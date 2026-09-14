@@ -3,6 +3,7 @@ package proxy
 import (
 	"bufio"
 	"context"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"net"
@@ -167,6 +168,95 @@ func TestGatewaySocks5AndHTTP(t *testing.T) {
 		buf := make([]byte, len(testMsg))
 		if _, err := io.ReadFull(conn, buf); err != nil || string(buf) != testMsg {
 			t.Fatalf("echo verification failed over http connect, got: %s", string(buf))
+		}
+	})
+
+	// Test 5: SOCKS5 UDP Associate Protocol
+	t.Run("SOCKS5 UDP Associate Protocol", func(t *testing.T) {
+		// Setup dummy target UDP echo server
+		udpEcho, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 0})
+		if err != nil {
+			t.Fatalf("failed to listen udp echo server: %v", err)
+		}
+		defer udpEcho.Close()
+		udpEchoPort := udpEcho.LocalAddr().(*net.UDPAddr).Port
+
+		go func() {
+			buf := make([]byte, 2048)
+			for {
+				n, from, err := udpEcho.ReadFrom(buf)
+				if err != nil {
+					return
+				}
+				_, _ = udpEcho.WriteTo(buf[:n], from)
+			}
+		}()
+
+		// Dial SOCKS5 TCP control connection
+		tcpConn, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", gatewayPort))
+		if err != nil {
+			t.Fatalf("failed to dial gateway for udp associate: %v", err)
+		}
+		defer tcpConn.Close()
+
+		// 1. Handshake
+		_, _ = tcpConn.Write([]byte{0x05, 0x01, 0x00})
+		resp := make([]byte, 2)
+		if _, err := io.ReadFull(tcpConn, resp); err != nil || resp[0] != 0x05 || resp[1] != 0x00 {
+			t.Fatalf("socks5 handshake failed: %v", resp)
+		}
+
+		// 2. UDP ASSOCIATE command: VER 0x05, CMD 0x03, RSV 0x00, ATYP 0x01, ADDR 0.0.0.0, PORT 0
+		_, _ = tcpConn.Write([]byte{0x05, 0x03, 0x00, 0x01, 0, 0, 0, 0, 0, 0})
+		assocReply := make([]byte, 10)
+		if _, err := io.ReadFull(tcpConn, assocReply); err != nil || assocReply[1] != 0x00 {
+			t.Fatalf("socks5 udp associate reply failed: %v", assocReply)
+		}
+
+		relayIP := net.IP(assocReply[4:8])
+		relayPort := int(binary.BigEndian.Uint16(assocReply[8:10]))
+		if relayPort <= 0 {
+			t.Fatalf("invalid relay port returned: %d", relayPort)
+		}
+
+		// 3. Send encapsulated UDP packet to relay
+		clientUDP, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 0})
+		if err != nil {
+			t.Fatalf("failed to create client udp: %v", err)
+		}
+		defer clientUDP.Close()
+
+		udpPayload := []byte("ping-udp-socks5-associate")
+		// SOCKS5 UDP header: RSV(2) | FRAG(1) | ATYP(1) | IP(4) | PORT(2) | DATA
+		reqPacket := make([]byte, 10+len(udpPayload))
+		reqPacket[0] = 0x00
+		reqPacket[1] = 0x00
+		reqPacket[2] = 0x00 // FRAG
+		reqPacket[3] = 0x01 // IPv4
+		copy(reqPacket[4:8], net.ParseIP("127.0.0.1").To4())
+		binary.BigEndian.PutUint16(reqPacket[8:10], uint16(udpEchoPort))
+		copy(reqPacket[10:], udpPayload)
+
+		relayAddr := &net.UDPAddr{IP: relayIP, Port: relayPort}
+		_, err = clientUDP.WriteTo(reqPacket, relayAddr)
+		if err != nil {
+			t.Fatalf("failed to write to udp relay: %v", err)
+		}
+
+		// 4. Receive echoed response
+		_ = clientUDP.SetReadDeadline(time.Now().Add(2 * time.Second))
+		recvBuf := make([]byte, 2048)
+		n, _, err := clientUDP.ReadFrom(recvBuf)
+		if err != nil {
+			t.Fatalf("failed to receive echoed udp packet through socks5 relay: %v", err)
+		}
+
+		if n < 10 {
+			t.Fatalf("response packet too short: %d", n)
+		}
+		receivedData := recvBuf[10:n]
+		if string(receivedData) != string(udpPayload) {
+			t.Fatalf("expected payload %q, got %q", string(udpPayload), string(receivedData))
 		}
 	})
 }

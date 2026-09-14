@@ -115,7 +115,7 @@ async function mockAPI(route) {
       nodes: [{ name: "Hysteria2-62799.json", protocol: "Hysteria2", port: 62799, outbound: "direct" }],
       available_outbounds: [
         { addr: "direct", label: "直连", is_default: false },
-        { addr: "http://127.0.0.1:7928", label: "默认出口 7928", is_default: true }
+        { addr: "socks5://127.0.0.1:7928", label: "默认出口 7928", is_default: true }
       ]
     };
   } else if (path.endsWith("/api/singbox/nodes/outbound")) {
@@ -282,9 +282,9 @@ try {
 
     const select = page.locator('.sb-chain-select');
     if (await select.count() > 0) {
-      await select.selectOption("http://127.0.0.1:7928");
+      await select.selectOption("socks5://127.0.0.1:7928");
       await page.waitForTimeout(100);
-      if (!lastOutboundPost || lastOutboundPost.outbound !== "http://127.0.0.1:7928" || lastOutboundPost.target !== "Hysteria2-62799.json") {
+      if (!lastOutboundPost || lastOutboundPost.outbound !== "socks5://127.0.0.1:7928" || lastOutboundPost.target !== "Hysteria2-62799.json") {
         failures.push(`${viewport}px: singbox outbound select did not trigger POST /api/singbox/nodes/outbound with expected payload, got: ${JSON.stringify(lastOutboundPost)}`);
       }
     } else {
