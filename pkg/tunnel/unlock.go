@@ -149,7 +149,7 @@ func (d *UnlockDetector) EvaluateNodeUnlock(node *nodes.Node) *UnlockResult {
 
 	if node.LatencyMs > 0 {
 		if node.IPType == "residential" {
-			// 住宅宽带初步推测：OpenAI与Gemini在支持国家较宽松；Claude因Cloudflare风控极严，未实测前保持待测
+			// 住宅宽带初步推测：在官方支持国家内标记为预测可用
 			if isOpenAIOk {
 				res.OpenAI = StatusUnlocked
 			} else {
@@ -157,7 +157,7 @@ func (d *UnlockDetector) EvaluateNodeUnlock(node *nodes.Node) *UnlockResult {
 			}
 
 			if isClaudeOk {
-				res.Claude = StatusUnknown
+				res.Claude = StatusUnlocked
 			} else {
 				res.Claude = StatusBlocked
 			}
@@ -201,7 +201,7 @@ func (d *UnlockDetector) EvaluateNodeUnlock(node *nodes.Node) *UnlockResult {
 				res.OpenAI = StatusUnlocked
 			}
 			if isClaudeOk {
-				res.Claude = StatusUnknown
+				res.Claude = StatusUnlocked
 			}
 			if isGeminiOk {
 				res.Gemini = StatusUnlocked
@@ -281,26 +281,57 @@ func (d *UnlockDetector) ProbeTunnel(ctx context.Context, devName string, ip str
 	// 2. Claude / Anthropic
 	go func() {
 		defer wg.Done()
-		req, err := http.NewRequestWithContext(ctx, "GET", "https://claude.ai/api/auth/session", nil)
+		// 优先探测 Anthropic 核心消息路由接口 (Anthropic API / Claude 客户端公共路由)
+		// 正常允许访问的非封锁 IP 返回 HTTP 401 并携带 authentication_error
+		// 处于封锁地区或硬封禁的 IP 返回 HTTP 403 或 permission_error
+		req, err := http.NewRequestWithContext(ctx, "POST", "https://api.anthropic.com/v1/messages", strings.NewReader(`{}`))
 		if err == nil {
 			req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("anthropic-version", "2023-06-01")
+			req.Header.Set("x-api-key", "ant-api-probe-check")
 			resp, err := client.Do(req)
 			if err == nil {
 				defer resp.Body.Close()
 				body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
 				bodyStr := string(body)
-				if (resp.StatusCode == 200 || resp.StatusCode == 401) &&
-					!strings.Contains(bodyStr, "Just a moment") &&
-					!strings.Contains(bodyStr, "Cloudflare") &&
-					!strings.Contains(bodyStr, "cf-mitigated") &&
-					!strings.Contains(bodyStr, "Attention Required!") {
+				if resp.StatusCode == 401 && strings.Contains(bodyStr, "authentication_error") {
 					result.Claude = StatusUnlocked
-				} else {
-					result.Claude = StatusBlocked
+					return
 				}
-				return
+				if resp.StatusCode == 403 || strings.Contains(bodyStr, "permission_error") || strings.Contains(bodyStr, "not available in your region") {
+					result.Claude = StatusBlocked
+					return
+				}
 			}
 		}
+
+		// 备用探测：获取 Claude Cloudflare Edge 真实出口归属
+		reqTrace, errTrace := http.NewRequestWithContext(ctx, "GET", "https://claude.ai/cdn-cgi/trace", nil)
+		if errTrace == nil {
+			reqTrace.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+			resp, err := client.Do(reqTrace)
+			if err == nil {
+				defer resp.Body.Close()
+				body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+				bodyStr := string(body)
+				if resp.StatusCode == 200 && strings.Contains(bodyStr, "loc=") {
+					for _, line := range strings.Split(bodyStr, "\n") {
+						if strings.HasPrefix(line, "loc=") {
+							loc := strings.ToUpper(strings.TrimSpace(strings.TrimPrefix(line, "loc=")))
+							if claudeSupportedCountries[loc] {
+								result.Claude = StatusUnlocked
+								return
+							} else {
+								result.Claude = StatusBlocked
+								return
+							}
+						}
+					}
+				}
+			}
+		}
+
 		result.Claude = StatusBlocked
 	}()
 
