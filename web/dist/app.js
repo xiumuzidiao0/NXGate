@@ -116,6 +116,9 @@
             if (u.claude === 'unlocked') badges.push('<span class="badge unlock-badge unlock-open" title="Claude / Anthropic 访问正常">Claude 可用</span>');
             else if (u.claude === 'blocked') badges.push('<span class="badge unlock-badge unlock-blocked" title="Claude 风控拦截">Claude 阻断</span>');
 
+            if (u.gemini === 'unlocked') badges.push('<span class="badge unlock-badge unlock-open" title="Google Gemini 访问正常">Gemini 可用</span>');
+            else if (u.gemini === 'blocked') badges.push('<span class="badge unlock-badge unlock-blocked" title="Google Gemini 限制访问">Gemini 阻断</span>');
+
             if (u.netflix === 'unlocked') badges.push('<span class="badge unlock-badge unlock-warn" title="Netflix 原生流媒体解锁">NF 可用</span>');
             else if (u.netflix === 'blocked') badges.push('<span class="badge unlock-badge unlock-blocked" title="Netflix 限制访问">NF 限制</span>');
 
@@ -624,9 +627,9 @@
             }
             if (unlockEl) {
                 let unlockText = '不限';
-                if (sysGroup.unlock_filter === 'ai') unlockText = '必须解锁 AI (ChatGPT / Claude)';
+                if (sysGroup.unlock_filter === 'ai') unlockText = '必须解锁三大 AI (ChatGPT + Claude + Gemini)';
                 else if (sysGroup.unlock_filter === 'streaming') unlockText = '必须解锁流媒体 (Netflix / Google)';
-                else if (sysGroup.unlock_filter === 'full' || sysGroup.unlock_filter === 'all') unlockText = '全解锁 (AI + 流媒体)';
+                else if (sysGroup.unlock_filter === 'full' || sysGroup.unlock_filter === 'all') unlockText = '全解锁 (三大 AI + 流媒体)';
                 unlockEl.innerText = unlockText;
             }
             if (badgeEl) {
@@ -868,9 +871,9 @@
                 if (g.ip_type === 'mobile') ipTypeText = '移动网络';
 
                 let unlockText = '';
-                if (g.unlock_filter === 'ai') unlockText = '<span>解锁: <strong class="unlock-ai">仅AI模型</strong></span>';
+                if (g.unlock_filter === 'ai') unlockText = '<span>解锁: <strong class="unlock-ai">三大 AI (GPT+Claude+Gemini)</strong></span>';
                 else if (g.unlock_filter === 'streaming') unlockText = '<span>解锁: <strong class="unlock-stream">仅流媒体</strong></span>';
-                else if (g.unlock_filter === 'full' || g.unlock_filter === 'all') unlockText = '<span>解锁: <strong class="unlock-full">全解锁 (AI+流媒体)</strong></span>';
+                else if (g.unlock_filter === 'full' || g.unlock_filter === 'all') unlockText = '<span>解锁: <strong class="unlock-full">全解锁 (三大 AI+流媒体)</strong></span>';
 
                 const isSys = g.is_system || g.id === 'system-primary';
                 const sysBadge = isSys ? '<span class="badge badge-system">系统主连网关 (tun0)</span>' : `<span class="badge badge-accent">Top ${g.target_count} 隧道</span>`;

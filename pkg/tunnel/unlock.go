@@ -132,21 +132,24 @@ func (d *UnlockDetector) EvaluateNodeUnlock(node *nodes.Node) *UnlockResult {
 		IP:            node.IP,
 		OpenAI:        StatusUnknown,
 		Claude:        StatusUnknown,
+		Gemini:        StatusUnknown,
 		Google:        StatusUnknown,
 		Netflix:       StatusUnknown,
 		NetflixRegion: node.CountryShort,
+		IsProbed:      false,
 		CheckedAt:     time.Now(),
 	}
 
 	c := strings.ToUpper(strings.TrimSpace(node.CountryShort))
 	isOpenAIOk := openAISupportedCountries[c]
 	isClaudeOk := claudeSupportedCountries[c]
+	isGeminiOk := c != "CN" && c != "HK" && c != "IR" && c != "KP" && c != "RU"
 	isGoogleOk := c != "CN" && c != "IR" && c != "KP"
 	isNetflixOk := c != "" && c != "CN"
 
 	if node.LatencyMs > 0 {
 		if node.IPType == "residential" {
-			// Residential (home broadband) IPs in supported countries have best unlock rates
+			// 住宅宽带初步推测：OpenAI与Gemini在支持国家较宽松；Claude因Cloudflare风控极严，未实测前保持待测
 			if isOpenAIOk {
 				res.OpenAI = StatusUnlocked
 			} else {
@@ -154,9 +157,15 @@ func (d *UnlockDetector) EvaluateNodeUnlock(node *nodes.Node) *UnlockResult {
 			}
 
 			if isClaudeOk {
-				res.Claude = StatusUnlocked
+				res.Claude = StatusUnknown
 			} else {
 				res.Claude = StatusBlocked
+			}
+
+			if isGeminiOk {
+				res.Gemini = StatusUnlocked
+			} else {
+				res.Gemini = StatusBlocked
 			}
 
 			if isGoogleOk {
@@ -171,7 +180,7 @@ func (d *UnlockDetector) EvaluateNodeUnlock(node *nodes.Node) *UnlockResult {
 				res.Netflix = StatusBlocked
 			}
 		} else if node.IPType == "hosting" {
-			// Datacenter IPs
+			// 数据中心机房IP
 			if isGoogleOk {
 				res.Google = StatusUnlocked
 			}
@@ -182,12 +191,20 @@ func (d *UnlockDetector) EvaluateNodeUnlock(node *nodes.Node) *UnlockResult {
 			} else {
 				res.OpenAI = StatusBlocked
 			}
+			if isGeminiOk && node.ReputationScore >= 70 {
+				res.Gemini = StatusUnlocked
+			} else {
+				res.Gemini = StatusBlocked
+			}
 		} else {
 			if isOpenAIOk {
 				res.OpenAI = StatusUnlocked
 			}
 			if isClaudeOk {
-				res.Claude = StatusUnlocked
+				res.Claude = StatusUnknown
+			}
+			if isGeminiOk {
+				res.Gemini = StatusUnlocked
 			}
 			if isGoogleOk {
 				res.Google = StatusUnlocked
@@ -198,11 +215,6 @@ func (d *UnlockDetector) EvaluateNodeUnlock(node *nodes.Node) *UnlockResult {
 		}
 	}
 
-	d.mu.Lock()
-	d.cache[node.IP] = res
-	d.saveLocked()
-	d.mu.Unlock()
-
 	node.Unlock = res
 	return res
 }
@@ -212,15 +224,17 @@ func (d *UnlockDetector) ProbeTunnel(ctx context.Context, devName string, ip str
 		IP:        ip,
 		OpenAI:    StatusUnknown,
 		Claude:    StatusUnknown,
+		Gemini:    StatusUnknown,
 		Google:    StatusUnknown,
 		Netflix:   StatusUnknown,
+		IsProbed:  true,
 		CheckedAt: time.Now(),
 	}
 
 	client := newTunnelHTTPClient(devName, 6*time.Second)
 
 	var wg sync.WaitGroup
-	wg.Add(4)
+	wg.Add(5)
 
 	// 1. OpenAI / ChatGPT
 	go func() {
@@ -252,7 +266,7 @@ func (d *UnlockDetector) ProbeTunnel(ctx context.Context, devName string, ip str
 			if err == nil {
 				defer resp.Body.Close()
 				body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-				if resp.StatusCode == 200 && strings.Contains(string(body), "loc=") {
+				if resp.StatusCode == 200 && strings.Contains(string(body), "loc=") && !strings.Contains(string(body), "loc=CN") && !strings.Contains(string(body), "loc=HK") {
 					result.OpenAI = StatusUnlocked
 					return
 				}
@@ -269,20 +283,48 @@ func (d *UnlockDetector) ProbeTunnel(ctx context.Context, devName string, ip str
 		defer wg.Done()
 		req, err := http.NewRequestWithContext(ctx, "GET", "https://claude.ai/api/auth/session", nil)
 		if err == nil {
-			req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+			req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")
 			resp, err := client.Do(req)
 			if err == nil {
 				defer resp.Body.Close()
-				if resp.StatusCode == 200 || resp.StatusCode == 401 {
+				body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+				bodyStr := string(body)
+				if (resp.StatusCode == 200 || resp.StatusCode == 401) &&
+					!strings.Contains(bodyStr, "Just a moment") &&
+					!strings.Contains(bodyStr, "Cloudflare") &&
+					!strings.Contains(bodyStr, "cf-mitigated") &&
+					!strings.Contains(bodyStr, "Attention Required!") {
 					result.Claude = StatusUnlocked
-				} else if resp.StatusCode == 403 {
+				} else {
 					result.Claude = StatusBlocked
 				}
+				return
 			}
 		}
+		result.Claude = StatusBlocked
 	}()
 
-	// 3. Google / YouTube (Generate 204)
+	// 3. Google Gemini
+	go func() {
+		defer wg.Done()
+		req, err := http.NewRequestWithContext(ctx, "GET", "https://gemini.google.com/", nil)
+		if err == nil {
+			req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")
+			resp, err := client.Do(req)
+			if err == nil {
+				defer resp.Body.Close()
+				if resp.StatusCode == 200 {
+					result.Gemini = StatusUnlocked
+				} else if resp.StatusCode == 403 || resp.StatusCode == 429 {
+					result.Gemini = StatusBlocked
+				}
+				return
+			}
+		}
+		result.Gemini = StatusBlocked
+	}()
+
+	// 4. Google Search (Generate 204)
 	go func() {
 		defer wg.Done()
 		req, err := http.NewRequestWithContext(ctx, "GET", "https://www.google.com/generate_204", nil)
@@ -299,7 +341,7 @@ func (d *UnlockDetector) ProbeTunnel(ctx context.Context, devName string, ip str
 		}
 	}()
 
-	// 4. Netflix
+	// 5. Netflix
 	go func() {
 		defer wg.Done()
 		req, err := http.NewRequestWithContext(ctx, "GET", "https://www.netflix.com/title/81280792", nil)
@@ -319,14 +361,14 @@ func (d *UnlockDetector) ProbeTunnel(ctx context.Context, devName string, ip str
 
 	wg.Wait()
 
-	// Update cache
+	// Update cache with real physical probe result
 	d.mu.Lock()
 	d.cache[ip] = result
 	d.saveLocked()
 	d.mu.Unlock()
 
-	stats.LogInfo("UnlockDetector", "[%s:%s] 实测解锁结果: ChatGPT=%s, Claude=%s, Google=%s, Netflix=%s",
-		devName, ip, result.OpenAI, result.Claude, result.Google, result.Netflix)
+	stats.LogInfo("UnlockDetector", "[%s:%s] 实测解锁结果: ChatGPT=%s, Claude=%s, Gemini=%s, Google=%s, Netflix=%s",
+		devName, ip, result.OpenAI, result.Claude, result.Gemini, result.Google, result.Netflix)
 
 	return result
 }
