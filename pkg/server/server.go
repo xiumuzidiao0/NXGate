@@ -156,6 +156,12 @@ func (s *Server) Start(ctx context.Context) error {
 	watchdog := NewSingBoxWatchdog(s, 30*time.Second)
 	watchdog.Start(ctx)
 
+	// Sync sing-box outbound credentials & protocol (upgrade to SOCKS5 dual-stack) shortly after startup
+	go func() {
+		time.Sleep(3 * time.Second)
+		s.syncSingBoxOutboundCredentials(context.Background())
+	}()
+
 	// Start 3-hour blacklisted nodes probe & resurrection loop
 	s.pool.StartRevivalLoop(ctx)
 
