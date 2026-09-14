@@ -34,11 +34,17 @@ type SingBoxOverviewResponse struct {
 	Error              string                  `json:"error,omitempty"`
 }
 
-// resolveHTTPOutboundURL converts an input port/address into a standard HTTP proxy URL with credentials if required.
-func (s *Server) resolveHTTPOutboundURL(outboundRaw string) string {
+// resolveOutboundURL converts an input port/address into a standard SOCKS5 or HTTP proxy URL with credentials if required.
+// By default, it generates a SOCKS5 URL (supporting both TCP and UDP Associate).
+func (s *Server) resolveOutboundURL(outboundRaw string) string {
 	raw := strings.TrimSpace(outboundRaw)
 	if raw == "" || strings.EqualFold(raw, "direct") || strings.EqualFold(raw, "none") || strings.EqualFold(raw, "default") {
 		return "direct"
+	}
+
+	scheme := "socks5"
+	if strings.HasPrefix(strings.ToLower(raw), "http://") {
+		scheme = "http"
 	}
 
 	var targetPort int
@@ -97,7 +103,7 @@ func (s *Server) resolveHTTPOutboundURL(outboundRaw string) string {
 
 	if (authMode == "default_web" || authMode == "custom") && authUser != "" {
 		proxyURL := &url.URL{
-			Scheme: "http",
+			Scheme: scheme,
 			User:   url.UserPassword(authUser, authPass),
 			Host:   net.JoinHostPort("127.0.0.1", strconv.Itoa(targetPort)),
 		}
@@ -105,7 +111,7 @@ func (s *Server) resolveHTTPOutboundURL(outboundRaw string) string {
 	}
 
 	return (&url.URL{
-		Scheme: "http",
+		Scheme: scheme,
 		Host:   net.JoinHostPort("127.0.0.1", strconv.Itoa(targetPort)),
 	}).String()
 }
@@ -114,12 +120,12 @@ func (s *Server) getAvailableOutbounds() []AvailableOutbound {
 	var list []AvailableOutbound
 	seenPorts := make(map[int]bool)
 
-	// 1. Default proxy port
+	// 1. Default proxy port (SOCKS5 dual-stack TCP+UDP)
 	defPort := s.cfg.ProxyPort
 	if defPort <= 0 {
 		defPort = 7928
 	}
-	defAddr := s.resolveHTTPOutboundURL(fmt.Sprintf("%d", defPort))
+	defAddr := s.resolveOutboundURL(fmt.Sprintf("%d", defPort))
 	authNote := "免密"
 	if strings.Contains(defAddr, "@") {
 		authNote = "密码保护"
@@ -128,8 +134,8 @@ func (s *Server) getAvailableOutbounds() []AvailableOutbound {
 	list = append(list, AvailableOutbound{
 		Port:      defPort,
 		Addr:      defAddr,
-		Type:      "http",
-		Label:     fmt.Sprintf("AimiliVPN 默认出口 (PORT %d - HTTP %s)", defPort, authNote),
+		Type:      "socks5",
+		Label:     fmt.Sprintf("AimiliVPN 默认出口 (PORT %d - SOCKS5 TCP+UDP %s)", defPort, authNote),
 		IsDefault: true,
 	})
 	seenPorts[defPort] = true
@@ -138,7 +144,7 @@ func (s *Server) getAvailableOutbounds() []AvailableOutbound {
 	if s.portMgr != nil {
 		for _, rule := range s.portMgr.GetRules() {
 			if !seenPorts[rule.Port] && rule.Port > 0 {
-				ruleAddr := s.resolveHTTPOutboundURL(fmt.Sprintf("%d", rule.Port))
+				ruleAddr := s.resolveOutboundURL(fmt.Sprintf("%d", rule.Port))
 				ruleAuthNote := "免密"
 				if strings.Contains(ruleAddr, "@") {
 					ruleAuthNote = "密码保护"
@@ -157,8 +163,8 @@ func (s *Server) getAvailableOutbounds() []AvailableOutbound {
 				list = append(list, AvailableOutbound{
 					Port:      rule.Port,
 					Addr:      ruleAddr,
-					Type:      "http",
-					Label:     fmt.Sprintf("多端口出口 (PORT %d - HTTP %s%s)", rule.Port, ruleAuthNote, boundDesc),
+					Type:      "socks5",
+					Label:     fmt.Sprintf("多端口出口 (PORT %d - SOCKS5 TCP+UDP %s%s)", rule.Port, ruleAuthNote, boundDesc),
 					IsDefault: false,
 				})
 				seenPorts[rule.Port] = true
@@ -328,7 +334,7 @@ func (s *Server) handleSingBoxAddNode(w http.ResponseWriter, r *http.Request) {
 		sni = "auto"
 	}
 
-	resolvedOutbound := s.resolveHTTPOutboundURL(req.Outbound)
+	resolvedOutbound := s.resolveOutboundURL(req.Outbound)
 	node, err := s.singboxClient.AddNode(r.Context(), proto, req.Port, cred, sni, resolvedOutbound)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
@@ -359,7 +365,7 @@ func (s *Server) handleSingBoxSetOutbound(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	resolvedOutbound := s.resolveHTTPOutboundURL(req.Outbound)
+	resolvedOutbound := s.resolveOutboundURL(req.Outbound)
 	resp, err := s.singboxClient.SetOutbound(r.Context(), req.Target, resolvedOutbound)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
@@ -389,7 +395,7 @@ func (s *Server) syncSingBoxOutboundCredentials(ctx context.Context) {
 			continue
 		}
 
-		expectedOutbound := s.resolveHTTPOutboundURL(fmt.Sprintf("%d", n.OutboundPort))
+		expectedOutbound := s.resolveOutboundURL(fmt.Sprintf("%d", n.OutboundPort))
 		if expectedOutbound == "direct" {
 			continue
 		}

@@ -1,14 +1,17 @@
 package proxy
 
 import (
+	"context"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
 	"net"
 	"strconv"
+	"sync"
 	"time"
 
+	"aimili-vpngate-go/pkg/stats"
 	"aimili-vpngate-go/pkg/tunnel"
 )
 
@@ -21,7 +24,9 @@ const (
 	authMethodNoAccept = 0xff
 
 	// Commands
-	cmdConnect = 0x01
+	cmdConnect      = 0x01
+	cmdBind         = 0x02
+	cmdUdpAssociate = 0x03
 
 	// Address types
 	atypIPv4   = 0x01
@@ -129,71 +134,316 @@ func handleSocks5(client net.Conn, auth *Authenticator, devName string, tun *tun
 	}
 
 	cmd := reqHeader[1]
-	if cmd != cmdConnect {
+	switch cmd {
+	case cmdConnect:
+		targetHost, targetPort, err := readSocks5Address(client, reqHeader[3])
+		if err != nil {
+			_, _ = client.Write([]byte{socks5Version, repAtypNotSupport, 0x00, atypIPv4, 0, 0, 0, 0, 0, 0})
+			return err
+		}
+		targetAddr := net.JoinHostPort(targetHost, strconv.Itoa(int(targetPort)))
+
+		// 3. Connect to upstream via selected tunnel devName
+		upstream, err := dialUpstream(targetAddr, devName, 10*time.Second)
+		if err != nil {
+			if tun != nil {
+				tun.RecordFailure()
+			}
+			_, _ = client.Write([]byte{socks5Version, repGeneralFailure, 0x00, atypIPv4, 0, 0, 0, 0, 0, 0})
+			return fmt.Errorf("dial upstream %s failed: %w", targetAddr, err)
+		}
+		if tun != nil {
+			tun.RecordSuccess()
+		}
+
+		// 4. Send success reply
+		// Reply: VER | REP | RSV | ATYP | BND.ADDR | BND.PORT
+		reply := []byte{socks5Version, repSuccess, 0x00, atypIPv4, 0, 0, 0, 0, 0, 0}
+		if _, err := client.Write(reply); err != nil {
+			_ = upstream.Close()
+			return err
+		}
+
+		// 5. Bidirectional forward
+		clearDeadline(client)
+		relay(client, upstream)
+		return nil
+
+	case cmdUdpAssociate:
+		return handleSocks5UDPAssociate(client, reqHeader[3], devName, tun)
+
+	default:
 		_, _ = client.Write([]byte{socks5Version, repCommandNotSupport, 0x00, atypIPv4, 0, 0, 0, 0, 0, 0})
 		return fmt.Errorf("unsupported socks5 command: %d", cmd)
 	}
+}
 
-	atyp := reqHeader[3]
+func readSocks5Address(r io.Reader, atyp byte) (string, uint16, error) {
 	var targetHost string
 	switch atyp {
 	case atypIPv4:
 		ipv4 := make([]byte, 4)
-		if _, err := io.ReadFull(client, ipv4); err != nil {
-			return err
+		if _, err := io.ReadFull(r, ipv4); err != nil {
+			return "", 0, err
 		}
 		targetHost = net.IP(ipv4).String()
 	case atypDomain:
 		dLenBuf := make([]byte, 1)
-		if _, err := io.ReadFull(client, dLenBuf); err != nil {
-			return err
+		if _, err := io.ReadFull(r, dLenBuf); err != nil {
+			return "", 0, err
 		}
 		domain := make([]byte, int(dLenBuf[0]))
-		if _, err := io.ReadFull(client, domain); err != nil {
-			return err
+		if _, err := io.ReadFull(r, domain); err != nil {
+			return "", 0, err
 		}
 		targetHost = string(domain)
 	case atypIPv6:
 		ipv6 := make([]byte, 16)
-		if _, err := io.ReadFull(client, ipv6); err != nil {
-			return err
+		if _, err := io.ReadFull(r, ipv6); err != nil {
+			return "", 0, err
 		}
 		targetHost = net.IP(ipv6).String()
 	default:
-		_, _ = client.Write([]byte{socks5Version, repAtypNotSupport, 0x00, atypIPv4, 0, 0, 0, 0, 0, 0})
-		return fmt.Errorf("unsupported socks5 atyp: %d", atyp)
+		return "", 0, fmt.Errorf("unsupported socks5 atyp: %d", atyp)
 	}
 
 	portBuf := make([]byte, 2)
-	if _, err := io.ReadFull(client, portBuf); err != nil {
-		return err
+	if _, err := io.ReadFull(r, portBuf); err != nil {
+		return "", 0, err
 	}
 	targetPort := binary.BigEndian.Uint16(portBuf)
-	targetAddr := net.JoinHostPort(targetHost, strconv.Itoa(int(targetPort)))
+	return targetHost, targetPort, nil
+}
 
-	// 3. Connect to upstream via selected tunnel devName
-	upstream, err := dialUpstream(targetAddr, devName, 10*time.Second)
+func handleSocks5UDPAssociate(client net.Conn, atyp byte, devName string, tun *tunnel.Tunnel) error {
+	// 1. Read advertised client source address/port (usually 0.0.0.0:0)
+	_, _, err := readSocks5Address(client, atyp)
 	if err != nil {
-		if tun != nil {
-			tun.RecordFailure()
-		}
 		_, _ = client.Write([]byte{socks5Version, repGeneralFailure, 0x00, atypIPv4, 0, 0, 0, 0, 0, 0})
-		return fmt.Errorf("dial upstream %s failed: %w", targetAddr, err)
-	}
-	if tun != nil {
-		tun.RecordSuccess()
+		return fmt.Errorf("read udp associate address failed: %w", err)
 	}
 
-	// 4. Send success reply
-	// Reply: VER | REP | RSV | ATYP | BND.ADDR | BND.PORT
-	reply := []byte{socks5Version, repSuccess, 0x00, atypIPv4, 0, 0, 0, 0, 0, 0}
+	// 2. Bind local UDP relay listener on the same IP interface as client TCP connection
+	var bindIP net.IP
+	if tcpAddr, ok := client.LocalAddr().(*net.TCPAddr); ok && tcpAddr != nil {
+		bindIP = tcpAddr.IP
+	}
+	if bindIP == nil || bindIP.IsUnspecified() {
+		bindIP = net.ParseIP("127.0.0.1")
+	}
+
+	relayConn, err := net.ListenUDP("udp4", &net.UDPAddr{IP: bindIP, Port: 0})
+	if err != nil {
+		_, _ = client.Write([]byte{socks5Version, repGeneralFailure, 0x00, atypIPv4, 0, 0, 0, 0, 0, 0})
+		return fmt.Errorf("listen udp relay failed: %w", err)
+	}
+	defer relayConn.Close()
+
+	relayPort := relayConn.LocalAddr().(*net.UDPAddr).Port
+
+	// 3. Send SOCKS5 reply with BND.ADDR and BND.PORT over TCP
+	bndIP := bindIP.To4()
+	if bndIP == nil {
+		bndIP = net.ParseIP("127.0.0.1").To4()
+	}
+	reply := []byte{socks5Version, repSuccess, 0x00, atypIPv4, bndIP[0], bndIP[1], bndIP[2], bndIP[3], byte(relayPort >> 8), byte(relayPort & 0xff)}
 	if _, err := client.Write(reply); err != nil {
-		_ = upstream.Close()
 		return err
 	}
 
-	// 5. Bidirectional forward
+	// 4. Create upstream UDP socket bound to target tunnel devName
+	upstreamConn, err := createBoundUDPSocket(devName)
+	if err != nil {
+		stats.LogWarn("Proxy", "UDP Associate 创建物理网卡套接字失败: %v", err)
+		return fmt.Errorf("create bound udp socket failed: %w", err)
+	}
+	defer upstreamConn.Close()
+
 	clearDeadline(client)
-	relay(client, upstream)
+
+	// 5. Manage TCP lifecycle: per RFC 1928, UDP association terminates when TCP drops
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go func() {
+		defer cancel()
+		buf := make([]byte, 1)
+		for {
+			_, err := client.Read(buf)
+			if err != nil {
+				break
+			}
+		}
+		_ = relayConn.Close()
+		_ = upstreamConn.Close()
+	}()
+
+	var clientUDPMu sync.RWMutex
+	var clientUDPAddr *net.UDPAddr
+
+	// Relay Upstream -> Client
+	go func() {
+		respBuf := make([]byte, 65535)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+
+			n, remoteAddr, err := upstreamConn.ReadFrom(respBuf)
+			if err != nil {
+				return
+			}
+			if n <= 0 {
+				continue
+			}
+
+			clientUDPMu.RLock()
+			destClient := clientUDPAddr
+			clientUDPMu.RUnlock()
+			if destClient == nil {
+				continue
+			}
+
+			if rUDP, ok := remoteAddr.(*net.UDPAddr); ok {
+				packed := packSocks5UDPPacket(rUDP, respBuf[:n])
+				if len(packed) > 0 {
+					_, _ = relayConn.WriteTo(packed, destClient)
+					stats.GetTrafficTracker().AddDownload(uint64(n))
+					if tun != nil {
+						tun.RecordSuccess()
+					}
+				}
+			}
+		}
+	}()
+
+	// Relay Client -> Upstream
+	reqBuf := make([]byte, 65535)
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+
+		n, fromAddr, err := relayConn.ReadFrom(reqBuf)
+		if err != nil {
+			return nil
+		}
+		if n < 4 {
+			continue
+		}
+
+		if reqBuf[0] != 0x00 || reqBuf[1] != 0x00 {
+			continue // Invalid RSV
+		}
+		if reqBuf[2] != 0x00 {
+			continue // Fragment not supported
+		}
+
+		if fromUDP, ok := fromAddr.(*net.UDPAddr); ok {
+			clientUDPMu.Lock()
+			clientUDPAddr = fromUDP
+			clientUDPMu.Unlock()
+		}
+
+		targetUDPAddr, payload, err := parseSocks5UDPPacket(ctx, reqBuf[:n], devName)
+		if err != nil || targetUDPAddr == nil || len(payload) == 0 {
+			continue
+		}
+
+		_, err = upstreamConn.WriteTo(payload, targetUDPAddr)
+		if err != nil {
+			if tun != nil {
+				tun.RecordFailure()
+			}
+			continue
+		}
+
+		stats.GetTrafficTracker().AddUpload(uint64(len(payload)))
+	}
+}
+
+func packSocks5UDPPacket(addr *net.UDPAddr, data []byte) []byte {
+	if addr == nil {
+		return nil
+	}
+	ip4 := addr.IP.To4()
+	if ip4 != nil {
+		// RSV(2) | FRAG(1) | ATYP(1) | IP(4) | PORT(2) | DATA
+		header := make([]byte, 10+len(data))
+		header[0] = 0x00
+		header[1] = 0x00
+		header[2] = 0x00 // FRAG
+		header[3] = atypIPv4
+		copy(header[4:8], ip4)
+		binary.BigEndian.PutUint16(header[8:10], uint16(addr.Port))
+		copy(header[10:], data)
+		return header
+	}
+
+	ip6 := addr.IP.To16()
+	if ip6 != nil {
+		// RSV(2) | FRAG(1) | ATYP(1) | IP(16) | PORT(2) | DATA
+		header := make([]byte, 22+len(data))
+		header[0] = 0x00
+		header[1] = 0x00
+		header[2] = 0x00
+		header[3] = atypIPv6
+		copy(header[4:20], ip6)
+		binary.BigEndian.PutUint16(header[20:22], uint16(addr.Port))
+		copy(header[22:], data)
+		return header
+	}
+
 	return nil
+}
+
+func parseSocks5UDPPacket(ctx context.Context, packet []byte, devName string) (*net.UDPAddr, []byte, error) {
+	if len(packet) < 10 {
+		return nil, nil, errors.New("packet too short")
+	}
+
+	atyp := packet[3]
+	offset := 4
+	var host string
+
+	switch atyp {
+	case atypIPv4:
+		if len(packet) < offset+4+2 {
+			return nil, nil, errors.New("invalid ipv4 packet length")
+		}
+		host = net.IP(packet[offset : offset+4]).String()
+		offset += 4
+	case atypDomain:
+		dLen := int(packet[offset])
+		offset++
+		if len(packet) < offset+dLen+2 {
+			return nil, nil, errors.New("invalid domain packet length")
+		}
+		host = string(packet[offset : offset+dLen])
+		offset += dLen
+	case atypIPv6:
+		if len(packet) < offset+16+2 {
+			return nil, nil, errors.New("invalid ipv6 packet length")
+		}
+		host = net.IP(packet[offset : offset+16]).String()
+		offset += 16
+	default:
+		return nil, nil, fmt.Errorf("unsupported atyp in udp packet: %d", atyp)
+	}
+
+	port := int(binary.BigEndian.Uint16(packet[offset : offset+2]))
+	offset += 2
+
+	payload := packet[offset:]
+
+	destAddr, err := resolveUDPAddrThroughTunnel(ctx, host, port, devName)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return destAddr, payload, nil
 }

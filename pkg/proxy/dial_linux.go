@@ -105,3 +105,78 @@ func dialUpstream(targetAddr string, devName string, timeout time.Duration) (net
 	}
 	return conn, nil
 }
+
+func createBoundUDPSocket(devName string) (*net.UDPConn, error) {
+	lc := net.ListenConfig{}
+	if devName != "" {
+		lc.Control = func(network, address string, c syscall.RawConn) error {
+			var operr error
+			fn := func(fd uintptr) {
+				if err := syscall.SetsockoptString(int(fd), syscall.SOL_SOCKET, syscall.SO_BINDTODEVICE, devName); err != nil {
+					operr = err
+				}
+			}
+			if err := c.Control(fn); err != nil {
+				return err
+			}
+			return operr
+		}
+	}
+
+	var localIP net.IP
+	if devName != "" {
+		localIP = getInterfaceIPv4(devName)
+	}
+
+	conn, err := lc.ListenPacket(context.Background(), "udp4", (&net.UDPAddr{IP: localIP, Port: 0}).String())
+	if err != nil {
+		conn, err = lc.ListenPacket(context.Background(), "udp4", ":0")
+		if err != nil {
+			return nil, err
+		}
+	}
+	return conn.(*net.UDPConn), nil
+}
+
+func resolveUDPAddrThroughTunnel(ctx context.Context, host string, port int, devName string) (*net.UDPAddr, error) {
+	ip := net.ParseIP(host)
+	if ip != nil {
+		return &net.UDPAddr{IP: ip, Port: port}, nil
+	}
+
+	resolver := &net.Resolver{
+		PreferGo: true,
+	}
+	if devName != "" {
+		resolver.Dial = func(ctx context.Context, network, address string) (net.Conn, error) {
+			dnsDialer := net.Dialer{
+				Timeout: 4 * time.Second,
+				Control: func(netw, addr string, c syscall.RawConn) error {
+					var operr error
+					fn := func(fd uintptr) {
+						if err := syscall.SetsockoptString(int(fd), syscall.SOL_SOCKET, syscall.SO_BINDTODEVICE, devName); err != nil {
+							operr = err
+						}
+					}
+					if err := c.Control(fn); err != nil {
+						return err
+					}
+					return operr
+				},
+			}
+			if ip4 := getInterfaceIPv4(devName); ip4 != nil {
+				dnsDialer.LocalAddr = &net.UDPAddr{IP: ip4}
+			}
+			return dnsDialer.DialContext(ctx, "udp", "8.8.8.8:53")
+		}
+	}
+
+	ips, err := resolver.LookupIP(ctx, "ip4", host)
+	if err != nil || len(ips) == 0 {
+		ips, err = net.DefaultResolver.LookupIP(ctx, "ip4", host)
+		if err != nil || len(ips) == 0 {
+			return nil, err
+		}
+	}
+	return &net.UDPAddr{IP: ips[0], Port: port}, nil
+}
