@@ -357,6 +357,15 @@ func (m *DynamicGroupManager) EvaluateGroup(ctx context.Context, g *DynamicGroup
 			return aAvail
 		}
 
+		// If group requires unlock filter, prioritize nodes that have been physically PROBED and verified
+		if g.UnlockFilter != "" && g.UnlockFilter != "none" {
+			aProbedOk := a.Unlock != nil && a.Unlock.IsProbed && a.Unlock.MatchFilter(g.UnlockFilter)
+			bProbedOk := b.Unlock != nil && b.Unlock.IsProbed && b.Unlock.MatchFilter(g.UnlockFilter)
+			if aProbedOk != bProbedOk {
+				return aProbedOk // Proven verified unlocked nodes come first
+			}
+		}
+
 		switch g.SortBy {
 		case "latency":
 			if aAvail && bAvail {
@@ -497,6 +506,19 @@ func (m *DynamicGroupManager) EvaluateGroup(ctx context.Context, g *DynamicGroup
 				// Verify genuine outbound Internet connectivity through this tunnel
 				time.Sleep(300 * time.Millisecond)
 				if CheckTunnelConnectivity(newTun.DevName, 3*time.Second) {
+					// 严苛物理入网闸门：若配置了解锁过滤（如三大 AI 全通），立即通过网卡物理实测
+					if g.UnlockFilter != "" && g.UnlockFilter != "none" && m.pool.UnlockDetector() != nil {
+						probeCtx, probeCancel := context.WithTimeout(ctx, 8*time.Second)
+						unlockRes := m.pool.UnlockDetector().ProbeTunnel(probeCtx, newTun.DevName, n.IP)
+						probeCancel()
+						newTun.SetUnlock(unlockRes)
+						if !unlockRes.MatchFilter(g.UnlockFilter) {
+							stats.LogWarn("DynamicGroup", "[%s] 候选节点 %s (%s) 连通但实测未通过解锁要求 (%s: GPT=%s, Claude=%s, Gemini=%s)，释放换线...",
+								g.Name, n.ID, newTun.DevName, g.UnlockFilter, unlockRes.OpenAI, unlockRes.Claude, unlockRes.Gemini)
+							_ = m.pool.StopTunnel(newTun.ID)
+							continue
+						}
+					}
 					chosenTunnelIDs = append(chosenTunnelIDs, newTun.ID)
 					usedNodeIDs[n.ID] = true
 					usedNodeIDs[n.IP] = true
@@ -689,8 +711,37 @@ func (m *DynamicGroupManager) evaluatePrimarySystemGroup(ctx context.Context, g 
 		currentActiveNode = primaryTun.Node
 	}
 
-	// If periodic rotation is disabled (IntervalMinutes <= 0), keep the healthy primary connection without rotating
-	if g.IntervalMinutes <= 0 && primaryHealthy && currentActiveNode != nil {
+	// 严苛物理实测校验：如果配置了解锁要求（如三大 AI 全通），实测当前主网关
+	primaryUnlockValid := true
+	if g.UnlockFilter != "" && g.UnlockFilter != "none" && primaryTun != nil && currentActiveNode != nil {
+		currUnlock := primaryTun.GetUnlock()
+		if currUnlock == nil || !currUnlock.IsProbed {
+			if m.pool.UnlockDetector() != nil {
+				probeCtx, probeCancel := context.WithTimeout(ctx, 8*time.Second)
+				currUnlock = m.pool.UnlockDetector().ProbeTunnel(probeCtx, primaryTun.DevName, currentActiveNode.IP)
+				probeCancel()
+				primaryTun.SetUnlock(currUnlock)
+			}
+		}
+		if currUnlock != nil && !currUnlock.MatchFilter(g.UnlockFilter) {
+			primaryUnlockValid = false
+			stats.LogWarn("DynamicGroup", "[%s] 当前主网关 %s 实测不满足解锁要求 (%s: GPT=%s, Claude=%s, Gemini=%s)，立即换线寻找支持三大AI的节点...",
+				g.Name, currentActiveNode.IP, g.UnlockFilter, currUnlock.OpenAI, currUnlock.Claude, currUnlock.Gemini)
+		}
+	}
+
+	// 若当前主网关未通过解锁检测，排除当前节点，向后顺延选取下一个候选节点
+	if !primaryUnlockValid && currentActiveNode != nil {
+		for _, cand := range matched {
+			if cand.ID != currentActiveNode.ID && cand.IP != currentActiveNode.IP {
+				best = cand
+				break
+			}
+		}
+	}
+
+	// If periodic rotation is disabled (IntervalMinutes <= 0), keep the healthy primary connection without rotating ONLY IF it satisfies unlock requirement
+	if g.IntervalMinutes <= 0 && primaryHealthy && currentActiveNode != nil && primaryUnlockValid {
 		m.mu.Lock()
 		g.ActiveTunnelIDs = []string{primaryTun.ID}
 		g.LastEvaluatedAt = time.Now()
@@ -700,8 +751,8 @@ func (m *DynamicGroupManager) evaluatePrimarySystemGroup(ctx context.Context, g 
 		return
 	}
 
-	// If primary is already healthy on this best node, keep it
-	if primaryHealthy && currentActiveNode != nil && (currentActiveNode.ID == best.ID || currentActiveNode.IP == best.IP) {
+	// If primary is already healthy on this best node AND satisfies unlock requirement, keep it
+	if primaryHealthy && currentActiveNode != nil && primaryUnlockValid && (currentActiveNode.ID == best.ID || currentActiveNode.IP == best.IP) {
 		m.mu.Lock()
 		g.ActiveTunnelIDs = []string{primaryTun.ID}
 		g.LastEvaluatedAt = time.Now()
@@ -711,8 +762,8 @@ func (m *DynamicGroupManager) evaluatePrimarySystemGroup(ctx context.Context, g 
 		return
 	}
 
-	// If primary connection was established within last 60 seconds, don't interrupt it
-	if primaryTun != nil && !primaryTun.ConnectedAt.IsZero() && time.Since(primaryTun.ConnectedAt) < 60*time.Second {
+	// If primary connection was established within last 60 seconds and satisfies unlock requirement, don't interrupt it
+	if primaryHealthy && primaryUnlockValid && primaryTun != nil && !primaryTun.ConnectedAt.IsZero() && time.Since(primaryTun.ConnectedAt) < 60*time.Second {
 		m.mu.Lock()
 		g.ActiveTunnelIDs = []string{primaryTun.ID}
 		g.LastEvaluatedAt = time.Now()

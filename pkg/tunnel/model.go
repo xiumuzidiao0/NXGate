@@ -76,6 +76,16 @@ func (t *Tunnel) IsCircuitBroken() bool {
 	return !t.circuitBrokenUntil.IsZero() && time.Now().Before(t.circuitBrokenUntil)
 }
 
+func (t *Tunnel) GetUnlock() *UnlockResult {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	if t.Unlock == nil {
+		return nil
+	}
+	cp := *t.Unlock
+	return &cp
+}
+
 func (t *Tunnel) SetUnlock(result *UnlockResult) {
 	t.mu.Lock()
 	defer t.mu.Unlock()

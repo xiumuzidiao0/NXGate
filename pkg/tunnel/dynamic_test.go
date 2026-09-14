@@ -30,24 +30,39 @@ func (m *mockPrimaryConnector) GetStatus() string {
 
 func TestUnlockFilterMatching(t *testing.T) {
 	aiOnly := &nodes.UnlockResult{
-		OpenAI:  nodes.StatusUnlocked,
-		Claude:  nodes.StatusBlocked,
-		Netflix: nodes.StatusBlocked,
-		Google:  nodes.StatusBlocked,
+		OpenAI:   nodes.StatusUnlocked,
+		Claude:   nodes.StatusUnlocked,
+		Gemini:   nodes.StatusUnlocked,
+		Netflix:  nodes.StatusBlocked,
+		Google:   nodes.StatusBlocked,
+		IsProbed: true,
+	}
+
+	claudeBlocked := &nodes.UnlockResult{
+		OpenAI:   nodes.StatusUnlocked,
+		Claude:   nodes.StatusBlocked,
+		Gemini:   nodes.StatusUnlocked,
+		Netflix:  nodes.StatusBlocked,
+		Google:   nodes.StatusBlocked,
+		IsProbed: true,
 	}
 
 	streamOnly := &nodes.UnlockResult{
-		OpenAI:  nodes.StatusBlocked,
-		Claude:  nodes.StatusBlocked,
-		Netflix: nodes.StatusUnlocked,
-		Google:  nodes.StatusUnlocked,
+		OpenAI:   nodes.StatusBlocked,
+		Claude:   nodes.StatusBlocked,
+		Gemini:   nodes.StatusBlocked,
+		Netflix:  nodes.StatusUnlocked,
+		Google:   nodes.StatusUnlocked,
+		IsProbed: true,
 	}
 
 	fullUnlock := &nodes.UnlockResult{
-		OpenAI:  nodes.StatusUnlocked,
-		Claude:  nodes.StatusUnlocked,
-		Netflix: nodes.StatusUnlocked,
-		Google:  nodes.StatusUnlocked,
+		OpenAI:   nodes.StatusUnlocked,
+		Claude:   nodes.StatusUnlocked,
+		Gemini:   nodes.StatusUnlocked,
+		Netflix:  nodes.StatusUnlocked,
+		Google:   nodes.StatusUnlocked,
+		IsProbed: true,
 	}
 
 	// 1. None filter matches everything
@@ -55,9 +70,12 @@ func TestUnlockFilterMatching(t *testing.T) {
 		t.Fatalf("none filter should match all")
 	}
 
-	// 2. AI filter
+	// 2. AI filter (三大 AI 全部解锁)
 	if !aiOnly.MatchFilter("ai") {
 		t.Fatalf("aiOnly should match ai filter")
+	}
+	if claudeBlocked.MatchFilter("ai") {
+		t.Fatalf("claudeBlocked should NOT match ai filter")
 	}
 	if streamOnly.MatchFilter("ai") {
 		t.Fatalf("streamOnly should not match ai filter")
@@ -75,7 +93,7 @@ func TestUnlockFilterMatching(t *testing.T) {
 	if !fullUnlock.MatchFilter("full") {
 		t.Fatalf("fullUnlock should match full filter")
 	}
-	if aiOnly.MatchFilter("full") || streamOnly.MatchFilter("full") {
+	if aiOnly.MatchFilter("full") || streamOnly.MatchFilter("full") || claudeBlocked.MatchFilter("full") {
 		t.Fatalf("partial unlock should not match full filter")
 	}
 }
