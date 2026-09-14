@@ -84,6 +84,10 @@ func (np *NodePool) loadStore() {
 			if n.LastSeen.IsZero() {
 				n.LastSeen = now
 			}
+			// If stored unlock is unprobed prediction or older than 12h, clear it for fresh evaluation
+			if n.Unlock != nil && (!n.Unlock.IsProbed || now.Sub(n.Unlock.CheckedAt) > 12*time.Hour) {
+				n.Unlock = nil
+			}
 			np.nodeStore[n.ID] = n
 		}
 	}

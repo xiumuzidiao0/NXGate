@@ -80,8 +80,10 @@ func (s *Server) handleNodes(w http.ResponseWriter, r *http.Request) {
 	if s.tunnelPool != nil && s.tunnelPool.UnlockDetector() != nil {
 		detector := s.tunnelPool.UnlockDetector()
 		for _, n := range candidates {
-			if n.Unlock == nil {
-				detector.EvaluateNodeUnlock(n)
+			if realUnlock := detector.GetUnlock(n.IP); realUnlock != nil {
+				n.Unlock = realUnlock
+			} else if n.Unlock == nil || !n.Unlock.IsProbed || time.Since(n.Unlock.CheckedAt) > 6*time.Hour {
+				n.Unlock = detector.EvaluateNodeUnlock(n)
 			}
 		}
 	}
@@ -104,7 +106,11 @@ func (s *Server) handleProbeNodes(w http.ResponseWriter, r *http.Request) {
 		if s.tunnelPool != nil && s.tunnelPool.UnlockDetector() != nil {
 			detector := s.tunnelPool.UnlockDetector()
 			for _, n := range targets {
-				detector.EvaluateNodeUnlock(n)
+				if realUnlock := detector.GetUnlock(n.IP); realUnlock != nil {
+					n.Unlock = realUnlock
+				} else {
+					n.Unlock = detector.EvaluateNodeUnlock(n)
+				}
 			}
 		}
 	}()
