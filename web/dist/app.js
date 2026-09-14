@@ -125,14 +125,18 @@
             if (u.google === 'unlocked') badges.push('<span class="badge unlock-badge text-accent" title="Google Search 干净无验证码">Google 可用</span>');
             else if (u.google === 'blocked') badges.push('<span class="badge unlock-badge unlock-blocked" title="Google 出现验证码异常">Google 验证</span>');
 
-            if (badges.length === 0) return '<span class="text-xs text-muted">-</span>';
-            return `<div class="unlock-badges">${badges.join('')}</div>`;
+            if (badges.length === 0) return '<span class="text-xs text-muted">未检测</span>';
+            const tag = u.is_probed ? '<span class="badge badge-system badge-mini" title="经虚拟网卡物理流量实测">实测</span> ' : '';
+            return `<div class="unlock-badges">${tag}${badges.join('')}</div>`;
         }
 
         async function fetchUnlockCache() {
             try {
                 const res = await fetch('/api/unlock');
-                if (res.ok) cachedUnlockMap = await res.json() || {};
+                if (res.ok) {
+                    cachedUnlockMap = await res.json() || {};
+                    renderNodes();
+                }
             } catch(e) {}
         }
 
@@ -380,12 +384,24 @@
                 if (activeQuickFilter === 'res' && n.ip_type !== 'residential') return false;
                 if (activeQuickFilter === 'host' && n.ip_type !== 'hosting') return false;
                 if (activeQuickFilter === 'fast' && (n.latency_ms <= 0 || n.latency_ms >= 150)) return false;
+                if (activeQuickFilter === 'ai') {
+                    const u = (cachedUnlockMap && cachedUnlockMap[n.ip]) || n.unlock;
+                    if (!u || u.openai !== 'unlocked' || u.claude !== 'unlocked' || u.gemini !== 'unlocked') return false;
+                }
                 if (activeQuickFilter === 'gpt') {
-                    const u = n.unlock || cachedUnlockMap[n.ip];
+                    const u = (cachedUnlockMap && cachedUnlockMap[n.ip]) || n.unlock;
                     if (!u || u.openai !== 'unlocked') return false;
                 }
+                if (activeQuickFilter === 'claude') {
+                    const u = (cachedUnlockMap && cachedUnlockMap[n.ip]) || n.unlock;
+                    if (!u || u.claude !== 'unlocked') return false;
+                }
+                if (activeQuickFilter === 'gemini') {
+                    const u = (cachedUnlockMap && cachedUnlockMap[n.ip]) || n.unlock;
+                    if (!u || u.gemini !== 'unlocked') return false;
+                }
                 if (activeQuickFilter === 'nf') {
-                    const u = n.unlock || cachedUnlockMap[n.ip];
+                    const u = (cachedUnlockMap && cachedUnlockMap[n.ip]) || n.unlock;
                     if (!u || u.netflix !== 'unlocked') return false;
                 }
 
@@ -453,7 +469,7 @@
                 const repClass = repVal < 45 ? 'rep-bad' : (repVal < 70 ? 'rep-warn' : 'rep-good');
                 const repBadge = `<span class="badge reputation-badge ${repClass}">${repVal}分</span>`;
 
-                const unlockData = n.unlock || cachedUnlockMap[n.ip];
+                const unlockData = (cachedUnlockMap && cachedUnlockMap[n.ip]) || n.unlock;
                 const unlockInfo = unlockData ? renderUnlockBadges(unlockData) : '<span  class="text-xs text-muted">未检测</span>';
 
                 return `
