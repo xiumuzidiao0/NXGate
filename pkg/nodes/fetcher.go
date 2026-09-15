@@ -128,6 +128,7 @@ func (f *Fetcher) FetchNodes(ctx context.Context) (*FetchResult, error) {
 		combined.WriteString("*vpn_servers\n#HostName,IP,Score,Ping,Speed,CountryLong,CountryShort,NumVpnSessions,Uptime,TotalUsers,TotalTraffic,LogType,Operator,Message,OpenVPN_ConfigData_Base64\n")
 
 		sourceNames := make([]string, 0, len(successes))
+		seenIPs := make(map[string]bool)
 		for _, s := range successes {
 			sourceNames = append(sourceNames, s.name)
 			lines := strings.Split(string(s.data), "\n")
@@ -136,8 +137,15 @@ func (f *Fetcher) FetchNodes(ctx context.Context) (*FetchResult, error) {
 				if trimmed == "" || strings.HasPrefix(trimmed, "*") || strings.HasPrefix(trimmed, "#") {
 					continue
 				}
-				combined.WriteString(trimmed)
-				combined.WriteString("\n")
+				parts := strings.SplitN(trimmed, ",", 3)
+				if len(parts) >= 2 {
+					ip := strings.TrimSpace(parts[1])
+					if ip != "" && !seenIPs[ip] {
+						seenIPs[ip] = true
+						combined.WriteString(trimmed)
+						combined.WriteString("\n")
+					}
+				}
 			}
 		}
 
