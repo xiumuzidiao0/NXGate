@@ -371,7 +371,6 @@
             <!-- Tab Switcher -->
             <div class="modal-tabs">
                 <button type="button" class="modal-tab-btn active" id="tab-btn-base" data-action="switchSettingsTab" data-args="[&quot;base&quot;]">基础与网络</button>
-                <button type="button" class="modal-tab-btn" id="tab-btn-rotate" data-action="switchSettingsTab" data-args="[&quot;rotate&quot;]">自动轮换策略</button>
                 <button type="button" class="modal-tab-btn" id="tab-btn-tg" data-action="switchSettingsTab" data-args="[&quot;tg&quot;]">Telegram 告警</button>
             </div>
 
@@ -406,38 +405,7 @@
                     </div>
                 </div>
 
-                <!-- Tab 2: Auto Rotate (Unified into Dynamic Group system-primary) -->
-                <div id="tab-content-rotate" class="hidden">
-                    <div class="settings-note mb-4">
-                        💡 <strong>架构升级提示</strong>：系统节点的自动定时轮换与平滑故障转移已全面收敛至<strong>自适应隧道组</strong>统一托管。由系统内置的 <strong>主出口网关组 (tun0)</strong> 负责监测出网健康度、按 AI / 流媒体解锁能力择优，并定期平滑轮换。
-                    </div>
-
-                    <div class="card mb-4" style="background: var(--bg-card-sub); border: 1px solid var(--border); padding: 16px;">
-                        <div class="row items-center justify-between wrap gap-2 mb-3">
-                            <div class="row items-center gap-2">
-                                <span class="badge badge-system">系统主出口网关组 (tun0)</span>
-                                <span id="sys-rotate-status-badge" class="badge connected"><span class="status-dot"></span> 托管运行中</span>
-                            </div>
-                            <button type="button" class="btn btn-sm" data-action="openSystemPrimaryConfig">
-                                ⚡ 前往配置主连策略 ↗
-                            </button>
-                        </div>
-
-                        <div class="dynamic-group-meta" id="sys-rotate-meta">
-                            <span>轮换周期: <strong id="sys-meta-interval" class="text-strong">30分钟</strong></span>
-                            <span>网络类型: <strong id="sys-meta-iptype" class="text-strong">全部网络类型</strong></span>
-                            <span>首选地区: <strong id="sys-meta-country" class="text-strong">全部国家/地区</strong></span>
-                            <span>择优指标: <strong id="sys-meta-sort" class="dynamic-metric">最低延迟优先</strong></span>
-                            <span>解锁要求: <strong id="sys-meta-unlock" class="text-strong">不限</strong></span>
-                        </div>
-                    </div>
-
-                    <div class="text-note text-muted">
-                        如需关闭定时自动轮换（保持固定节点长期连接），点击上方「前往配置主连策略」将轮换状态调整为保持固定连接即可。
-                    </div>
-                </div>
-
-                <!-- Tab 3: Telegram -->
+                <!-- Tab 2: Telegram -->
                 <div id="tab-content-tg" class="hidden">
                     <div  class="settings-note">
                         配置后，网关在节点自动故障转移、自适应池全断线时自动推送告警；并支持在 TG 对话框使用 <code>/status</code>、<code>/tunnels</code>、<code>/rotate</code> 远程控制。
