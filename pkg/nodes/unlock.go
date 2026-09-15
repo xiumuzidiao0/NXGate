@@ -13,15 +13,17 @@ const (
 )
 
 type UnlockResult struct {
-	IP            string              `json:"ip"`
-	OpenAI        ServiceUnlockStatus `json:"openai"`         // ChatGPT / OpenAI
-	Claude        ServiceUnlockStatus `json:"claude"`         // Claude / Anthropic
-	Gemini        ServiceUnlockStatus `json:"gemini"`         // Google Gemini
-	Google        ServiceUnlockStatus `json:"google"`         // Google Search / 204
-	Netflix       ServiceUnlockStatus `json:"netflix"`        // Netflix
-	NetflixRegion string              `json:"netflix_region"` // 地区代码，如 "JP", "US"
-	IsProbed      bool                `json:"is_probed"`      // 是否经过物理虚拟网卡真实流量探测
-	CheckedAt     time.Time           `json:"checked_at"`
+	IP                    string              `json:"ip"`
+	OpenAI                ServiceUnlockStatus `json:"openai"`                  // ChatGPT / OpenAI
+	Claude                ServiceUnlockStatus `json:"claude"`                  // Claude / Anthropic
+	Gemini                ServiceUnlockStatus `json:"gemini"`                  // Google Gemini
+	Google                ServiceUnlockStatus `json:"google"`                  // Google Search / 204
+	Netflix               ServiceUnlockStatus `json:"netflix"`                 // Netflix
+	NetflixRegion         string              `json:"netflix_region"`          // 地区代码，如 "JP", "US"
+	IsProbed              bool                `json:"is_probed"`               // 是否经过物理虚拟网卡真实流量探测
+	ThroughputPassed      bool                `json:"throughput_passed"`       // 吞吐量检测是否通过（freesub 断流检测）
+	ThroughputBytesPerSec int64               `json:"throughput_bytes_per_sec"` // 实际测得吞吐量（字节/秒）
+	CheckedAt             time.Time           `json:"checked_at"`
 }
 
 // MatchFilter checks whether the unlock status satisfies the requested filter criteria.
