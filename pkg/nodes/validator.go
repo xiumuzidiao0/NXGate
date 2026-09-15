@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	MaxSnapshotBytes = 12 * 1024 * 1024 // 12 MB
+	MaxSnapshotBytes = 32 * 1024 * 1024 // 32 MB
 	MaxConfigBytes   = 128 * 1024       // 128 KB
 )
 
