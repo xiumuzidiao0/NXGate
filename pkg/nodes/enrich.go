@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -14,20 +15,26 @@ import (
 )
 
 type IPCacheEntry struct {
-	IP        string    `json:"ip"`
-	IPType    string    `json:"ip_type"` // residential, hosting, mobile, unknown
-	ISP       string    `json:"isp"`
-	City      string    `json:"city"`
-	Region    string    `json:"region"`
-	IsHosting bool      `json:"is_hosting"`
-	CachedAt  time.Time `json:"cached_at"`
+	IP            string    `json:"ip"`
+	IPType        string    `json:"ip_type"` // residential, hosting, mobile, unknown
+	ISP           string    `json:"isp"`
+	City          string    `json:"city"`
+	Region        string    `json:"region"`
+	ASN           int       `json:"asn"`
+	RDNS          string    `json:"rdns"`
+	IsHosting     bool      `json:"is_hosting"`
+	IsResidential bool      `json:"is_residential"`
+	ResConfidence int       `json:"res_confidence"`
+	ResReason     string    `json:"res_reason"`
+	CachedAt      time.Time `json:"cached_at"`
 }
 
 type IPEnricher struct {
-	mu        sync.RWMutex
-	cachePath string
-	cache     map[string]*IPCacheEntry
-	client    *http.Client
+	mu               sync.RWMutex
+	cachePath        string
+	cache            map[string]*IPCacheEntry
+	client           *http.Client
+	residentialDetector *ResidentialDetector
 }
 
 func NewIPEnricher(dataDir string) *IPEnricher {
@@ -37,6 +44,7 @@ func NewIPEnricher(dataDir string) *IPEnricher {
 		client: &http.Client{
 			Timeout: 15 * time.Second,
 		},
+		residentialDetector: NewResidentialDetector(),
 	}
 	e.loadCache()
 	return e
@@ -87,6 +95,8 @@ type ipApiItem struct {
 	City       string `json:"city"`
 	ISP        string `json:"isp"`
 	Org        string `json:"org"`
+	AS         string `json:"as"`       // "AS15169 Google LLC"
+	Reverse    string `json:"reverse"`  // rDNS
 	Hosting    bool   `json:"hosting"`
 	Mobile     bool   `json:"mobile"`
 	Proxy      bool   `json:"proxy"`
@@ -107,7 +117,12 @@ func (e *IPEnricher) EnrichNodes(ctx context.Context, nodeList []*Node) {
 			n.ISP = entry.ISP
 			n.City = entry.City
 			n.Region = entry.Region
+			n.ASN = entry.ASN
+			n.RDNS = entry.RDNS
 			n.IsHosting = entry.IsHosting
+			n.IsResidential = entry.IsResidential
+			n.ResConfidence = entry.ResConfidence
+			n.ResReason = entry.ResReason
 		} else {
 			toQuery = append(toQuery, n.IP)
 		}
@@ -135,7 +150,7 @@ func (e *IPEnricher) EnrichNodes(ctx context.Context, nodeList []*Node) {
 		}
 
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-			"http://ip-api.com/batch?lang=zh-CN&fields=status,query,country,regionName,city,isp,org,hosting,mobile,proxy",
+			"http://ip-api.com/batch?lang=zh-CN&fields=status,query,country,regionName,city,isp,org,as,reverse,hosting,mobile,proxy",
 			bytes.NewReader(reqBytes))
 		if err != nil {
 			continue
@@ -161,11 +176,14 @@ func (e *IPEnricher) EnrichNodes(ctx context.Context, nodeList []*Node) {
 				continue
 			}
 
-			ipType := "residential" // 默认居民住宅/家庭宽带
-			if item.Hosting {
-				ipType = "hosting" // 机房/数据中心
-			} else if item.Mobile {
-				ipType = "mobile" // 移动蜂窝
+			// 解析 ASN
+			asn := 0
+			if item.AS != "" {
+				// AS format: "AS15169 Google LLC"
+				var parsed int
+				if n, _ := fmt.Sscanf(item.AS, "AS%d", &parsed); n == 1 {
+					asn = parsed
+				}
 			}
 
 			ispName := item.ISP
@@ -173,14 +191,36 @@ func (e *IPEnricher) EnrichNodes(ctx context.Context, nodeList []*Node) {
 				ispName = item.Org
 			}
 
+			// 使用家宽甄选引擎进行五层判定
+			classification := e.residentialDetector.Classify(item.Query, asn, ispName, item.Reverse)
+
+			// 基于 ip-api.com 和甄选引擎综合判定
+			ipType := "residential" // 默认居民住宅/家庭宽带
+			isResidential := false
+			if item.Hosting {
+				ipType = "hosting" // 机房/数据中心（API 明确标记）
+			} else if item.Mobile {
+				ipType = "mobile" // 移动蜂窝
+			} else if classification.Type == TypeResidential && classification.Confidence >= 60 {
+				ipType = "residential"
+				isResidential = true
+			} else if classification.Type == TypeDatacenter && classification.Confidence >= 70 {
+				ipType = "hosting"
+			}
+
 			entry := &IPCacheEntry{
-				IP:        item.Query,
-				IPType:    ipType,
-				ISP:       ispName,
-				City:      item.City,
-				Region:    item.RegionName,
-				IsHosting: item.Hosting,
-				CachedAt:  time.Now(),
+				IP:            item.Query,
+				IPType:        ipType,
+				ISP:           ispName,
+				City:          item.City,
+				Region:        item.RegionName,
+				ASN:           asn,
+				RDNS:          item.Reverse,
+				IsHosting:     item.Hosting,
+				IsResidential: isResidential,
+				ResConfidence: classification.Confidence,
+				ResReason:     classification.Reason,
+				CachedAt:      time.Now(),
 			}
 			newResults[item.Query] = entry
 		}
@@ -204,7 +244,12 @@ func (e *IPEnricher) EnrichNodes(ctx context.Context, nodeList []*Node) {
 			n.ISP = entry.ISP
 			n.City = entry.City
 			n.Region = entry.Region
+			n.ASN = entry.ASN
+			n.RDNS = entry.RDNS
 			n.IsHosting = entry.IsHosting
+			n.IsResidential = entry.IsResidential
+			n.ResConfidence = entry.ResConfidence
+			n.ResReason = entry.ResReason
 		} else if n.IPType == "" {
 			n.IPType = "unknown"
 		}

@@ -304,6 +304,8 @@ func (np *NodePool) ProbeNodes(ctx context.Context, nodeList []*Node) {
 	concurrency := 24
 	sem := make(chan struct{}, concurrency)
 
+	probeConfig := DefaultProbeConfig()
+
 	for _, n := range nodeList {
 		wg.Add(1)
 		go func(target *Node) {
@@ -315,42 +317,62 @@ func (np *NodePool) ProbeNodes(ctx context.Context, nodeList []*Node) {
 			}
 			defer func() { <-sem }()
 
-			start := time.Now()
 			addr := net.JoinHostPort(target.IP, strconv.Itoa(target.Port))
 			isUDP := strings.ToLower(target.Proto) == "udp"
 
-			if isUDP {
-				udpConn, err := net.DialTimeout("udp", addr, 1500*time.Millisecond)
-				if err == nil {
-					_ = udpConn.Close()
-					np.mu.Lock()
-					if target.Ping > 0 {
-						target.LatencyMs = target.Ping
-					} else {
-						target.LatencyMs = 60
-					}
-					target.LastChecked = time.Now()
-					target.FailCount = 0
-					np.mu.Unlock()
+			// Layered timeout strategy: generous first attempt, strict retry
+			for attempt := 0; attempt < probeConfig.MaxAttempts; attempt++ {
+				if ctx.Err() != nil {
 					return
 				}
-			} else {
-				conn, err := net.DialTimeout("tcp", addr, 2500*time.Millisecond)
-				if err == nil {
-					_ = conn.Close()
-					latency := int(time.Since(start).Milliseconds())
-					if latency <= 0 {
-						latency = 1
+
+				strategy := GetProbeStrategy(attempt)
+				start := time.Now()
+				var dialErr error
+
+				if isUDP {
+					timeout := strategy.UDPTimeout
+					udpConn, err := net.DialTimeout("udp", addr, timeout)
+					dialErr = err
+					if err == nil {
+						_ = udpConn.Close()
+						np.mu.Lock()
+						if target.Ping > 0 {
+							target.LatencyMs = target.Ping
+						} else {
+							target.LatencyMs = 60
+						}
+						target.LastChecked = time.Now()
+						target.FailCount = 0
+						np.mu.Unlock()
+						return
 					}
-					np.mu.Lock()
-					target.LatencyMs = latency
-					target.LastChecked = time.Now()
-					target.FailCount = 0
-					np.mu.Unlock()
-					return
+				} else {
+					timeout := strategy.TCPTimeout
+					conn, err := net.DialTimeout("tcp", addr, timeout)
+					dialErr = err
+					if err == nil {
+						_ = conn.Close()
+						latency := int(time.Since(start).Milliseconds())
+						if latency <= 0 {
+							latency = 1
+						}
+						np.mu.Lock()
+						target.LatencyMs = latency
+						target.LastChecked = time.Now()
+						target.FailCount = 0
+						np.mu.Unlock()
+						return
+					}
+				}
+
+				// Log retry attempts for debugging
+				if attempt > 0 && dialErr != nil {
+					stats.LogInfo("Probe", "节点 %s:%d 第 %d 次重试失败: %v", target.IP, target.Port, attempt+1, dialErr)
 				}
 			}
 
+			// All attempts failed
 			np.mu.Lock()
 			target.LatencyMs = -1
 			target.LastChecked = time.Now()
