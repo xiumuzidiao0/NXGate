@@ -701,6 +701,69 @@ func (np *NodePool) StartRevivalLoop(ctx context.Context) {
 	}()
 }
 
+// PortKnockTCP checks if a specific TCP port is reachable within the given timeout.
+func PortKnockTCP(ip string, port int, timeout time.Duration) (bool, time.Duration, error) {
+	addr := net.JoinHostPort(ip, strconv.Itoa(port))
+	start := time.Now()
+	conn, err := net.DialTimeout("tcp", addr, timeout)
+	latency := time.Since(start)
+	if err == nil {
+		_ = conn.Close()
+		return true, latency, nil
+	}
+	return false, latency, err
+}
+
+// PortKnockResult represents the result of knocking a node's port.
+type PortKnockResult struct {
+	Node      *Node
+	Reachable bool
+	Latency   time.Duration
+	Error     error
+}
+
+// BatchPortKnock concurrently checks TCP reachability for a batch of nodes.
+func BatchPortKnock(ctx context.Context, nodes []*Node, timeout time.Duration) []PortKnockResult {
+	if len(nodes) == 0 {
+		return nil
+	}
+
+	results := make([]PortKnockResult, len(nodes))
+	concurrency := 48
+	sem := make(chan struct{}, concurrency)
+	var wg sync.WaitGroup
+
+	for i, n := range nodes {
+		wg.Add(1)
+		go func(idx int, target *Node) {
+			defer wg.Done()
+			select {
+			case <-ctx.Done():
+				results[idx] = PortKnockResult{Node: target, Reachable: false, Error: ctx.Err()}
+				return
+			case sem <- struct{}{}:
+			}
+			defer func() { <-sem }()
+
+			if strings.ToLower(target.Proto) == "udp" {
+				results[idx] = PortKnockResult{Node: target, Reachable: true}
+				return
+			}
+
+			reachable, latency, err := PortKnockTCP(target.IP, target.Port, timeout)
+			results[idx] = PortKnockResult{
+				Node:      target,
+				Reachable: reachable,
+				Latency:   latency,
+				Error:     err,
+			}
+		}(i, n)
+	}
+
+	wg.Wait()
+	return results
+}
+
 // FilterReachableNodes performs fast TCP port knock on all nodes to filter out dead ports.
 // This is much faster than full OpenVPN dial and reduces wasted connection attempts by ~90%.
 func FilterReachableNodes(nodes []*Node, timeout time.Duration) []*Node {
@@ -708,52 +771,16 @@ func FilterReachableNodes(nodes []*Node, timeout time.Duration) []*Node {
 		return nodes
 	}
 
-	type result struct {
-		node      *Node
-		reachable bool
-	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout+1*time.Second)
+	defer cancel()
 
-	resultCh := make(chan result, len(nodes))
-	concurrency := 48 // Aggressive concurrency for fast port scanning
-	sem := make(chan struct{}, concurrency)
-	var wg sync.WaitGroup
-
-	for _, n := range nodes {
-		wg.Add(1)
-		go func(node *Node) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-
-			// Skip UDP nodes (port knock only works for TCP)
-			if strings.ToLower(node.Proto) == "udp" {
-				resultCh <- result{node: node, reachable: true}
-				return
-			}
-
-			addr := net.JoinHostPort(node.IP, strconv.Itoa(node.Port))
-			conn, err := net.DialTimeout("tcp", addr, timeout)
-			if err == nil {
-				_ = conn.Close()
-				resultCh <- result{node: node, reachable: true}
-			} else {
-				resultCh <- result{node: node, reachable: false}
-			}
-		}(n)
-	}
-
-	go func() {
-		wg.Wait()
-		close(resultCh)
-	}()
-
+	results := BatchPortKnock(ctx, nodes, timeout)
 	var reachable []*Node
-	for res := range resultCh {
-		if res.reachable {
-			reachable = append(reachable, res.node)
+	for _, res := range results {
+		if res.Reachable {
+			reachable = append(reachable, res.Node)
 		}
 	}
-
 	return reachable
 }
 
