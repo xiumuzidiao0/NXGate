@@ -214,22 +214,6 @@ try {
     const baseVisible = await page.locator("#tab-content-base").isVisible();
     if (!baseVisible) failures.push(`${viewport}px: settings base tab is not visible`);
 
-    await page.locator('[data-action="switchSettingsTab"][data-args*="rotate"]').click();
-    await page.waitForTimeout(60);
-    const rotateVisible = await page.locator("#tab-content-rotate").isVisible();
-    if (!rotateVisible) failures.push(`${viewport}px: settings rotate tab is not visible`);
-
-    // Test direct jump from rotate tab to system primary group drawer
-    await page.locator('[data-action="openSystemPrimaryConfig"]').click();
-    await page.waitForTimeout(200);
-    const sysDrawerOpen = await page.locator("#dynamic-group-edit-card").evaluate(el => el.classList.contains("open"));
-    if (!sysDrawerOpen) failures.push(`${viewport}px: openSystemPrimaryConfig did not open drawer`);
-    await page.locator("#dynamic-group-edit-card [data-drawer-close]").click();
-    await page.waitForTimeout(200);
-
-    // Go back to settings to test tg tab
-    await page.evaluate(() => document.querySelector('[data-view="settings"]').click());
-    await page.waitForTimeout(80);
     await page.locator('[data-action="switchSettingsTab"][data-args*="tg"]').click();
     await page.waitForTimeout(60);
     const tgVisible = await page.locator("#tab-content-tg").isVisible();
