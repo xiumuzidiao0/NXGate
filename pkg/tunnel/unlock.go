@@ -338,20 +338,53 @@ func (d *UnlockDetector) ProbeTunnel(ctx context.Context, devName string, ip str
 	// 3. Google Gemini
 	go func() {
 		defer wg.Done()
-		req, err := http.NewRequestWithContext(ctx, "GET", "https://gemini.google.com/", nil)
+		// 探测 Gemini 应用核心端点
+		// 正常访问返回 200 并加载 Gemini Web App
+		// 区域封锁返回 403 或重定向到不可用页面
+		req, err := http.NewRequestWithContext(ctx, "GET", "https://gemini.google.com/app", nil)
 		if err == nil {
 			req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")
+			req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
 			resp, err := client.Do(req)
 			if err == nil {
 				defer resp.Body.Close()
-				if resp.StatusCode == 200 {
+				body, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
+				bodyStr := string(body)
+
+				// HTTP 200 且页面包含 Gemini 应用标识
+				if resp.StatusCode == 200 && (strings.Contains(bodyStr, "gemini") || strings.Contains(bodyStr, "bard") || len(bodyStr) > 100) {
 					result.Gemini = StatusUnlocked
-				} else if resp.StatusCode == 403 || resp.StatusCode == 429 {
-					result.Gemini = StatusBlocked
+					return
 				}
-				return
+
+				// 明确封锁
+				if resp.StatusCode == 403 || resp.StatusCode == 429 {
+					result.Gemini = StatusBlocked
+					return
+				}
+
+				// 重定向到不可用页面
+				if strings.Contains(bodyStr, "not available") || strings.Contains(bodyStr, "unavailable") {
+					result.Gemini = StatusBlocked
+					return
+				}
 			}
 		}
+
+		// 备用探测：检查 Google API 端点可用性
+		reqAPI, errAPI := http.NewRequestWithContext(ctx, "GET", "https://generativelanguage.googleapis.com/", nil)
+		if errAPI == nil {
+			resp, err := client.Do(reqAPI)
+			if err == nil {
+				defer resp.Body.Close()
+				// API 端点正常响应（即使是 404）说明网络可达
+				if resp.StatusCode >= 200 && resp.StatusCode < 500 {
+					result.Gemini = StatusUnlocked
+					return
+				}
+			}
+		}
+
 		result.Gemini = StatusBlocked
 	}()
 
