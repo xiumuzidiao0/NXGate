@@ -32,9 +32,9 @@ func TestPortKnockTCP(t *testing.T) {
 			wantLatLow: 2 * time.Second,
 		},
 		{
-			name:       "Invalid IP should fail",
-			ip:         "192.0.2.1", // TEST-NET-1 (should timeout)
-			port:       9999,
+			name:       "Unused local port should fail",
+			ip:         "127.0.0.1",
+			port:       59999,
 			timeout:    500 * time.Millisecond,
 			wantReach:  false,
 			wantLatLow: 1 * time.Second,
@@ -66,7 +66,7 @@ func TestBatchPortKnock(t *testing.T) {
 			HostName:     "Google DNS",
 			IP:           "8.8.8.8",
 			Proto:        "tcp",
-			TCPPort:      53,
+			Port:         53,
 			CountryLong:  "United States",
 			CountryShort: "US",
 		},
@@ -74,15 +74,15 @@ func TestBatchPortKnock(t *testing.T) {
 			HostName:     "Cloudflare DNS",
 			IP:           "1.1.1.1",
 			Proto:        "tcp",
-			TCPPort:      53,
+			Port:         53,
 			CountryLong:  "United States",
 			CountryShort: "US",
 		},
 		{
 			HostName:     "Dead Node",
-			IP:           "192.0.2.1", // TEST-NET-1
+			IP:           "127.0.0.1",
 			Proto:        "tcp",
-			TCPPort:      9999,
+			Port:         59999,
 			CountryLong:  "Unknown",
 			CountryShort: "XX",
 		},
@@ -116,15 +116,15 @@ func TestFilterReachableNodes(t *testing.T) {
 			HostName:     "Google DNS",
 			IP:           "8.8.8.8",
 			Proto:        "tcp",
-			TCPPort:      53,
+			Port:         53,
 			CountryLong:  "United States",
 			CountryShort: "US",
 		},
 		{
 			HostName:     "Dead Node",
-			IP:           "192.0.2.1",
+			IP:           "127.0.0.1",
 			Proto:        "tcp",
-			TCPPort:      9999,
+			Port:         59999,
 			CountryLong:  "Unknown",
 			CountryShort: "XX",
 		},
@@ -145,10 +145,10 @@ func TestFilterReachableNodes(t *testing.T) {
 func TestPortKnockTimeout(t *testing.T) {
 	// Test that timeout is respected
 	start := time.Now()
-	timeout := 500 * time.Millisecond
+	timeout := 400 * time.Millisecond
 
-	// Try to connect to a non-routable IP
-	reachable, latency, _ := PortKnockTCP("192.0.2.1", 9999, timeout)
+	// Try to connect to an unroutable Class E address
+	reachable, latency, _ := PortKnockTCP("240.0.0.1", 9999, timeout)
 
 	elapsed := time.Since(start)
 
@@ -156,12 +156,12 @@ func TestPortKnockTimeout(t *testing.T) {
 		t.Error("PortKnockTCP() should not be reachable for non-routable IP")
 	}
 
-	// Allow some margin for timeout accuracy (±200ms)
-	if elapsed > timeout+200*time.Millisecond {
+	// Allow some margin for timeout accuracy (+-300ms)
+	if elapsed > timeout+300*time.Millisecond {
 		t.Errorf("PortKnockTCP() took %v, expected around %v", elapsed, timeout)
 	}
 
-	if latency > timeout+200*time.Millisecond {
+	if latency > timeout+300*time.Millisecond {
 		t.Errorf("PortKnockTCP() latency %v exceeds timeout %v", latency, timeout)
 	}
 }

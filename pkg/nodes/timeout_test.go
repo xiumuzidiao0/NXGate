@@ -11,38 +11,36 @@ func TestGetProbeStrategy(t *testing.T) {
 		attempt            int
 		expectedTCPTimeout time.Duration
 		expectedUDPTimeout time.Duration
-		expectedVPNTimeout time.Duration
 	}{
 		{
 			name:               "First attempt uses generous timeouts",
 			attempt:            0,
-			expectedTCPTimeout: 12 * time.Second,
-			expectedUDPTimeout: 8 * time.Second,
-			expectedVPNTimeout: 35 * time.Second,
+			expectedTCPTimeout: 6 * time.Second,
+			expectedUDPTimeout: 4 * time.Second,
 		},
 		{
-			name:               "Retry uses strict timeouts",
+			name:               "Retry uses tighter timeouts",
 			attempt:            1,
 			expectedTCPTimeout: 4 * time.Second,
-			expectedUDPTimeout: 2500 * time.Millisecond,
-			expectedVPNTimeout: 15 * time.Second,
+			expectedUDPTimeout: 3 * time.Second,
 		},
 		{
-			name:               "Multiple retries use same strict timeouts",
+			name:               "Final attempt uses strict timeouts",
+			attempt:            2,
+			expectedTCPTimeout: 3 * time.Second,
+			expectedUDPTimeout: 2 * time.Second,
+		},
+		{
+			name:               "Subsequent retries cap at strict timeouts",
 			attempt:            5,
-			expectedTCPTimeout: 4 * time.Second,
-			expectedUDPTimeout: 2500 * time.Millisecond,
-			expectedVPNTimeout: 15 * time.Second,
+			expectedTCPTimeout: 3 * time.Second,
+			expectedUDPTimeout: 2 * time.Second,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			strategy := GetProbeStrategy(tt.attempt)
-
-			if strategy.Attempt != tt.attempt {
-				t.Errorf("Expected attempt %d, got %d", tt.attempt, strategy.Attempt)
-			}
 
 			if strategy.TCPTimeout != tt.expectedTCPTimeout {
 				t.Errorf("Expected TCP timeout %v, got %v", tt.expectedTCPTimeout, strategy.TCPTimeout)
@@ -51,10 +49,6 @@ func TestGetProbeStrategy(t *testing.T) {
 			if strategy.UDPTimeout != tt.expectedUDPTimeout {
 				t.Errorf("Expected UDP timeout %v, got %v", tt.expectedUDPTimeout, strategy.UDPTimeout)
 			}
-
-			if strategy.OpenVPNTimeout != tt.expectedVPNTimeout {
-				t.Errorf("Expected OpenVPN timeout %v, got %v", tt.expectedVPNTimeout, strategy.OpenVPNTimeout)
-			}
 		})
 	}
 }
@@ -62,24 +56,8 @@ func TestGetProbeStrategy(t *testing.T) {
 func TestDefaultProbeConfig(t *testing.T) {
 	cfg := DefaultProbeConfig()
 
-	if cfg.MaxAttempts != 2 {
-		t.Errorf("Expected MaxAttempts 2, got %d", cfg.MaxAttempts)
-	}
-
-	if !cfg.UseLayered {
-		t.Error("Expected UseLayered to be true for default config")
-	}
-}
-
-func TestLegacyProbeConfig(t *testing.T) {
-	cfg := LegacyProbeConfig()
-
-	if cfg.MaxAttempts != 1 {
-		t.Errorf("Expected MaxAttempts 1, got %d", cfg.MaxAttempts)
-	}
-
-	if cfg.UseLayered {
-		t.Error("Expected UseLayered to be false for legacy config")
+	if cfg.MaxAttempts != 3 {
+		t.Errorf("Expected MaxAttempts 3, got %d", cfg.MaxAttempts)
 	}
 }
 
@@ -87,10 +65,16 @@ func TestTimeoutProgression(t *testing.T) {
 	// Verify that first attempt is always more generous than retry
 	first := GetProbeStrategy(0)
 	retry := GetProbeStrategy(1)
+	final := GetProbeStrategy(2)
 
 	if first.TCPTimeout <= retry.TCPTimeout {
 		t.Errorf("First attempt TCP timeout (%v) should be greater than retry (%v)",
 			first.TCPTimeout, retry.TCPTimeout)
+	}
+
+	if retry.TCPTimeout <= final.TCPTimeout {
+		t.Errorf("Retry TCP timeout (%v) should be greater than final (%v)",
+			retry.TCPTimeout, final.TCPTimeout)
 	}
 
 	if first.UDPTimeout <= retry.UDPTimeout {
@@ -98,8 +82,8 @@ func TestTimeoutProgression(t *testing.T) {
 			first.UDPTimeout, retry.UDPTimeout)
 	}
 
-	if first.OpenVPNTimeout <= retry.OpenVPNTimeout {
-		t.Errorf("First attempt OpenVPN timeout (%v) should be greater than retry (%v)",
-			first.OpenVPNTimeout, retry.OpenVPNTimeout)
+	if retry.UDPTimeout <= final.UDPTimeout {
+		t.Errorf("Retry UDP timeout (%v) should be greater than final (%v)",
+			retry.UDPTimeout, final.UDPTimeout)
 	}
 }
