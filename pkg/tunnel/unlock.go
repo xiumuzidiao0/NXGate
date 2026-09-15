@@ -425,14 +425,32 @@ func (d *UnlockDetector) ProbeTunnel(ctx context.Context, devName string, ip str
 
 	wg.Wait()
 
+	// 🔥 Phase 4: Throughput check (freesub inspired)
+	// Detect "connected but dead" nodes with zero bandwidth
+	throughputResult := CheckThroughputWithRetry(devName, DefaultThroughputConfig())
+	result.ThroughputPassed = throughputResult.Passed
+	result.ThroughputBytesPerSec = throughputResult.BytesPerSecond
+
+	if !throughputResult.Passed {
+		stats.LogWarn("UnlockDetector", "[%s:%s] 断流检测失败: %s", devName, ip, throughputResult.String())
+		// Downgrade all unlock statuses to blocked if throughput fails
+		result.OpenAI = StatusBlocked
+		result.Claude = StatusBlocked
+		result.Gemini = StatusBlocked
+		result.Google = StatusBlocked
+		result.Netflix = StatusBlocked
+	} else {
+		stats.LogInfo("UnlockDetector", "[%s:%s] 吞吐量检测通过: %s", devName, ip, throughputResult.String())
+	}
+
 	// Update cache with real physical probe result
 	d.mu.Lock()
 	d.cache[ip] = result
 	d.saveLocked()
 	d.mu.Unlock()
 
-	stats.LogInfo("UnlockDetector", "[%s:%s] 实测解锁结果: ChatGPT=%s, Claude=%s, Gemini=%s, Google=%s, Netflix=%s",
-		devName, ip, result.OpenAI, result.Claude, result.Gemini, result.Google, result.Netflix)
+	stats.LogInfo("UnlockDetector", "[%s:%s] 实测解锁结果: ChatGPT=%s, Claude=%s, Gemini=%s, Google=%s, Netflix=%s, Throughput=%s",
+		devName, ip, result.OpenAI, result.Claude, result.Gemini, result.Google, result.Netflix, throughputResult.String())
 
 	return result
 }
