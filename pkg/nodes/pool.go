@@ -120,6 +120,7 @@ func (np *NodePool) saveStoreLocked() {
 
 // evictStaleNodesLocked cleans up nodes that have been offline or unseen for an extended period.
 // Favored nodes are permanently protected from automated eviction.
+// Reachable nodes (LatencyMs > 0) are actively preserved in the pool.
 func (np *NodePool) evictStaleNodesLocked(now time.Time) int {
 	evicted := 0
 	for id, n := range np.nodeStore {
@@ -128,11 +129,16 @@ func (np *NodePool) evictStaleNodesLocked(now time.Time) int {
 			continue
 		}
 
-		// 2. Condition A: Unseen in upstream feed for > 24h AND TCP probe unreachable
-		staleByTime := !n.LastSeen.IsZero() && now.Sub(n.LastSeen) > 24*time.Hour && n.LatencyMs <= 0
+		// 2. Never evict currently reachable nodes
+		if n.LatencyMs > 0 {
+			continue
+		}
 
-		// 3. Condition B: Failed TCP probe >= 5 consecutive times AND unseen in upstream for > 6h
-		staleByFails := n.FailCount >= 5 && !n.LastSeen.IsZero() && now.Sub(n.LastSeen) > 6*time.Hour
+		// 3. Condition A: Unseen in upstream feeds for >= 24h AND unreachable
+		staleByTime := !n.LastSeen.IsZero() && now.Sub(n.LastSeen) >= 24*time.Hour && n.LatencyMs <= 0
+
+		// 4. Condition B: Failed probe >= 8 consecutive times AND unseen in upstream for >= 24h
+		staleByFails := n.FailCount >= 8 && !n.LastSeen.IsZero() && now.Sub(n.LastSeen) >= 24*time.Hour
 
 		if staleByTime || staleByFails {
 			delete(np.nodeStore, id)
@@ -311,25 +317,45 @@ func (np *NodePool) ProbeNodes(ctx context.Context, nodeList []*Node) {
 
 			start := time.Now()
 			addr := net.JoinHostPort(target.IP, strconv.Itoa(target.Port))
-			conn, err := net.DialTimeout("tcp", addr, 2500*time.Millisecond)
-			if err == nil {
-				_ = conn.Close()
-				latency := int(time.Since(start).Milliseconds())
-				if latency <= 0 {
-					latency = 1
+			isUDP := strings.ToLower(target.Proto) == "udp"
+
+			if isUDP {
+				udpConn, err := net.DialTimeout("udp", addr, 1500*time.Millisecond)
+				if err == nil {
+					_ = udpConn.Close()
+					np.mu.Lock()
+					if target.Ping > 0 {
+						target.LatencyMs = target.Ping
+					} else {
+						target.LatencyMs = 60
+					}
+					target.LastChecked = time.Now()
+					target.FailCount = 0
+					np.mu.Unlock()
+					return
 				}
-				np.mu.Lock()
-				target.LatencyMs = latency
-				target.LastChecked = time.Now()
-				target.FailCount = 0
-				np.mu.Unlock()
 			} else {
-				np.mu.Lock()
-				target.LatencyMs = -1
-				target.LastChecked = time.Now()
-				target.FailCount++
-				np.mu.Unlock()
+				conn, err := net.DialTimeout("tcp", addr, 2500*time.Millisecond)
+				if err == nil {
+					_ = conn.Close()
+					latency := int(time.Since(start).Milliseconds())
+					if latency <= 0 {
+						latency = 1
+					}
+					np.mu.Lock()
+					target.LatencyMs = latency
+					target.LastChecked = time.Now()
+					target.FailCount = 0
+					np.mu.Unlock()
+					return
+				}
 			}
+
+			np.mu.Lock()
+			target.LatencyMs = -1
+			target.LastChecked = time.Now()
+			target.FailCount++
+			np.mu.Unlock()
 		}(n)
 	}
 	wg.Wait()

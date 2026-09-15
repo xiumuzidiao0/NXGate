@@ -166,7 +166,7 @@ func LoadConfig() *Config {
 		FetchInterval:      time.Duration(getEnvInt("FETCH_INTERVAL_SECONDS", 900, 60, 86400)) * time.Second,
 		CheckInterval:      time.Duration(getEnvInt("CHECK_INTERVAL_SECONDS", 20, 5, 300)) * time.Second,
 		TargetValidNodes:   getEnvInt("TARGET_VALID_NODES", 5, 1, 50),
-		MaxScanRows:        getEnvInt("MAX_SCAN_ROWS", 100, 10, 500),
+		MaxScanRows:        getEnvInt("MAX_SCAN_ROWS", 1000, 10, 5000),
 		InvalidBackoff:     time.Duration(getEnvInt("INVALID_BACKOFF_SECONDS", 1800, 60, 86400)) * time.Second,
 		DiscoveryCountries: countries,
 
