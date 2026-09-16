@@ -7,6 +7,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,9 +20,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -38,6 +36,8 @@ import androidx.compose.material.icons.rounded.ToggleOff
 import androidx.compose.material.icons.rounded.ToggleOn
 import androidx.compose.material.icons.rounded.VpnKey
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
@@ -80,6 +80,7 @@ import com.aimili.vpn.model.DynamicGroupCard
 import com.aimili.vpn.model.InboundProtocolItem
 import com.aimili.vpn.model.PortRuleItem
 import com.aimili.vpn.model.ServerProfile
+import com.aimili.vpn.model.TunnelItem
 import com.aimili.vpn.ui.components.ConnectedButtonItem
 import com.aimili.vpn.ui.components.ConnectedButtonGroup
 import com.aimili.vpn.ui.components.ConnectedButtonStyle
@@ -134,28 +135,35 @@ fun RoutingMatrixScreen(
     var inbounds by remember {
         mutableStateOf(
             listOf(
-                InboundProtocolItem("sb-1", "Hysteria2-62799", "真实传输 (REALITY)", 443, "socks5://127.0.0.1:7928", 7928),
-                InboundProtocolItem("sb-2", "AnyTLS-12974", "高速二代 (Hysteria2)", 8443, "direct", 0)
+                InboundProtocolItem("sb-1", "Hysteria2-62799", "VLESS-REALITY", 443, "socks5://127.0.0.1:7928", 7928),
+                InboundProtocolItem("sb-2", "AnyTLS-12974", "Hysteria2", 8443, "direct", 0),
+                InboundProtocolItem("sb-3", "TUIC-19078", "TUIC v5", 19078, "socks5://127.0.0.1:7929", 7929)
             )
         )
     }
 
-    // Modal dialog states: Port Rules
-    var showAddPortDialog by remember { mutableStateOf(false) }
-    var newPortInput by remember { mutableStateOf("7931") }
-    var newPolicyInput by remember { mutableStateOf("round_robin") }
-    var newIntervalInput by remember { mutableStateOf("300") }
-    var newAuthInput by remember { mutableStateOf("random") }
-    var newAuthUserInput by remember { mutableStateOf("") }
-    var newAuthPassInput by remember { mutableStateOf("") }
+    var activeTunnels by remember {
+        mutableStateOf<List<TunnelItem>>(emptyList())
+    }
+
+    // Modal dialog states: Port Rules (Full CRUD)
+    var showPortDialog by remember { mutableStateOf(false) }
     var editPortRuleTarget by remember { mutableStateOf<PortRuleItem?>(null) }
+    var inputPortNum by remember { mutableStateOf("7931") }
+    var inputPolicy by remember { mutableStateOf("round_robin") }
+    var inputIntervalSec by remember { mutableStateOf("300") }
+    var inputAuthMode by remember { mutableStateOf("random") }
+    var inputAuthUser by remember { mutableStateOf("") }
+    var inputAuthPass by remember { mutableStateOf("") }
+    var bindAllTunnels by remember { mutableStateOf(true) }
+    var selectedBoundGroups by remember { mutableStateOf(setOf<String>()) }
     var deletePortRuleCandidate by remember { mutableStateOf<PortRuleItem?>(null) }
 
-    // Modal dialog states: Dynamic Groups
-    var showAddGroupDialog by remember { mutableStateOf(false) }
+    // Modal dialog states: Dynamic Groups (Full CRUD)
+    var showGroupDialog by remember { mutableStateOf(false) }
     var editGroupTarget by remember { mutableStateOf<DynamicGroupCard?>(null) }
     var deleteGroupCandidate by remember { mutableStateOf<DynamicGroupCard?>(null) }
-    var groupNameInput by remember { mutableStateOf("新自适应住宅池") }
+    var groupNameInput by remember { mutableStateOf("日本Top3住宅组") }
     var groupCountryInput by remember { mutableStateOf("JP") }
     var groupIpTypeInput by remember { mutableStateOf("residential") }
     var groupUnlockInput by remember { mutableStateOf("ai") }
@@ -163,8 +171,9 @@ fun RoutingMatrixScreen(
     var groupTargetCountInput by remember { mutableStateOf("3") }
     var groupIntervalInput by remember { mutableStateOf("15") }
 
-    // Modal dialog states: SingBox Inbounds
+    // Modal dialog states: SingBox Inbounds (Full CRUD with 22 Protocols)
     var showAddInboundDialog by remember { mutableStateOf(false) }
+    var selectedProtoCat by remember { mutableIntStateOf(0) }
     var newInboundProtocol by remember { mutableStateOf("reality") }
     var newInboundPort by remember { mutableStateOf("auto") }
     var newInboundOutbound by remember { mutableStateOf("socks5://127.0.0.1:7928") }
@@ -187,6 +196,10 @@ fun RoutingMatrixScreen(
             val inboundsRes = AimiliApplication.instance.apiClient.fetchSingBoxNodes(activeServer)
             if (inboundsRes.isSuccess && !inboundsRes.getOrNull().isNullOrEmpty()) {
                 inbounds = inboundsRes.getOrNull()!!
+            }
+            val tunnelsRes = AimiliApplication.instance.apiClient.fetchTunnels(activeServer)
+            if (tunnelsRes.isSuccess && !tunnelsRes.getOrNull().isNullOrEmpty()) {
+                activeTunnels = tunnelsRes.getOrNull()!!
             }
         }
     }
@@ -215,7 +228,7 @@ fun RoutingMatrixScreen(
                                     if (groupsRes.isSuccess && !groupsRes.getOrNull().isNullOrEmpty()) dynamicGroups = groupsRes.getOrNull()!!
                                     val inboundsRes = AimiliApplication.instance.apiClient.fetchSingBoxNodes(activeServer)
                                     if (inboundsRes.isSuccess && !inboundsRes.getOrNull().isNullOrEmpty()) inbounds = inboundsRes.getOrNull()!!
-                                    Toast.makeText(context, "已从 [${activeServer.name}] 刷新调度与入站数据", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "已从 [${activeServer.name}] 同步最新调度分流数据", Toast.LENGTH_SHORT).show()
                                 }
                             }
                         },
@@ -276,7 +289,7 @@ fun RoutingMatrixScreen(
                 }
             }
 
-            // Tab Content Router
+            // Tab Content Router with Tablet Centering
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -285,7 +298,7 @@ fun RoutingMatrixScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .widthIn(max = if (isTablet) 920.dp else 500.dp)
+                        .widthIn(max = if (isTablet) 960.dp else 500.dp)
                         .align(Alignment.TopCenter)
                         .verticalScroll(scrollState),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -301,7 +314,7 @@ fun RoutingMatrixScreen(
                             // ==================== TAB 0: 多端口分流矩阵 (全增删改查) ====================
                             0 -> {
                                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                                    // 端口列表项
+                                    // 端口列表项 (带启停切换、编辑抽屉、删除操作)
                                     Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                                         portRules.forEachIndexed { index, rule ->
                                             ConnectedListItem(
@@ -321,7 +334,7 @@ fun RoutingMatrixScreen(
                                                                     AimiliApplication.instance.apiClient.savePortRules(activeServer, updated)
                                                                 }
                                                             }
-                                                            Toast.makeText(context, "端口 ${rule.port} 状态已切换为: ${if (!rule.enabled) "已启用" else "已停用"}", Toast.LENGTH_SHORT).show()
+                                                            Toast.makeText(context, "端口 ${rule.port} 状态已更新为: ${if (!rule.enabled) "已启用" else "已停用"}", Toast.LENGTH_SHORT).show()
                                                         }) {
                                                             Icon(
                                                                 imageVector = if (rule.enabled) Icons.Rounded.ToggleOn else Icons.Rounded.ToggleOff,
@@ -337,12 +350,15 @@ fun RoutingMatrixScreen(
                                                 },
                                                 onClick = {
                                                     editPortRuleTarget = rule
-                                                    newPortInput = rule.port.toString()
-                                                    newPolicyInput = rule.policy
-                                                    newIntervalInput = rule.intervalSeconds.toString()
-                                                    newAuthInput = rule.authMode
-                                                    newAuthUserInput = rule.authUser
-                                                    newAuthPassInput = rule.authPass
+                                                    inputPortNum = rule.port.toString()
+                                                    inputPolicy = rule.policy
+                                                    inputIntervalSec = rule.intervalSeconds.toString()
+                                                    inputAuthMode = rule.authMode
+                                                    inputAuthUser = rule.authUser
+                                                    inputAuthPass = rule.authPass
+                                                    bindAllTunnels = rule.boundGroupIds.isEmpty() && rule.boundTunnelIds.isEmpty()
+                                                    selectedBoundGroups = rule.boundGroupIds.toSet()
+                                                    showPortDialog = true
                                                 }
                                             )
                                         }
@@ -356,13 +372,16 @@ fun RoutingMatrixScreen(
                                                 style = ConnectedButtonStyle.Filled,
                                                 icon = Icons.Rounded.Add,
                                                 onClick = {
-                                                    newPortInput = (portRules.maxOfOrNull { it.port }?.plus(1) ?: 7931).toString()
-                                                    newPolicyInput = "round_robin"
-                                                    newIntervalInput = "300"
-                                                    newAuthInput = "random"
-                                                    newAuthUserInput = ""
-                                                    newAuthPassInput = ""
-                                                    showAddPortDialog = true
+                                                    editPortRuleTarget = null
+                                                    inputPortNum = (portRules.maxOfOrNull { it.port }?.plus(1) ?: 7931).toString()
+                                                    inputPolicy = "round_robin"
+                                                    inputIntervalSec = "300"
+                                                    inputAuthMode = "random"
+                                                    inputAuthUser = ""
+                                                    inputAuthPass = ""
+                                                    bindAllTunnels = true
+                                                    selectedBoundGroups = emptySet()
+                                                    showPortDialog = true
                                                 }
                                             ),
                                             ConnectedButtonItem(
@@ -414,7 +433,7 @@ fun RoutingMatrixScreen(
                                                     )
                                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                                         Text(
-                                                            text = if (group.isSystem) "系统主出口(tun0)" else "动态池 (${group.targetCount}网卡)",
+                                                            text = if (group.isSystem) "系统主出口(tun0)" else "自适应池 (${group.targetCount}网卡)",
                                                             style = MaterialTheme.typography.labelSmall,
                                                             color = MaterialTheme.colorScheme.primary
                                                         )
@@ -450,6 +469,7 @@ fun RoutingMatrixScreen(
                                                             groupSortInput = group.sortBy
                                                             groupTargetCountInput = group.targetCount.toString()
                                                             groupIntervalInput = group.intervalMinutes.toString()
+                                                            showGroupDialog = true
                                                         },
                                                         modifier = Modifier.height(36.dp),
                                                         shape = RoundedCornerShape(18.dp)
@@ -484,6 +504,7 @@ fun RoutingMatrixScreen(
                                                 style = ConnectedButtonStyle.Tonal,
                                                 icon = Icons.Rounded.Add,
                                                 onClick = {
+                                                    editGroupTarget = null
                                                     groupNameInput = "新自适应住宅池"
                                                     groupCountryInput = "JP"
                                                     groupIpTypeInput = "residential"
@@ -491,7 +512,7 @@ fun RoutingMatrixScreen(
                                                     groupSortInput = "latency"
                                                     groupTargetCountInput = "3"
                                                     groupIntervalInput = "15"
-                                                    showAddGroupDialog = true
+                                                    showGroupDialog = true
                                                 }
                                             )
                                         )
@@ -499,7 +520,7 @@ fun RoutingMatrixScreen(
                                 }
                             }
 
-                            // ==================== TAB 2: 边缘抗封锁入站 (全增删改查) ====================
+                            // ==================== TAB 2: 边缘抗封锁入站 (22 种协议全管理) ====================
                             2 -> {
                                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                                     Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
@@ -575,12 +596,12 @@ fun RoutingMatrixScreen(
 
     // ======================== MODAL DIALOGS ========================
 
-    // 1. Add / Edit Port Dialog
-    if (showAddPortDialog || editPortRuleTarget != null) {
+    // 1. Add / Edit Port Dialog (包含自适应端口组与指定隧道绑定多选)
+    if (showPortDialog) {
         val isEditing = editPortRuleTarget != null
         AlertDialog(
             onDismissRequest = {
-                showAddPortDialog = false
+                showPortDialog = false
                 editPortRuleTarget = null
             },
             shape = RoundedCornerShape(28.dp),
@@ -593,10 +614,13 @@ fun RoutingMatrixScreen(
                 )
             },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
                     OutlinedTextField(
-                        value = newPortInput,
-                        onValueChange = { newPortInput = it },
+                        value = inputPortNum,
+                        onValueChange = { inputPortNum = it },
                         label = { Text("监听端口 [1-65535]") },
                         singleLine = true,
                         enabled = !isEditing,
@@ -607,16 +631,16 @@ fun RoutingMatrixScreen(
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         listOf("round_robin" to "轮询", "interval" to "定时", "random" to "随机").forEach { (pol, label) ->
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                RadioButton(selected = newPolicyInput == pol, onClick = { newPolicyInput = pol })
+                                RadioButton(selected = inputPolicy == pol, onClick = { inputPolicy = pol })
                                 Text(label, style = MaterialTheme.typography.bodySmall)
                             }
                         }
                     }
 
-                    if (newPolicyInput == "interval") {
+                    if (inputPolicy == "interval") {
                         OutlinedTextField(
-                            value = newIntervalInput,
-                            onValueChange = { newIntervalInput = it },
+                            value = inputIntervalSec,
+                            onValueChange = { inputIntervalSec = it },
                             label = { Text("轮换周期 (秒)") },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth()
@@ -627,28 +651,63 @@ fun RoutingMatrixScreen(
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         listOf("random" to "系统随机", "none" to "免密", "custom" to "自定义").forEach { (auth, label) ->
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                RadioButton(selected = newAuthInput == auth, onClick = { newAuthInput = auth })
+                                RadioButton(selected = inputAuthMode == auth, onClick = { inputAuthMode = auth })
                                 Text(label, style = MaterialTheme.typography.bodySmall)
                             }
                         }
                     }
 
-                    if (newAuthInput == "custom") {
+                    if (inputAuthMode == "custom") {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedTextField(
-                                value = newAuthUserInput,
-                                onValueChange = { newAuthUserInput = it },
+                                value = inputAuthUser,
+                                onValueChange = { inputAuthUser = it },
                                 label = { Text("用户名") },
                                 singleLine = true,
                                 modifier = Modifier.weight(1f)
                             )
                             OutlinedTextField(
-                                value = newAuthPassInput,
-                                onValueChange = { newAuthPassInput = it },
+                                value = inputAuthPass,
+                                onValueChange = { inputAuthPass = it },
                                 label = { Text("密码") },
                                 singleLine = true,
                                 modifier = Modifier.weight(1f)
                             )
+                        }
+                    }
+
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                    // 绑定自适应组与出口部分 (参照 Web 控制台实现)
+                    Text("绑定出网出口范围:", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+
+                    // Checkbox 1: 全部在线隧道
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                        Checkbox(
+                            checked = bindAllTunnels,
+                            onCheckedChange = {
+                                bindAllTunnels = it
+                                if (it) selectedBoundGroups = emptySet()
+                            }
+                        )
+                        Text("全部在线隧道 (默认全池负载均衡)", style = MaterialTheme.typography.bodyMedium)
+                    }
+
+                    // Checkbox 2: 绑定自适应端口组
+                    if (dynamicGroups.isNotEmpty()) {
+                        Text("自适应动态出口组:", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                        dynamicGroups.forEach { group ->
+                            val isChecked = !bindAllTunnels && selectedBoundGroups.contains(group.id)
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                                Checkbox(
+                                    checked = isChecked,
+                                    onCheckedChange = { checked ->
+                                        bindAllTunnels = false
+                                        selectedBoundGroups = if (checked) selectedBoundGroups + group.id else selectedBoundGroups - group.id
+                                    }
+                                )
+                                Text("${group.name} (${group.country} · ${group.targetCount}出口)", style = MaterialTheme.typography.bodySmall)
+                            }
                         }
                     }
                 }
@@ -656,17 +715,20 @@ fun RoutingMatrixScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        val portNum = newPortInput.toIntOrNull() ?: 7931
-                        val intervalSec = newIntervalInput.toIntOrNull() ?: 300
+                        val portNum = inputPortNum.toIntOrNull() ?: 7931
+                        val intervalSec = inputIntervalSec.toIntOrNull() ?: 300
                         val updated = portRules.toMutableList()
+                        val boundGroupList = if (bindAllTunnels) emptyList() else selectedBoundGroups.toList()
+
                         val rule = PortRuleItem(
                             port = portNum,
                             enabled = true,
-                            policy = newPolicyInput,
+                            policy = inputPolicy,
                             intervalSeconds = intervalSec,
-                            authMode = newAuthInput,
-                            authUser = newAuthUserInput,
-                            authPass = newAuthPassInput
+                            authMode = inputAuthMode,
+                            authUser = inputAuthUser,
+                            authPass = inputAuthPass,
+                            boundGroupIds = boundGroupList
                         )
                         val existIdx = updated.indexOfFirst { it.port == portNum }
                         if (existIdx >= 0) {
@@ -680,9 +742,9 @@ fun RoutingMatrixScreen(
                                 AimiliApplication.instance.apiClient.savePortRules(activeServer, updated)
                             }
                         }
-                        showAddPortDialog = false
+                        showPortDialog = false
                         editPortRuleTarget = null
-                        Toast.makeText(context, "端口 [$portNum] 分流规则已成功下发并生效！", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "端口 [$portNum] 分流规则与出口绑定已下发！", Toast.LENGTH_SHORT).show()
                     }
                 ) {
                     Text("保存生效", fontWeight = FontWeight.Bold)
@@ -690,7 +752,7 @@ fun RoutingMatrixScreen(
             },
             dismissButton = {
                 TextButton(onClick = {
-                    showAddPortDialog = false
+                    showPortDialog = false
                     editPortRuleTarget = null
                 }) {
                     Text("取消")
@@ -732,11 +794,11 @@ fun RoutingMatrixScreen(
     }
 
     // 3. Add / Edit Dynamic Group Dialog
-    if (showAddGroupDialog || editGroupTarget != null) {
+    if (showGroupDialog) {
         val isEditing = editGroupTarget != null
         AlertDialog(
             onDismissRequest = {
-                showAddGroupDialog = false
+                showGroupDialog = false
                 editGroupTarget = null
             },
             shape = RoundedCornerShape(28.dp),
@@ -749,7 +811,10 @@ fun RoutingMatrixScreen(
                 )
             },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     OutlinedTextField(
                         value = groupNameInput,
                         onValueChange = { groupNameInput = it },
@@ -761,7 +826,7 @@ fun RoutingMatrixScreen(
                         OutlinedTextField(
                             value = groupCountryInput,
                             onValueChange = { groupCountryInput = it },
-                            label = { Text("目标国家 (如 JP, US)") },
+                            label = { Text("国家 (如 JP, US, ALL)") },
                             singleLine = true,
                             modifier = Modifier.weight(1f)
                         )
@@ -777,14 +842,14 @@ fun RoutingMatrixScreen(
                         OutlinedTextField(
                             value = groupIntervalInput,
                             onValueChange = { groupIntervalInput = it },
-                            label = { Text("评估周期 (分钟)") },
+                            label = { Text("重评周期 (分钟)") },
                             singleLine = true,
                             modifier = Modifier.weight(1f)
                         )
                         OutlinedTextField(
                             value = groupUnlockInput,
                             onValueChange = { groupUnlockInput = it },
-                            label = { Text("解锁要求 (ai, all, none)") },
+                            label = { Text("解锁过滤 (ai/all/none)") },
                             singleLine = true,
                             modifier = Modifier.weight(1f)
                         )
@@ -818,9 +883,9 @@ fun RoutingMatrixScreen(
                                 AimiliApplication.instance.apiClient.saveDynamicGroup(activeServer, newG)
                             }
                         }
-                        showAddGroupDialog = false
+                        showGroupDialog = false
                         editGroupTarget = null
-                        Toast.makeText(context, "自适应组 [${newG.name}] 已成功保存并下发！", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "自适应组 [${newG.name}] 已成功保存下发生效！", Toast.LENGTH_SHORT).show()
                     }
                 ) {
                     Text("保存生效", fontWeight = FontWeight.Bold)
@@ -828,7 +893,7 @@ fun RoutingMatrixScreen(
             },
             dismissButton = {
                 TextButton(onClick = {
-                    showAddGroupDialog = false
+                    showGroupDialog = false
                     editGroupTarget = null
                 }) {
                     Text("取消")
@@ -868,30 +933,100 @@ fun RoutingMatrixScreen(
         )
     }
 
-    // 5. Add SingBox Inbound Protocol Dialog
+    // 5. Add SingBox Inbound Protocol Dialog (完整 22 种协议支持)
     if (showAddInboundDialog) {
+        val protoCategories = listOf(
+            "推荐免域名" to listOf(
+                "reality" to "VLESS-REALITY (免域名)",
+                "rh2" to "VLESS-H2-REALITY (多路复用)",
+                "hy2" to "Hysteria2 (QUIC丢包克星)",
+                "tuic" to "TUIC v5 (BBR拥塞控制)",
+                "ss" to "Shadowsocks 2022"
+            ),
+            "经典穿透" to listOf(
+                "trojan" to "Trojan (经典HTTPS伪装)",
+                "anytls" to "AnyTLS (自适应特征)",
+                "socks" to "Socks5 (标准局域网代理)",
+                "direct" to "Direct (端口转发中继)"
+            ),
+            "CDN/域名TLS" to listOf(
+                "vws" to "VLESS-WS-TLS (CDN优选)",
+                "wss" to "VMess-WS-TLS (救砖方案)",
+                "tws" to "Trojan-WS-TLS",
+                "vhu" to "VLESS-HTTPUpgrade-TLS",
+                "hu" to "VMess-HTTPUpgrade-TLS",
+                "thu" to "Trojan-HTTPUpgrade-TLS",
+                "vh2" to "VLESS-H2-TLS",
+                "h2" to "VMess-H2-TLS",
+                "th2" to "Trojan-H2-TLS"
+            ),
+            "原生传输" to listOf(
+                "ws" to "VMess-WS (明文反代)",
+                "tcp" to "VMess-TCP",
+                "http" to "HTTP 代理",
+                "quic" to "VMess-QUIC"
+            )
+        )
+
         AlertDialog(
             onDismissRequest = { showAddInboundDialog = false },
             shape = RoundedCornerShape(28.dp),
             containerColor = MaterialTheme.colorScheme.surfaceContainer,
             title = { Text("新建边缘抗封锁入站节点", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("选择抗审查协议：", style = MaterialTheme.typography.labelMedium)
-                    val protos = listOf("reality" to "VLESS-REALITY", "hy2" to "Hysteria2", "tuic" to "TUIC v5", "ss" to "Shadowsocks")
-                    protos.forEach { (pKey, pName) ->
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                            RadioButton(selected = newInboundProtocol == pKey, onClick = { newInboundProtocol = pKey })
-                            Text(pName, style = MaterialTheme.typography.bodyMedium)
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Category selector
+                    Row(
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        protoCategories.forEachIndexed { idx, (catName, _) ->
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (selectedProtoCat == idx) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+                                modifier = Modifier.clickable { selectedProtoCat = idx }
+                            ) {
+                                Text(
+                                    text = catName,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = if (selectedProtoCat == idx) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                )
+                            }
                         }
                     }
+
+                    Text("选择协议类型:", style = MaterialTheme.typography.labelMedium)
+                    val currentProtos = protoCategories[selectedProtoCat].second
+                    currentProtos.forEach { (pKey, pLabel) ->
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                            RadioButton(selected = newInboundProtocol == pKey, onClick = { newInboundProtocol = pKey })
+                            Text(pLabel, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+
                     OutlinedTextField(
                         value = newInboundPort,
                         onValueChange = { newInboundPort = it },
-                        label = { Text("外部监听端口 (或填 auto)") },
+                        label = { Text("外部端口 (填 auto 自动挑选可用高位端口)") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
+
+                    Text("出口链式分流指向:", style = MaterialTheme.typography.labelMedium)
+                    val outboundChoices = listOf(
+                        "socks5://127.0.0.1:7928" to "端口 7928 (默认住宅池)",
+                        "direct" to "直连出口 (VPS 本机原生网络)"
+                    )
+                    outboundChoices.forEach { (obVal, obLabel) ->
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                            RadioButton(selected = newInboundOutbound == obVal, onClick = { newInboundOutbound = obVal })
+                            Text(obLabel, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
                 }
             },
             confirmButton = {
@@ -992,7 +1127,7 @@ fun RoutingMatrixScreen(
             shape = RoundedCornerShape(28.dp),
             containerColor = MaterialTheme.colorScheme.surfaceContainer,
             title = { Text("确认删除入站协议？", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) },
-            text = { Text("确认删除协议节点 [${target.name}] (端口 ${target.port}) 吗？", style = MaterialTheme.typography.bodyMedium) },
+            text = { Text("确认彻底删除协议节点 [${target.name}] (端口 ${target.port}) 吗？", style = MaterialTheme.typography.bodyMedium) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -1023,10 +1158,10 @@ fun RoutingMatrixScreen(
             onDismissRequest = { showInboundQRDialog = null },
             shape = RoundedCornerShape(28.dp),
             containerColor = MaterialTheme.colorScheme.surfaceContainer,
-            title = { Text("客户端配置分享", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) },
+            title = { Text("客户端配置分享与导入", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("节点类型: ${inbound.protocol} (外部端口 ${inbound.port})", style = MaterialTheme.typography.bodyMedium)
+                    Text("协议: ${inbound.protocol} (外部监听端口: ${inbound.port})", style = MaterialTheme.typography.bodyMedium)
                     OutlinedTextField(
                         value = shareUrl,
                         onValueChange = {},
