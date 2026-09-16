@@ -18,6 +18,7 @@ type Client struct {
 type ProtocolInfo struct {
 	ID          string   `json:"id"`
 	Name        string   `json:"name"`
+	Category    string   `json:"category,omitempty"`
 	Recommended bool     `json:"recommended"`
 	Transport   string   `json:"transport"`
 	TLS         string   `json:"tls"`
@@ -195,23 +196,35 @@ func (c *Client) GetStatus(ctx context.Context) (*StatusResponse, error) {
 }
 
 func (c *Client) GetProtocols(ctx context.Context) ([]ProtocolInfo, error) {
+	if !c.IsInstalled() {
+		return DefaultProtocols(), nil
+	}
+
 	ctxTimeout, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	data, err := c.execAPI(ctxTimeout, "protocols")
 	if err != nil {
-		return nil, err
+		return DefaultProtocols(), nil
 	}
 
 	var resp ProtocolsResponse
 	if err := json.Unmarshal(data, &resp); err != nil {
-		return nil, fmt.Errorf("failed to parse protocols json: %w", err)
+		return DefaultProtocols(), nil
+	}
+
+	if len(resp.Protocols) == 0 {
+		return DefaultProtocols(), nil
 	}
 
 	return resp.Protocols, nil
 }
 
 func (c *Client) ListNodes(ctx context.Context) ([]Node, error) {
+	if !c.IsInstalled() {
+		return []Node{}, nil
+	}
+
 	ctxTimeout, cancel := context.WithTimeout(ctx, 8*time.Second)
 	defer cancel()
 
