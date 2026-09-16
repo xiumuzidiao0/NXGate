@@ -427,7 +427,7 @@ fun ServerConsoleScreen(
                                     color = MaterialTheme.colorScheme.surfaceContainerLow
                                 ) {
                                     Text(
-                                        text = "暂无独立并发出口，在节点广场中点击「🚀 拉起网卡」即可多出口并发在线。",
+                                        text = "暂无独立并发出口，在节点广场中点击「拉起网卡」即可多出口并发在线。",
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         modifier = Modifier.padding(16.dp)
@@ -567,7 +567,7 @@ fun ServerConsoleScreen(
                             color = MaterialTheme.colorScheme.surfaceContainerLow
                         ) {
                             Text(
-                                text = "暂无独立并发出口，在节点广场中点击「🚀 拉起网卡」即可多出口并发在线。",
+                                text = "暂无独立并发出口，在节点广场中点击「拉起网卡」即可多出口并发在线。",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(16.dp)
@@ -650,7 +650,7 @@ fun ServerConsoleScreen(
 
                 val mockLogs = listOf(
                     "[INFO] [Main] 正在初始化节点池并拉取候选节点...",
-                    "[INFO] [Nodes] 🚪 端口预检完成：291/767 节点可达，已过滤 476 个死端口",
+                    "[INFO] [Nodes] 端口预检完成：291/767 节点可达，已过滤 476 个死端口",
                     "[INFO] [TunnelPool] 已为接口 tun1 配置独立隔离策略路由 (Table 101) 与 rp_filter",
                     "[INFO] [UnlockDetector] [tun1] 吞吐量检测通过: PASSED (1019.4 KB/s)",
                     "[INFO] [UnlockDetector] 实测解锁结果: ChatGPT=unlocked, Claude=unlocked, Gemini=unlocked",

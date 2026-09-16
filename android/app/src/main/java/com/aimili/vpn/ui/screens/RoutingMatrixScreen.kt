@@ -229,8 +229,8 @@ fun RoutingMatrixScreen(
     val groupIpTypeOptions = remember {
         listOf(
             GroupIpTypeOption("all", "全部网络类型 (不限)"),
-            GroupIpTypeOption("residential", "🏠 住宅宽带 IP (家宽原生)"),
-            GroupIpTypeOption("hosting", "🏢 机房/数据中心 IP")
+            GroupIpTypeOption("residential", "住宅宽带 IP (家宽原生)"),
+            GroupIpTypeOption("hosting", "机房/数据中心 IP")
         )
     }
     var selectedGroupIpTypeOption by remember { mutableStateOf(groupIpTypeOptions[1]) }
@@ -238,18 +238,18 @@ fun RoutingMatrixScreen(
     val groupUnlockOptions = remember {
         listOf(
             GroupUnlockOption("none", "不限解锁能力 (全量候选)"),
-            GroupUnlockOption("ai", "🤖 必须支持三大 AI (ChatGPT+Claude+Gemini)"),
-            GroupUnlockOption("streaming", "🎬 必须支持主流流媒体 (Netflix/Google)"),
-            GroupUnlockOption("all", "⭐ 全解锁 (三大 AI + 流媒体)")
+            GroupUnlockOption("ai", "必须支持三大 AI (ChatGPT+Claude+Gemini)"),
+            GroupUnlockOption("streaming", "必须支持主流流媒体 (Netflix/Google)"),
+            GroupUnlockOption("all", "全解锁 (三大 AI + 流媒体)")
         )
     }
     var selectedGroupUnlockOption by remember { mutableStateOf(groupUnlockOptions[1]) }
 
     val groupSortOptions = remember {
         listOf(
-            GroupSortOption("latency", "⚡ 最低延迟优先 (TCP 测速)"),
-            GroupSortOption("speed", "🚀 最大带宽优先 (Mbps)"),
-            GroupSortOption("score", "⭐ 综合评分最高优先")
+            GroupSortOption("latency", "最低延迟优先 (TCP 测速)"),
+            GroupSortOption("speed", "最大带宽优先 (Mbps)"),
+            GroupSortOption("score", "综合评分最高优先")
         )
     }
     var selectedGroupSortOption by remember { mutableStateOf(groupSortOptions[0]) }
@@ -1175,7 +1175,7 @@ fun RoutingMatrixScreen(
                                         val data = refreshRes.getOrNull()
                                         if (data != null && data.nodes.isNotEmpty()) inbounds = data.nodes
                                     }
-                                    Toast.makeText(context, "✅ 边缘入站节点已成功创建并启动！", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "边缘入站节点已成功创建并启动", Toast.LENGTH_SHORT).show()
                                 } else {
                                     Toast.makeText(context, "创建失败: ${res.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
                                 }
@@ -1230,7 +1230,7 @@ fun RoutingMatrixScreen(
                                     if (it.id == inbound.id) it.copy(outbound = switchOutboundTargetOption.addr, outboundLabel = switchOutboundTargetOption.label) else it
                                 }
                                 inbounds = updated
-                                Toast.makeText(context, "✅ [${inbound.name}] 出口已改挂至: ${switchOutboundTargetOption.label}", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "[${inbound.name}] 出口已改挂至: ${switchOutboundTargetOption.label}", Toast.LENGTH_SHORT).show()
                             }
                         }
                         selectedInboundForOutboundSwitch = null

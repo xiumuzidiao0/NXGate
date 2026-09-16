@@ -29,7 +29,9 @@ import androidx.compose.material.icons.rounded.Block
 import androidx.compose.material.icons.rounded.Category
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Domain
 import androidx.compose.material.icons.rounded.Flag
+import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Lan
 import androidx.compose.material.icons.rounded.Public
 import androidx.compose.material.icons.rounded.Refresh
@@ -178,12 +180,23 @@ fun FullNodeCard(
                     shape = RoundedCornerShape(6.dp),
                     color = if (isRes) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainer
                 ) {
-                    Text(
-                        text = if (isRes) "🏠 原生家宽" else "🏢 机房托管",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (isRes) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                    )
+                    ) {
+                        Icon(
+                            imageVector = if (isRes) Icons.Rounded.Home else Icons.Rounded.Domain,
+                            contentDescription = null,
+                            tint = if (isRes) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(12.dp)
+                        )
+                        Spacer(Modifier.width(3.dp))
+                        Text(
+                            text = if (isRes) "原生家宽" else "机房托管",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (isRes) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
 
@@ -311,8 +324,8 @@ fun NodeSquareScreen(
     val ipTypeOptions = remember {
         listOf(
             IpTypeFilterOption("all", "全部网络类型"),
-            IpTypeFilterOption("residential", "🏠 原生住宅宽带 (家宽)"),
-            IpTypeFilterOption("hosting", "🏢 机房/数据中心 IP")
+            IpTypeFilterOption("residential", "原生住宅宽带 (家宽)"),
+            IpTypeFilterOption("hosting", "机房/数据中心 IP")
         )
     }
     var selectedIpTypeOption by remember { mutableStateOf(ipTypeOptions.first()) }
@@ -320,9 +333,9 @@ fun NodeSquareScreen(
     // Sort dropdown options (matching Web)
     val sortOptions = remember {
         listOf(
-            SortFilterOption("latency_asc", "⚡ 按测速延迟 (低 ➔ 高)"),
-            SortFilterOption("speed_desc", "🚀 按节点带宽 (大 ➔ 小)"),
-            SortFilterOption("score_desc", "⭐ 按综合评分 (高 ➔ 低)")
+            SortFilterOption("latency_asc", "按测速延迟 (从低到高)"),
+            SortFilterOption("speed_desc", "按节点带宽 (从大到小)"),
+            SortFilterOption("score_desc", "按综合评分 (从高到低)")
         )
     }
     var selectedSortOption by remember { mutableStateOf(sortOptions.first()) }
@@ -650,10 +663,10 @@ fun NodeSquareScreen(
                                             val res = AimiliApplication.instance.apiClient.connectMaster(activeServer, node.id)
                                             if (res.isSuccess) {
                                                 activeMasterIp = node.ip
-                                                Toast.makeText(context, "✅ 已将 [${node.countryLong.ifEmpty { node.countryShort }} ${node.ip}] 设为主网关出口！", Toast.LENGTH_SHORT).show()
+                                                Toast.makeText(context, "已将 [${node.countryLong.ifEmpty { node.countryShort }} ${node.ip}] 设为主网关出口", Toast.LENGTH_SHORT).show()
                                                 refreshAllNodes()
                                             } else {
-                                                Toast.makeText(context, "⚠️ 切换主出口失败: ${res.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
+                                                Toast.makeText(context, "切换主出口失败: ${res.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
                                             }
                                         }
                                     }
@@ -716,10 +729,10 @@ fun NodeSquareScreen(
                                             val res = AimiliApplication.instance.apiClient.connectMaster(activeServer, node.id)
                                             if (res.isSuccess) {
                                                 activeMasterIp = node.ip
-                                                Toast.makeText(context, "✅ 已将 [${node.countryLong.ifEmpty { node.countryShort }} ${node.ip}] 设为主网关出口！", Toast.LENGTH_SHORT).show()
+                                                Toast.makeText(context, "已将 [${node.countryLong.ifEmpty { node.countryShort }} ${node.ip}] 设为主网关出口", Toast.LENGTH_SHORT).show()
                                                 refreshAllNodes()
                                             } else {
-                                                Toast.makeText(context, "⚠️ 切换主出口失败: ${res.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
+                                                Toast.makeText(context, "切换主出口失败: ${res.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
                                             }
                                         }
                                     }

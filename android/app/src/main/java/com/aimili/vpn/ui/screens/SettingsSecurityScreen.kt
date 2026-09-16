@@ -258,9 +258,9 @@ fun SettingsSecurityScreen(
                                                             val res = AimiliApplication.instance.apiClient.testConnection(server)
                                                             if (res.isSuccess) {
                                                                 AimiliApplication.instance.serverStore.updateServer(res.getOrNull() ?: server)
-                                                                Toast.makeText(context, "✅ [${server.name}] 测活通过！延迟: ${server.latencyMs}ms", Toast.LENGTH_SHORT).show()
+                                                                Toast.makeText(context, "[${server.name}] 测活通过！延迟: ${server.latencyMs}ms", Toast.LENGTH_SHORT).show()
                                                             } else {
-                                                                Toast.makeText(context, "⚠️ [${server.name}] 测活失败: ${res.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
+                                                                Toast.makeText(context, "[${server.name}] 测活失败: ${res.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
                                                             }
                                                         }
                                                     }) {
@@ -383,11 +383,11 @@ fun SettingsSecurityScreen(
 
                                         if (editingServerId != null && servers.any { it.id == editingServerId }) {
                                             AimiliApplication.instance.serverStore.updateServer(profileToSave)
-                                            Toast.makeText(context, "✅ [${profileToSave.name}] 配置已更新并安全保存！", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(context, "[${profileToSave.name}] 配置已更新并安全保存", Toast.LENGTH_SHORT).show()
                                         } else {
                                             AimiliApplication.instance.serverStore.addServer(profileToSave)
                                             editingServerId = profileToSave.id
-                                            Toast.makeText(context, "✅ 新服务器 [${profileToSave.name}] 已成功添加！", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(context, "新服务器 [${profileToSave.name}] 已成功添加", Toast.LENGTH_SHORT).show()
                                         }
                                     }
                                 },
@@ -504,9 +504,9 @@ fun SettingsSecurityScreen(
                                                     val res = AimiliApplication.instance.apiClient.testConnection(server)
                                                     if (res.isSuccess) {
                                                         AimiliApplication.instance.serverStore.updateServer(res.getOrNull() ?: server)
-                                                        Toast.makeText(context, "✅ [${server.name}] 测活通过！延迟: ${server.latencyMs}ms", Toast.LENGTH_SHORT).show()
+                                                        Toast.makeText(context, "[${server.name}] 测活通过！延迟: ${server.latencyMs}ms", Toast.LENGTH_SHORT).show()
                                                     } else {
-                                                        Toast.makeText(context, "⚠️ [${server.name}] 测活失败: ${res.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
+                                                        Toast.makeText(context, "[${server.name}] 测活失败: ${res.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
                                                     }
                                                 }
                                             }) {
@@ -635,11 +635,11 @@ fun SettingsSecurityScreen(
 
                                     if (editingServerId != null && servers.any { it.id == editingServerId }) {
                                         AimiliApplication.instance.serverStore.updateServer(profileToSave)
-                                        Toast.makeText(context, "✅ [${profileToSave.name}] 配置已更新并安全保存！", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, "[${profileToSave.name}] 配置已更新并安全保存", Toast.LENGTH_SHORT).show()
                                     } else {
                                         AimiliApplication.instance.serverStore.addServer(profileToSave)
                                         editingServerId = profileToSave.id
-                                        Toast.makeText(context, "✅ 新服务器 [${profileToSave.name}] 已成功添加！", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, "新服务器 [${profileToSave.name}] 已成功添加", Toast.LENGTH_SHORT).show()
                                     }
                                 }
                             },
@@ -810,7 +810,7 @@ fun SettingsSecurityScreen(
                             editingServerId = parsed.id
                             AimiliApplication.instance.serverStore.addServer(parsed)
                             showScanSimDialog = false
-                            Toast.makeText(context, "🎉 已成功扫码识别并自动导入 [${parsed.name}]！", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "已成功扫码识别并自动导入 [${parsed.name}]", Toast.LENGTH_SHORT).show()
                         } else {
                             Toast.makeText(context, "无效的 aimili:// 协议内容", Toast.LENGTH_SHORT).show()
                         }
