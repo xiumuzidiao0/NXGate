@@ -1,0 +1,52 @@
+name: CI Test & Build Validation
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  test:
+    name: Test & Validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "stable"
+          cache: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Check version consistency
+        run: |
+          chmod +x scripts/check-version.sh
+          ./scripts/check-version.sh
+
+      - name: Run Go Unit Tests
+        run: |
+          go test -v -count=1 ./...
+
+      - name: Install Web Test Dependencies & Chromium
+        run: |
+          npm --prefix web install
+          npx --prefix web playwright install --with-deps chromium
+
+      - name: Run Web UI Smoke Tests
+        run: |
+          npm --prefix web run test:ui
+
+      - name: Verify Multi-arch Compilation
+        run: |
+          chmod +x scripts/build.sh
+          ./scripts/build.sh
+          ls -lh dist/
