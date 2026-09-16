@@ -1,6 +1,7 @@
 package com.aimili.vpn.data
 
 import android.net.Uri
+import android.util.Log
 import com.aimili.vpn.model.AvailableOutbound
 import com.aimili.vpn.model.BlacklistRecord
 import com.aimili.vpn.model.DynamicGroupCard
@@ -18,6 +19,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.Response
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
@@ -31,8 +33,23 @@ class ApiClient {
 
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
-    private fun buildRequest(profile: ServerProfile, path: String, method: String = "GET", bodyJson: String? = null): Request {
-        val url = "${profile.baseUrl}$path"
+    private fun buildRequest(profile: ServerProfile, path: String, method: String = "GET", bodyJson: String? = null, bypassPath: Boolean = false): Request {
+        val base = if (bypassPath) {
+            val scheme = if (profile.isTls) "https" else "http"
+            var rawHost = profile.host.trim().removePrefix("http://").removePrefix("https://").trim('/')
+            var finalPort = profile.port
+            if (rawHost.contains(":")) {
+                val parts = rawHost.split(":")
+                rawHost = parts[0]
+                val p = parts.getOrNull(1)?.toIntOrNull()
+                if (p != null && p > 0) finalPort = p
+            }
+            "$scheme://$rawHost:$finalPort"
+        } else {
+            profile.baseUrl
+        }
+
+        val url = "$base$path"
         val builder = Request.Builder()
             .url(url)
             .header("Authorization", Credentials.basic(profile.username, profile.password))
@@ -45,11 +62,21 @@ class ApiClient {
         return builder.build()
     }
 
+    private fun executeCall(profile: ServerProfile, path: String, method: String = "GET", bodyJson: String? = null): Response {
+        val req1 = buildRequest(profile, path, method, bodyJson, bypassPath = false)
+        val resp1 = client.newCall(req1).execute()
+        if (resp1.code == 404 && profile.path.trim().trim('/').isNotEmpty()) {
+            resp1.close()
+            val req2 = buildRequest(profile, path, method, bodyJson, bypassPath = true)
+            return client.newCall(req2).execute()
+        }
+        return resp1
+    }
+
     suspend fun testConnection(profile: ServerProfile): Result<ServerProfile> = withContext(Dispatchers.IO) {
         try {
             val start = System.currentTimeMillis()
-            val req = buildRequest(profile, "/api/app/info")
-            client.newCall(req).execute().use { response ->
+            executeCall(profile, "/api/app/info").use { response ->
                 val elapsed = (System.currentTimeMillis() - start).toInt()
                 if (response.isSuccessful) {
                     val json = JSONObject(response.body?.string() ?: "{}")
@@ -65,15 +92,15 @@ class ApiClient {
                 }
             }
         } catch (e: Exception) {
+            Log.e("ApiClient", "testConnection failed for ${profile.host}", e)
             Result.failure(e)
         }
     }
 
     suspend fun fetchStatus(profile: ServerProfile): Result<MasterGatewayInfo> = withContext(Dispatchers.IO) {
         try {
-            val req = buildRequest(profile, "/api/status")
-            client.newCall(req).execute().use { resp ->
-                if (!resp.isSuccessful) return@withContext Result.failure(Exception("HTTP ${resp.code}"))
+            executeCall(profile, "/api/status").use { resp ->
+                if (!resp.isSuccessful) return@withContext Result.failure(Exception("HTTP ${resp.code}: ${resp.message}"))
                 val json = JSONObject(resp.body?.string() ?: "{}")
                 val vpnObj = json.optJSONObject("vpn")
                 val activeNode = vpnObj?.optString("active_node_id", "") ?: ""
@@ -86,7 +113,7 @@ class ApiClient {
 
                 val isConnected = status == "connected"
                 val info = MasterGatewayInfo(
-                    devName = "tun0 (主出口)",
+                    devName = "主网卡零号 (tun0)",
                     nodeName = if (activeNode.isNotEmpty()) activeNode else "未连接",
                     uptimeStr = uptimeStr,
                     status = if (isConnected) "断流检测通过" else "未连接",
@@ -95,14 +122,16 @@ class ApiClient {
                 Result.success(info)
             }
         } catch (e: Exception) {
+            Log.e("ApiClient", "fetchStatus failed", e)
             Result.failure(e)
         }
     }
 
     suspend fun connectMaster(profile: ServerProfile, nodeId: String): Result<Boolean> = withContext(Dispatchers.IO) {
         try {
-            val req = buildRequest(profile, "/api/connect", "POST", JSONObject().put("node_id", nodeId).toString())
-            client.newCall(req).execute().use { resp -> Result.success(resp.isSuccessful) }
+            executeCall(profile, "/api/connect", "POST", JSONObject().put("node_id", nodeId).toString()).use { resp ->
+                Result.success(resp.isSuccessful)
+            }
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -110,8 +139,9 @@ class ApiClient {
 
     suspend fun disconnectMasterVPN(profile: ServerProfile): Result<Boolean> = withContext(Dispatchers.IO) {
         try {
-            val req = buildRequest(profile, "/api/disconnect", "POST", "{}")
-            client.newCall(req).execute().use { resp -> Result.success(resp.isSuccessful) }
+            executeCall(profile, "/api/disconnect", "POST", "{}").use { resp ->
+                Result.success(resp.isSuccessful)
+            }
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -119,10 +149,10 @@ class ApiClient {
 
     suspend fun fetchTunnels(profile: ServerProfile): Result<List<TunnelItem>> = withContext(Dispatchers.IO) {
         try {
-            val req = buildRequest(profile, "/api/tunnels")
-            client.newCall(req).execute().use { resp ->
-                if (!resp.isSuccessful) return@withContext Result.failure(Exception("HTTP ${resp.code}"))
-                val arr = JSONArray(resp.body?.string() ?: "[]")
+            executeCall(profile, "/api/tunnels").use { resp ->
+                if (!resp.isSuccessful) return@withContext Result.failure(Exception("HTTP ${resp.code}: ${resp.message}"))
+                val rawStr = resp.body?.string() ?: "[]"
+                val arr = JSONArray(rawStr)
                 val list = mutableListOf<TunnelItem>()
                 for (i in 0 until arr.length()) {
                     val obj = arr.getJSONObject(i)
@@ -168,14 +198,16 @@ class ApiClient {
                 Result.success(list)
             }
         } catch (e: Exception) {
+            Log.e("ApiClient", "fetchTunnels failed", e)
             Result.failure(e)
         }
     }
 
     suspend fun startTunnel(profile: ServerProfile, nodeId: String): Result<Boolean> = withContext(Dispatchers.IO) {
         try {
-            val req = buildRequest(profile, "/api/tunnels/start", "POST", JSONObject().put("node_id", nodeId).toString())
-            client.newCall(req).execute().use { resp -> Result.success(resp.isSuccessful) }
+            executeCall(profile, "/api/tunnels/start", "POST", JSONObject().put("node_id", nodeId).toString()).use { resp ->
+                Result.success(resp.isSuccessful)
+            }
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -183,8 +215,9 @@ class ApiClient {
 
     suspend fun stopTunnel(profile: ServerProfile, tunnelId: String): Result<Boolean> = withContext(Dispatchers.IO) {
         try {
-            val req = buildRequest(profile, "/api/tunnels/stop", "POST", JSONObject().put("tunnel_id", tunnelId).toString())
-            client.newCall(req).execute().use { resp -> Result.success(resp.isSuccessful) }
+            executeCall(profile, "/api/tunnels/stop", "POST", JSONObject().put("tunnel_id", tunnelId).toString()).use { resp ->
+                Result.success(resp.isSuccessful)
+            }
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -192,8 +225,9 @@ class ApiClient {
 
     suspend fun probeTunnelUnlock(profile: ServerProfile, tunnelId: String): Result<Boolean> = withContext(Dispatchers.IO) {
         try {
-            val req = buildRequest(profile, "/api/unlock/probe", "POST", JSONObject().put("tunnel_id", tunnelId).toString())
-            client.newCall(req).execute().use { resp -> Result.success(resp.isSuccessful) }
+            executeCall(profile, "/api/unlock/probe", "POST", JSONObject().put("tunnel_id", tunnelId).toString()).use { resp ->
+                Result.success(resp.isSuccessful)
+            }
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -201,9 +235,8 @@ class ApiClient {
 
     suspend fun fetchPortRules(profile: ServerProfile): Result<List<PortRuleItem>> = withContext(Dispatchers.IO) {
         try {
-            val req = buildRequest(profile, "/api/proxy/ports")
-            client.newCall(req).execute().use { resp ->
-                if (!resp.isSuccessful) return@withContext Result.failure(Exception("HTTP ${resp.code}"))
+            executeCall(profile, "/api/proxy/ports").use { resp ->
+                if (!resp.isSuccessful) return@withContext Result.failure(Exception("HTTP ${resp.code}: ${resp.message}"))
                 val arr = JSONArray(resp.body?.string() ?: "[]")
                 val list = mutableListOf<PortRuleItem>()
                 for (i in 0 until arr.length()) {
@@ -268,8 +301,9 @@ class ApiClient {
                 )
             }
             val jsonBody = JSONObject().put("rules", arr).toString()
-            val req = buildRequest(profile, "/api/proxy/ports", "POST", jsonBody)
-            client.newCall(req).execute().use { resp -> Result.success(resp.isSuccessful) }
+            executeCall(profile, "/api/proxy/ports", "POST", jsonBody).use { resp ->
+                Result.success(resp.isSuccessful)
+            }
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -278,12 +312,11 @@ class ApiClient {
     suspend fun triggerRotate(profile: ServerProfile, groupId: String? = null): Result<String> = withContext(Dispatchers.IO) {
         try {
             val body = if (groupId != null) JSONObject().put("group_id", groupId).toString() else "{}"
-            val req = buildRequest(profile, "/api/tunnel-groups/evaluate", "POST", body)
-            client.newCall(req).execute().use { response ->
+            executeCall(profile, "/api/tunnel-groups/evaluate", "POST", body).use { response ->
                 if (response.isSuccessful) {
                     Result.success("已在后台触发 [${profile.name}] 动态重评与换线！")
                 } else {
-                    Result.failure(Exception("HTTP ${response.code}"))
+                    Result.failure(Exception("HTTP ${response.code}: ${response.message}"))
                 }
             }
         } catch (e: Exception) {
@@ -293,9 +326,8 @@ class ApiClient {
 
     suspend fun fetchDynamicGroups(profile: ServerProfile): Result<List<DynamicGroupCard>> = withContext(Dispatchers.IO) {
         try {
-            val req = buildRequest(profile, "/api/tunnel-groups")
-            client.newCall(req).execute().use { resp ->
-                if (!resp.isSuccessful) return@withContext Result.failure(Exception("HTTP ${resp.code}"))
+            executeCall(profile, "/api/tunnel-groups").use { resp ->
+                if (!resp.isSuccessful) return@withContext Result.failure(Exception("HTTP ${resp.code}: ${resp.message}"))
                 val arr = JSONArray(resp.body?.string() ?: "[]")
                 val list = mutableListOf<DynamicGroupCard>()
                 for (i in 0 until arr.length()) {
@@ -337,8 +369,9 @@ class ApiClient {
                 put("target_count", group.targetCount)
                 put("interval_minutes", group.intervalMinutes)
             }
-            val req = buildRequest(profile, "/api/tunnel-groups", "POST", json.toString())
-            client.newCall(req).execute().use { resp -> Result.success(resp.isSuccessful) }
+            executeCall(profile, "/api/tunnel-groups", "POST", json.toString()).use { resp ->
+                Result.success(resp.isSuccessful)
+            }
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -346,8 +379,9 @@ class ApiClient {
 
     suspend fun deleteDynamicGroup(profile: ServerProfile, groupId: String): Result<Boolean> = withContext(Dispatchers.IO) {
         try {
-            val req = buildRequest(profile, "/api/tunnel-groups?id=${Uri.encode(groupId)}", "DELETE")
-            client.newCall(req).execute().use { resp -> Result.success(resp.isSuccessful) }
+            executeCall(profile, "/api/tunnel-groups?id=${Uri.encode(groupId)}", "DELETE").use { resp ->
+                Result.success(resp.isSuccessful)
+            }
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -355,9 +389,8 @@ class ApiClient {
 
     suspend fun fetchSingBoxOverview(profile: ServerProfile): Result<SingBoxOverviewData> = withContext(Dispatchers.IO) {
         try {
-            val req = buildRequest(profile, "/api/singbox/overview")
-            client.newCall(req).execute().use { resp ->
-                if (!resp.isSuccessful) return@withContext Result.failure(Exception("HTTP ${resp.code}"))
+            executeCall(profile, "/api/singbox/overview").use { resp ->
+                if (!resp.isSuccessful) return@withContext Result.failure(Exception("HTTP ${resp.code}: ${resp.message}"))
                 val json = JSONObject(resp.body?.string() ?: "{}")
                 val nodeArr = json.optJSONArray("nodes") ?: JSONArray()
                 val obArr = json.optJSONArray("available_outbounds") ?: JSONArray()
@@ -400,6 +433,7 @@ class ApiClient {
                 Result.success(SingBoxOverviewData(nodesList, outboundsList))
             }
         } catch (e: Exception) {
+            Log.e("ApiClient", "fetchSingBoxOverview failed", e)
             Result.failure(e)
         }
     }
@@ -425,8 +459,9 @@ class ApiClient {
                 put("port", port)
                 put("outbound", outbound)
             }
-            val req = buildRequest(profile, "/api/singbox/nodes", "POST", json.toString())
-            client.newCall(req).execute().use { resp -> Result.success(resp.isSuccessful) }
+            executeCall(profile, "/api/singbox/nodes", "POST", json.toString()).use { resp ->
+                Result.success(resp.isSuccessful)
+            }
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -435,8 +470,9 @@ class ApiClient {
     suspend fun setSingBoxOutbound(profile: ServerProfile, target: String, outbound: String): Result<Boolean> = withContext(Dispatchers.IO) {
         try {
             val body = JSONObject().put("target", target).put("outbound", outbound).toString()
-            val req = buildRequest(profile, "/api/singbox/nodes/outbound", "POST", body)
-            client.newCall(req).execute().use { resp -> Result.success(resp.isSuccessful) }
+            executeCall(profile, "/api/singbox/nodes/outbound", "POST", body).use { resp ->
+                Result.success(resp.isSuccessful)
+            }
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -444,8 +480,9 @@ class ApiClient {
 
     suspend fun deleteSingBoxNode(profile: ServerProfile, target: String): Result<Boolean> = withContext(Dispatchers.IO) {
         try {
-            val req = buildRequest(profile, "/api/singbox/nodes?target=${Uri.encode(target)}", "DELETE")
-            client.newCall(req).execute().use { resp -> Result.success(resp.isSuccessful) }
+            executeCall(profile, "/api/singbox/nodes?target=${Uri.encode(target)}", "DELETE").use { resp ->
+                Result.success(resp.isSuccessful)
+            }
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -453,8 +490,7 @@ class ApiClient {
 
     suspend fun fetchClashSubscription(profile: ServerProfile): Result<String> = withContext(Dispatchers.IO) {
         try {
-            val req = buildRequest(profile, "/api/singbox/subscription/clash")
-            client.newCall(req).execute().use { response ->
+            executeCall(profile, "/api/singbox/subscription/clash").use { response ->
                 if (response.isSuccessful) {
                     Result.success(response.body?.string() ?: "")
                 } else {
@@ -468,8 +504,7 @@ class ApiClient {
 
     suspend fun fetchNodes(profile: ServerProfile): Result<List<NodeCandidate>> = withContext(Dispatchers.IO) {
         try {
-            val req = buildRequest(profile, "/api/nodes")
-            client.newCall(req).execute().use { resp ->
+            executeCall(profile, "/api/nodes").use { resp ->
                 if (!resp.isSuccessful) return@withContext Result.failure(Exception("HTTP ${resp.code}: ${resp.message}"))
                 val rawStr = resp.body?.string() ?: "[]"
                 val arr = JSONArray(rawStr)
@@ -483,7 +518,7 @@ class ApiClient {
                     val cLong = obj.optString("country_long", "日本")
                     val latency = obj.optInt("latency_ms", 0)
                     val isp = obj.optString("isp", "")
-                    val score = obj.optInt("score", 80)
+                    val score = obj.optLong("score", 80).toInt()
                     val speed = obj.optLong("speed", 30000000)
                     val ipType = obj.optString("ip_type", "unknown")
                     val isFav = obj.optBoolean("is_favorite", false)
@@ -517,15 +552,16 @@ class ApiClient {
                 Result.success(list)
             }
         } catch (e: Exception) {
+            Log.e("ApiClient", "fetchNodes failed", e)
             Result.failure(e)
         }
     }
 
     suspend fun toggleFavorite(profile: ServerProfile, nodeId: String): Result<Boolean> = withContext(Dispatchers.IO) {
         try {
-            val body = JSONObject().put("node_id", nodeId).toString()
-            val req = buildRequest(profile, "/api/nodes/favorite", "POST", body)
-            client.newCall(req).execute().use { resp -> Result.success(resp.isSuccessful) }
+            executeCall(profile, "/api/nodes/favorite", "POST", JSONObject().put("node_id", nodeId).toString()).use { resp ->
+                Result.success(resp.isSuccessful)
+            }
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -533,8 +569,9 @@ class ApiClient {
 
     suspend fun probeNodes(profile: ServerProfile): Result<Boolean> = withContext(Dispatchers.IO) {
         try {
-            val req = buildRequest(profile, "/api/nodes/probe", "POST", "{}")
-            client.newCall(req).execute().use { resp -> Result.success(resp.isSuccessful) }
+            executeCall(profile, "/api/nodes/probe", "POST", "{}").use { resp ->
+                Result.success(resp.isSuccessful)
+            }
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -542,9 +579,8 @@ class ApiClient {
 
     suspend fun fetchBlacklist(profile: ServerProfile): Result<List<BlacklistRecord>> = withContext(Dispatchers.IO) {
         try {
-            val req = buildRequest(profile, "/api/blacklist")
-            client.newCall(req).execute().use { resp ->
-                if (!resp.isSuccessful) return@withContext Result.failure(Exception("HTTP ${resp.code}"))
+            executeCall(profile, "/api/blacklist").use { resp ->
+                if (!resp.isSuccessful) return@withContext Result.failure(Exception("HTTP ${resp.code}: ${resp.message}"))
                 val arr = JSONArray(resp.body?.string() ?: "[]")
                 val list = mutableListOf<BlacklistRecord>()
                 for (i in 0 until arr.length()) {
@@ -569,8 +605,9 @@ class ApiClient {
 
     suspend fun resurrectBlacklist(profile: ServerProfile): Result<Boolean> = withContext(Dispatchers.IO) {
         try {
-            val req = buildRequest(profile, "/api/blacklist/resurrect", "POST", "{}")
-            client.newCall(req).execute().use { resp -> Result.success(resp.isSuccessful) }
+            executeCall(profile, "/api/blacklist/resurrect", "POST", "{}").use { resp ->
+                Result.success(resp.isSuccessful)
+            }
         } catch (e: Exception) {
             Result.failure(e)
         }

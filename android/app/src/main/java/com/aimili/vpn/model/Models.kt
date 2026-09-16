@@ -22,12 +22,30 @@ data class ServerProfile(
 ) {
     val baseUrl: String
         get() {
-            val scheme = if (isTls) "https" else "http"
+            var rawHost = host.trim()
+            var scheme = if (isTls) "https" else "http"
+            if (rawHost.startsWith("http://", ignoreCase = true)) {
+                scheme = "http"
+                rawHost = rawHost.substring(7)
+            } else if (rawHost.startsWith("https://", ignoreCase = true)) {
+                scheme = "https"
+                rawHost = rawHost.substring(8)
+            }
+            rawHost = rawHost.trim('/')
+            var finalPort = port
+            if (rawHost.contains(":")) {
+                val parts = rawHost.split(":")
+                rawHost = parts[0]
+                val p = parts.getOrNull(1)?.toIntOrNull()
+                if (p != null && p > 0) {
+                    finalPort = p
+                }
+            }
             val cleanPath = path.trim().trim('/')
             return if (cleanPath.isNotEmpty()) {
-                "$scheme://$host:$port/$cleanPath"
+                "$scheme://$rawHost:$finalPort/$cleanPath"
             } else {
-                "$scheme://$host:$port"
+                "$scheme://$rawHost:$finalPort"
             }
         }
 }
