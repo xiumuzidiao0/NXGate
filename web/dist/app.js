@@ -1465,6 +1465,13 @@
             const authUser = document.getElementById('rule-auth-user').value.trim();
             const authPass = document.getElementById('rule-auth-pass').value.trim();
 
+            if (authMode === 'custom') {
+                if (!authUser || !authPass) {
+                    alert('自定义认证模式必须同时填写用户名和密码，或选择免密模式！');
+                    return;
+                }
+            }
+
             let boundTunnels = [];
             let boundGroups = [];
             const allChk = document.getElementById('chk-tunnel-all');

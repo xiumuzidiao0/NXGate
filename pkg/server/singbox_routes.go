@@ -101,7 +101,7 @@ func (s *Server) resolveOutboundURL(outboundRaw string) string {
 		}
 	}
 
-	if (authMode == "default_web" || authMode == "custom") && authUser != "" {
+	if (authMode == "default_web" || authMode == "custom") && authUser != "" && authPass != "" {
 		proxyURL := &url.URL{
 			Scheme: scheme,
 			User:   url.UserPassword(authUser, authPass),
@@ -378,6 +378,73 @@ func (s *Server) handleSingBoxSetOutbound(w http.ResponseWriter, r *http.Request
 	_ = json.NewEncoder(w).Encode(resp)
 }
 
+// isOutboundEquivalent determines if two outbound URLs refer to the same proxy exit,
+// accounting for scheme synonyms (socks vs socks5), URL credential escaping, and loopback aliases.
+func isOutboundEquivalent(a, b string) bool {
+	a = strings.TrimSpace(a)
+	b = strings.TrimSpace(b)
+	if strings.EqualFold(a, b) {
+		return true
+	}
+	isDirectA := a == "" || strings.EqualFold(a, "direct") || strings.EqualFold(a, "none")
+	isDirectB := b == "" || strings.EqualFold(b, "direct") || strings.EqualFold(b, "none")
+	if isDirectA && isDirectB {
+		return true
+	}
+	if isDirectA != isDirectB {
+		return false
+	}
+
+	uA, errA := url.Parse(a)
+	uB, errB := url.Parse(b)
+	if errA != nil || errB != nil {
+		return strings.EqualFold(a, b)
+	}
+
+	// Normalize schemes: socks and socks5 are treated as identical SOCKS5 protocol
+	sA := strings.ToLower(uA.Scheme)
+	sB := strings.ToLower(uB.Scheme)
+	if (sA == "socks" || sA == "socks5") && (sB == "socks" || sB == "socks5") {
+		// both are socks
+	} else if sA != sB {
+		return false
+	}
+
+	// Compare hosts & ports
+	hA, pA, errA := net.SplitHostPort(uA.Host)
+	hB, pB, errB := net.SplitHostPort(uB.Host)
+	if errA == nil && errB == nil {
+		if pA != pB {
+			return false
+		}
+		isLoopbackA := hA == "127.0.0.1" || hA == "localhost" || hA == "::1"
+		isLoopbackB := hB == "127.0.0.1" || hB == "localhost" || hB == "::1"
+		if isLoopbackA && isLoopbackB {
+			// loopback match
+		} else if !strings.EqualFold(hA, hB) {
+			return false
+		}
+	} else if !strings.EqualFold(uA.Host, uB.Host) {
+		return false
+	}
+
+	// Compare user credentials
+	userA := ""
+	passA := ""
+	if uA.User != nil {
+		userA = uA.User.Username()
+		passA, _ = uA.User.Password()
+	}
+	userB := ""
+	passB := ""
+	if uB.User != nil {
+		userB = uB.User.Username()
+		passB, _ = uB.User.Password()
+	}
+
+	return userA == userB && passA == passB
+}
+
 // syncSingBoxOutboundCredentials automatically updates all sing-box chained inbounds
 // whenever local proxy port authentication rules or web credentials change.
 func (s *Server) syncSingBoxOutboundCredentials(ctx context.Context) {
@@ -401,8 +468,8 @@ func (s *Server) syncSingBoxOutboundCredentials(ctx context.Context) {
 		}
 
 		// If protocol or credentials changed, automatically update the node's outbound config
-		if n.Outbound != expectedOutbound {
-			stats.LogInfo("SingBoxSync", "正在自动同步更新节点 [%s] 的链式出口配置", n.Name)
+		if !isOutboundEquivalent(n.Outbound, expectedOutbound) {
+			stats.LogInfo("SingBoxSync", "正在自动同步更新节点 [%s] 的链式出口配置 (%s -> %s)", n.Name, n.Outbound, expectedOutbound)
 			_, _ = s.singboxClient.SetOutbound(ctx, n.Name, expectedOutbound)
 		}
 	}
