@@ -87,6 +87,8 @@ import com.aimili.vpn.ui.components.ConnectedButtonGroup
 import com.aimili.vpn.ui.components.ConnectedButtonStyle
 import com.aimili.vpn.ui.components.ConnectedListItem
 import com.aimili.vpn.ui.components.GlobalServerSwitcherTitle
+import com.aimili.vpn.ui.components.countryChineseName
+import com.aimili.vpn.ui.components.countryFlag
 import kotlinx.coroutines.launch
 
 // Dropdown option data models
@@ -125,41 +127,14 @@ fun RoutingMatrixScreen(
     var selectedTabIndex by remember { mutableIntStateOf(0) }
     val tabTitles = listOf("多端口", "自适应组", "边缘入站")
 
-    // State for port rules
-    var portRules by remember {
-        mutableStateOf(
-            listOf(
-                PortRuleItem(7928, enabled = true, policy = "round_robin", authMode = "random"),
-                PortRuleItem(7929, enabled = true, policy = "interval", intervalSeconds = 300, authMode = "custom", authUser = "custom_user"),
-                PortRuleItem(7930, enabled = false, policy = "random", authMode = "none")
-            )
-        )
-    }
-
-    var dynamicGroups by remember {
-        mutableStateOf(
-            listOf(
-                DynamicGroupCard(id = "system-primary", name = "系统主出口网关组 (tun0)", country = "日本", ipType = "residential", unlockFilter = "ai", targetCount = 1, intervalMinutes = 30),
-                DynamicGroupCard(id = "dg-1", name = "日本前三住宅组", country = "日本", ipType = "residential", unlockFilter = "ai", targetCount = 3, intervalMinutes = 15)
-            )
-        )
-    }
-
-    var inbounds by remember {
-        mutableStateOf(
-            listOf(
-                InboundProtocolItem("sb-1", "Hysteria2-62799", "VLESS-REALITY", 443, "socks5://127.0.0.1:7928", 7928, "AimiliVPN 默认出口 (PORT 7928)"),
-                InboundProtocolItem("sb-2", "AnyTLS-12974", "Hysteria2", 8443, "direct", 0, "直连出口 (VPS 本机原生网络)"),
-                InboundProtocolItem("sb-3", "TUIC-19078", "TUIC v5", 19078, "socks5://127.0.0.1:7929", 7929, "多端口出口 (PORT 7929)")
-            )
-        )
-    }
-
+    // Real server states
+    var portRules by remember { mutableStateOf<List<PortRuleItem>>(emptyList()) }
+    var dynamicGroups by remember { mutableStateOf<List<DynamicGroupCard>>(emptyList()) }
+    var inbounds by remember { mutableStateOf<List<InboundProtocolItem>>(emptyList()) }
     var availableOutbounds by remember {
         mutableStateOf(
             listOf(
-                AvailableOutbound(7928, "socks5://127.0.0.1:7928", "AimiliVPN 默认出口 (PORT 7928 - 免密)", true),
-                AvailableOutbound(7929, "socks5://127.0.0.1:7929", "多端口出口 (PORT 7929 - 1 动态组)", false),
+                AvailableOutbound(7928, "socks5://127.0.0.1:7928", "AimiliVPN 默认出口 (PORT 7928)", true),
                 AvailableOutbound(0, "direct", "直连出口 (VPS 本机原生网络)", false)
             )
         )
@@ -211,18 +186,21 @@ fun RoutingMatrixScreen(
     var groupNameInput by remember { mutableStateOf("日本Top3住宅组") }
 
     val groupCountryOptions = remember {
-        listOf(
-            GroupCountryOption("ALL", "全部国家/地区 (不限)"),
-            GroupCountryOption("JP", "🇯🇵 日本 (JP)"),
-            GroupCountryOption("US", "🇺🇸 美国 (US)"),
-            GroupCountryOption("KR", "🇰🇷 韩国 (KR)"),
-            GroupCountryOption("TW", "🇹🇼 台湾 (TW)"),
-            GroupCountryOption("HK", "🇭🇰 香港 (HK)"),
-            GroupCountryOption("SG", "🇸🇬 新加坡 (SG)"),
-            GroupCountryOption("GB", "🇬🇧 英国 (GB)"),
-            GroupCountryOption("DE", "🇩🇪 德国 (DE)"),
-            GroupCountryOption("AU", "🇦🇺 澳大利亚 (AU)")
+        val list = mutableListOf(
+            GroupCountryOption("ALL", "全部国家/地区 (不限)")
         )
+        val majorCodes = listOf(
+            "JP", "US", "KR", "TW", "HK", "SG", "GB", "DE", "FR", "CA", "AU",
+            "NL", "VN", "TH", "MY", "IN", "RU", "BR", "PH", "ID", "IT", "ES",
+            "SE", "CH", "NZ", "PL", "UA", "TR", "ZA", "AR", "CL", "CO", "MX",
+            "NO", "FI", "DK", "IE", "AT", "BE", "CZ", "RO", "IL", "AE", "SA", "CN"
+        )
+        majorCodes.forEach { code ->
+            val flag = countryFlag(code)
+            val name = countryChineseName(code)
+            list.add(GroupCountryOption(code, "$flag $name ($code)"))
+        }
+        list
     }
     var selectedGroupCountryOption by remember { mutableStateOf(groupCountryOptions[1]) }
 
@@ -292,18 +270,18 @@ fun RoutingMatrixScreen(
     LaunchedEffect(activeServer?.id) {
         if (activeServer != null) {
             val portsRes = AimiliApplication.instance.apiClient.fetchPortRules(activeServer)
-            if (portsRes.isSuccess && !portsRes.getOrNull().isNullOrEmpty()) {
-                portRules = portsRes.getOrNull()!!
+            if (portsRes.isSuccess) {
+                portRules = portsRes.getOrNull() ?: emptyList()
             }
             val groupsRes = AimiliApplication.instance.apiClient.fetchDynamicGroups(activeServer)
-            if (groupsRes.isSuccess && !groupsRes.getOrNull().isNullOrEmpty()) {
-                dynamicGroups = groupsRes.getOrNull()!!
+            if (groupsRes.isSuccess) {
+                dynamicGroups = groupsRes.getOrNull() ?: emptyList()
             }
             val sbOverviewRes = AimiliApplication.instance.apiClient.fetchSingBoxOverview(activeServer)
             if (sbOverviewRes.isSuccess) {
                 val data = sbOverviewRes.getOrNull()
                 if (data != null) {
-                    if (data.nodes.isNotEmpty()) inbounds = data.nodes
+                    inbounds = data.nodes
                     if (data.availableOutbounds.isNotEmpty()) {
                         availableOutbounds = data.availableOutbounds
                         selectedInboundOutboundOption = data.availableOutbounds.first()
@@ -430,10 +408,24 @@ fun RoutingMatrixScreen(
                             // ==================== TAB 0: 多端口分流矩阵 (全增删改查) ====================
                             0 -> {
                                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                                    // 端口列表项
-                                    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                                        portRules.forEachIndexed { index, rule ->
-                                            ConnectedListItem(
+                                    if (portRules.isEmpty()) {
+                                        Surface(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            shape = RoundedCornerShape(16.dp),
+                                            color = MaterialTheme.colorScheme.surfaceContainerLow
+                                        ) {
+                                            Text(
+                                                text = "当前服务器尚未配置独立代理端口规则，请点击下方「新建端口规则」添加。",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier.padding(20.dp)
+                                            )
+                                        }
+                                    } else {
+                                        // 端口列表项
+                                        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                            portRules.forEachIndexed { index, rule ->
+                                                ConnectedListItem(
                                                 index = index,
                                                 total = portRules.size,
                                                 headline = rule.title,
@@ -479,6 +471,7 @@ fun RoutingMatrixScreen(
                                             )
                                         }
                                     }
+                                    }
 
                                     // 新建端口操作组
                                     ConnectedButtonGroup(
@@ -522,8 +515,22 @@ fun RoutingMatrixScreen(
                             // ==================== TAB 1: 动态自适应组 (全增删改查) ====================
                             1 -> {
                                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                                    dynamicGroups.forEach { group ->
-                                        Card(
+                                    if (dynamicGroups.isEmpty()) {
+                                        Surface(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            shape = RoundedCornerShape(16.dp),
+                                            color = MaterialTheme.colorScheme.surfaceContainerLow
+                                        ) {
+                                            Text(
+                                                text = "当前服务器尚未配置动态自适应组，请点击下方「新建自适应组」添加。",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier.padding(20.dp)
+                                            )
+                                        }
+                                    } else {
+                                        dynamicGroups.forEach { group ->
+                                            Card(
                                             modifier = Modifier.fillMaxWidth(),
                                             shape = RoundedCornerShape(20.dp),
                                             colors = CardDefaults.cardColors(
@@ -598,6 +605,7 @@ fun RoutingMatrixScreen(
                                             }
                                         }
                                     }
+                                    }
 
                                     // 自适应组操作组
                                     ConnectedButtonGroup(
@@ -639,9 +647,23 @@ fun RoutingMatrixScreen(
                             // ==================== TAB 2: 边缘抗封锁入站 (22 种协议全管理) ====================
                             2 -> {
                                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                                    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                                        inbounds.forEachIndexed { index, inbound ->
-                                            ConnectedListItem(
+                                    if (inbounds.isEmpty()) {
+                                        Surface(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            shape = RoundedCornerShape(16.dp),
+                                            color = MaterialTheme.colorScheme.surfaceContainerLow
+                                        ) {
+                                            Text(
+                                                text = "当前服务器尚未创建边缘抗封锁入站节点，请点击下方「新建入站节点」创建。",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier.padding(20.dp)
+                                            )
+                                        }
+                                    } else {
+                                        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                            inbounds.forEachIndexed { index, inbound ->
+                                                ConnectedListItem(
                                                 index = index,
                                                 total = inbounds.size,
                                                 headline = inbound.title,
@@ -668,6 +690,7 @@ fun RoutingMatrixScreen(
                                                 }
                                             )
                                         }
+                                    }
                                     }
 
                                     // 入站协议操作组
