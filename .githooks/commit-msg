@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# AimiliVPN Git Commit-Msg Hook
+# 强制校验 Conventional Commits 规范，确保提交记录结构清晰易维护
+# 格式规范: <type>(<optional scope>): <description>
+# 例如: feat(proxy): 支持 SOCKS5 UDP Associate 转发
+#       fix(web): 修复手机端横向溢出问题
+#       docs(ci): 更新发布流程指南
+# ==============================================================================
+
+set -e
+
+MSG_FILE="$1"
+COMMIT_MSG=$(head -n 1 "$MSG_FILE" | tr -d '\r\n')
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;36m'
+PLAIN='\033[0m'
+BOLD='\033[1m'
+
+# 忽略 Merge commit 与 Revert commit
+if [[ "$COMMIT_MSG" =~ ^Merge.* ]] || [[ "$COMMIT_MSG" =~ ^Revert.* ]] || [[ "$COMMIT_MSG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+    exit 0
+fi
+
+# 正则表达式校验 Conventional Commits
+PATTERN="^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-zA-Z0-9_\.\/-]+\))?!?: .+$"
+
+if [[ ! "$COMMIT_MSG" =~ $PATTERN ]]; then
+    echo -e "\n${RED}==================================================================${PLAIN}"
+    echo -e "${RED}❌ [Commit-msg 拦截] 提交信息不符合 Conventional Commits 规范！${PLAIN}"
+    echo -e "${RED}==================================================================${PLAIN}"
+    echo -e "当前提交信息: ${YELLOW}\"${COMMIT_MSG}\"${PLAIN}\n"
+    echo -e "${BOLD}正确格式:${PLAIN} ${GREEN}<type>(<可选模块>): <简明描述>${PLAIN}\n"
+    echo -e "${BOLD}允许的 <type> 前缀列表:${PLAIN}"
+    echo -e "  ${GREEN}feat${PLAIN}     : 新功能 (Features)"
+    echo -e "  ${GREEN}fix${PLAIN}      : 缺陷修复 (Bug fixes)"
+    echo -e "  ${GREEN}docs${PLAIN}     : 文档变动 (Documentation)"
+    echo -e "  ${GREEN}style${PLAIN}    : 样式/格式调整 (UI layout, CSS styles)"
+    echo -e "  ${GREEN}refactor${PLAIN} : 代码重构 (无新增功能亦无修复 bug)"
+    echo -e "  ${GREEN}perf${PLAIN}     : 性能优化 (Performance improvements)"
+    echo -e "  ${GREEN}test${PLAIN}     : 测试用例增加或调整 (Tests)"
+    echo -e "  ${GREEN}build${PLAIN}    : 构建系统/依赖项变动 (Build scripts, dependencies)"
+    echo -e "  ${GREEN}ci${PLAIN}       : CI/CD 流水线与工作流配置 (GitHub Actions)"
+    echo -e "  ${GREEN}chore${PLAIN}    : 杂项与版本号维护 (Release bump, chores)\n"
+    echo -e "${BOLD}示例参考:${PLAIN}"
+    echo -e "  ${BLUE}feat(proxy): 支持 SOCKS5 UDP 穿透出海${PLAIN}"
+    echo -e "  ${BLUE}fix(server): 解决 CI 环境下协议列表 500 异常${PLAIN}"
+    echo -e "  ${BLUE}docs(readme): 补充架构升级与安装说明${PLAIN}\n"
+    echo -e "${YELLOW}💡 提示: 紧急情况下可附加 --no-verify 跳过本地校验 (git commit --no-verify)${PLAIN}\n"
+    exit 1
+fi
+
+exit 0

@@ -291,5 +291,36 @@ systemctl start aimilivpn
 
 ---
 
-**文档版本**：`1.0.0`  
+## 八、 本地 Git 钩子与分支保护策略
+
+### 1. 本地双重守门钩子 (Git Hooks)
+
+项目在 `.githooks/` 目录内置了开箱即用的自动化钩子，克隆项目后执行 `git config core.hooksPath .githooks` 即可全局激活：
+
+1. **`commit-msg` (规范提交信息)**：
+   - 自动拦截不符合 Conventional Commits 格式的提交。
+   - 必须使用 `feat:`, `fix:`, `docs:`, `style:`, `refactor:`, `perf:`, `test:`, `ci:`, `chore:` 等语义前缀。
+2. **`pre-push` (推送前质量自检)**：
+   - 自动运行 `./scripts/check-version.sh`（全链路版本一致性）。
+   - 自动运行 `go vet ./...`（静态代码安全分析）。
+   - 自动运行 `go test -count=1 ./...`（全量子包单元测试）。
+   - 自动运行 `npm --prefix web run test:ui`（4 视口回归测试）。
+
+### 2. GitHub 分支保护策略（两套协作模式）
+
+#### 模式 A：单人敏捷开发模式（当前默认）
+- **特点**：开发者可在本地直接 `git push origin main`。
+- **质量保障**：由本地 `.githooks/pre-push` 与远端 GitHub Actions CI 双重保障，任何版本冲突或测试失败均在第一时间被拦截并标红。
+
+#### 模式 B：多人团队与 PR 审查模式
+当项目进入多人协同开发阶段时，推荐开启 GitHub 官方分支保护规则：
+1. 打开 GitHub 仓库 -> **Settings** -> **Branches** -> **Add branch protection rule**；
+2. **Branch name pattern** 输入 `main`；
+3. 勾选 **Require a pull request before merging**（要求必须通过 PR 合并代码）；
+4. 勾选 **Require status checks to pass before merging**，并在列表中搜索添加 **`Test & Validate`**（绑定 CI 测试流水线）；
+5. 勾选 **Do not allow bypassing the above settings**，点击保存。
+
+---
+
+**文档版本**：`1.1.0`  
 **适用范围**：`aimili-vpngate-go v2.5.1+`

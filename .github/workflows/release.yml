@@ -42,8 +42,11 @@ jobs:
             exit 1
           fi
 
-      - name: Run Full Test Suite
+      - name: Run Full Test Suite & Security Audit
         run: |
+          go vet ./...
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
           go test -v -count=1 ./...
           npm --prefix web install
           npx --prefix web playwright install --with-deps chromium

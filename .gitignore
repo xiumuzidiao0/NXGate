@@ -1,12 +1,27 @@
-# Binaries and release builds at repo root
+# Binaries and release builds
 /bin/
 /dist/
+aimili-vpngate
+*.exe
+*.test
+__debug_bin*
 
-# Runtime data & secrets
-/data/
-*.ovpn
+# Configuration & Secrets
+*.env
+*.env.*
+!*.env.example
+!config.env.example
+config.env
+credentials.env
 openvpn_auth.txt
 admin_path.txt
+*.pem
+*.key
+*.crt
+
+# Runtime data & logs
+/data/
+*.ovpn
 *.log
 *.tmp
 
