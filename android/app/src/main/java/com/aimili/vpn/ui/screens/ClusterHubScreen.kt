@@ -3,9 +3,7 @@ package com.aimili.vpn.ui.screens
 import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -27,12 +25,12 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -145,7 +143,7 @@ fun ClusterHubScreen(
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        text = "纳管主机：${summary.onlineCount} 台在线 / ${summary.offlineCount} 台离线\n实时吞吐：下行 ${summary.downSpeedStr}，上行 ${summary.upSpeedStr}\n今日总流量：${summary.todayTrafficStr}",
+                        text = "纳管主机：${servers.size} 台在线 / ${servers.count { !it.isOnline }} 台离线\n实时吞吐：下行 ${summary.downSpeedStr}，上行 ${summary.upSpeedStr}\n今日总流量：${summary.todayTrafficStr}",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.9f),
                         lineHeight = MaterialTheme.typography.bodyMedium.lineHeight * 1.35f
@@ -153,115 +151,97 @@ fun ClusterHubScreen(
                 }
             }
 
-            // 2. 东京住宅网关填充卡片（高 174dp）
-            val tokyoServer = servers.firstOrNull { it.id == "tokyo-residential" } ?: servers.firstOrNull()
-            if (tokyoServer != null) {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(174.dp)
-                        .clip(RoundedCornerShape(20.dp))
-                        .clickable { onSelectServerAndOpenConsole(tokyoServer) },
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
-                    )
+            // 2. 动态渲染各服务器卡片及其对应操作组
+            if (servers.isEmpty()) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerLow
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(20.dp),
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Text(
-                            text = "${tokyoServer.name} 在线 ${tokyoServer.latencyMs}毫秒",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            text = "物理出口：${tokyoServer.exitIp} ${tokyoServer.ipType}\n智能解锁：${tokyoServer.unlockStatus}\n下行 ${tokyoServer.downSpeedStr}，总计 ${tokyoServer.totalTrafficStr}，活跃连接 ${tokyoServer.activeConns}",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            lineHeight = MaterialTheme.typography.bodyMedium.lineHeight * 1.35f
-                        )
-                    }
+                    Text(
+                        text = "当前暂未纳管任何服务器，请点击右下角按钮或右上角扫码添加 VPS。",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(16.dp)
+                    )
                 }
+            } else {
+                servers.forEachIndexed { index, server ->
+                    val cardHeight = if (index == 0) 174.dp else 160.dp
 
-                // 3. 按钮组: “一键换线”(色调) “复制订阅”(色调) “控制台”(填充)
-                ConnectedButtonGroup(
-                    items = listOf(
-                        ConnectedButtonItem(
-                            text = "一键换线",
-                            style = ConnectedButtonStyle.Tonal,
-                            onClick = {
-                                scope.launch {
-                                    val res = AimiliApplication.instance.apiClient.triggerRotate(tokyoServer)
-                                    Toast.makeText(
-                                        context,
-                                        res.getOrDefault("已在后台触发 [${tokyoServer.name}] 动态重评与换线！"),
-                                        Toast.LENGTH_SHORT
-                                    ).show()
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(cardHeight)
+                            .clip(RoundedCornerShape(20.dp))
+                            .clickable { onSelectServerAndOpenConsole(server) },
+                        shape = RoundedCornerShape(20.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(20.dp),
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Text(
+                                text = "${server.name} 在线 ${server.latencyMs}毫秒",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                text = "物理出口：${server.exitIp} ${server.ipType}\n智能解锁：${server.unlockStatus}\n下行 ${server.downSpeedStr}，总计 ${server.totalTrafficStr}，活跃连接 ${server.activeConns}",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                lineHeight = MaterialTheme.typography.bodyMedium.lineHeight * 1.35f
+                            )
+                        }
+                    }
+
+                    // Connected button group below the card
+                    ConnectedButtonGroup(
+                        items = listOf(
+                            ConnectedButtonItem(
+                                text = "一键换线",
+                                style = ConnectedButtonStyle.Tonal,
+                                onClick = {
+                                    scope.launch {
+                                        val res = AimiliApplication.instance.apiClient.triggerRotate(server)
+                                        Toast.makeText(
+                                            context,
+                                            res.getOrDefault("已触发 [${server.name}] 动态重评换线！"),
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
                                 }
-                            }
-                        ),
-                        ConnectedButtonItem(
-                            text = "复制订阅",
-                            style = ConnectedButtonStyle.Tonal,
-                            onClick = {
-                                val clashUrl = "${tokyoServer.baseUrl}/api/singbox/subscription/clash"
-                                clipboardManager.setText(AnnotatedString(clashUrl))
-                                Toast.makeText(context, "Clash 订阅地址已复制到剪贴板！", Toast.LENGTH_SHORT).show()
-                            }
-                        ),
-                        ConnectedButtonItem(
-                            text = "控制台",
-                            style = ConnectedButtonStyle.Filled,
-                            onClick = { onSelectServerAndOpenConsole(tokyoServer) }
+                            ),
+                            ConnectedButtonItem(
+                                text = "复制订阅",
+                                style = ConnectedButtonStyle.Tonal,
+                                onClick = {
+                                    scope.launch {
+                                        val subRes = AimiliApplication.instance.apiClient.fetchClashSubscription(server)
+                                        val url = subRes.getOrDefault("${server.baseUrl}/api/singbox/subscription/clash")
+                                        clipboardManager.setText(AnnotatedString(url))
+                                        Toast.makeText(context, "已复制 [${server.name}] Clash Meta 分流订阅！", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            ),
+                            ConnectedButtonItem(
+                                text = "控制台",
+                                style = ConnectedButtonStyle.Filled,
+                                onClick = { onSelectServerAndOpenConsole(server) }
+                            )
                         )
                     )
-                )
-            }
-
-            // 4. 硅谷智能专属池填充卡片（高 160dp）
-            val svServer = servers.find { it.id == "silicon-valley-ai" } ?: servers.getOrNull(1)
-            if (svServer != null) {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(160.dp)
-                        .clip(RoundedCornerShape(20.dp))
-                        .clickable { onSelectServerAndOpenConsole(svServer) },
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
-                    )
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(20.dp),
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Text(
-                            text = "${svServer.name} 在线 ${svServer.latencyMs}毫秒",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            text = "物理出口：${svServer.exitIp} ${svServer.ipType}\n智能解锁：${svServer.unlockStatus}\n下行 ${svServer.downSpeedStr}，总计 ${svServer.totalTrafficStr}，活跃连接 ${svServer.activeConns}",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            lineHeight = MaterialTheme.typography.bodyMedium.lineHeight * 1.35f
-                        )
-                    }
                 }
             }
 
-            Spacer(Modifier.height(80.dp)) // Padding for bottom bar & FAB
+            Spacer(Modifier.height(80.dp))
         }
     }
 }

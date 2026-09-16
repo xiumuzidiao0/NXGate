@@ -17,8 +17,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Dns
@@ -37,6 +37,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -78,25 +79,28 @@ fun SettingsSecurityScreen(
     val scope = rememberCoroutineScope()
     val scrollState = rememberScrollState()
 
-    // Form inputs state
-    var selectedFieldTabIndex by remember { mutableIntStateOf(0) }
-    var inputName by remember { mutableStateOf("东京住宅网关") }
-    var inputHost by remember { mutableStateOf("47.238.2.197") }
-    var inputPort by remember { mutableStateOf("8787") }
-    var inputPath by remember { mutableStateOf("enter") }
-    var inputUser by remember { mutableStateOf("xmzd") }
-    var inputPass by remember { mutableStateOf("a18979346882") }
+    // Tracking which server is being edited (null = adding a new server)
+    var editingServerId by remember { mutableStateOf<String?>(servers.firstOrNull()?.id) }
+
+    // Form inputs state initialized from first server or default
+    val initialServer = servers.firstOrNull()
+    var inputName by remember { mutableStateOf(initialServer?.name ?: "东京住宅网关") }
+    var inputHost by remember { mutableStateOf(initialServer?.host ?: "47.238.2.197") }
+    var inputPort by remember { mutableStateOf(initialServer?.port?.toString() ?: "8787") }
+    var inputPath by remember { mutableStateOf(initialServer?.path ?: "enter") }
+    var inputUser by remember { mutableStateOf(initialServer?.username ?: "xmzd") }
+    var inputPass by remember { mutableStateOf(initialServer?.password ?: "a18979346882") }
 
     // Protocol chip: "明文连接", "加密连接" (selected)
-    var selectedProtocolChipIndex by remember { mutableIntStateOf(1) }
+    var selectedProtocolChipIndex by remember { mutableIntStateOf(if (initialServer?.isTls == true) 1 else 0) }
     val protocolChips = listOf("明文连接", "加密连接")
 
-    // Security preferences switch states (initial true)
+    // Security preferences switch states
     var biometricEnabled by remember { mutableStateOf(AimiliApplication.instance.serverStore.biometricEnabled.value) }
     var cleartextWarningEnabled by remember { mutableStateOf(AimiliApplication.instance.serverStore.cleartextWarningEnabled.value) }
 
-    // Server deletion confirmation dialog
-    var deleteCandidateId by remember { mutableStateOf<String?>(null) }
+    // Server deletion confirmation target
+    var deleteCandidate by remember { mutableStateOf<ServerProfile?>(null) }
     var isTestingConnection by remember { mutableStateOf(false) }
 
     // QR Code Manual Scan Dialog
@@ -118,7 +122,7 @@ fun SettingsSecurityScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
                         Icon(
-                            imageVector = Icons.Rounded.ArrowBack,
+                            imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
                             contentDescription = "返回",
                             tint = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.size(24.dp)
@@ -155,84 +159,78 @@ fun SettingsSecurityScreen(
         ) {
             Spacer(Modifier.height(4.dp))
 
-            // 1. 2项的列表: “东京住宅网关” 与 “硅谷智能专属池”
-            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                // Item 1: 东京住宅网关 (点击测试连通性，长按可拖拽调整)
-                ConnectedListItem(
-                    index = 0,
-                    total = 2,
-                    headline = servers.getOrNull(0)?.name ?: "东京住宅网关",
-                    supportingText = "地址 ${servers.getOrNull(0)?.host ?: "47.238.2.197"}，端口 ${servers.getOrNull(0)?.port ?: 8787}，连通正常",
-                    leadingIcon = Icons.Rounded.Dns,
-                    trailingContent = {
-                        IconButton(onClick = {
-                            val server = servers.getOrNull(0)
-                            if (server != null) {
-                                scope.launch {
-                                    val res = AimiliApplication.instance.apiClient.testConnection(server)
-                                    Toast.makeText(context, "✅ 东京节点已测通！延迟: ${server.latencyMs}ms", Toast.LENGTH_SHORT).show()
+            // 1. 动态已纳管服务器列表（支持任意服务器的连通性测试、点击载入编辑、删除确认）
+            if (servers.isEmpty()) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerLow
+                ) {
+                    Text(
+                        text = "暂无已纳管的 VPS，请点击下方表单或右上角二维码扫码添加服务器",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(16.dp)
+                    )
+                }
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    servers.forEachIndexed { index, server ->
+                        ConnectedListItem(
+                            index = index,
+                            total = servers.size,
+                            headline = server.name,
+                            supportingText = "地址 ${server.host}，端口 ${server.port}，${if (server.isOnline) "连通正常 (${server.latencyMs}ms)" else "离线/待测"}",
+                            leadingIcon = Icons.Rounded.Dns,
+                            trailingContent = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    IconButton(onClick = {
+                                        scope.launch {
+                                            val res = AimiliApplication.instance.apiClient.testConnection(server)
+                                            if (res.isSuccess) {
+                                                AimiliApplication.instance.serverStore.updateServer(res.getOrNull() ?: server)
+                                                Toast.makeText(context, "✅ [${server.name}] 测活通过！延迟: ${server.latencyMs}ms", Toast.LENGTH_SHORT).show()
+                                            } else {
+                                                Toast.makeText(context, "⚠️ [${server.name}] 测活失败: ${res.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
+                                    }) {
+                                        Icon(Icons.Rounded.NetworkPing, contentDescription = "测试连通性", tint = MaterialTheme.colorScheme.primary)
+                                    }
+                                    IconButton(onClick = {
+                                        deleteCandidate = server
+                                    }) {
+                                        Icon(Icons.Rounded.Delete, contentDescription = "删除服务器", tint = MaterialTheme.colorScheme.error)
+                                    }
                                 }
+                            },
+                            onClick = {
+                                editingServerId = server.id
+                                inputName = server.name
+                                inputHost = server.host
+                                inputPort = server.port.toString()
+                                inputPath = server.path
+                                inputUser = server.username
+                                inputPass = server.password
+                                selectedProtocolChipIndex = if (server.isTls) 1 else 0
+                                Toast.makeText(context, "已载入 [${server.name}] 参数至下方表单，可直接修改或保存", Toast.LENGTH_SHORT).show()
                             }
-                        }) {
-                            Icon(Icons.Rounded.NetworkPing, contentDescription = "测试连通性", tint = MaterialTheme.colorScheme.primary)
-                        }
-                    },
-                    onClick = {
-                        val server = servers.getOrNull(0)
-                        if (server != null) {
-                            inputName = server.name
-                            inputHost = server.host
-                            inputPort = server.port.toString()
-                            inputPath = server.path
-                            inputUser = server.username
-                            inputPass = server.password
-                            selectedProtocolChipIndex = if (server.isTls) 1 else 0
-                            Toast.makeText(context, "已载入 [${server.name}] 参数至下方表单", Toast.LENGTH_SHORT).show()
-                        }
+                        )
                     }
-                )
-
-                // Item 2: 硅谷智能专属池 (删除前需要二次确认)
-                ConnectedListItem(
-                    index = 1,
-                    total = 2,
-                    headline = servers.getOrNull(1)?.name ?: "硅谷智能专属池",
-                    supportingText = "地址 ${servers.getOrNull(1)?.host ?: "104.28.0.8"}，端口 ${servers.getOrNull(1)?.port ?: 8787}，连通正常",
-                    leadingIcon = Icons.Rounded.Dns,
-                    trailingContent = {
-                        IconButton(onClick = {
-                            deleteCandidateId = servers.getOrNull(1)?.id ?: "silicon-valley-ai"
-                        }) {
-                            Icon(Icons.Rounded.Delete, contentDescription = "删除服务器", tint = MaterialTheme.colorScheme.error)
-                        }
-                    },
-                    onClick = {
-                        val server = servers.getOrNull(1)
-                        if (server != null) {
-                            inputName = server.name
-                            inputHost = server.host
-                            inputPort = server.port.toString()
-                            inputPath = server.path
-                            inputUser = server.username
-                            inputPass = server.password
-                            selectedProtocolChipIndex = if (server.isTls) 1 else 0
-                            Toast.makeText(context, "已载入 [${server.name}] 参数至下方表单", Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                )
+                }
             }
 
             // 2. 4个横向相连的描边按钮组: “服务器备注名称”“主机地址或域名”“网页端口”“安全访问路径”
             ConnectedButtonGroup(
                 items = listOf(
-                    ConnectedButtonItem("服务器备注", ConnectedButtonStyle.Outlined) { selectedFieldTabIndex = 0 },
-                    ConnectedButtonItem("主机域名", ConnectedButtonStyle.Outlined) { selectedFieldTabIndex = 1 },
-                    ConnectedButtonItem("网页端口", ConnectedButtonStyle.Outlined) { selectedFieldTabIndex = 2 },
-                    ConnectedButtonItem("安全路径", ConnectedButtonStyle.Outlined) { selectedFieldTabIndex = 3 }
+                    ConnectedButtonItem("服务器备注", ConnectedButtonStyle.Outlined) {},
+                    ConnectedButtonItem("主机地址", ConnectedButtonStyle.Outlined) {},
+                    ConnectedButtonItem("网页端口", ConnectedButtonStyle.Outlined) {},
+                    ConnectedButtonItem("安全路径", ConnectedButtonStyle.Outlined) {}
                 )
             )
 
-            // Dynamic editable fields based on selection or full form
+            // Dynamic editable fields based on current input
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
                     value = inputName,
@@ -304,8 +302,9 @@ fun SettingsSecurityScreen(
                 Button(
                     onClick = {
                         isTestingConnection = true
+                        val targetId = editingServerId ?: UUID.randomUUID().toString()
                         val newServer = ServerProfile(
-                            id = UUID.randomUUID().toString(),
+                            id = targetId,
                             name = inputName.trim().ifEmpty { "AimiliVPN 网关" },
                             host = inputHost.trim().ifEmpty { "127.0.0.1" },
                             port = inputPort.toIntOrNull() ?: 8787,
@@ -317,12 +316,15 @@ fun SettingsSecurityScreen(
                         scope.launch {
                             val res = AimiliApplication.instance.apiClient.testConnection(newServer)
                             isTestingConnection = false
-                            if (res.isSuccess) {
-                                AimiliApplication.instance.serverStore.addServer(res.getOrNull() ?: newServer)
-                                Toast.makeText(context, "✅ 连通性测试通过！配置已安全加密保存。", Toast.LENGTH_SHORT).show()
+                            val profileToSave = res.getOrNull() ?: newServer
+
+                            if (editingServerId != null && servers.any { it.id == editingServerId }) {
+                                AimiliApplication.instance.serverStore.updateServer(profileToSave)
+                                Toast.makeText(context, "✅ [${profileToSave.name}] 配置已更新并安全保存！", Toast.LENGTH_SHORT).show()
                             } else {
-                                AimiliApplication.instance.serverStore.addServer(newServer)
-                                Toast.makeText(context, "⚠️ 连通性测试未响应，但已持久化保存配置。", Toast.LENGTH_SHORT).show()
+                                AimiliApplication.instance.serverStore.addServer(profileToSave)
+                                editingServerId = profileToSave.id
+                                Toast.makeText(context, "✅ 新服务器 [${profileToSave.name}] 已成功添加！", Toast.LENGTH_SHORT).show()
                             }
                         }
                     },
@@ -412,17 +414,17 @@ fun SettingsSecurityScreen(
                     )
                 }
 
-                // FAB (add 图标的填充 FAB) 叠放在内部靠右位置
+                // FAB: 点击清空表单，进入纯净新增服务器模式
                 FloatingActionButton(
                     onClick = {
-                        // Reset form to clean state
+                        editingServerId = null
                         inputName = "新服务器网关"
                         inputHost = ""
                         inputPort = "8787"
                         inputPath = "enter"
                         inputUser = "admin"
                         inputPass = ""
-                        Toast.makeText(context, "已清空表单，请输入新服务器参数", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "已切换为新增模式，请输入新服务器参数并测试保存", Toast.LENGTH_SHORT).show()
                     },
                     shape = RoundedCornerShape(16.dp),
                     containerColor = MaterialTheme.colorScheme.primary,
@@ -444,32 +446,38 @@ fun SettingsSecurityScreen(
         }
     }
 
-    // Delete confirmation dialog
-    if (deleteCandidateId != null) {
-        val idToDelete = deleteCandidateId!!
+    // 真正可靠的删除二次确认弹窗
+    if (deleteCandidate != null) {
+        val server = deleteCandidate!!
         AlertDialog(
-            onDismissRequest = { deleteCandidateId = null },
+            onDismissRequest = { deleteCandidate = null },
             shape = RoundedCornerShape(28.dp),
             containerColor = MaterialTheme.colorScheme.surfaceContainer,
             title = {
-                Text("确认移除此服务器？", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text("确认移除服务器？", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             },
             text = {
-                Text("删除后该 VPS 将从集群概览中移除，后续可通过扫码随时重新添加。", style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    "服务器 [${server.name}] (${server.host}:${server.port}) 将从应用纳管列表中彻底删除，确定要移除吗？",
+                    style = MaterialTheme.typography.bodyMedium
+                )
             },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        AimiliApplication.instance.serverStore.deleteServer(idToDelete)
-                        deleteCandidateId = null
-                        Toast.makeText(context, "服务器配置已安全移除", Toast.LENGTH_SHORT).show()
+                        AimiliApplication.instance.serverStore.deleteServer(server.id)
+                        if (editingServerId == server.id) {
+                            editingServerId = null
+                        }
+                        deleteCandidate = null
+                        Toast.makeText(context, "已成功移除服务器 [${server.name}]", Toast.LENGTH_SHORT).show()
                     }
                 ) {
                     Text("确认删除", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { deleteCandidateId = null }) {
+                TextButton(onClick = { deleteCandidate = null }) {
                     Text("取消")
                 }
             }
@@ -488,7 +496,7 @@ fun SettingsSecurityScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        text = "支持通过相机扫描 Web 控制台顶栏“手机 App 绑定”二维码，或粘贴 aimili://server 协议链接：",
+                        text = "支持通过相机扫描 Web 控制台顶栏“手机 App 绑定”二维码，或直接粘贴 aimili://server 专属链接：",
                         style = MaterialTheme.typography.bodyMedium
                     )
                     OutlinedTextField(
@@ -514,11 +522,12 @@ fun SettingsSecurityScreen(
                             inputUser = parsed.username
                             inputPass = parsed.password
                             selectedProtocolChipIndex = if (parsed.isTls) 1 else 0
+                            editingServerId = parsed.id
                             AimiliApplication.instance.serverStore.addServer(parsed)
                             showScanSimDialog = false
                             Toast.makeText(context, "🎉 已成功扫码识别并自动导入 [${parsed.name}]！", Toast.LENGTH_SHORT).show()
                         } else {
-                            Toast.makeText(context, "无效的 aimili:// 协议链接", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "无效的 aimili:// 协议内容", Toast.LENGTH_SHORT).show()
                         }
                     }
                 ) {

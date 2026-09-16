@@ -17,12 +17,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.automirrored.rounded.Sort
 import androidx.compose.material.icons.rounded.Public
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.RocketLaunch
 import androidx.compose.material.icons.rounded.Search
-import androidx.compose.material.icons.rounded.Sort
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.StarBorder
 import androidx.compose.material3.Card
@@ -44,6 +43,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -55,6 +55,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.aimili.vpn.AimiliApplication
+import com.aimili.vpn.model.BlacklistRecord
 import com.aimili.vpn.model.NodeCandidate
 import com.aimili.vpn.model.ServerProfile
 import com.aimili.vpn.ui.components.ConnectedButtonItem
@@ -79,41 +80,86 @@ fun NodeSquareScreen(
     val scope = rememberCoroutineScope()
     val scrollState = rememberScrollState()
 
+    var searchQuery by remember { mutableStateOf("") }
+    var isSearchActive by remember { mutableStateOf(false) }
+
     var selectedChipIndex by remember { mutableIntStateOf(0) }
     val chipList = listOf("全部", "日本 180", "美国 45", "住宅宽带", "智能全通")
 
-    // Dropdown sort options
     val sortOptions = listOf("延迟最低", "带宽最大", "信誉分最高")
     var selectedSortOption by remember { mutableStateOf(sortOptions[0]) }
     var dropdownExpanded by remember { mutableStateOf(false) }
 
-    // Star state for main card
     var isMainNodeStarred by remember { mutableStateOf(false) }
 
-    // Show blacklist sheet
     var showBlacklistSheet by remember { mutableStateOf(false) }
     val blacklistSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    val mainCandidate = remember {
-        NodeCandidate(
-            id = "jp-node-1",
-            title = "日本节点 220.92.176.236 延迟32毫秒",
-            latencyMs = 32,
-            isp = "中华电信骨干",
-            score = 96,
-            ipType = "原生家宽",
-            speedStr = "48.2 兆每秒",
-            unlockStr = "智能服务与流媒体全通过",
-            isStarred = false
+    // Full nodes list from server
+    var allNodes by remember {
+        mutableStateOf(
+            listOf(
+                NodeCandidate("jp-1", "220.92.176.236", 1194, "JP", "日本", 32, "中华电信骨干", 96, 48200000, "residential", false, "unlocked", "unlocked", "unlocked", "unlocked"),
+                NodeCandidate("us-1", "142.250.80.45", 443, "US", "美国", 138, "Comcast", 82, 22500000, "hosting", false, "unlocked", "blocked", "unlocked", "unlocked"),
+                NodeCandidate("sg-1", "47.238.2.197", 1194, "SG", "新加坡", 68, "Singtel", 91, 35100000, "residential", false, "unlocked", "unlocked", "unlocked", "unlocked")
+            )
         )
     }
 
-    val otherNodes = remember {
-        listOf(
-            NodeCandidate("us-node-1", "美国节点 142.250.80.45 延迟138毫秒", 138, "Comcast", 82, "机房托管", "22.5 兆每秒", "克劳德未通过"),
-            NodeCandidate("sg-node-1", "新加坡节点 47.238.2.197 延迟68毫秒", 68, "Singtel", 91, "原生家宽", "35.1 兆每秒", "智能服务全通过")
+    var blacklistItems by remember {
+        mutableStateOf(
+            listOf(
+                BlacklistRecord("218.146.192.89:1685", "218.146.192.89", "KR", "吞吐量趋零 (断流)"),
+                BlacklistRecord("118.238.203.45:443", "118.238.203.45", "JP", "TCP 握手敲门未响应"),
+                BlacklistRecord("49.213.12.18:1194", "49.213.12.18", "US", "物理出网验证超时")
+            )
         )
     }
+
+    // Pull real nodes from active server
+    LaunchedEffect(activeServer?.id) {
+        if (activeServer != null) {
+            val nodesRes = AimiliApplication.instance.apiClient.fetchNodes(activeServer)
+            if (nodesRes.isSuccess && !nodesRes.getOrNull().isNullOrEmpty()) {
+                allNodes = nodesRes.getOrNull()!!
+            }
+            val blRes = AimiliApplication.instance.apiClient.fetchBlacklist(activeServer)
+            if (blRes.isSuccess && !blRes.getOrNull().isNullOrEmpty()) {
+                blacklistItems = blRes.getOrNull()!!
+            }
+        }
+    }
+
+    // Filter nodes
+    val filteredNodes = remember(allNodes, selectedChipIndex, searchQuery, selectedSortOption) {
+        var list = allNodes.filter { node ->
+            val matchesQuery = searchQuery.isEmpty() ||
+                    node.ip.contains(searchQuery, ignoreCase = true) ||
+                    node.countryShort.contains(searchQuery, ignoreCase = true) ||
+                    node.countryLong.contains(searchQuery, ignoreCase = true) ||
+                    node.isp.contains(searchQuery, ignoreCase = true)
+
+            val matchesChip = when (selectedChipIndex) {
+                1 -> node.countryShort.equals("JP", ignoreCase = true)
+                2 -> node.countryShort.equals("US", ignoreCase = true)
+                3 -> node.ipType == "residential"
+                4 -> node.openai == "unlocked" && node.claude == "unlocked" && node.gemini == "unlocked"
+                else -> true
+            }
+            matchesQuery && matchesChip
+        }
+
+        list = when (selectedSortOption) {
+            "延迟最低" -> list.sortedBy { if (it.latencyMs > 0) it.latencyMs else 9999 }
+            "带宽最大" -> list.sortedByDescending { it.speedBps }
+            "信誉分最高" -> list.sortedByDescending { it.score }
+            else -> list
+        }
+        list
+    }
+
+    val primaryNode = filteredNodes.firstOrNull() ?: allNodes.first()
+    val secondaryNodes = if (filteredNodes.size > 1) filteredNodes.drop(1).take(2) else allNodes.drop(1).take(2)
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -130,9 +176,7 @@ fun NodeSquareScreen(
                 },
                 actions = {
                     IconButton(
-                        onClick = {
-                            Toast.makeText(context, "支持检索国家代码 (JP/US)、IP 或运营商关键词", Toast.LENGTH_SHORT).show()
-                        },
+                        onClick = { isSearchActive = !isSearchActive },
                         modifier = Modifier.size(48.dp)
                     ) {
                         Icon(
@@ -160,6 +204,17 @@ fun NodeSquareScreen(
         ) {
             Spacer(Modifier.height(4.dp))
 
+            if (isSearchActive) {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    label = { Text("搜索 IP / 国家代码 / 运营商") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
             // 1. 横向排列的标签片组
             Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
                 ConnectedChipGroup(
@@ -182,7 +237,7 @@ fun NodeSquareScreen(
                     label = { Text("排序规则") },
                     supportingText = { Text("按${selectedSortOption}优先显示候选节点") },
                     leadingIcon = {
-                        Icon(Icons.Rounded.Sort, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Icon(Icons.AutoMirrored.Rounded.Sort, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                     },
                     trailingIcon = {
                         ExposedDropdownMenuDefaults.TrailingIcon(expanded = dropdownExpanded)
@@ -210,7 +265,7 @@ fun NodeSquareScreen(
                 }
             }
 
-            // 3. 填充卡片（高 174dp）: 日本节点 220.92.176.236 延迟32毫秒
+            // 3. 填充卡片（高 174dp）: 日本节点展示
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -227,14 +282,14 @@ fun NodeSquareScreen(
                     verticalArrangement = Arrangement.Center
                 ) {
                     Text(
-                        text = mainCandidate.title,
+                        text = primaryNode.title,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        text = mainCandidate.description,
+                        text = primaryNode.description,
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         lineHeight = MaterialTheme.typography.bodyMedium.lineHeight * 1.35f
@@ -246,12 +301,17 @@ fun NodeSquareScreen(
             ConnectedButtonGroup(
                 items = listOf(
                     ConnectedButtonItem(
-                        text = if (isMainNodeStarred) "已星标" else "设为星标",
-                        style = if (isMainNodeStarred) ConnectedButtonStyle.Filled else ConnectedButtonStyle.Tonal,
-                        icon = if (isMainNodeStarred) Icons.Rounded.Star else Icons.Rounded.StarBorder,
+                        text = if (isMainNodeStarred || primaryNode.isFavorite) "已星标" else "设为星标",
+                        style = if (isMainNodeStarred || primaryNode.isFavorite) ConnectedButtonStyle.Filled else ConnectedButtonStyle.Tonal,
+                        icon = if (isMainNodeStarred || primaryNode.isFavorite) Icons.Rounded.Star else Icons.Rounded.StarBorder,
                         onClick = {
                             isMainNodeStarred = !isMainNodeStarred
-                            val msg = if (isMainNodeStarred) "已将该日本住宅节点设为星标置顶！" else "已取消星标"
+                            if (activeServer != null) {
+                                scope.launch {
+                                    AimiliApplication.instance.apiClient.toggleFavorite(activeServer, primaryNode.id)
+                                }
+                            }
+                            val msg = if (isMainNodeStarred) "已将 [${primaryNode.ip}] 设为星标置顶！" else "已取消星标"
                             Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                         }
                     ),
@@ -259,58 +319,62 @@ fun NodeSquareScreen(
                         text = "拉起隧道",
                         style = ConnectedButtonStyle.Filled,
                         onClick = {
-                            Toast.makeText(context, "正在为该节点独立拉起虚拟网卡并配置策略路由...", Toast.LENGTH_SHORT).show()
+                            if (activeServer != null) {
+                                scope.launch {
+                                    AimiliApplication.instance.apiClient.startTunnel(activeServer, primaryNode.id)
+                                    Toast.makeText(context, "已在 [${activeServer.name}] 为该节点拉起独立并发隧道！", Toast.LENGTH_SHORT).show()
+                                }
+                            }
                         }
                     ),
                     ConnectedButtonItem(
                         text = "手动屏蔽",
                         style = ConnectedButtonStyle.Outlined,
                         onClick = {
-                            Toast.makeText(context, "已将节点加入隔离屏蔽库", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "已将节点 [${primaryNode.ip}] 加入隔离屏蔽库", Toast.LENGTH_SHORT).show()
                         }
                     )
                 )
             )
 
-            // 5. 2项列表: 美国节点、新加坡节点
-            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                // Item 1: 美国节点 142.250.80.45
-                ConnectedListItem(
-                    index = 0,
-                    total = 2,
-                    headline = otherNodes[0].title,
-                    supportingText = "速度 22.5 兆每秒，信誉评分 82，克劳德未通过",
-                    leadingIcon = Icons.Rounded.Public,
-                    trailingContent = {
-                        IconButton(onClick = {
-                            Toast.makeText(context, "已将该节点添加至个人星标库", Toast.LENGTH_SHORT).show()
-                        }) {
-                            Icon(Icons.Rounded.StarBorder, contentDescription = "星标", tint = MaterialTheme.colorScheme.primary)
-                        }
-                    },
-                    onClick = {
-                        Toast.makeText(context, "查看该节点多维信息详情与测速历史", Toast.LENGTH_SHORT).show()
+            // 5. 2项列表: 次选候选节点
+            val secondaryCount = secondaryNodes.size
+            if (secondaryCount > 0) {
+                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    secondaryNodes.forEachIndexed { index, node ->
+                        ConnectedListItem(
+                            index = index,
+                            total = secondaryCount,
+                            headline = node.title,
+                            supportingText = "速度 ${node.speedMbStr}，信誉评分 ${node.score}，${node.unlockDisplay}",
+                            leadingIcon = Icons.Rounded.Public,
+                            trailingContent = {
+                                IconButton(onClick = {
+                                    if (activeServer != null) {
+                                        scope.launch {
+                                            if (index == 0) {
+                                                AimiliApplication.instance.apiClient.toggleFavorite(activeServer, node.id)
+                                                Toast.makeText(context, "已将该节点添加至个人星标库", Toast.LENGTH_SHORT).show()
+                                            } else {
+                                                AimiliApplication.instance.apiClient.startTunnel(activeServer, node.id)
+                                                Toast.makeText(context, "正在为节点 [${node.ip}] 分配虚拟网卡建立独立出口...", Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
+                                    }
+                                }) {
+                                    Icon(
+                                        imageVector = if (index == 0) Icons.Rounded.StarBorder else Icons.Rounded.RocketLaunch,
+                                        contentDescription = null,
+                                        tint = if (index == 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
+                                    )
+                                }
+                            },
+                            onClick = {
+                                Toast.makeText(context, "节点: ${node.ip}:${node.port} (${node.isp})", Toast.LENGTH_SHORT).show()
+                            }
+                        )
                     }
-                )
-
-                // Item 2: 新加坡节点 47.238.2.197
-                ConnectedListItem(
-                    index = 1,
-                    total = 2,
-                    headline = otherNodes[1].title,
-                    supportingText = "速度 35.1 兆每秒，信誉评分 91，智能服务全通过",
-                    leadingIcon = Icons.Rounded.Public,
-                    trailingContent = {
-                        IconButton(onClick = {
-                            Toast.makeText(context, "正在为新加坡节点分配虚拟网卡建立独立出口...", Toast.LENGTH_SHORT).show()
-                        }) {
-                            Icon(Icons.Rounded.RocketLaunch, contentDescription = "拉起出口", tint = MaterialTheme.colorScheme.secondary)
-                        }
-                    },
-                    onClick = {
-                        Toast.makeText(context, "新加坡节点全AI通过，可随时用于出海调度", Toast.LENGTH_SHORT).show()
-                    }
-                )
+                }
             }
 
             // 6. 按钮组: “全量并发测速”(填充) “屏蔽库管理”(色调)
@@ -323,7 +387,7 @@ fun NodeSquareScreen(
                             if (activeServer != null) {
                                 scope.launch {
                                     AimiliApplication.instance.apiClient.probeNodes(activeServer)
-                                    Toast.makeText(context, "已触发远端服务器对全量候选节点进行并发预检和测速！", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "已触发远端对全量候选节点进行并发敲门与测速！", Toast.LENGTH_SHORT).show()
                                 }
                             }
                         }
@@ -361,7 +425,7 @@ fun NodeSquareScreen(
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                    text = "包含因吞吐量低于 70KB/s、握手超时或离线而被系统自动隔离的死节点",
+                    text = "包含因吞吐量低于 70KB/s、握手超时或离线而被系统自动隔离的死节点 (${blacklistItems.size} 个)",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -381,7 +445,7 @@ fun NodeSquareScreen(
                                 if (activeServer != null) {
                                     scope.launch {
                                         AimiliApplication.instance.apiClient.resurrectBlacklist(activeServer)
-                                        Toast.makeText(context, "已在后台启动探活探测，恢复连通的节点将自动放回候选池！", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, "已在后台启动探活探测，恢复连通的节点将自动解封放回候选池！", Toast.LENGTH_SHORT).show()
                                     }
                                 }
                             }
@@ -391,28 +455,28 @@ fun NodeSquareScreen(
 
                 Spacer(Modifier.height(14.dp))
 
-                val mockBlacklisted = listOf(
-                    "218.146.192.89:1685 - 隔离原因: 吞吐量趋零(断流)",
-                    "118.238.203.45:443 - 隔离原因: TCP 握手敲门未响应",
-                    "49.213.12.18:1194 - 隔离原因: 物理出网验证超时"
-                )
-
                 LazyColumn(
-                    modifier = Modifier.height(160.dp),
+                    modifier = Modifier.height(180.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    items(mockBlacklisted) { item ->
+                    items(blacklistItems) { item ->
                         Surface(
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(8.dp),
                             color = MaterialTheme.colorScheme.surfaceContainerHighest
                         ) {
-                            Text(
-                                text = item,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.error,
-                                modifier = Modifier.padding(10.dp)
-                            )
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(10.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = "${item.ip} (${item.country}) - ${item.reason}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                            }
                         }
                     }
                 }
