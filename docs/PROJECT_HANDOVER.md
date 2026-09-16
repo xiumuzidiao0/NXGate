@@ -226,9 +226,8 @@ aimili-vpngate-go/
 ├── dist/                      # 交叉编译产物输出目录 (git 忽略)
 ├── docs/
 │   ├── CICD_AND_TESTING_GUIDE.md   # CI/CD 发布与测试流程标准化指南
-│   ├── FRONTEND_OPTIMIZATION_PLAN.md # 前端 UI/UX 设计方案
-│   ├── PROJECT_HANDOVER.md    # [当前文件] 项目交接与工程维护文档
-│   └── FREESUB_COMPARISON.md  # 与 freesub 项目技术特性对比分析
+│   ├── FREESUB_COMPARISON.md       # 与 freesub 项目技术特性深度对比分析
+│   └── PROJECT_HANDOVER.md         # [当前文件] 项目交接与工程维护文档 (系统全景/生产运维/故障排查)
 ├── install.sh                 # Linux 一键安装、服务部署与终端管理脚本 (ml)
 ├── pkg/
 │   ├── config/                # 配置加载、版本定义 (version.go)
