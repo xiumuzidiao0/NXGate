@@ -126,7 +126,7 @@ fun SettingsSecurityScreen(
 
     // QR Code Manual Scan Dialog
     var showScanSimDialog by remember { mutableStateOf(false) }
-    var scannedUriInput by remember { mutableStateOf("aimili://server?host=198.51.100.1&port=8787&path=enter&user=xmzd&pass=<YourPasswordHere>&name=%E4%B8%9C%E4%BA%AC%E7%BD%91%E5%85%B3&tls=0") }
+    var scannedUriInput by remember { mutableStateOf("") }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
