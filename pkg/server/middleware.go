@@ -30,6 +30,18 @@ func (m *Middleware) SecurityHeaders(next http.Handler) http.Handler {
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("X-XSS-Protection", "1; mode=block")
 		w.Header().Set("Referrer-Policy", "no-referrer")
+
+		if strings.HasPrefix(r.URL.Path, "/api/") || strings.Contains(r.URL.Path, "/api/") {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Accept, X-Requested-With")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+
+			if r.Method == http.MethodOptions {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+		}
+
 		next.ServeHTTP(w, r)
 	})
 }
@@ -67,6 +79,15 @@ func (m *Middleware) BasicAuth(next http.Handler) http.Handler {
 		}
 
 		user, pass, ok := r.BasicAuth()
+		if !ok {
+			qUser := r.URL.Query().Get("user")
+			qPass := r.URL.Query().Get("pass")
+			if qUser != "" && qPass != "" {
+				user = qUser
+				pass = qPass
+				ok = true
+			}
+		}
 		if !ok || !m.cfg.VerifyUICredentials(user, pass) {
 			// Anti brute-force delay on invalid attempt
 			time.Sleep(300 * time.Millisecond)
@@ -104,6 +125,15 @@ func (m *Middleware) SecretPathGuard(next http.Handler) http.Handler {
 		if strings.HasPrefix(reqPath, "/api/") || reqPath == "/api" || reqPath == "/metrics" {
 			if m.cfg.IsUIAuthEnabled() {
 				user, pass, ok := r.BasicAuth()
+				if !ok {
+					qUser := r.URL.Query().Get("user")
+					qPass := r.URL.Query().Get("pass")
+					if qUser != "" && qPass != "" {
+						user = qUser
+						pass = qPass
+						ok = true
+					}
+				}
 				if !ok || !m.cfg.VerifyUICredentials(user, pass) {
 					http.NotFound(w, r)
 					return

@@ -23,7 +23,7 @@
                 </div>
                 <div class="brand-text">
                     <div class="brand-title">AimiliVPN</div>
-                    <div class="brand-sub">Go 性能网关 <span id="sidebar-version-badge" class="badge-ver">v2.5.4</span></div>
+                    <div class="brand-sub">Go 性能网关 <span id="sidebar-version-badge" class="badge-ver">v2.5.5</span></div>
                 </div>
             </div>
 
@@ -79,10 +79,14 @@
                     </button>
                     <h1 id="page-title">运行概览</h1>
                     <span id="conn-badge" class="badge disconnected"><span class="status-dot"></span> 检查中</span>
-                    <span id="app-version-badge" class="badge badge-accent">v2.5.4</span>
+                    <span id="app-version-badge" class="badge badge-accent">v2.5.5</span>
                 </div>
 
                 <div class="header-actions">
+                    <button id="btn-open-mobile-app" class="btn btn-outline" data-action="openMobileAppModal" title="手机 App 远程管理与扫码快速导入">
+                        <svg aria-hidden="true" viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+                        <span>手机 App 绑定</span>
+                    </button>
                     <button id="btn-quick-connect" class="btn" data-action="quickConnect">
                         <svg aria-hidden="true" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
                         智能连接最优节点
@@ -372,6 +376,7 @@
             <div class="modal-tabs">
                 <button type="button" class="modal-tab-btn active" id="tab-btn-base" data-action="switchSettingsTab" data-args="[&quot;base&quot;]">基础与网络</button>
                 <button type="button" class="modal-tab-btn" id="tab-btn-tg" data-action="switchSettingsTab" data-args="[&quot;tg&quot;]">Telegram 告警</button>
+                <button type="button" class="modal-tab-btn" id="tab-btn-app" data-action="switchSettingsTab" data-args="[&quot;app&quot;]">📱 移动端连接</button>
             </div>
 
             <form id="settings-form" data-submit-action="saveSettings">
@@ -420,6 +425,18 @@
                     </div>
                     <div  class="mt-2">
                         <button type="button" class="btn btn-outline btn-sm"  data-action="testTelegramAlert">发送测试消息</button>
+                    </div>
+                </div>
+
+                <!-- Tab 3: Mobile App -->
+                <div id="tab-content-app" class="hidden">
+                    <div class="settings-note">
+                        AimiliVPN 支持通过安卓/移动端专属 App 实现多服务器集中远程控制与状态监控。使用现有 Web 管理账号与密码直接认证。
+                    </div>
+                    <div class="card p-4 text-center mt-3" style="background: var(--bg-card-sub); border: 1px dashed var(--border);">
+                        <div class="text-base font-semibold mb-2">一键生成移动端扫码导入凭据</div>
+                        <div class="text-sm text-muted mb-3">点击下方按钮打开高清二维码与导入专属链接 (URI/JSON)，在手机 App 端使用相机扫描即可秒级录入本服务器。</div>
+                        <button type="button" class="btn btn-sm" data-action="openMobileAppModal">📱 打开扫码导入二维码面板</button>
                     </div>
                 </div>
 
@@ -716,6 +733,77 @@
             <div  class="form-actions">
                 <button type="button" class="btn btn-outline" data-action="copyFromElement" data-args="[&quot;sb-qr-url-text&quot;]">复制链接</button>
                 <button type="button" class="btn" data-action="closeSingBoxQRModal">完成</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 5. 移动端 App 扫码连接与快速导入模态弹窗 -->
+    <div id="mobile-app-modal" class="modal-overlay">
+        <div class="modal-card modal-md modal-qr">
+            <div class="card-header mb-4">
+                <div class="card-title">
+                    <svg aria-hidden="true" viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+                    移动端 App 扫码快速导入
+                </div>
+                <button type="button" class="btn btn-outline btn-icon" data-action="closeMobileAppModal" aria-label="关闭二维码">×</button>
+            </div>
+
+            <div class="qr-container">
+                <div id="app-qrcode-box" class="qr-code-box">
+                    <img id="app-qr-img" src="" alt="App Connection QR Code" class="qr-image">
+                </div>
+                <div class="text-sm text-muted">
+                    打开 AimiliVPN 手机客户端，扫描上方二维码即可一键绑定此服务器进行远程管控
+                </div>
+
+                <!-- Server Info Details -->
+                <div class="w-full text-left mt-2">
+                    <div class="form-grid-auto mb-2">
+                        <div>
+                            <label class="form-label qr-label">服务器名称 (客户端备注)</label>
+                            <input id="app-server-name" class="input-field w-full mono text-xs" type="text" placeholder="例如: 东京住宅网关" data-input-action="onAppProfileFieldChanged">
+                        </div>
+                        <div>
+                            <label class="form-label qr-label">连接协议</label>
+                            <select id="app-server-protocol" class="input-field w-full text-xs" data-change-action="onAppProfileFieldChanged">
+                                <option value="http">HTTP</option>
+                                <option value="https">HTTPS (支持反代)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-grid-auto mb-2">
+                        <div>
+                            <label class="form-label qr-label">服务器主机地址</label>
+                            <input id="app-server-host" class="input-field w-full mono text-xs" type="text" data-input-action="onAppProfileFieldChanged">
+                        </div>
+                        <div>
+                            <label class="form-label qr-label">Web 访问端口</label>
+                            <input id="app-server-port" class="input-field w-full mono text-xs" type="text" data-input-action="onAppProfileFieldChanged">
+                        </div>
+                    </div>
+
+                    <div class="mb-2">
+                        <label class="form-label qr-label">一键导入专属链接 (URI)</label>
+                        <div class="flex gap-2">
+                            <input id="app-connect-uri" class="input-field w-full mono text-xs" readonly>
+                            <button type="button" class="btn btn-outline btn-xs whitespace-nowrap" data-action="copyFromElement" data-args="[&quot;app-connect-uri&quot;]">复制 URI</button>
+                        </div>
+                    </div>
+
+                    <div class="mb-2">
+                        <label class="form-label qr-label">标准导入配置 (JSON)</label>
+                        <textarea id="app-connect-json" class="input-field qr-url mono text-xs" readonly></textarea>
+                    </div>
+
+                    <div id="app-api-test-result" class="text-xs text-muted mb-1 text-center hidden"></div>
+                </div>
+            </div>
+
+            <div class="form-actions">
+                <button type="button" class="btn btn-outline" data-action="copyFromElement" data-args="[&quot;app-connect-json&quot;]">复制 JSON</button>
+                <button type="button" class="btn btn-outline" data-action="testMobileApiConnectivity">测试 API 连通性</button>
+                <button type="button" class="btn" data-action="closeMobileAppModal">完成</button>
             </div>
         </div>
     </div>

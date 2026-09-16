@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -595,4 +598,127 @@ func (s *Server) writeJSON(w http.ResponseWriter, code int, data any) {
 
 func (s *Server) writeError(w http.ResponseWriter, code int, msg string) {
 	s.writeJSON(w, code, map[string]string{"error": msg})
+}
+
+type AppInfoResponse struct {
+	OK               bool     `json:"ok"`
+	App              string   `json:"app"`
+	Version          string   `json:"version"`
+	ServerTime       string   `json:"server_time"`
+	Status           string   `json:"status"`
+	ActiveNode       string   `json:"active_node,omitempty"`
+	TunnelsCount     int      `json:"tunnels_count"`
+	DownloadSpeedBps int64    `json:"download_speed_bps"`
+	UploadSpeedBps   int64    `json:"upload_speed_bps"`
+	TotalDownloadMB  int64    `json:"total_download_mb"`
+	TotalUploadMB    int64    `json:"total_upload_mb"`
+	Capabilities     []string `json:"capabilities"`
+}
+
+func (s *Server) handleAppInfo(w http.ResponseWriter, r *http.Request) {
+	vpnState := s.vpn.Snapshot()
+	traffic := stats.GetTrafficTracker().Snapshot()
+	var tunnelsCount int
+	if s.tunnelPool != nil {
+		tunnelsCount = len(s.tunnelPool.ListTunnels())
+	}
+
+	capabilities := []string{
+		"status",
+		"nodes",
+		"tunnels",
+		"dynamic_groups",
+		"port_rules",
+		"singbox",
+		"sse_events",
+		"blacklist",
+	}
+
+	resp := AppInfoResponse{
+		OK:               true,
+		App:              "aimili-vpngate-go",
+		Version:          config.Version,
+		ServerTime:       time.Now().UTC().Format(time.RFC3339),
+		Status:           string(vpnState.Status),
+		ActiveNode:       vpnState.ActiveNodeID,
+		TunnelsCount:     tunnelsCount,
+		DownloadSpeedBps: int64(traffic.DownloadSpeedBps),
+		UploadSpeedBps:   int64(traffic.UploadSpeedBps),
+		TotalDownloadMB:  int64(traffic.TotalDownloadBytes / (1024 * 1024)),
+		TotalUploadMB:    int64(traffic.TotalUploadBytes / (1024 * 1024)),
+		Capabilities:     capabilities,
+	}
+	s.writeJSON(w, http.StatusOK, resp)
+}
+
+type ServerProfile struct {
+	Type      string `json:"type"`       // "aimili_server"
+	Version   int    `json:"version"`    // 1
+	Name      string `json:"name"`       // display name
+	Host      string `json:"host"`       // host IP or domain
+	Port      int    `json:"port"`       // UI port
+	Path      string `json:"path"`       // UI path
+	Username  string `json:"username"`   // UI Username
+	Password  string `json:"password"`   // UI Password
+	ProxyPort int    `json:"proxy_port"` // Proxy port
+	TLS       bool   `json:"tls"`        // whether https
+}
+
+type AppProfileResponse struct {
+	OK         bool          `json:"ok"`
+	Profile    ServerProfile `json:"profile"`
+	ConnectURI string        `json:"connect_uri"`
+}
+
+func (s *Server) handleAppProfile(w http.ResponseWriter, r *http.Request) {
+	host := r.Host
+	if h, _, err := net.SplitHostPort(r.Host); err == nil {
+		host = h
+	}
+	if host == "" || host == "::" || host == "0.0.0.0" {
+		host = "127.0.0.1"
+	}
+
+	port := s.cfg.UIPort
+	path := strings.Trim(s.cfg.UIPath, "/")
+	username, password := s.cfg.GetUICredentials()
+	tls := r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
+
+	name := "AimiliVPN (" + host + ")"
+	if customName := r.URL.Query().Get("name"); customName != "" {
+		name = customName
+	}
+
+	profile := ServerProfile{
+		Type:      "aimili_server",
+		Version:   1,
+		Name:      name,
+		Host:      host,
+		Port:      port,
+		Path:      path,
+		Username:  username,
+		Password:  password,
+		ProxyPort: s.cfg.ProxyPort,
+		TLS:       tls,
+	}
+
+	q := url.Values{}
+	q.Set("host", host)
+	q.Set("port", strconv.Itoa(port))
+	q.Set("path", path)
+	q.Set("user", username)
+	q.Set("pass", password)
+	q.Set("name", name)
+	if tls {
+		q.Set("tls", "1")
+	} else {
+		q.Set("tls", "0")
+	}
+	connectURI := "aimili://server?" + q.Encode()
+
+	s.writeJSON(w, http.StatusOK, AppProfileResponse{
+		OK:         true,
+		Profile:    profile,
+		ConnectURI: connectURI,
+	})
 }
