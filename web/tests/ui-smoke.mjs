@@ -169,6 +169,30 @@ async function mockAPI(route) {
     };
   } else if (path.endsWith("/api/blacklist")) {
     body = [];
+  } else if (path.endsWith("/api/app/profile")) {
+    body = {
+      ok: true,
+      profile: {
+        type: "aimili_server",
+        version: 1,
+        name: "AimiliVPN (127.0.0.1)",
+        host: "127.0.0.1",
+        port: 8787,
+        path: "enter",
+        username: "admin",
+        password: "password",
+        tls: false
+      },
+      connect_uri: "aimili://server?host=127.0.0.1&port=8787&path=enter&user=admin&pass=password&name=AimiliVPN&tls=0"
+    };
+  } else if (path.endsWith("/api/app/info")) {
+    body = {
+      ok: true,
+      app: "aimili-vpngate-go",
+      version: "2.5.4",
+      status: "connected",
+      tunnels_count: 1
+    };
   }
   await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
 }
@@ -218,6 +242,19 @@ try {
     await page.waitForTimeout(60);
     const tgVisible = await page.locator("#tab-content-tg").isVisible();
     if (!tgVisible) failures.push(`${viewport}px: settings tg tab is not visible`);
+
+    await page.locator('[data-action="switchSettingsTab"][data-args*="app"]').click();
+    await page.waitForTimeout(60);
+    const appTabVisible = await page.locator("#tab-content-app").isVisible();
+    if (!appTabVisible) failures.push(`${viewport}px: settings app tab is not visible`);
+
+    // Test Mobile App QR Modal
+    await page.locator("#btn-open-mobile-app").click();
+    await page.waitForTimeout(100);
+    const appModalOpen = await page.locator("#mobile-app-modal").evaluate((el) => el.classList.contains("open"));
+    if (!appModalOpen) failures.push(`${viewport}px: mobile app modal did not open`);
+    await page.locator('[data-action="closeMobileAppModal"]').first().click();
+    await page.waitForTimeout(80);
 
     // Test Matrix & Dynamic Groups visibility
     await page.evaluate(() => document.querySelector('[data-view="matrix"]').click());

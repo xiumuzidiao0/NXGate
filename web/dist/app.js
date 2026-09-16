@@ -599,7 +599,7 @@
         // Settings Modal & Tabs
         function switchSettingsTab(tabKey) {
             document.querySelectorAll('#settings-modal .modal-tab-btn').forEach(b => b.classList.remove('active'));
-            ['base', 'tg'].forEach(k => {
+            ['base', 'tg', 'app'].forEach(k => {
                 const el = document.getElementById('tab-content-' + k);
                 if (el) {
                     const isHidden = (k !== tabKey);
@@ -2199,6 +2199,103 @@
             document.getElementById('singbox-qr-modal').classList.remove('open');
         }
 
+        let currentAppProfile = null;
+
+        async function openMobileAppModal() {
+            const host = window.location.hostname || '127.0.0.1';
+            const port = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
+            const proto = window.location.protocol === 'https:' ? 'https' : 'http';
+
+            document.getElementById('app-server-name').value = `AimiliVPN (${host})`;
+            document.getElementById('app-server-protocol').value = proto;
+            document.getElementById('app-server-host').value = host;
+            document.getElementById('app-server-port').value = port;
+            const testEl = document.getElementById('app-api-test-result');
+            if (testEl) {
+                testEl.classList.add('hidden');
+                testEl.innerHTML = '';
+            }
+
+            try {
+                const res = await fetch('/api/app/profile');
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data && data.profile) {
+                        currentAppProfile = data.profile;
+                    }
+                }
+            } catch (e) {
+                console.warn('获取服务器导入配置失败:', e);
+            }
+
+            renderAppProfileQRCode();
+            document.getElementById('mobile-app-modal').classList.add('open');
+        }
+
+        function closeMobileAppModal() {
+            document.getElementById('mobile-app-modal').classList.remove('open');
+        }
+
+        function renderAppProfileQRCode() {
+            const name = (document.getElementById('app-server-name')?.value || '').trim() || 'AimiliVPN';
+            const proto = document.getElementById('app-server-protocol')?.value || 'http';
+            const host = (document.getElementById('app-server-host')?.value || '').trim() || window.location.hostname || '127.0.0.1';
+            const port = parseInt(document.getElementById('app-server-port')?.value) || (window.location.port ? parseInt(window.location.port) : 8787);
+            const path = (currentAppProfile && currentAppProfile.path) || (currentState && currentState.admin_path) || 'enter';
+            const user = (currentAppProfile && currentAppProfile.username) || 'admin';
+            const pass = (currentAppProfile && currentAppProfile.password) || '';
+            const isTls = proto === 'https';
+
+            const uri = `aimili://server?host=${encodeURIComponent(host)}&port=${port}&path=${encodeURIComponent(path)}&user=${encodeURIComponent(user)}&pass=${encodeURIComponent(pass)}&name=${encodeURIComponent(name)}&tls=${isTls ? '1' : '0'}`;
+
+            const jsonProfile = {
+                type: 'aimili_server',
+                version: 1,
+                name: name,
+                host: host,
+                port: port,
+                path: path,
+                username: user,
+                password: pass,
+                proxy_port: (currentAppProfile && currentAppProfile.proxy_port) || 7928,
+                tls: isTls
+            };
+
+            const uriEl = document.getElementById('app-connect-uri');
+            if (uriEl) uriEl.value = uri;
+            const jsonEl = document.getElementById('app-connect-json');
+            if (jsonEl) jsonEl.value = JSON.stringify(jsonProfile, null, 2);
+
+            const qrImg = document.getElementById('app-qr-img');
+            if (qrImg) {
+                qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(uri)}`;
+            }
+        }
+
+        function onAppProfileFieldChanged() {
+            renderAppProfileQRCode();
+        }
+
+        async function testMobileApiConnectivity() {
+            const testEl = document.getElementById('app-api-test-result');
+            if (!testEl) return;
+            testEl.classList.remove('hidden');
+            testEl.innerHTML = '<span class="text-muted">正在测试连接 /api/app/info ...</span>';
+            const start = Date.now();
+            try {
+                const res = await fetch('/api/app/info');
+                const elapsed = Date.now() - start;
+                if (res.ok) {
+                    const data = await res.json();
+                    testEl.innerHTML = `<span class="text-success">✅ API 连通正常！(耗时 ${elapsed}ms, 版本: v${escapeHtml(data.version || '2.5.4')}, 状态: ${escapeHtml(data.status || '就绪')})</span>`;
+                } else {
+                    testEl.innerHTML = `<span class="text-danger">❌ API 测试返回异常 (HTTP ${res.status})</span>`;
+                }
+            } catch (err) {
+                testEl.innerHTML = `<span class="text-danger">❌ 无法连接到 API: ${escapeHtml(err.message)}</span>`;
+            }
+        }
+
         function copyFromElement(elId) {
             const el = document.getElementById(elId);
             if (el) {
@@ -2276,7 +2373,11 @@
             updateNodeOutboundFromSelect,
             copyNodeShareLink,
             showNodeQRCode,
-            deleteSingBoxNode
+            deleteSingBoxNode,
+            openMobileAppModal,
+            closeMobileAppModal,
+            onAppProfileFieldChanged,
+            testMobileApiConnectivity
         };
 
         function runDataAction(element, dataKey, event) {
