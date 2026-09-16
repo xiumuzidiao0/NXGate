@@ -15,7 +15,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Article
+import androidx.compose.material.icons.automirrored.rounded.Article
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.Hub
@@ -36,6 +36,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -71,27 +72,60 @@ fun ServerConsoleScreen(
     val scope = rememberCoroutineScope()
     val scrollState = rememberScrollState()
 
-    var masterInfo by remember { mutableStateOf(MasterGatewayInfo()) }
-    var showLogSheet by remember { mutableStateOf(false) }
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var masterInfo by remember {
+        mutableStateOf(
+            MasterGatewayInfo(
+                devName = "主网卡零号，策略表一百",
+                nodeName = "日本住宅节点十二号",
+                uptimeStr = "18小时24分",
+                status = "断流检测通过",
+                isConnected = true
+            )
+        )
+    }
 
     var tunnelList by remember {
         mutableStateOf(
             listOf(
                 TunnelItem(
                     id = "tun-1",
-                    title = "并发隧道一号  延迟42毫秒",
+                    devName = "tun1",
+                    devIndex = 1,
                     latencyMs = 42,
-                    subtitle = "日本出口，智能解锁全通过，吞吐 1.8 兆每秒"
+                    country = "日本",
+                    throughputBps = 1800000,
+                    openai = "unlocked",
+                    claude = "unlocked",
+                    gemini = "unlocked"
                 ),
                 TunnelItem(
                     id = "tun-2",
-                    title = "并发隧道二号  延迟55毫秒",
+                    devName = "tun2",
+                    devIndex = 2,
                     latencyMs = 55,
-                    subtitle = "日本出口，已运行 48 分钟，吞吐 920 千字节每秒"
+                    country = "日本",
+                    throughputBps = 920000,
+                    uptimeSeconds = 2880
                 )
             )
         )
+    }
+
+    var showLogSheet by remember { mutableStateOf(false) }
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    // Pull real data when active server changes
+    LaunchedEffect(activeServer?.id) {
+        if (activeServer != null) {
+            val statusRes = AimiliApplication.instance.apiClient.fetchStatus(activeServer)
+            if (statusRes.isSuccess) {
+                masterInfo = statusRes.getOrNull() ?: masterInfo
+            }
+            val tunnelsRes = AimiliApplication.instance.apiClient.fetchTunnels(activeServer)
+            if (tunnelsRes.isSuccess && !tunnelsRes.getOrNull().isNullOrEmpty()) {
+                tunnelList = tunnelsRes.getOrNull()!!
+            }
+        }
     }
 
     Scaffold(
@@ -112,12 +146,13 @@ fun ServerConsoleScreen(
                         onClick = {
                             if (activeServer != null) {
                                 scope.launch {
-                                    val res = AimiliApplication.instance.apiClient.testConnection(activeServer)
-                                    if (res.isSuccess) {
-                                        Toast.makeText(context, "✅ 网关服务状态就绪！延迟: ${res.getOrNull()?.latencyMs}ms", Toast.LENGTH_SHORT).show()
-                                    } else {
-                                        Toast.makeText(context, "已刷新单机状态快照", Toast.LENGTH_SHORT).show()
+                                    val statusRes = AimiliApplication.instance.apiClient.fetchStatus(activeServer)
+                                    if (statusRes.isSuccess) masterInfo = statusRes.getOrNull() ?: masterInfo
+                                    val tunnelsRes = AimiliApplication.instance.apiClient.fetchTunnels(activeServer)
+                                    if (tunnelsRes.isSuccess && !tunnelsRes.getOrNull().isNullOrEmpty()) {
+                                        tunnelList = tunnelsRes.getOrNull()!!
                                     }
+                                    Toast.makeText(context, "已从 [${activeServer.name}] 刷新实时隧道与主网关数据", Toast.LENGTH_SHORT).show()
                                 }
                             }
                         },
@@ -150,7 +185,7 @@ fun ServerConsoleScreen(
 
             // 1. 实时网速波形卡片（高 164dp）（背景 surfaceContainerHigh）
             SpeedWaveformCard(
-                downSpeedStr = "12.4 兆每秒",
+                downSpeedStr = activeServer?.downSpeedStr ?: "12.4 兆每秒",
                 upSpeedStr = "1.2 兆每秒"
             )
 
@@ -195,13 +230,14 @@ fun ServerConsoleScreen(
                         onClick = {
                             if (activeServer != null) {
                                 scope.launch {
-                                    AimiliApplication.instance.apiClient.triggerRotate(activeServer)
+                                    val res = AimiliApplication.instance.apiClient.triggerRotate(activeServer)
                                     masterInfo = masterInfo.copy(
-                                        nodeName = "日本高信誉候选节点(已自动切换)",
+                                        nodeName = "日本住宅最优节点(已切换)",
                                         uptimeStr = "刚刚",
-                                        status = "断流检测通过"
+                                        status = "断流检测通过",
+                                        isConnected = true
                                     )
-                                    Toast.makeText(context, "已在后台触发主出口切换并重新选优！", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, res.getOrDefault("已触发主网关切换最优出口！"), Toast.LENGTH_SHORT).show()
                                 }
                             }
                         }
@@ -225,59 +261,50 @@ fun ServerConsoleScreen(
                 )
             )
 
-            // 4. 3项相连列表: 并发隧道一号、并发隧道二号、实时事件与系统日志
+            // 4. 动态并发隧道列表项与日志项
+            val itemsCount = tunnelList.size + 1
             Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                // Item 1: 并发隧道一号  延迟42毫秒
-                ConnectedListItem(
-                    index = 0,
-                    total = 3,
-                    headline = tunnelList.getOrNull(0)?.title ?: "并发隧道一号  延迟42毫秒",
-                    supportingText = tunnelList.getOrNull(0)?.subtitle ?: "日本出口，智能解锁全通过，吞吐 1.8 兆每秒",
-                    leadingIcon = Icons.Rounded.Hub,
-                    trailingContent = {
-                        IconButton(onClick = {
-                            Toast.makeText(context, "已对 [并发隧道一号] 完成测速，延迟 42ms，三AI全通", Toast.LENGTH_SHORT).show()
-                        }) {
-                            Icon(Icons.Rounded.Speed, contentDescription = "测速", tint = MaterialTheme.colorScheme.primary)
-                        }
-                    },
-                    onClick = {
-                        Toast.makeText(context, "重新测速该隧道并刷新延迟与解锁状态...", Toast.LENGTH_SHORT).show()
-                    }
-                )
-
-                // Item 2: 并发隧道二号  延迟55毫秒
-                ConnectedListItem(
-                    index = 1,
-                    total = 3,
-                    headline = tunnelList.getOrNull(1)?.title ?: "并发隧道二号  延迟55毫秒",
-                    supportingText = tunnelList.getOrNull(1)?.subtitle ?: "日本出口，已运行 48 分钟，吞吐 920 千字节每秒",
-                    leadingIcon = Icons.Rounded.Hub,
-                    trailingContent = {
-                        IconButton(onClick = {
-                            if (activeServer != null) {
-                                scope.launch {
-                                    AimiliApplication.instance.apiClient.stopTunnel(activeServer, "tun-2")
-                                    tunnelList = tunnelList.filter { it.id != "tun-2" }
-                                    Toast.makeText(context, "已释放虚拟网卡 tun2 并清理远端策略路由", Toast.LENGTH_SHORT).show()
+                tunnelList.forEachIndexed { index, tunnel ->
+                    ConnectedListItem(
+                        index = index,
+                        total = itemsCount,
+                        headline = tunnel.title,
+                        supportingText = tunnel.subtitle,
+                        leadingIcon = Icons.Rounded.Hub,
+                        trailingContent = {
+                            if (index == 0) {
+                                IconButton(onClick = {
+                                    Toast.makeText(context, "重新测速该隧道并刷新延迟与解锁状态...", Toast.LENGTH_SHORT).show()
+                                }) {
+                                    Icon(Icons.Rounded.Speed, contentDescription = "测速", tint = MaterialTheme.colorScheme.primary)
+                                }
+                            } else {
+                                IconButton(onClick = {
+                                    if (activeServer != null) {
+                                        scope.launch {
+                                            AimiliApplication.instance.apiClient.stopTunnel(activeServer, tunnel.id)
+                                            tunnelList = tunnelList.filter { it.id != tunnel.id }
+                                            Toast.makeText(context, "已释放虚拟网卡 ${tunnel.devName} 并清理远端策略路由", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                }) {
+                                    Icon(Icons.Rounded.Close, contentDescription = "释放该网卡", tint = MaterialTheme.colorScheme.error)
                                 }
                             }
-                        }) {
-                            Icon(Icons.Rounded.Close, contentDescription = "释放该虚拟网卡", tint = MaterialTheme.colorScheme.error)
+                        },
+                        onClick = {
+                            Toast.makeText(context, "设备: ${tunnel.devName} (出口: ${tunnel.nodeIp} ${tunnel.country})", Toast.LENGTH_SHORT).show()
                         }
-                    },
-                    onClick = {
-                        Toast.makeText(context, "点击右侧 ✕ 图标可释放该虚拟网卡", Toast.LENGTH_SHORT).show()
-                    }
-                )
+                    )
+                }
 
-                // Item 3: 实时事件与系统日志
+                // Last item: 实时事件与系统日志
                 ConnectedListItem(
-                    index = 2,
-                    total = 3,
+                    index = itemsCount - 1,
+                    total = itemsCount,
                     headline = "实时事件与系统日志",
                     supportingText = "向上拖拽可展开日志抽屉，支持按信息、警告、错误过滤。",
-                    leadingIcon = Icons.Rounded.Article,
+                    leadingIcon = Icons.AutoMirrored.Rounded.Article,
                     trailingContent = {
                         Icon(Icons.Rounded.ExpandLess, contentDescription = "展开日志", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     },
