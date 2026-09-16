@@ -86,22 +86,17 @@ func (s *Server) resolveOutboundURL(outboundRaw string) string {
 			authUser = rule.AuthUser
 			authPass = rule.AuthPass
 		} else if targetPort == s.cfg.ProxyPort {
-			authMode = "default_web"
+			authMode = "random"
 		}
 	} else if targetPort == s.cfg.ProxyPort {
-		authMode = "default_web"
+		authMode = "random"
 	}
 
-	if authMode == "default_web" {
-		if s.cfg.IsUIAuthEnabled() {
-			authUser = s.cfg.UIUsername
-			authPass = s.cfg.UIPassword
-		} else {
-			authMode = "none"
-		}
+	if authMode == "random" || authMode == "default_web" {
+		authUser, authPass = s.cfg.GetProxyCredentials()
 	}
 
-	if (authMode == "default_web" || authMode == "custom") && authUser != "" && authPass != "" {
+	if (authMode == "random" || authMode == "default_web" || authMode == "custom") && authUser != "" && authPass != "" {
 		proxyURL := &url.URL{
 			Scheme: scheme,
 			User:   url.UserPassword(authUser, authPass),

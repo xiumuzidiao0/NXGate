@@ -111,6 +111,18 @@ func randomSecretPath() string {
 	return hex.EncodeToString(b)
 }
 
+func randomAlphaNumeric(length int) string {
+	const charset = "abcdefghijklmnopqrstuvwxyz0123456789"
+	b := make([]byte, length)
+	if _, err := rand.Read(b); err != nil {
+		return "proxy" + strconv.FormatInt(time.Now().UnixNano(), 36)
+	}
+	for i := range b {
+		b[i] = charset[int(b[i])%len(charset)]
+	}
+	return string(b)
+}
+
 func LoadConfig() *Config {
 	dataDir := getEnv("DATA_DIR", "data")
 	_ = os.MkdirAll(dataDir, 0700)
@@ -146,6 +158,31 @@ func LoadConfig() *Config {
 		}
 	}
 
+	proxyUser := getEnv("LOCAL_PROXY_USER", "")
+	proxyPass := getEnv("LOCAL_PROXY_PASS", "")
+	proxyAuthFile := filepath.Join(dataDir, "proxy_auth.txt")
+	if proxyUser == "" || proxyPass == "" {
+		if data, err := os.ReadFile(proxyAuthFile); err == nil {
+			parts := strings.Split(strings.TrimSpace(string(data)), ":")
+			if len(parts) == 2 && parts[0] != "" && parts[1] != "" {
+				if proxyUser == "" {
+					proxyUser = parts[0]
+				}
+				if proxyPass == "" {
+					proxyPass = parts[1]
+				}
+			}
+		}
+	}
+	if proxyUser == "" {
+		proxyUser = "vpn_" + randomAlphaNumeric(6)
+	}
+	if proxyPass == "" {
+		proxyPass = randomAlphaNumeric(16)
+	}
+	_ = os.WriteFile(proxyAuthFile, []byte(proxyUser+":"+proxyPass), 0600)
+	_ = os.Chmod(proxyAuthFile, 0600)
+
 	return &Config{
 		ApiURL:        getEnv("VPNGATE_API_HTTPS_URL", "https://www.vpngate.net/api/iphone/"),
 		MirrorURL:     getEnv("VPNGATE_MIRROR_HTTPS_URL", "https://baoweise-bot.github.io/aimili-vpngate/vpngate.csv"),
@@ -159,8 +196,8 @@ func LoadConfig() *Config {
 
 		ProxyHost:           getEnv("LOCAL_PROXY_HOST", "127.0.0.1"),
 		ProxyPort:           getEnvInt("LOCAL_PROXY_PORT", 7928, 1, 65535),
-		ProxyUser:           getEnv("LOCAL_PROXY_USER", ""),
-		ProxyPass:           getEnv("LOCAL_PROXY_PASS", ""),
+		ProxyUser:           proxyUser,
+		ProxyPass:           proxyPass,
 		ProxyMaxConnections: getEnvInt("LOCAL_PROXY_MAX_CONNECTIONS", 512, 16, 4096),
 
 		FetchInterval:      time.Duration(getEnvInt("FETCH_INTERVAL_SECONDS", 900, 60, 86400)) * time.Second,
@@ -194,12 +231,19 @@ func (c *Config) GetSettings() SettingsDTO {
 		UIUsername:         c.UIUsername,
 		ProxyPort:          c.ProxyPort,
 		ProxyUser:          c.ProxyUser,
+		ProxyPass:          c.ProxyPass,
 		AutoRotateMinutes:  c.AutoRotateMinutes,
 		AutoRotateIPType:   c.AutoRotateIPType,
 		DiscoveryCountries: c.DiscoveryCountries,
 		TelegramBotToken:   c.TelegramBotToken,
 		TelegramChatID:     c.TelegramChatID,
 	}
+}
+
+func (c *Config) GetProxyCredentials() (string, string) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.ProxyUser, c.ProxyPass
 }
 
 func (c *Config) GetUICredentials() (string, string) {

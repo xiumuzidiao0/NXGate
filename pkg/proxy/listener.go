@@ -22,7 +22,7 @@ type PortRule struct {
 	BoundGroupIDs   []string   `json:"bound_group_ids"` // Dynamic group IDs
 	Policy          PortPolicy `json:"policy"`
 	IntervalSeconds int        `json:"interval_seconds"`
-	AuthMode        string     `json:"auth_mode"` // "default_web", "custom", "none"
+	AuthMode        string     `json:"auth_mode"` // "random", "custom", "none" (legacy "default_web")
 	AuthUser        string     `json:"auth_user"`
 	AuthPass        string     `json:"auth_pass"`
 }
@@ -67,11 +67,8 @@ func (l *PortListener) getAuthenticator() *Authenticator {
 	if mode == "custom" {
 		return NewAuthenticator(l.rule.AuthUser, l.rule.AuthPass)
 	}
-	// Default: follow Web credentials
-	if !l.cfg.IsUIAuthEnabled() {
-		return NewAuthenticator("", "")
-	}
-	user, pass := l.cfg.GetUICredentials()
+	// "random" (and legacy "default_web"): use independent persistent random proxy credentials
+	user, pass := l.cfg.GetProxyCredentials()
 	return NewAuthenticator(user, pass)
 }
 

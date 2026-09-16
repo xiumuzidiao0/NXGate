@@ -1232,7 +1232,7 @@
                     policyBadge = `<span class="badge policy-interval"><svg aria-hidden="true" viewBox="0 0 24 24" class="icon-xs icon-stroke"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> 定时轮换 (${r.interval_seconds || 300}s)</span>`;
                 }
 
-                let authBadge = '<span class="auth-note">跟随管理密码</span>';
+                let authBadge = '<span class="auth-note">系统随机账密</span>';
                 if (r.auth_mode === 'none') {
                     authBadge = '<span class="auth-note auth-open">免密直连</span>';
                 } else if (r.auth_mode === 'custom') {
@@ -1314,7 +1314,7 @@
             document.getElementById('rule-port').disabled = false;
             selectPolicy('round_robin');
             document.getElementById('rule-interval').value = '300';
-            selectAuthMode('default_web');
+            selectAuthMode('random');
             document.getElementById('rule-auth-user').value = '';
             document.getElementById('rule-auth-pass').value = '';
             renderTunnelCheckboxes([], []);
@@ -1331,7 +1331,9 @@
             document.getElementById('rule-port').disabled = true;
             selectPolicy(rule.policy || 'round_robin');
             document.getElementById('rule-interval').value = rule.interval_seconds || 300;
-            selectAuthMode(rule.auth_mode || 'default_web');
+            let aMode = rule.auth_mode || 'random';
+            if (aMode === 'default_web') aMode = 'random';
+            selectAuthMode(aMode);
             document.getElementById('rule-auth-user').value = rule.auth_user || '';
             document.getElementById('rule-auth-pass').value = rule.auth_pass || '';
             renderTunnelCheckboxes(rule.bound_tunnel_ids || [], rule.bound_group_ids || []);
@@ -1353,15 +1355,27 @@
         }
 
         function selectAuthMode(mode) {
+            if (mode === 'default_web') mode = 'random';
             document.getElementById('rule-auth-mode').value = mode;
-            ['default_web', 'none', 'custom'].forEach(m => {
+            ['random', 'default_web', 'none', 'custom'].forEach(m => {
                 const el = document.getElementById('card-auth-' + m);
                 if (el) {
-                    if (m === mode) el.classList.add('selected');
+                    if (m === mode || (mode === 'random' && m === 'default_web')) el.classList.add('selected');
                     else el.classList.remove('selected');
                 }
             });
             document.getElementById('rule-custom-auth-group').classList.toggle('hidden', mode !== 'custom');
+        }
+
+        function generateRandomPortAuth() {
+            const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+            let user = 'u_';
+            for (let i = 0; i < 6; i++) user += chars[Math.floor(Math.random() * chars.length)];
+            let pass = '';
+            const passChars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+            for (let i = 0; i < 16; i++) pass += passChars[Math.floor(Math.random() * passChars.length)];
+            document.getElementById('rule-auth-user').value = user;
+            document.getElementById('rule-auth-pass').value = pass;
         }
 
         function suggestNextPort() {
@@ -2224,6 +2238,7 @@
             selectPolicy,
             setIntervalVal,
             selectAuthMode,
+            generateRandomPortAuth,
             hideEditPortForm,
             savePortRule,
             evaluateDynamicGroups,

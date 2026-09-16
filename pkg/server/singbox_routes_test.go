@@ -100,10 +100,10 @@ func TestIsOutboundEquivalent(t *testing.T) {
 
 func TestResolveOutboundURLWithAuth(t *testing.T) {
 	cfg := &config.Config{
-		DataDir:    t.TempDir(),
-		UIUsername: "admin",
-		UIPassword: "super%secret@123",
-		ProxyPort:  7928,
+		DataDir:   t.TempDir(),
+		ProxyUser: "vpn_rand",
+		ProxyPass: "super%secret@123",
+		ProxyPort: 7928,
 	}
 
 	s := &Server{
@@ -115,9 +115,9 @@ func TestResolveOutboundURLWithAuth(t *testing.T) {
 		t.Errorf("expected direct, got %s", got)
 	}
 
-	// 2. Default web auth enabled
+	// 2. Default random proxy auth enabled
 	got := s.resolveOutboundURL("7928")
-	expected := "socks5://admin:super%25secret%40123@127.0.0.1:7928"
+	expected := "socks5://vpn_rand:super%25secret%40123@127.0.0.1:7928"
 	if got != expected {
 		t.Errorf("expected %q, got %q", expected, got)
 	}
