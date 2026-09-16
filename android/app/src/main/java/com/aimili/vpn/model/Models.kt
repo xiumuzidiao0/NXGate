@@ -50,6 +50,18 @@ data class MasterGatewayInfo(
     val isConnected: Boolean = false
 )
 
+data class AvailableOutbound(
+    val port: Int,
+    val addr: String,
+    val label: String,
+    val isDefault: Boolean = false
+)
+
+data class SingBoxOverviewData(
+    val nodes: List<InboundProtocolItem>,
+    val availableOutbounds: List<AvailableOutbound>
+)
+
 data class TunnelItem(
     val id: String,
     val devName: String,
@@ -57,6 +69,7 @@ data class TunnelItem(
     val status: String = "connected",
     val latencyMs: Int = 0,
     val nodeIp: String = "",
+    val nodePort: Int = 443,
     val country: String = "",
     val uptimeSeconds: Long = 0,
     val throughputBps: Long = 0,
@@ -66,15 +79,20 @@ data class TunnelItem(
     val gemini: String = "unknown",
     val netflix: String = "unknown"
 ) {
+    val isMaster: Boolean
+        get() = devIndex == 0 || devName == "tun0"
+
     val title: String
-        get() = "${devName.replace("tun", "并发隧道")}  延迟${if (latencyMs > 0) "${latencyMs}毫秒" else "已就绪"}"
+        get() = "$devName ${if (isMaster) "(系统主网关出口)" else "(并发独立出口)"} • 延迟${if (latencyMs > 0) "${latencyMs}ms" else "就绪"}"
 
     val subtitle: String
         get() {
-            val c = if (country.isNotEmpty()) "${country}出口，" else ""
-            val tp = if (throughputBps > 0) "吞吐 %.1f 兆每秒".format(throughputBps / 1000000.0) else "在线"
-            val ai = if (openai == "unlocked" && claude == "unlocked" && gemini == "unlocked") "智能解锁全通过，" else ""
-            return "$c$ai$tp"
+            val c = if (country.isNotEmpty()) "$country 出口 " else ""
+            val tp = if (throughputBps > 0) "• 吞吐 %.1f MB/s".format(throughputBps / 1000000.0) else ""
+            val hours = uptimeSeconds / 3600
+            val mins = (uptimeSeconds % 3600) / 60
+            val up = if (hours > 0) "${hours}h${mins}m" else "${mins}m"
+            return "$c($nodeIp) • 运行 $up $tp"
         }
 }
 
@@ -161,18 +179,19 @@ data class InboundProtocolItem(
     val port: Int,
     val outbound: String,
     val outboundPort: Int = 0,
+    val outboundLabel: String = "",
     val uuid: String = "",
     val password: String = "",
     val sni: String = "",
     val shareUrl: String = ""
 ) {
     val title: String
-        get() = "入站协议：$protocol"
+        get() = "入站协议: $protocol (外部端口 $port)"
 
     val subtitle: String
         get() {
-            val ob = if (outbound == "direct") "出口指向本机直连" else "出口指向端口 $outboundPort"
-            return "外部端口 $port，${ob}"
+            val ob = if (outboundLabel.isNotEmpty()) outboundLabel else (if (outbound == "direct") "直连出口 (VPS 本机原生网络)" else "出口指向: $outbound")
+            return "外部端口 $port • $ob"
         }
 }
 

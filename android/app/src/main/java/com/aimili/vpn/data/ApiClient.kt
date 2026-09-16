@@ -1,6 +1,7 @@
 package com.aimili.vpn.data
 
 import android.net.Uri
+import com.aimili.vpn.model.AvailableOutbound
 import com.aimili.vpn.model.BlacklistRecord
 import com.aimili.vpn.model.DynamicGroupCard
 import com.aimili.vpn.model.InboundProtocolItem
@@ -8,6 +9,7 @@ import com.aimili.vpn.model.MasterGatewayInfo
 import com.aimili.vpn.model.NodeCandidate
 import com.aimili.vpn.model.PortRuleItem
 import com.aimili.vpn.model.ServerProfile
+import com.aimili.vpn.model.SingBoxOverviewData
 import com.aimili.vpn.model.TunnelItem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -22,9 +24,9 @@ import java.util.concurrent.TimeUnit
 
 class ApiClient {
     private val client = OkHttpClient.Builder()
-        .connectTimeout(6, TimeUnit.SECONDS)
-        .readTimeout(10, TimeUnit.SECONDS)
-        .writeTimeout(10, TimeUnit.SECONDS)
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(45, TimeUnit.SECONDS)
+        .writeTimeout(30, TimeUnit.SECONDS)
         .build()
 
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
@@ -54,7 +56,8 @@ class ApiClient {
                     val updated = profile.copy(
                         isOnline = true,
                         latencyMs = if (elapsed > 0) elapsed else 35,
-                        exitIp = json.optString("active_node", profile.exitIp).ifEmpty { profile.exitIp }
+                        exitIp = json.optString("active_node", profile.exitIp).ifEmpty { profile.exitIp },
+                        activeConns = json.optInt("tunnels_count", profile.activeConns)
                     )
                     Result.success(updated)
                 } else {
@@ -79,12 +82,12 @@ class ApiClient {
 
                 val hours = uptimeSec / 3600
                 val mins = (uptimeSec % 3600) / 60
-                val uptimeStr = "${hours}小时${mins}分"
+                val uptimeStr = if (hours > 0) "${hours}小时${mins}分" else "${mins}分钟"
 
                 val isConnected = status == "connected"
                 val info = MasterGatewayInfo(
-                    devName = "主网卡零号，策略表一百",
-                    nodeName = if (activeNode.isNotEmpty()) activeNode else "日本住宅节点十二号",
+                    devName = "tun0 (主出口)",
+                    nodeName = if (activeNode.isNotEmpty()) activeNode else "未连接",
                     uptimeStr = uptimeStr,
                     status = if (isConnected) "断流检测通过" else "未连接",
                     isConnected = isConnected
@@ -130,15 +133,17 @@ class ApiClient {
                     val uptime = obj.optLong("uptime", 0)
                     val nodeObj = obj.optJSONObject("node")
                     val ip = nodeObj?.optString("ip", "") ?: ""
+                    val port = nodeObj?.optInt("port", 443) ?: 443
                     val country = nodeObj?.optString("country_short", "JP") ?: "JP"
                     val latency = nodeObj?.optInt("latency_ms", 35) ?: 35
 
                     val unlockObj = obj.optJSONObject("unlock")
-                    val openai = unlockObj?.optString("openai", "unlocked") ?: "unlocked"
-                    val claude = unlockObj?.optString("claude", "unlocked") ?: "unlocked"
-                    val gemini = unlockObj?.optString("gemini", "unlocked") ?: "unlocked"
-                    val netflix = unlockObj?.optString("netflix", "unlocked") ?: "unlocked"
-                    val throughputBps = unlockObj?.optLong("throughput_bytes_per_sec", 1800000) ?: 1800000
+                    val openai = unlockObj?.optString("openai", "unknown") ?: "unknown"
+                    val claude = unlockObj?.optString("claude", "unknown") ?: "unknown"
+                    val gemini = unlockObj?.optString("gemini", "unknown") ?: "unknown"
+                    val netflix = unlockObj?.optString("netflix", "unknown") ?: "unknown"
+                    val throughputBps = unlockObj?.optLong("throughput_bytes_per_sec", 0) ?: 0
+                    val throughputPassed = unlockObj?.optBoolean("throughput_passed", true) ?: true
 
                     list.add(
                         TunnelItem(
@@ -148,9 +153,11 @@ class ApiClient {
                             status = status,
                             latencyMs = latency,
                             nodeIp = ip,
+                            nodePort = port,
                             country = country,
                             uptimeSeconds = uptime,
                             throughputBps = throughputBps,
+                            throughputPassed = throughputPassed,
                             openai = openai,
                             claude = claude,
                             gemini = gemini,
@@ -208,7 +215,32 @@ class ApiClient {
                     val authMode = obj.optString("auth_mode", "random")
                     val authUser = obj.optString("auth_user", "")
                     val authPass = obj.optString("auth_pass", "")
-                    list.add(PortRuleItem(port, enabled, policy, intervalSec, authMode, authUser, authPass))
+
+                    val bgArr = obj.optJSONArray("bound_group_ids")
+                    val boundGroups = mutableListOf<String>()
+                    if (bgArr != null) {
+                        for (j in 0 until bgArr.length()) boundGroups.add(bgArr.getString(j))
+                    }
+
+                    val btArr = obj.optJSONArray("bound_tunnel_ids")
+                    val boundTuns = mutableListOf<String>()
+                    if (btArr != null) {
+                        for (j in 0 until btArr.length()) boundTuns.add(btArr.getString(j))
+                    }
+
+                    list.add(
+                        PortRuleItem(
+                            port = port,
+                            enabled = enabled,
+                            policy = policy,
+                            intervalSeconds = intervalSec,
+                            authMode = authMode,
+                            authUser = authUser,
+                            authPass = authPass,
+                            boundGroupIds = boundGroups,
+                            boundTunnelIds = boundTuns
+                        )
+                    )
                 }
                 Result.success(list)
             }
@@ -321,6 +353,71 @@ class ApiClient {
         }
     }
 
+    suspend fun fetchSingBoxOverview(profile: ServerProfile): Result<SingBoxOverviewData> = withContext(Dispatchers.IO) {
+        try {
+            val req = buildRequest(profile, "/api/singbox/overview")
+            client.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) return@withContext Result.failure(Exception("HTTP ${resp.code}"))
+                val json = JSONObject(resp.body?.string() ?: "{}")
+                val nodeArr = json.optJSONArray("nodes") ?: JSONArray()
+                val obArr = json.optJSONArray("available_outbounds") ?: JSONArray()
+
+                val outboundsList = mutableListOf<AvailableOutbound>()
+                for (i in 0 until obArr.length()) {
+                    val ob = obArr.getJSONObject(i)
+                    outboundsList.add(
+                        AvailableOutbound(
+                            port = ob.optInt("port", 0),
+                            addr = ob.optString("addr", "direct"),
+                            label = ob.optString("label", "直连出口"),
+                            isDefault = ob.optBoolean("is_default", false)
+                        )
+                    )
+                }
+
+                val nodesList = mutableListOf<InboundProtocolItem>()
+                for (i in 0 until nodeArr.length()) {
+                    val obj = nodeArr.getJSONObject(i)
+                    val rawOutbound = obj.optString("outbound", "direct")
+                    val matchedLabel = outboundsList.find { isOutboundMatch(it.addr, rawOutbound) }?.label ?: ""
+
+                    nodesList.add(
+                        InboundProtocolItem(
+                            id = obj.optString("name", "inbound-$i"),
+                            name = obj.optString("name", "inbound-$i"),
+                            protocol = obj.optString("protocol", "VLESS-REALITY"),
+                            port = obj.optInt("port", 443),
+                            outbound = rawOutbound,
+                            outboundPort = obj.optInt("outbound_port", 0),
+                            outboundLabel = matchedLabel,
+                            uuid = obj.optString("uuid", ""),
+                            password = obj.optString("password", ""),
+                            sni = obj.optString("sni", ""),
+                            shareUrl = obj.optString("url", "")
+                        )
+                    )
+                }
+                Result.success(SingBoxOverviewData(nodesList, outboundsList))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    private fun isOutboundMatch(availableAddr: String, nodeOutbound: String): Boolean {
+        if (availableAddr.equals(nodeOutbound, ignoreCase = true)) return true
+        val cleanA = availableAddr.replace("socks5://", "").replace("socks://", "").trim('/')
+        val cleanB = nodeOutbound.replace("socks5://", "").replace("socks://", "").trim('/')
+        if (cleanA.equals(cleanB, ignoreCase = true)) return true
+        val hostPortA = if (cleanA.contains("@")) cleanA.substringAfter("@") else cleanA
+        val hostPortB = if (cleanB.contains("@")) cleanB.substringAfter("@") else cleanB
+        return hostPortA.equals(hostPortB, ignoreCase = true)
+    }
+
+    suspend fun fetchSingBoxNodes(profile: ServerProfile): Result<List<InboundProtocolItem>> = withContext(Dispatchers.IO) {
+        fetchSingBoxOverview(profile).map { it.nodes }
+    }
+
     suspend fun addSingBoxNode(profile: ServerProfile, protocol: String, port: String, outbound: String): Result<Boolean> = withContext(Dispatchers.IO) {
         try {
             val json = JSONObject().apply {
@@ -330,38 +427,6 @@ class ApiClient {
             }
             val req = buildRequest(profile, "/api/singbox/nodes", "POST", json.toString())
             client.newCall(req).execute().use { resp -> Result.success(resp.isSuccessful) }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
-    suspend fun fetchSingBoxNodes(profile: ServerProfile): Result<List<InboundProtocolItem>> = withContext(Dispatchers.IO) {
-        try {
-            val req = buildRequest(profile, "/api/singbox/nodes")
-            client.newCall(req).execute().use { resp ->
-                if (!resp.isSuccessful) return@withContext Result.failure(Exception("HTTP ${resp.code}"))
-                val json = JSONObject(resp.body?.string() ?: "{}")
-                val arr = json.optJSONArray("nodes") ?: JSONArray()
-                val list = mutableListOf<InboundProtocolItem>()
-                for (i in 0 until arr.length()) {
-                    val obj = arr.getJSONObject(i)
-                    list.add(
-                        InboundProtocolItem(
-                            id = obj.optString("name", "inbound-$i"),
-                            name = obj.optString("name", "inbound-$i"),
-                            protocol = obj.optString("protocol", "VLESS-REALITY"),
-                            port = obj.optInt("port", 443),
-                            outbound = obj.optString("outbound", "socks5://127.0.0.1:7928"),
-                            outboundPort = obj.optInt("outbound_port", 7928),
-                            uuid = obj.optString("uuid", ""),
-                            password = obj.optString("password", ""),
-                            sni = obj.optString("sni", ""),
-                            shareUrl = obj.optString("url", "")
-                        )
-                    )
-                }
-                Result.success(list)
-            }
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -405,9 +470,10 @@ class ApiClient {
         try {
             val req = buildRequest(profile, "/api/nodes")
             client.newCall(req).execute().use { resp ->
-                if (!resp.isSuccessful) return@withContext Result.failure(Exception("HTTP ${resp.code}"))
-                val arr = JSONArray(resp.body?.string() ?: "[]")
-                val list = mutableListOf<NodeCandidate>()
+                if (!resp.isSuccessful) return@withContext Result.failure(Exception("HTTP ${resp.code}: ${resp.message}"))
+                val rawStr = resp.body?.string() ?: "[]"
+                val arr = JSONArray(rawStr)
+                val list = ArrayList<NodeCandidate>(arr.length())
                 for (i in 0 until arr.length()) {
                     val obj = arr.getJSONObject(i)
                     val id = obj.optString("id", "node-$i")
