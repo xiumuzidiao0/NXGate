@@ -25,7 +25,7 @@ echo -e "${BOLD}🚀 [Pre-push] 正在执行本地推送前质量准入自检...
 echo -e "${BLUE}======================================================${PLAIN}"
 
 # 1. 检查版本一致性
-echo -e "\n${YELLOW}[1/3] 检查代码库全链路版本一致性...${PLAIN}"
+echo -e "\n${YELLOW}[1/4] 检查代码库全链路版本一致性...${PLAIN}"
 if [ -x "./scripts/check-version.sh" ]; then
     if ! ./scripts/check-version.sh; then
         echo -e "${RED}❌ [Pre-push 拦截] 版本不一致，请运行 ./scripts/check-version.sh --set <版本号> 进行统一！${PLAIN}"
@@ -35,8 +35,15 @@ else
     echo -e "${YELLOW}  -> scripts/check-version.sh 未找到或无执行权限，跳过${PLAIN}"
 fi
 
-# 2. 运行 Go 单元测试
-echo -e "${YELLOW}[2/3] 运行 Go 后端单元与集成测试...${PLAIN}"
+# 2. 静态代码分析与安全审计
+echo -e "${YELLOW}[2/4] 运行静态代码分析 (go vet)...${PLAIN}"
+if command -v go >/dev/null 2>&1; then
+    go vet ./...
+    echo -e "${GREEN}  [✓] go vet 静态分析无报错${PLAIN}"
+fi
+
+# 3. 运行 Go 单元测试
+echo -e "${YELLOW}[3/4] 运行 Go 后端单元与集成测试...${PLAIN}"
 if command -v go >/dev/null 2>&1; then
     if ! go test -count=1 ./...; then
         echo -e "\n${RED}❌ [Pre-push 拦截] Go 单元测试未通过！请先在本地排查修复测试用例。${PLAIN}"
@@ -48,8 +55,8 @@ else
     echo -e "${YELLOW}  -> 本地未检测到 Go 环境，跳过 Go 测试${PLAIN}"
 fi
 
-# 3. 运行前端自动化测试 (如果 node/npm 可用)
-echo -e "${YELLOW}[3/3] 检查前端安全审计与多端视口测试...${PLAIN}"
+# 4. 运行前端自动化测试 (如果 node/npm 可用)
+echo -e "${YELLOW}[4/4] 检查前端安全审计与多端视口测试...${PLAIN}"
 if command -v npm >/dev/null 2>&1 && [ -f "web/package.json" ]; then
     if npm --prefix web run test:ui >/dev/null 2>&1; then
         echo -e "${GREEN}  [✓] WebUI 4 大视口端到端测试 100% 通过${PLAIN}"
