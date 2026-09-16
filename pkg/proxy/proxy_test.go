@@ -402,3 +402,90 @@ func TestPortListenerSocks5WithAuthAndUDP(t *testing.T) {
 		t.Fatalf("payload mismatch in auth udp associate test")
 	}
 }
+
+func TestSocks5NoAuthAcceptsClientUserPassOffer(t *testing.T) {
+	// Listener configured in no-auth mode
+	cfg := &config.Config{
+		ProxyHost:           "127.0.0.1",
+		ProxyMaxConnections: 16,
+	}
+	rule := PortRule{
+		Port:     0,
+		Enabled:  true,
+		AuthMode: "none",
+	}
+
+	listener := NewPortListener(rule, cfg, nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go func() {
+		_ = listener.Start(ctx)
+	}()
+
+	var listenerPort int
+	for i := 0; i < 50; i++ {
+		listener.mu.Lock()
+		if listener.listener != nil {
+			listenerPort = listener.listener.Addr().(*net.TCPAddr).Port
+			listener.mu.Unlock()
+			break
+		}
+		listener.mu.Unlock()
+		time.Sleep(10 * time.Millisecond)
+	}
+	if listenerPort == 0 {
+		t.Fatal("listener failed to start")
+	}
+	defer listener.Close()
+
+	// Client offers ONLY method 0x02 (User/Pass) to an unauthenticated proxy
+	conn, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", listenerPort))
+	if err != nil {
+		t.Fatalf("dial failed: %v", err)
+	}
+	defer conn.Close()
+
+	_, _ = conn.Write([]byte{0x05, 0x01, 0x02}) // VER 5, NMETHODS 1, METHOD 2
+	resp := make([]byte, 2)
+	if _, err := io.ReadFull(conn, resp); err != nil {
+		t.Fatalf("read handshake reply failed: %v", err)
+	}
+	if resp[1] != 0x02 {
+		t.Fatalf("expected server to gracefully select method 0x02, got: 0x%02x", resp[1])
+	}
+
+	// Subnegotiation: send dummy user/pass
+	authReq := []byte{0x01, 0x04, 'u', 's', 'e', 'r', 0x04, 'p', 'a', 's', 's'}
+	_, _ = conn.Write(authReq)
+	authResp := make([]byte, 2)
+	if _, err := io.ReadFull(conn, authResp); err != nil || authResp[1] != 0x00 {
+		t.Fatalf("expected auth success 0x00, got: %v", authResp)
+	}
+}
+
+func TestPortListenerWithDefaultWebAuth(t *testing.T) {
+	cfg := &config.Config{
+		UIUsername: "webadmin",
+		UIPassword: "webpassword",
+		ProxyHost:  "127.0.0.1",
+	}
+
+	rule := PortRule{
+		Port:     0,
+		Enabled:  true,
+		AuthMode: "default_web",
+	}
+
+	listener := NewPortListener(rule, cfg, nil)
+	auth := listener.getAuthenticator()
+	if !auth.IsEnabled() {
+		t.Fatal("expected authenticator to be enabled under default_web mode")
+	}
+	if !auth.Verify("webadmin", "webpassword") {
+		t.Fatal("expected web credentials to verify successfully")
+	}
+	if auth.Verify("webadmin", "wrongpassword") {
+		t.Fatal("expected wrong password to fail")
+	}
+}

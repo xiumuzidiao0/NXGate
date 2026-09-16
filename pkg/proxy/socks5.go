@@ -114,12 +114,43 @@ func handleSocks5(client net.Conn, auth *Authenticator, devName string, tun *tun
 			return err
 		}
 	} else {
-		if !methodMap[authMethodNoAuth] {
+		if methodMap[authMethodNoAuth] {
+			if _, err := client.Write([]byte{socks5Version, authMethodNoAuth}); err != nil {
+				return err
+			}
+		} else if methodMap[authMethodUserPass] {
+			// Server does not require auth, but client offered only user/pass: accept gracefully
+			if _, err := client.Write([]byte{socks5Version, authMethodUserPass}); err != nil {
+				return err
+			}
+			authVer := make([]byte, 1)
+			if _, err := io.ReadFull(client, authVer); err != nil || authVer[0] != 0x01 {
+				_, _ = client.Write([]byte{0x01, 0x01})
+				return errors.New("invalid socks5 subnegotiation auth version")
+			}
+			uLenBuf := make([]byte, 1)
+			if _, err := io.ReadFull(client, uLenBuf); err != nil {
+				return err
+			}
+			username := make([]byte, int(uLenBuf[0]))
+			if _, err := io.ReadFull(client, username); err != nil {
+				return err
+			}
+			pLenBuf := make([]byte, 1)
+			if _, err := io.ReadFull(client, pLenBuf); err != nil {
+				return err
+			}
+			password := make([]byte, int(pLenBuf[0]))
+			if _, err := io.ReadFull(client, password); err != nil {
+				return err
+			}
+			// Auth is disabled, always accept
+			if _, err := client.Write([]byte{0x01, 0x00}); err != nil {
+				return err
+			}
+		} else {
 			_, _ = client.Write([]byte{socks5Version, authMethodNoAccept})
-			return errors.New("client does not support no-auth")
-		}
-		if _, err := client.Write([]byte{socks5Version, authMethodNoAuth}); err != nil {
-			return err
+			return errors.New("no acceptable auth method")
 		}
 	}
 
