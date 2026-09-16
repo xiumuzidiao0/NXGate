@@ -13,6 +13,7 @@ import com.aimili.vpn.model.PortRuleItem
 import com.aimili.vpn.model.ServerProfile
 import com.aimili.vpn.model.ServerStatusData
 import com.aimili.vpn.model.SingBoxOverviewData
+import com.aimili.vpn.model.SystemLogEntry
 import com.aimili.vpn.model.TunnelItem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -82,11 +83,20 @@ class ApiClient {
                 val elapsed = (System.currentTimeMillis() - start).toInt()
                 if (response.isSuccessful) {
                     val json = JSONObject(response.body?.string() ?: "{}")
+                    val downBps = json.optLong("download_speed_bps", 0)
+                    val totalMb = json.optLong("total_download_mb", 0) + json.optLong("total_upload_mb", 0)
+                    val downStr = if (downBps > 0) "%.2f Mb/s".format((downBps * 8.0) / 1_000_000.0) else profile.downSpeedStr
+                    val totalStr = if (totalMb > 0) {
+                        if (totalMb >= 1024) "%.2f Gb".format((totalMb * 8.0) / 1024.0) else "%.1f Mb".format(totalMb * 8.0)
+                    } else profile.totalTrafficStr
+
                     val updated = profile.copy(
                         isOnline = true,
                         latencyMs = if (elapsed > 0) elapsed else 35,
                         exitIp = json.optString("active_node", profile.exitIp).ifEmpty { profile.exitIp },
-                        activeConns = json.optInt("tunnels_count", profile.activeConns)
+                        activeConns = json.optInt("tunnels_count", profile.activeConns),
+                        downSpeedStr = downStr,
+                        totalTrafficStr = totalStr
                     )
                     Result.success(updated)
                 } else {
@@ -95,6 +105,30 @@ class ApiClient {
             }
         } catch (e: Exception) {
             Log.e("ApiClient", "testConnection failed for ${profile.host}", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun fetchLogs(profile: ServerProfile): Result<List<SystemLogEntry>> = withContext(Dispatchers.IO) {
+        try {
+            executeCall(profile, "/api/logs").use { resp ->
+                if (!resp.isSuccessful) return@withContext Result.failure(Exception("HTTP ${resp.code}: ${resp.message}"))
+                val arr = JSONArray(resp.body?.string() ?: "[]")
+                val list = mutableListOf<SystemLogEntry>()
+                for (i in 0 until arr.length()) {
+                    val obj = arr.getJSONObject(i)
+                    list.add(
+                        SystemLogEntry(
+                            timestamp = obj.optString("timestamp", ""),
+                            level = obj.optString("level", "INFO"),
+                            module = obj.optString("module", "System"),
+                            message = obj.optString("message", "")
+                        )
+                    )
+                }
+                Result.success(list)
+            }
+        } catch (e: Exception) {
             Result.failure(e)
         }
     }

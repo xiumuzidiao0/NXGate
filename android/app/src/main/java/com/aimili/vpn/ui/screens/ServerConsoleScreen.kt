@@ -33,6 +33,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
@@ -59,6 +60,7 @@ import com.aimili.vpn.AimiliApplication
 import com.aimili.vpn.model.LiveTrafficInfo
 import com.aimili.vpn.model.MasterGatewayInfo
 import com.aimili.vpn.model.ServerProfile
+import com.aimili.vpn.model.SystemLogEntry
 import com.aimili.vpn.model.TunnelItem
 import com.aimili.vpn.ui.components.ConnectedButtonItem
 import com.aimili.vpn.ui.components.ConnectedButtonGroup
@@ -214,11 +216,11 @@ fun ServerConsoleScreen(
     var masterInfo by remember {
         mutableStateOf(
             MasterGatewayInfo(
-                devName = "主网卡零号 (tun0)",
-                nodeName = "日本住宅节点十二号",
-                uptimeStr = "18小时24分",
-                status = "断流检测通过",
-                isConnected = true
+                devName = "主网卡 (tun0)",
+                nodeName = "正在获取出口...",
+                uptimeStr = "0分",
+                status = "检测中",
+                isConnected = false
             )
         )
     }
@@ -228,9 +230,23 @@ fun ServerConsoleScreen(
     }
 
     var liveTraffic by remember { mutableStateOf(LiveTrafficInfo()) }
+    var serverLogs by remember { mutableStateOf<List<SystemLogEntry>>(emptyList()) }
+    var isLoadingLogs by remember { mutableStateOf(false) }
 
     var showLogSheet by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    // Pull real logs when log sheet opens
+    LaunchedEffect(showLogSheet) {
+        if (showLogSheet && activeServer != null) {
+            isLoadingLogs = true
+            val logsRes = AimiliApplication.instance.apiClient.fetchLogs(activeServer)
+            isLoadingLogs = false
+            if (logsRes.isSuccess) {
+                serverLogs = logsRes.getOrNull() ?: emptyList()
+            }
+        }
+    }
 
     // Continuously pull real data, live traffic speeds, and tunnels every 3 seconds
     LaunchedEffect(activeServer?.id) {
@@ -633,47 +649,86 @@ fun ServerConsoleScreen(
                     .padding(horizontal = 20.dp)
                     .padding(bottom = 32.dp)
             ) {
-                Text(
-                    text = "系统运维日志流",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = "实时事件长连接广播: 端口预检、断流熔断与自适应轮换",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "系统运维日志流",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "来自服务端 /api/logs 的实时环形日志 (共 ${serverLogs.size} 条记录)",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    IconButton(
+                        onClick = {
+                            if (activeServer != null) {
+                                scope.launch {
+                                    isLoadingLogs = true
+                                    val logsRes = AimiliApplication.instance.apiClient.fetchLogs(activeServer)
+                                    isLoadingLogs = false
+                                    if (logsRes.isSuccess) {
+                                        serverLogs = logsRes.getOrNull() ?: emptyList()
+                                        Toast.makeText(context, "已刷新最新 ${serverLogs.size} 条日志", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            }
+                        }
+                    ) {
+                        Icon(Icons.Rounded.Refresh, contentDescription = "刷新日志", tint = MaterialTheme.colorScheme.primary)
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 Spacer(Modifier.height(8.dp))
 
-                val mockLogs = listOf(
-                    "[INFO] [Main] 正在初始化节点池并拉取候选节点...",
-                    "[INFO] [Nodes] 端口预检完成：291/767 节点可达，已过滤 476 个死端口",
-                    "[INFO] [TunnelPool] 已为接口 tun1 配置独立隔离策略路由 (Table 101) 与 rp_filter",
-                    "[INFO] [UnlockDetector] [tun1] 吞吐量检测通过: PASSED (1019.4 KB/s)",
-                    "[INFO] [UnlockDetector] 实测解锁结果: ChatGPT=unlocked, Claude=unlocked, Gemini=unlocked",
-                    "[INFO] [DynamicGroup] [日本前三住宅组] 动态自适应评估完成，维持 3 个健康出口在线",
-                    "[INFO] [Proxy] 代理端口 [7928] 已就绪监听于 127.0.0.1:7928 (SOCKS5 TCP+UDP)"
-                )
+                if (isLoadingLogs) {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.height(8.dp))
+                }
 
-                LazyColumn(
-                    modifier = Modifier.height(280.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    items(mockLogs) { log ->
-                        Surface(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(8.dp),
-                            color = MaterialTheme.colorScheme.surfaceContainerHighest
-                        ) {
-                            Text(
-                                text = log,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.padding(10.dp)
-                            )
+                if (serverLogs.isEmpty() && !isLoadingLogs) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHighest
+                    ) {
+                        Text(
+                            text = "当前服务器暂未产生事件日志，待有网络活动或节点轮换时将自动显示。",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(16.dp)
+                        )
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.height(320.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        items(serverLogs) { log ->
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.colorScheme.surfaceContainerHighest
+                            ) {
+                                Text(
+                                    text = log.formatted,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = when (log.level.uppercase()) {
+                                        "ERROR" -> MaterialTheme.colorScheme.error
+                                        "WARNING", "WARN" -> MaterialTheme.colorScheme.tertiary
+                                        else -> MaterialTheme.colorScheme.onSurface
+                                    },
+                                    modifier = Modifier.padding(10.dp)
+                                )
+                            }
                         }
                     }
                 }

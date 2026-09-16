@@ -340,3 +340,17 @@ data class BlacklistRecord(
     val blacklistedAt: String = "",
     val expiresAt: String = ""
 )
+
+data class SystemLogEntry(
+    val timestamp: String = "",
+    val level: String = "INFO",
+    val module: String = "System",
+    val message: String = ""
+) {
+    val formatted: String
+        get() {
+            val t = if (timestamp.length >= 19) timestamp.substring(11, 19) else timestamp
+            val timePart = if (t.isNotEmpty()) "[$t] " else ""
+            return "$timePart[$level] [$module] $message"
+        }
+}

@@ -26,6 +26,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Sort
 import androidx.compose.material.icons.rounded.Block
+import androidx.compose.material.icons.rounded.Bookmark
+import androidx.compose.material.icons.rounded.BookmarkBorder
 import androidx.compose.material.icons.rounded.Category
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Delete
@@ -81,6 +83,7 @@ import com.aimili.vpn.ui.components.ConnectedButtonStyle
 import com.aimili.vpn.ui.components.ConnectedChipGroup
 import com.aimili.vpn.ui.components.GlobalServerSwitcherTitle
 import com.aimili.vpn.ui.components.UnlockPill
+import com.aimili.vpn.ui.components.countryChineseName
 import com.aimili.vpn.ui.components.countryFlag
 import kotlinx.coroutines.launch
 
@@ -89,8 +92,8 @@ fun FullNodeCard(
     node: NodeCandidate,
     isMaster: Boolean = false,
     onSetMaster: () -> Unit,
-    isStarred: Boolean,
-    onToggleStar: () -> Unit,
+    isFavorite: Boolean,
+    onToggleFavorite: () -> Unit,
     onStartTunnel: () -> Unit,
     onBlacklist: () -> Unit,
     modifier: Modifier = Modifier
@@ -115,8 +118,9 @@ fun FullNodeCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    val displayName = node.countryLong.ifBlank { countryChineseName(node.countryShort) }
                     Text(
-                        text = "${countryFlag(node.countryShort)} ${node.countryLong.ifEmpty { node.countryShort }}",
+                        text = "${countryFlag(node.countryShort)} $displayName",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -234,7 +238,7 @@ fun FullNodeCard(
 
             Spacer(Modifier.height(2.dp))
 
-            // Row 5: Action Button Group (设为主出口, 拉起网卡, 星标, 屏蔽)
+            // Row 5: Action Button Group (设为主出口, 拉起网卡, 收藏, 屏蔽)
             ConnectedButtonGroup(
                 items = listOf(
                     ConnectedButtonItem(
@@ -250,10 +254,10 @@ fun FullNodeCard(
                         onClick = onStartTunnel
                     ),
                     ConnectedButtonItem(
-                        text = if (isStarred) "已星标" else "星标",
-                        style = if (isStarred) ConnectedButtonStyle.Filled else ConnectedButtonStyle.Tonal,
-                        icon = if (isStarred) Icons.Rounded.Star else Icons.Rounded.StarBorder,
-                        onClick = onToggleStar
+                        text = if (isFavorite) "已收藏" else "收藏",
+                        style = if (isFavorite) ConnectedButtonStyle.Filled else ConnectedButtonStyle.Tonal,
+                        icon = if (isFavorite) Icons.Rounded.Bookmark else Icons.Rounded.BookmarkBorder,
+                        onClick = onToggleFavorite
                     ),
                     ConnectedButtonItem(
                         text = "屏蔽",
@@ -293,9 +297,9 @@ fun NodeSquareScreen(
     var searchQuery by remember { mutableStateOf("") }
     var isSearchActive by remember { mutableStateOf(false) }
 
-    // Quick filter chips
+    // Quick filter chips (包含我的收藏)
     var selectedChipIndex by remember { mutableIntStateOf(0) }
-    val chipList = listOf("全部", "日本", "美国", "原生家宽", "三大AI全通")
+    val chipList = listOf("全部", "我的收藏", "日本", "美国", "原生家宽", "三大AI全通")
 
     // Full nodes list from server (dynamically loaded)
     var allNodes by remember { mutableStateOf<List<NodeCandidate>>(emptyList()) }
@@ -313,7 +317,8 @@ fun NodeSquareScreen(
         val list = mutableListOf(CountryFilterOption("", "全部国家/地区 (共 ${allNodes.size} 节点)"))
         countMap.entries.sortedByDescending { it.value }.forEach { (code, count) ->
             val flag = countryFlag(code)
-            val name = allNodes.find { it.countryShort.equals(code, ignoreCase = true) }?.countryLong ?: code
+            val rawName = allNodes.find { it.countryShort.equals(code, ignoreCase = true) }?.countryLong
+            val name = if (!rawName.isNullOrBlank()) rawName else countryChineseName(code)
             list.add(CountryFilterOption(code, "$flag $name ($code · $count)"))
         }
         list
@@ -402,10 +407,11 @@ fun NodeSquareScreen(
             }
 
             val matchesChip = when (selectedChipIndex) {
-                1 -> node.countryShort.equals("JP", ignoreCase = true)
-                2 -> node.countryShort.equals("US", ignoreCase = true)
-                3 -> node.ipType == "residential"
-                4 -> node.openai == "unlocked" && node.claude == "unlocked" && node.gemini == "unlocked"
+                1 -> node.isFavorite
+                2 -> node.countryShort.equals("JP", ignoreCase = true)
+                3 -> node.countryShort.equals("US", ignoreCase = true)
+                4 -> node.ipType == "residential"
+                5 -> node.openai == "unlocked" && node.claude == "unlocked" && node.gemini == "unlocked"
                 else -> true
             }
             matchesQuery && matchesCountry && matchesIpType && matchesChip
@@ -671,13 +677,13 @@ fun NodeSquareScreen(
                                         }
                                     }
                                 },
-                                isStarred = node.isFavorite,
-                                onToggleStar = {
+                                isFavorite = node.isFavorite,
+                                onToggleFavorite = {
                                     if (activeServer != null) {
                                         scope.launch {
                                             AimiliApplication.instance.apiClient.toggleFavorite(activeServer, node.id)
                                             allNodes = allNodes.map { if (it.id == node.id) it.copy(isFavorite = !it.isFavorite) else it }
-                                            Toast.makeText(context, if (!node.isFavorite) "已星标 [${node.ip}]" else "已取消星标", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(context, if (!node.isFavorite) "已收藏 [${node.ip}]" else "已取消收藏", Toast.LENGTH_SHORT).show()
                                         }
                                     }
                                 },
@@ -737,13 +743,13 @@ fun NodeSquareScreen(
                                         }
                                     }
                                 },
-                                isStarred = node.isFavorite,
-                                onToggleStar = {
+                                isFavorite = node.isFavorite,
+                                onToggleFavorite = {
                                     if (activeServer != null) {
                                         scope.launch {
                                             AimiliApplication.instance.apiClient.toggleFavorite(activeServer, node.id)
                                             allNodes = allNodes.map { if (it.id == node.id) it.copy(isFavorite = !it.isFavorite) else it }
-                                            Toast.makeText(context, if (!node.isFavorite) "已星标 [${node.ip}]" else "已取消星标", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(context, if (!node.isFavorite) "已收藏 [${node.ip}]" else "已取消收藏", Toast.LENGTH_SHORT).show()
                                         }
                                     }
                                 },
