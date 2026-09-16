@@ -3,6 +3,7 @@ package com.aimili.vpn.ui.screens
 import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -31,9 +33,11 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -60,6 +64,9 @@ fun ClusterHubScreen(
     val clipboardManager = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
     val scrollState = rememberScrollState()
+
+    val configuration = LocalConfiguration.current
+    val isTablet = configuration.screenWidthDp >= 600
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -109,139 +116,146 @@ fun ClusterHubScreen(
         },
         containerColor = MaterialTheme.colorScheme.surface
     ) { innerPadding ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
                 .padding(horizontal = 16.dp)
-                .verticalScroll(scrollState),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Spacer(Modifier.height(4.dp))
-
-            // 1. 集群全局汇总填充卡片（高 176dp）（背景 primaryContainer）
-            Card(
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(176.dp),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
-                )
+                    .fillMaxSize()
+                    .widthIn(max = if (isTablet) 920.dp else 500.dp)
+                    .align(Alignment.TopCenter)
+                    .verticalScroll(scrollState),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Column(
+                Spacer(Modifier.height(4.dp))
+
+                // 1. 集群全局汇总填充卡片（高 176dp）（背景 primaryContainer）
+                Card(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .padding(20.dp),
-                    verticalArrangement = Arrangement.Center
+                        .fillMaxWidth()
+                        .height(176.dp),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer
+                    )
                 ) {
-                    Text(
-                        text = "集群全局汇总",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        text = "纳管主机：${servers.size} 台在线 / ${servers.count { !it.isOnline }} 台离线\n实时吞吐：下行 ${summary.downSpeedStr}，上行 ${summary.upSpeedStr}\n今日总流量：${summary.todayTrafficStr}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.9f),
-                        lineHeight = MaterialTheme.typography.bodyMedium.lineHeight * 1.35f
-                    )
-                }
-            }
-
-            // 2. 动态渲染各服务器卡片及其对应操作组
-            if (servers.isEmpty()) {
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerLow
-                ) {
-                    Text(
-                        text = "当前暂未纳管任何服务器，请点击右下角按钮或右上角扫码添加 VPS。",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(16.dp)
-                    )
-                }
-            } else {
-                servers.forEachIndexed { index, server ->
-                    val cardHeight = if (index == 0) 174.dp else 160.dp
-
-                    Card(
+                    Column(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .height(cardHeight)
-                            .clip(RoundedCornerShape(20.dp))
-                            .clickable { onSelectServerAndOpenConsole(server) },
-                        shape = RoundedCornerShape(20.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
-                        )
+                            .fillMaxSize()
+                            .padding(20.dp),
+                        verticalArrangement = Arrangement.Center
                     ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(20.dp),
-                            verticalArrangement = Arrangement.Center
-                        ) {
-                            Text(
-                                text = "${server.name} 在线 ${server.latencyMs}毫秒",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Spacer(Modifier.height(8.dp))
-                            Text(
-                                text = "物理出口：${server.exitIp} ${server.ipType}\n智能解锁：${server.unlockStatus}\n下行 ${server.downSpeedStr}，总计 ${server.totalTrafficStr}，活跃连接 ${server.activeConns}",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                lineHeight = MaterialTheme.typography.bodyMedium.lineHeight * 1.35f
-                            )
-                        }
+                        Text(
+                            text = "集群全局汇总",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = "纳管主机：${servers.size} 台在线 / ${servers.count { !it.isOnline }} 台离线\n实时吞吐：下行 ${summary.downSpeedStr}，上行 ${summary.upSpeedStr}\n今日总流量：${summary.todayTrafficStr}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.9f),
+                            lineHeight = MaterialTheme.typography.bodyMedium.lineHeight * 1.35f
+                        )
                     }
+                }
 
-                    // Connected button group below the card
-                    ConnectedButtonGroup(
-                        items = listOf(
-                            ConnectedButtonItem(
-                                text = "一键换线",
-                                style = ConnectedButtonStyle.Tonal,
-                                onClick = {
-                                    scope.launch {
-                                        val res = AimiliApplication.instance.apiClient.triggerRotate(server)
-                                        Toast.makeText(
-                                            context,
-                                            res.getOrDefault("已触发 [${server.name}] 动态重评换线！"),
-                                            Toast.LENGTH_SHORT
-                                        ).show()
+                // 2. 动态渲染各服务器卡片及其对应操作组
+                if (servers.isEmpty()) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerLow
+                    ) {
+                        Text(
+                            text = "当前暂未纳管任何服务器，请点击右下角按钮或右上角扫码添加 VPS。",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(16.dp)
+                        )
+                    }
+                } else {
+                    servers.forEachIndexed { index, server ->
+                        val cardHeight = if (index == 0) 174.dp else 160.dp
+
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(cardHeight)
+                                .clip(RoundedCornerShape(20.dp))
+                                .clickable { onSelectServerAndOpenConsole(server) },
+                            shape = RoundedCornerShape(20.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                            )
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(20.dp),
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Text(
+                                    text = "${server.name} 在线 ${server.latencyMs}毫秒",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    text = "物理出口：${server.exitIp} ${server.ipType}\n智能解锁：${server.unlockStatus}\n下行 ${server.downSpeedStr}，总计 ${server.totalTrafficStr}，活跃连接 ${server.activeConns}",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    lineHeight = MaterialTheme.typography.bodyMedium.lineHeight * 1.35f
+                                )
+                            }
+                        }
+
+                        // Connected button group below the card
+                        ConnectedButtonGroup(
+                            items = listOf(
+                                ConnectedButtonItem(
+                                    text = "一键换线",
+                                    style = ConnectedButtonStyle.Tonal,
+                                    onClick = {
+                                        scope.launch {
+                                            val res = AimiliApplication.instance.apiClient.triggerRotate(server)
+                                            Toast.makeText(
+                                                context,
+                                                res.getOrDefault("已触发 [${server.name}] 动态重评换线！"),
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+                                        }
                                     }
-                                }
-                            ),
-                            ConnectedButtonItem(
-                                text = "复制订阅",
-                                style = ConnectedButtonStyle.Tonal,
-                                onClick = {
-                                    scope.launch {
-                                        val subRes = AimiliApplication.instance.apiClient.fetchClashSubscription(server)
-                                        val url = subRes.getOrDefault("${server.baseUrl}/api/singbox/subscription/clash")
-                                        clipboardManager.setText(AnnotatedString(url))
-                                        Toast.makeText(context, "已复制 [${server.name}] Clash Meta 分流订阅！", Toast.LENGTH_SHORT).show()
+                                ),
+                                ConnectedButtonItem(
+                                    text = "复制订阅",
+                                    style = ConnectedButtonStyle.Tonal,
+                                    onClick = {
+                                        scope.launch {
+                                            val subRes = AimiliApplication.instance.apiClient.fetchClashSubscription(server)
+                                            val url = subRes.getOrDefault("${server.baseUrl}/api/singbox/subscription/clash")
+                                            clipboardManager.setText(AnnotatedString(url))
+                                            Toast.makeText(context, "已复制 [${server.name}] Clash Meta 分流订阅！", Toast.LENGTH_SHORT).show()
+                                        }
                                     }
-                                }
-                            ),
-                            ConnectedButtonItem(
-                                text = "控制台",
-                                style = ConnectedButtonStyle.Filled,
-                                onClick = { onSelectServerAndOpenConsole(server) }
+                                ),
+                                ConnectedButtonItem(
+                                    text = "控制台",
+                                    style = ConnectedButtonStyle.Filled,
+                                    onClick = { onSelectServerAndOpenConsole(server) }
+                                )
                             )
                         )
-                    )
+                    }
                 }
-            }
 
-            Spacer(Modifier.height(80.dp))
+                Spacer(Modifier.height(80.dp))
+            }
         }
     }
 }

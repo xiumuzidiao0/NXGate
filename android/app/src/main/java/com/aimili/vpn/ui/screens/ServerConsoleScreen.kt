@@ -46,6 +46,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalConfiguration
 import com.aimili.vpn.AimiliApplication
 import com.aimili.vpn.model.MasterGatewayInfo
 import com.aimili.vpn.model.ServerProfile
@@ -71,6 +75,9 @@ fun ServerConsoleScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val scrollState = rememberScrollState()
+
+    val configuration = LocalConfiguration.current
+    val isTablet = configuration.screenWidthDp >= 600
 
     var masterInfo by remember {
         mutableStateOf(
@@ -173,15 +180,21 @@ fun ServerConsoleScreen(
         },
         containerColor = MaterialTheme.colorScheme.surface
     ) { innerPadding ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
                 .padding(horizontal = 16.dp)
-                .verticalScroll(scrollState),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Spacer(Modifier.height(4.dp))
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .widthIn(max = if (isTablet) 920.dp else 500.dp)
+                    .align(Alignment.TopCenter)
+                    .verticalScroll(scrollState),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Spacer(Modifier.height(4.dp))
 
             // 1. 实时网速波形卡片（高 164dp）（背景 surfaceContainerHigh）
             SpeedWaveformCard(
@@ -315,6 +328,7 @@ fun ServerConsoleScreen(
             Spacer(Modifier.height(80.dp))
         }
     }
+}
 
     // Log Drawer ModalBottomSheet
     if (showLogSheet) {
