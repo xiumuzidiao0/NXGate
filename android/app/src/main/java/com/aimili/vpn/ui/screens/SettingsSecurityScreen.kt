@@ -881,7 +881,7 @@ fun ThemeAppearanceSettingsSection(modifier: Modifier = Modifier) {
 
             // 1. 深浅模式切换
             ConnectedChipGroup(
-                chips = listOf("🌓 跟随系统", "☀️ 浅色模式", "🌙 深色模式"),
+                chips = listOf("跟随系统", "浅色模式", "深色模式"),
                 selectedIndex = when (themeMode) {
                     "light" -> 1
                     "dark" -> 2
@@ -915,7 +915,7 @@ fun ThemeAppearanceSettingsSection(modifier: Modifier = Modifier) {
                 },
                 optionLabel = { it.name },
                 leadingIcon = Icons.Rounded.ColorLens,
-                supportingText = if (themePalette == "monet") "✨ 从系统桌面壁纸动态提取莫奈色系 (Android 12+ 专属)" else selectedPal.description
+                supportingText = if (themePalette == "monet") "从系统桌面壁纸动态提取莫奈色系 (Android 12+ 专属)" else selectedPal.description
             )
 
             // 3. 颜色快选色盘圆球

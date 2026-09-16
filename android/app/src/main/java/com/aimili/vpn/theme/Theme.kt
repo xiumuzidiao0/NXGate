@@ -25,6 +25,7 @@ fun AimiliTheme(
         paletteId == "monet" && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         }
+        paletteId == "miuix" -> if (darkTheme) MiuixDarkColorScheme else MiuixLightColorScheme
         paletteId == "ocean" -> if (darkTheme) OceanDarkColorScheme else OceanLightColorScheme
         paletteId == "emerald" -> if (darkTheme) EmeraldDarkColorScheme else EmeraldLightColorScheme
         paletteId == "purple" -> if (darkTheme) PurpleDarkColorScheme else PurpleLightColorScheme

@@ -56,6 +56,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.aimili.vpn.AimiliApplication
+import com.aimili.vpn.model.LiveTrafficInfo
 import com.aimili.vpn.model.MasterGatewayInfo
 import com.aimili.vpn.model.ServerProfile
 import com.aimili.vpn.model.TunnelItem
@@ -67,6 +68,8 @@ import com.aimili.vpn.ui.components.GlobalServerSwitcherTitle
 import com.aimili.vpn.ui.components.SpeedWaveformCard
 import com.aimili.vpn.ui.components.UnlockPill
 import com.aimili.vpn.ui.components.countryFlag
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 @Composable
@@ -224,20 +227,33 @@ fun ServerConsoleScreen(
         mutableStateOf<List<TunnelItem>>(emptyList())
     }
 
+    var liveTraffic by remember { mutableStateOf(LiveTrafficInfo()) }
+
     var showLogSheet by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    // Pull real data when active server changes
+    // Continuously pull real data, live traffic speeds, and tunnels every 3 seconds
     LaunchedEffect(activeServer?.id) {
-        if (activeServer != null) {
-            val statusRes = AimiliApplication.instance.apiClient.fetchStatus(activeServer)
-            if (statusRes.isSuccess) {
-                masterInfo = statusRes.getOrNull() ?: masterInfo
+        while (isActive) {
+            if (activeServer != null) {
+                val statusRes = AimiliApplication.instance.apiClient.fetchServerStatus(activeServer)
+                if (statusRes.isSuccess) {
+                    val data = statusRes.getOrNull()
+                    if (data != null) {
+                        masterInfo = data.masterGateway
+                        liveTraffic = data.traffic
+                        tunnelList = data.tunnels
+                        AimiliApplication.instance.serverStore.updateServerTraffic(
+                            activeServer.id,
+                            downSpeedStr = data.traffic.downSpeedMbStr,
+                            upSpeedStr = data.traffic.upSpeedMbStr,
+                            totalTrafficStr = data.traffic.totalTrafficGbStr,
+                            activeConns = data.traffic.activeConnections
+                        )
+                    }
+                }
             }
-            val tunnelsRes = AimiliApplication.instance.apiClient.fetchTunnels(activeServer)
-            if (tunnelsRes.isSuccess) {
-                tunnelList = tunnelsRes.getOrNull() ?: emptyList()
-            }
+            delay(3000)
         }
     }
 
@@ -318,8 +334,7 @@ fun ServerConsoleScreen(
                             verticalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
                             SpeedWaveformCard(
-                                downSpeedStr = activeServer?.downSpeedStr ?: "12.4 Mb/s",
-                                upSpeedStr = "1.2 Mb/s"
+                                liveTraffic = liveTraffic
                             )
 
                             Card(
@@ -460,8 +475,7 @@ fun ServerConsoleScreen(
                     // ==================== 竖屏/手机：单列垂直布局 ====================
                     // 1. 实时网速波形卡片（高 164dp）（背景 surfaceContainerHigh）
                     SpeedWaveformCard(
-                        downSpeedStr = activeServer?.downSpeedStr ?: "12.4 Mb/s",
-                        upSpeedStr = "1.2 Mb/s"
+                        liveTraffic = liveTraffic
                     )
 
                     // 2. 系统主出口网关填充卡片（高 158dp）

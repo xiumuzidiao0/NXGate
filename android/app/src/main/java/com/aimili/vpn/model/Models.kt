@@ -58,6 +58,77 @@ data class ClusterSummary(
     val todayTrafficStr: String = "0 B"
 )
 
+enum class SpeedUnit {
+    MB_S,
+    MBPS,
+    KB_S
+}
+
+data class LiveTrafficInfo(
+    val downloadSpeedBps: Long = 0,
+    val uploadSpeedBps: Long = 0,
+    val totalDownloadBytes: Long = 0,
+    val totalUploadBytes: Long = 0,
+    val activeConnections: Int = 0
+) {
+    fun formattedDownSpeed(unit: SpeedUnit = SpeedUnit.MBPS): String {
+        return when (unit) {
+            SpeedUnit.MBPS -> {
+                val mbps = (downloadSpeedBps * 8.0) / 1_000_000.0
+                if (mbps >= 1.0) "%.2f Mb/s".format(mbps) else "%.1f Kb/s".format((downloadSpeedBps * 8.0) / 1_000.0)
+            }
+            SpeedUnit.MB_S -> {
+                val mBps = downloadSpeedBps / (1024.0 * 1024.0)
+                if (mBps >= 1.0) "%.2f MB/s".format(mBps) else "%.1f KB/s".format(downloadSpeedBps / 1024.0)
+            }
+            SpeedUnit.KB_S -> {
+                "%.1f KB/s".format(downloadSpeedBps / 1024.0)
+            }
+        }
+    }
+
+    fun formattedUpSpeed(unit: SpeedUnit = SpeedUnit.MBPS): String {
+        return when (unit) {
+            SpeedUnit.MBPS -> {
+                val mbps = (uploadSpeedBps * 8.0) / 1_000_000.0
+                if (mbps >= 1.0) "%.2f Mb/s".format(mbps) else "%.1f Kb/s".format((uploadSpeedBps * 8.0) / 1_000.0)
+            }
+            SpeedUnit.MB_S -> {
+                val mBps = uploadSpeedBps / (1024.0 * 1024.0)
+                if (mBps >= 1.0) "%.2f MB/s".format(mBps) else "%.1f KB/s".format(uploadSpeedBps / 1024.0)
+            }
+            SpeedUnit.KB_S -> {
+                "%.1f KB/s".format(uploadSpeedBps / 1024.0)
+            }
+        }
+    }
+
+    val downSpeedMbStr: String
+        get() {
+            val mbps = (downloadSpeedBps * 8.0) / 1_000_000.0
+            return if (mbps >= 0.05) "%.2f Mb/s".format(mbps) else "0.0 Mb/s"
+        }
+
+    val upSpeedMbStr: String
+        get() {
+            val mbps = (uploadSpeedBps * 8.0) / 1_000_000.0
+            return if (mbps >= 0.05) "%.2f Mb/s".format(mbps) else "0.0 Mb/s"
+        }
+
+    val totalTrafficGbStr: String
+        get() {
+            val totalBytes = totalDownloadBytes + totalUploadBytes
+            val gb = (totalBytes * 8.0) / 1_000_000_000.0
+            return if (gb >= 1.0) "%.2f Gb".format(gb) else "%.1f Mb".format((totalBytes * 8.0) / 1_000_000.0)
+        }
+}
+
+data class ServerStatusData(
+    val masterGateway: MasterGatewayInfo,
+    val traffic: LiveTrafficInfo,
+    val tunnels: List<TunnelItem> = emptyList()
+)
+
 data class MasterGatewayInfo(
     val devName: String = "tun0",
     val nodeName: String = "未连接",

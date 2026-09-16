@@ -78,13 +78,14 @@ fun MainAppScaffold() {
     val useNavRail = isTablet && isLandscape
 
     // Dynamic cluster summary
-    val clusterSummary = remember(servers) {
+    val clusterSummary = remember(servers, activeServer) {
+        val currServer = activeServer ?: servers.firstOrNull()
         ClusterSummary(
             onlineCount = servers.count { it.isOnline },
             offlineCount = servers.count { !it.isOnline },
-            downSpeedStr = "10.2 Mb/s",
-            upSpeedStr = "1.4 Mb/s",
-            todayTrafficStr = "18.6 Gb"
+            downSpeedStr = currServer?.downSpeedStr ?: "0.0 Mb/s",
+            upSpeedStr = "0.0 Mb/s",
+            todayTrafficStr = currServer?.totalTrafficStr ?: "0.0 Gb"
         )
     }
 

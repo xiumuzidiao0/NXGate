@@ -6,10 +6,12 @@ import com.aimili.vpn.model.AvailableOutbound
 import com.aimili.vpn.model.BlacklistRecord
 import com.aimili.vpn.model.DynamicGroupCard
 import com.aimili.vpn.model.InboundProtocolItem
+import com.aimili.vpn.model.LiveTrafficInfo
 import com.aimili.vpn.model.MasterGatewayInfo
 import com.aimili.vpn.model.NodeCandidate
 import com.aimili.vpn.model.PortRuleItem
 import com.aimili.vpn.model.ServerProfile
+import com.aimili.vpn.model.ServerStatusData
 import com.aimili.vpn.model.SingBoxOverviewData
 import com.aimili.vpn.model.TunnelItem
 import kotlinx.coroutines.Dispatchers
@@ -97,11 +99,13 @@ class ApiClient {
         }
     }
 
-    suspend fun fetchStatus(profile: ServerProfile): Result<MasterGatewayInfo> = withContext(Dispatchers.IO) {
+    suspend fun fetchServerStatus(profile: ServerProfile): Result<ServerStatusData> = withContext(Dispatchers.IO) {
         try {
             executeCall(profile, "/api/status").use { resp ->
                 if (!resp.isSuccessful) return@withContext Result.failure(Exception("HTTP ${resp.code}: ${resp.message}"))
                 val json = JSONObject(resp.body?.string() ?: "{}")
+
+                // 1. VPN Master info
                 val vpnObj = json.optJSONObject("vpn")
                 val activeNode = vpnObj?.optString("active_node_id", "") ?: ""
                 val status = vpnObj?.optString("status", "disconnected") ?: "disconnected"
@@ -112,19 +116,81 @@ class ApiClient {
                 val uptimeStr = if (hours > 0) "${hours}小时${mins}分" else "${mins}分钟"
 
                 val isConnected = status == "connected"
-                val info = MasterGatewayInfo(
+                val masterInfo = MasterGatewayInfo(
                     devName = "主网卡零号 (tun0)",
                     nodeName = if (activeNode.isNotEmpty()) activeNode else "未连接",
                     uptimeStr = uptimeStr,
                     status = if (isConnected) "断流检测通过" else "未连接",
                     isConnected = isConnected
                 )
-                Result.success(info)
+
+                // 2. Real-time Traffic snapshot
+                val trafficObj = json.optJSONObject("traffic")
+                val traffic = if (trafficObj != null) {
+                    LiveTrafficInfo(
+                        downloadSpeedBps = trafficObj.optLong("download_speed_bps", 0),
+                        uploadSpeedBps = trafficObj.optLong("upload_speed_bps", 0),
+                        totalDownloadBytes = trafficObj.optLong("total_download_bytes", 0),
+                        totalUploadBytes = trafficObj.optLong("total_upload_bytes", 0),
+                        activeConnections = trafficObj.optInt("active_connections", 0)
+                    )
+                } else {
+                    LiveTrafficInfo()
+                }
+
+                // 3. Tunnels
+                val tunnelsArr = json.optJSONArray("tunnels")
+                val tunnelsList = mutableListOf<TunnelItem>()
+                if (tunnelsArr != null) {
+                    for (i in 0 until tunnelsArr.length()) {
+                        val obj = tunnelsArr.getJSONObject(i)
+                        val id = obj.optString("id", "")
+                        val devName = obj.optString("dev_name", "tun$i")
+                        val devIndex = obj.optInt("dev_index", i)
+                        val tStatus = obj.optString("status", "connected")
+                        val uptime = obj.optLong("uptime", 0)
+                        val latency = obj.optInt("latency_ms", 38)
+                        val nodeObj = obj.optJSONObject("node")
+                        val ip = nodeObj?.optString("ip", "") ?: ""
+                        val port = nodeObj?.optInt("port", 443) ?: 443
+                        val country = nodeObj?.optString("country_long", nodeObj.optString("country_short", "JP")) ?: "JP"
+
+                        val unlockObj = obj.optJSONObject("unlock")
+                        val throughputBps = unlockObj?.optLong("throughput_bps", 0) ?: 0
+                        val throughputPassed = unlockObj?.optBoolean("throughput_passed", true) ?: true
+
+                        tunnelsList.add(
+                            TunnelItem(
+                                id = id,
+                                devName = devName,
+                                devIndex = devIndex,
+                                status = tStatus,
+                                uptimeSeconds = uptime,
+                                latencyMs = latency,
+                                nodeIp = ip,
+                                nodePort = port,
+                                country = country,
+                                throughputBps = throughputBps,
+                                throughputPassed = throughputPassed,
+                                openai = unlockObj?.optString("openai", "unknown") ?: "unknown",
+                                claude = unlockObj?.optString("claude", "unknown") ?: "unknown",
+                                gemini = unlockObj?.optString("gemini", "unknown") ?: "unknown",
+                                netflix = unlockObj?.optString("netflix", "unknown") ?: "unknown"
+                            )
+                        )
+                    }
+                }
+
+                Result.success(ServerStatusData(masterInfo, traffic, tunnelsList))
             }
         } catch (e: Exception) {
-            Log.e("ApiClient", "fetchStatus failed", e)
+            Log.e("ApiClient", "fetchServerStatus failed", e)
             Result.failure(e)
         }
+    }
+
+    suspend fun fetchStatus(profile: ServerProfile): Result<MasterGatewayInfo> = withContext(Dispatchers.IO) {
+        fetchServerStatus(profile).map { it.masterGateway }
     }
 
     suspend fun connectMaster(profile: ServerProfile, nodeId: String): Result<Boolean> = withContext(Dispatchers.IO) {

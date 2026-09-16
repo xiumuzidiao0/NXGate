@@ -34,31 +34,46 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.aimili.vpn.model.LiveTrafficInfo
+import com.aimili.vpn.model.SpeedUnit
 import kotlinx.coroutines.delay
-
-enum class SpeedUnit {
-    MB_S,
-    MBPS,
-    KB_S
-}
 
 /**
  * M3 Expressive Speed Waveform Card (height: 164dp, background: surfaceContainerHigh).
  * Displays live download & upload speed and smooth Bézier curve graph.
- * Tap toggles speed units (MB/s -> Mbps -> KB/s).
+ * Tap toggles speed units (Mb/s -> MB/s -> KB/s).
  */
 @Composable
 fun SpeedWaveformCard(
-    downSpeedStr: String = "12.4 Mb/s",
-    upSpeedStr: String = "1.2 Mb/s",
+    liveTraffic: LiveTrafficInfo = LiveTrafficInfo(),
+    downSpeedStr: String = "",
+    upSpeedStr: String = "",
     modifier: Modifier = Modifier
 ) {
-    var unit by remember { mutableStateOf(SpeedUnit.MB_S) }
+    var unit by remember { mutableStateOf(SpeedUnit.MBPS) }
 
     // Waveform live data points
     val wavePoints = remember {
         mutableStateOf(listOf(0.2f, 0.4f, 0.35f, 0.7f, 0.55f, 0.85f, 0.75f, 0.95f, 0.65f, 0.8f))
     }
+
+    // Reflect real throughput changes onto wave curve
+    LaunchedEffect(liveTraffic.downloadSpeedBps, liveTraffic.uploadSpeedBps) {
+        val totalSpeedBps = liveTraffic.downloadSpeedBps + liveTraffic.uploadSpeedBps
+        val targetHeight = when {
+            totalSpeedBps <= 0 -> 0.15f
+            totalSpeedBps < 100_000 -> 0.25f + (totalSpeedBps / 100_000f) * 0.15f
+            totalSpeedBps < 1_000_000 -> 0.40f + (totalSpeedBps / 1_000_000f) * 0.25f
+            else -> (0.65f + (totalSpeedBps / 10_000_000f) * 0.30f).coerceAtMost(0.95f)
+        }
+        val current = wavePoints.value.toMutableList()
+        current.removeAt(0)
+        current.add(targetHeight)
+        wavePoints.value = current
+    }
+
+    val displayDown = if (downSpeedStr.isNotEmpty()) downSpeedStr else liveTraffic.formattedDownSpeed(unit)
+    val displayUp = if (upSpeedStr.isNotEmpty()) upSpeedStr else liveTraffic.formattedUpSpeed(unit)
 
     val phaseAnim = remember { Animatable(0f) }
 
@@ -172,7 +187,7 @@ fun SpeedWaveformCard(
                     Text(
                         text = when (unit) {
                             SpeedUnit.MB_S -> "单位: MB/s"
-                            SpeedUnit.MBPS -> "单位: Mbps"
+                            SpeedUnit.MBPS -> "单位: Mb/s"
                             SpeedUnit.KB_S -> "单位: KB/s"
                         },
                         style = MaterialTheme.typography.labelSmall,
@@ -182,20 +197,20 @@ fun SpeedWaveformCard(
 
                 Column {
                     Text(
-                        text = "下行：$downSpeedStr",
+                        text = "下行：$displayDown",
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "上行：$upSpeedStr",
+                        text = "上行：$displayUp",
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        text = "数据来自服务器事件长连接，点击可切换速率单位。",
+                        text = "活跃连接：${liveTraffic.activeConnections} 个 • 实时采样率：3秒/次 • 点击卡片切换单位",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
