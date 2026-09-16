@@ -3,6 +3,7 @@ package com.aimili.vpn.ui.screens
 import android.widget.Toast
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -50,7 +52,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -80,6 +84,9 @@ fun NodeSquareScreen(
     val scope = rememberCoroutineScope()
     val scrollState = rememberScrollState()
 
+    val configuration = LocalConfiguration.current
+    val isTablet = configuration.screenWidthDp >= 600
+
     var searchQuery by remember { mutableStateOf("") }
     var isSearchActive by remember { mutableStateOf(false) }
 
@@ -90,6 +97,7 @@ fun NodeSquareScreen(
     var selectedSortOption by remember { mutableStateOf(sortOptions[0]) }
     var dropdownExpanded by remember { mutableStateOf(false) }
 
+    var selectedHeroNode by remember { mutableStateOf<NodeCandidate?>(null) }
     var isMainNodeStarred by remember { mutableStateOf(false) }
 
     var showBlacklistSheet by remember { mutableStateOf(false) }
@@ -101,7 +109,11 @@ fun NodeSquareScreen(
             listOf(
                 NodeCandidate("jp-1", "220.92.176.236", 1194, "JP", "日本", 32, "中华电信骨干", 96, 48200000, "residential", false, "unlocked", "unlocked", "unlocked", "unlocked"),
                 NodeCandidate("us-1", "142.250.80.45", 443, "US", "美国", 138, "Comcast", 82, 22500000, "hosting", false, "unlocked", "blocked", "unlocked", "unlocked"),
-                NodeCandidate("sg-1", "47.238.2.197", 1194, "SG", "新加坡", 68, "Singtel", 91, 35100000, "residential", false, "unlocked", "unlocked", "unlocked", "unlocked")
+                NodeCandidate("sg-1", "47.238.2.197", 1194, "SG", "新加坡", 68, "Singtel", 91, 35100000, "residential", false, "unlocked", "unlocked", "unlocked", "unlocked"),
+                NodeCandidate("jp-2", "118.238.203.45", 1194, "JP", "日本", 45, "NTT OCN", 94, 52000000, "residential", true, "unlocked", "unlocked", "unlocked", "unlocked"),
+                NodeCandidate("us-2", "198.51.100.22", 443, "US", "美国", 125, "Charter Spectrum", 88, 38000000, "residential", false, "unlocked", "unlocked", "unlocked", "unlocked"),
+                NodeCandidate("kr-1", "211.234.118.90", 1194, "KR", "韩国", 58, "Korea Telecom (KT)", 89, 44000000, "residential", false, "unlocked", "unlocked", "unlocked", "unlocked"),
+                NodeCandidate("de-1", "185.220.101.5", 443, "DE", "德国", 168, "Deutsche Telekom", 85, 29000000, "residential", false, "unlocked", "unlocked", "unlocked", "unlocked")
             )
         )
     }
@@ -158,8 +170,12 @@ fun NodeSquareScreen(
         list
     }
 
-    val primaryNode = filteredNodes.firstOrNull() ?: allNodes.first()
-    val secondaryNodes = if (filteredNodes.size > 1) filteredNodes.drop(1).take(2) else allNodes.drop(1).take(2)
+    val primaryNode = selectedHeroNode ?: filteredNodes.firstOrNull() ?: allNodes.first()
+    val remainingCandidates = if (filteredNodes.isNotEmpty()) {
+        filteredNodes.filter { it.id != primaryNode.id }
+    } else {
+        emptyList()
+    }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -194,213 +210,264 @@ fun NodeSquareScreen(
         },
         containerColor = MaterialTheme.colorScheme.surface
     ) { innerPadding ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
                 .padding(horizontal = 16.dp)
-                .verticalScroll(scrollState),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Spacer(Modifier.height(4.dp))
-
-            if (isSearchActive) {
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    label = { Text("搜索 IP / 国家代码 / 运营商") },
-                    singleLine = true,
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-
-            // 1. 横向排列的标签片组
-            Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                ConnectedChipGroup(
-                    chips = chipList,
-                    selectedIndex = selectedChipIndex,
-                    onSelected = { selectedChipIndex = it }
-                )
-            }
-
-            // 2. 描边下拉菜单（Exposed Dropdown Menu）
-            ExposedDropdownMenuBox(
-                expanded = dropdownExpanded,
-                onExpandedChange = { dropdownExpanded = !dropdownExpanded },
-                modifier = Modifier.fillMaxWidth()
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .widthIn(max = if (isTablet) 920.dp else 500.dp)
+                    .align(Alignment.TopCenter)
+                    .verticalScroll(scrollState),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                OutlinedTextField(
-                    value = selectedSortOption,
-                    onValueChange = {},
-                    readOnly = true,
-                    label = { Text("排序规则") },
-                    supportingText = { Text("按${selectedSortOption}优先显示候选节点") },
-                    leadingIcon = {
-                        Icon(Icons.AutoMirrored.Rounded.Sort, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                    },
-                    trailingIcon = {
-                        ExposedDropdownMenuDefaults.TrailingIcon(expanded = dropdownExpanded)
-                    },
+                Spacer(Modifier.height(4.dp))
+
+                if (isSearchActive) {
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        label = { Text("搜索 IP / 国家代码 / 运营商") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                // 1. 横向排列的标签片组
+                Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                    ConnectedChipGroup(
+                        chips = chipList,
+                        selectedIndex = selectedChipIndex,
+                        onSelected = { selectedChipIndex = it }
+                    )
+                }
+
+                // 2. 描边下拉菜单（Exposed Dropdown Menu）
+                ExposedDropdownMenuBox(
+                    expanded = dropdownExpanded,
+                    onExpandedChange = { dropdownExpanded = !dropdownExpanded },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    OutlinedTextField(
+                        value = selectedSortOption,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("排序规则") },
+                        supportingText = { Text("按${selectedSortOption}优先显示候选节点") },
+                        leadingIcon = {
+                            Icon(Icons.AutoMirrored.Rounded.Sort, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        },
+                        trailingIcon = {
+                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = dropdownExpanded)
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor(),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
+                    )
+
+                    ExposedDropdownMenu(
+                        expanded = dropdownExpanded,
+                        onDismissRequest = { dropdownExpanded = false }
+                    ) {
+                        sortOptions.forEach { option ->
+                            DropdownMenuItem(
+                                text = { Text(option, style = MaterialTheme.typography.bodyLarge) },
+                                onClick = {
+                                    selectedSortOption = option
+                                    dropdownExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                // 3. 填充卡片（高 174dp）: 当前选中的主力/最优节点展示
+                Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .menuAnchor(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
-                )
-
-                ExposedDropdownMenu(
-                    expanded = dropdownExpanded,
-                    onDismissRequest = { dropdownExpanded = false }
+                        .height(174.dp),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                    )
                 ) {
-                    sortOptions.forEach { option ->
-                        DropdownMenuItem(
-                            text = { Text(option, style = MaterialTheme.typography.bodyLarge) },
-                            onClick = {
-                                selectedSortOption = option
-                                dropdownExpanded = false
-                            }
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(20.dp),
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = primaryNode.title,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = primaryNode.description,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            lineHeight = MaterialTheme.typography.bodyMedium.lineHeight * 1.35f
                         )
                     }
                 }
-            }
 
-            // 3. 填充卡片（高 174dp）: 日本节点展示
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(174.dp),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
-                )
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(20.dp),
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    Text(
-                        text = primaryNode.title,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        text = primaryNode.description,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        lineHeight = MaterialTheme.typography.bodyMedium.lineHeight * 1.35f
-                    )
-                }
-            }
-
-            // 4. 按钮组: “设为星标”(色调，可切换为“已星标”填充) “拉起隧道”(填充) “手动屏蔽”(描边)
-            ConnectedButtonGroup(
-                items = listOf(
-                    ConnectedButtonItem(
-                        text = if (isMainNodeStarred || primaryNode.isFavorite) "已星标" else "设为星标",
-                        style = if (isMainNodeStarred || primaryNode.isFavorite) ConnectedButtonStyle.Filled else ConnectedButtonStyle.Tonal,
-                        icon = if (isMainNodeStarred || primaryNode.isFavorite) Icons.Rounded.Star else Icons.Rounded.StarBorder,
-                        onClick = {
-                            isMainNodeStarred = !isMainNodeStarred
-                            if (activeServer != null) {
-                                scope.launch {
-                                    AimiliApplication.instance.apiClient.toggleFavorite(activeServer, primaryNode.id)
+                // 4. 按钮组: “设为星标”(色调，可切换为“已星标”填充) “拉起隧道”(填充) “手动屏蔽”(描边)
+                ConnectedButtonGroup(
+                    items = listOf(
+                        ConnectedButtonItem(
+                            text = if (isMainNodeStarred || primaryNode.isFavorite) "已星标" else "设为星标",
+                            style = if (isMainNodeStarred || primaryNode.isFavorite) ConnectedButtonStyle.Filled else ConnectedButtonStyle.Tonal,
+                            icon = if (isMainNodeStarred || primaryNode.isFavorite) Icons.Rounded.Star else Icons.Rounded.StarBorder,
+                            onClick = {
+                                isMainNodeStarred = !isMainNodeStarred
+                                if (activeServer != null) {
+                                    scope.launch {
+                                        AimiliApplication.instance.apiClient.toggleFavorite(activeServer, primaryNode.id)
+                                    }
+                                }
+                                val msg = if (isMainNodeStarred) "已将 [${primaryNode.ip}] 设为星标置顶！" else "已取消星标"
+                                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                            }
+                        ),
+                        ConnectedButtonItem(
+                            text = "拉起隧道",
+                            style = ConnectedButtonStyle.Filled,
+                            onClick = {
+                                if (activeServer != null) {
+                                    scope.launch {
+                                        AimiliApplication.instance.apiClient.startTunnel(activeServer, primaryNode.id)
+                                        Toast.makeText(context, "已在 [${activeServer.name}] 为该节点拉起独立并发隧道！", Toast.LENGTH_SHORT).show()
+                                    }
                                 }
                             }
-                            val msg = if (isMainNodeStarred) "已将 [${primaryNode.ip}] 设为星标置顶！" else "已取消星标"
-                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-                        }
-                    ),
-                    ConnectedButtonItem(
-                        text = "拉起隧道",
-                        style = ConnectedButtonStyle.Filled,
-                        onClick = {
-                            if (activeServer != null) {
-                                scope.launch {
-                                    AimiliApplication.instance.apiClient.startTunnel(activeServer, primaryNode.id)
-                                    Toast.makeText(context, "已在 [${activeServer.name}] 为该节点拉起独立并发隧道！", Toast.LENGTH_SHORT).show()
-                                }
+                        ),
+                        ConnectedButtonItem(
+                            text = "手动屏蔽",
+                            style = ConnectedButtonStyle.Outlined,
+                            onClick = {
+                                Toast.makeText(context, "已将节点 [${primaryNode.ip}] 加入隔离屏蔽库", Toast.LENGTH_SHORT).show()
                             }
-                        }
-                    ),
-                    ConnectedButtonItem(
-                        text = "手动屏蔽",
-                        style = ConnectedButtonStyle.Outlined,
-                        onClick = {
-                            Toast.makeText(context, "已将节点 [${primaryNode.ip}] 加入隔离屏蔽库", Toast.LENGTH_SHORT).show()
-                        }
+                        )
                     )
                 )
-            )
 
-            // 5. 2项列表: 次选候选节点
-            val secondaryCount = secondaryNodes.size
-            if (secondaryCount > 0) {
-                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    secondaryNodes.forEachIndexed { index, node ->
-                        ConnectedListItem(
-                            index = index,
-                            total = secondaryCount,
-                            headline = node.title,
-                            supportingText = "速度 ${node.speedMbStr}，信誉评分 ${node.score}，${node.unlockDisplay}",
-                            leadingIcon = Icons.Rounded.Public,
-                            trailingContent = {
-                                IconButton(onClick = {
-                                    if (activeServer != null) {
-                                        scope.launch {
-                                            if (index == 0) {
-                                                AimiliApplication.instance.apiClient.toggleFavorite(activeServer, node.id)
-                                                Toast.makeText(context, "已将该节点添加至个人星标库", Toast.LENGTH_SHORT).show()
-                                            } else {
-                                                AimiliApplication.instance.apiClient.startTunnel(activeServer, node.id)
-                                                Toast.makeText(context, "正在为节点 [${node.ip}] 分配虚拟网卡建立独立出口...", Toast.LENGTH_SHORT).show()
+                // 5. 全量候选节点列表展示（真正列出所有过滤节点，点击任意项可置为主卡片或拉起独立出口）
+                if (remainingCandidates.isEmpty()) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerLow
+                    ) {
+                        Text(
+                            text = "未找到其他符合条件的候选节点，请尝试切换筛选标签或点击下方全量并发测速。",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(16.dp)
+                        )
+                    }
+                } else {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "全量可用候选节点 (${filteredNodes.size} 个)",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = "轻点即可切换为主卡片",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+
+                    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        remainingCandidates.forEachIndexed { index, node ->
+                            ConnectedListItem(
+                                index = index,
+                                total = remainingCandidates.size,
+                                headline = node.title,
+                                supportingText = "速度 ${node.speedMbStr}，信誉评分 ${node.score}，${node.unlockDisplay}",
+                                leadingIcon = Icons.Rounded.Public,
+                                trailingContent = {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        IconButton(onClick = {
+                                            if (activeServer != null) {
+                                                scope.launch {
+                                                    AimiliApplication.instance.apiClient.toggleFavorite(activeServer, node.id)
+                                                    allNodes = allNodes.map { if (it.id == node.id) it.copy(isFavorite = !it.isFavorite) else it }
+                                                    Toast.makeText(context, if (!node.isFavorite) "已星标 [${node.ip}]" else "已取消星标", Toast.LENGTH_SHORT).show()
+                                                }
                                             }
+                                        }) {
+                                            Icon(
+                                                imageVector = if (node.isFavorite) Icons.Rounded.Star else Icons.Rounded.StarBorder,
+                                                contentDescription = "星标",
+                                                tint = if (node.isFavorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        IconButton(onClick = {
+                                            if (activeServer != null) {
+                                                scope.launch {
+                                                    AimiliApplication.instance.apiClient.startTunnel(activeServer, node.id)
+                                                    Toast.makeText(context, "正在为节点 [${node.ip}] 分配虚拟网卡建立独立出口...", Toast.LENGTH_SHORT).show()
+                                                }
+                                            }
+                                        }) {
+                                            Icon(
+                                                imageVector = Icons.Rounded.RocketLaunch,
+                                                contentDescription = "拉起网卡",
+                                                tint = MaterialTheme.colorScheme.secondary
+                                            )
                                         }
                                     }
-                                }) {
-                                    Icon(
-                                        imageVector = if (index == 0) Icons.Rounded.StarBorder else Icons.Rounded.RocketLaunch,
-                                        contentDescription = null,
-                                        tint = if (index == 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
-                                    )
+                                },
+                                onClick = {
+                                    selectedHeroNode = node
+                                    isMainNodeStarred = node.isFavorite
+                                    Toast.makeText(context, "已将 [${node.ip}] 设为主卡片，可直接操作星标或拉起", Toast.LENGTH_SHORT).show()
                                 }
-                            },
-                            onClick = {
-                                Toast.makeText(context, "节点: ${node.ip}:${node.port} (${node.isp})", Toast.LENGTH_SHORT).show()
-                            }
-                        )
+                            )
+                        }
                     }
                 }
-            }
 
-            // 6. 按钮组: “全量并发测速”(填充) “屏蔽库管理”(色调)
-            ConnectedButtonGroup(
-                items = listOf(
-                    ConnectedButtonItem(
-                        text = "全量并发测速",
-                        style = ConnectedButtonStyle.Filled,
-                        onClick = {
-                            if (activeServer != null) {
-                                scope.launch {
-                                    AimiliApplication.instance.apiClient.probeNodes(activeServer)
-                                    Toast.makeText(context, "已触发远端对全量候选节点进行并发敲门与测速！", Toast.LENGTH_SHORT).show()
+                // 6. 按钮组: “全量并发测速”(填充) “屏蔽库管理”(色调)
+                ConnectedButtonGroup(
+                    items = listOf(
+                        ConnectedButtonItem(
+                            text = "全量并发测速",
+                            style = ConnectedButtonStyle.Filled,
+                            onClick = {
+                                if (activeServer != null) {
+                                    scope.launch {
+                                        AimiliApplication.instance.apiClient.probeNodes(activeServer)
+                                        Toast.makeText(context, "已触发远端对全量候选节点进行并发敲门与测速！", Toast.LENGTH_SHORT).show()
+                                    }
                                 }
                             }
-                        }
-                    ),
-                    ConnectedButtonItem(
-                        text = "屏蔽库管理",
-                        style = ConnectedButtonStyle.Tonal,
-                        onClick = { showBlacklistSheet = true }
+                        ),
+                        ConnectedButtonItem(
+                            text = "屏蔽库管理",
+                            style = ConnectedButtonStyle.Tonal,
+                            onClick = { showBlacklistSheet = true }
+                        )
                     )
                 )
-            )
 
-            Spacer(Modifier.height(80.dp))
+                Spacer(Modifier.height(80.dp))
+            }
         }
     }
 

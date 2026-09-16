@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -53,6 +54,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -78,6 +80,9 @@ fun SettingsSecurityScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val scrollState = rememberScrollState()
+
+    val configuration = LocalConfiguration.current
+    val isTablet = configuration.screenWidthDp >= 600
 
     // Tracking which server is being edited (null = adding a new server)
     var editingServerId by remember { mutableStateOf<String?>(servers.firstOrNull()?.id) }
@@ -147,217 +152,243 @@ fun SettingsSecurityScreen(
                 )
             )
         },
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = {
+                    editingServerId = null
+                    inputName = "新服务器网关"
+                    inputHost = ""
+                    inputPort = "8787"
+                    inputPath = "enter"
+                    inputUser = "admin"
+                    inputPass = ""
+                    Toast.makeText(context, "已切换为新增模式，可在下方表单填写或扫码导入！", Toast.LENGTH_SHORT).show()
+                },
+                shape = RoundedCornerShape(16.dp),
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+                elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 6.dp),
+                modifier = Modifier.padding(bottom = 16.dp, end = 16.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Add,
+                    contentDescription = "新增服务器",
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+        },
         containerColor = MaterialTheme.colorScheme.surface
     ) { innerPadding ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
                 .padding(horizontal = 16.dp)
-                .verticalScroll(scrollState),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Spacer(Modifier.height(4.dp))
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .widthIn(max = if (isTablet) 840.dp else 500.dp)
+                    .align(Alignment.TopCenter)
+                    .verticalScroll(scrollState),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Spacer(Modifier.height(4.dp))
 
-            // 1. 动态已纳管服务器列表（支持任意服务器的连通性测试、点击载入编辑、删除确认）
-            if (servers.isEmpty()) {
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerLow
-                ) {
-                    Text(
-                        text = "暂无已纳管的 VPS，请点击下方表单或右上角二维码扫码添加服务器",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(16.dp)
+                // 1. 动态已纳管服务器列表（支持任意服务器的连通性测试、点击载入编辑、删除确认）
+                if (servers.isEmpty()) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerLow
+                    ) {
+                        Text(
+                            text = "暂无已纳管的 VPS，请点击下方表单或右上角二维码扫码添加服务器",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(16.dp)
+                        )
+                    }
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        servers.forEachIndexed { index, server ->
+                            ConnectedListItem(
+                                index = index,
+                                total = servers.size,
+                                headline = server.name,
+                                supportingText = "地址 ${server.host}，端口 ${server.port}，${if (server.isOnline) "连通正常 (${server.latencyMs}ms)" else "离线/待测"}",
+                                leadingIcon = Icons.Rounded.Dns,
+                                trailingContent = {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        IconButton(onClick = {
+                                            scope.launch {
+                                                val res = AimiliApplication.instance.apiClient.testConnection(server)
+                                                if (res.isSuccess) {
+                                                    AimiliApplication.instance.serverStore.updateServer(res.getOrNull() ?: server)
+                                                    Toast.makeText(context, "✅ [${server.name}] 测活通过！延迟: ${server.latencyMs}ms", Toast.LENGTH_SHORT).show()
+                                                } else {
+                                                    Toast.makeText(context, "⚠️ [${server.name}] 测活失败: ${res.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
+                                                }
+                                            }
+                                        }) {
+                                            Icon(Icons.Rounded.NetworkPing, contentDescription = "测试连通性", tint = MaterialTheme.colorScheme.primary)
+                                        }
+                                        IconButton(onClick = {
+                                            deleteCandidate = server
+                                        }) {
+                                            Icon(Icons.Rounded.Delete, contentDescription = "删除服务器", tint = MaterialTheme.colorScheme.error)
+                                        }
+                                    }
+                                },
+                                onClick = {
+                                    editingServerId = server.id
+                                    inputName = server.name
+                                    inputHost = server.host
+                                    inputPort = server.port.toString()
+                                    inputPath = server.path
+                                    inputUser = server.username
+                                    inputPass = server.password
+                                    selectedProtocolChipIndex = if (server.isTls) 1 else 0
+                                    Toast.makeText(context, "已载入 [${server.name}] 参数至下方表单，可直接修改或保存", Toast.LENGTH_SHORT).show()
+                                }
+                            )
+                        }
+                    }
+                }
+
+                // 2. 4个横向相连的描边按钮组: “服务器备注名称”“主机地址或域名”“网页端口”“安全访问路径”
+                ConnectedButtonGroup(
+                    items = listOf(
+                        ConnectedButtonItem("服务器备注", ConnectedButtonStyle.Outlined) {},
+                        ConnectedButtonItem("主机地址", ConnectedButtonStyle.Outlined) {},
+                        ConnectedButtonItem("网页端口", ConnectedButtonStyle.Outlined) {},
+                        ConnectedButtonItem("安全路径", ConnectedButtonStyle.Outlined) {}
+                    )
+                )
+
+                // Dynamic editable fields based on current input
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = inputName,
+                        onValueChange = { inputName = it },
+                        label = { Text("服务器备注名称") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = inputHost,
+                            onValueChange = { inputHost = it },
+                            label = { Text("主机地址或域名") },
+                            singleLine = true,
+                            shape = RoundedCornerShape(16.dp),
+                            modifier = Modifier.weight(2f)
+                        )
+                        OutlinedTextField(
+                            value = inputPort,
+                            onValueChange = { inputPort = it },
+                            label = { Text("Web 端口") },
+                            singleLine = true,
+                            shape = RoundedCornerShape(16.dp),
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = inputPath,
+                            onValueChange = { inputPath = it },
+                            label = { Text("安全访问路径") },
+                            singleLine = true,
+                            shape = RoundedCornerShape(16.dp),
+                            modifier = Modifier.weight(1f)
+                        )
+                        OutlinedTextField(
+                            value = inputUser,
+                            onValueChange = { inputUser = it },
+                            label = { Text("Web 管理账号") },
+                            singleLine = true,
+                            shape = RoundedCornerShape(16.dp),
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    OutlinedTextField(
+                        value = inputPass,
+                        onValueChange = { inputPass = it },
+                        label = { Text("Web 管理密码") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        singleLine = true,
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
-            } else {
-                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    servers.forEachIndexed { index, server ->
-                        ConnectedListItem(
-                            index = index,
-                            total = servers.size,
-                            headline = server.name,
-                            supportingText = "地址 ${server.host}，端口 ${server.port}，${if (server.isOnline) "连通正常 (${server.latencyMs}ms)" else "离线/待测"}",
-                            leadingIcon = Icons.Rounded.Dns,
-                            trailingContent = {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    IconButton(onClick = {
-                                        scope.launch {
-                                            val res = AimiliApplication.instance.apiClient.testConnection(server)
-                                            if (res.isSuccess) {
-                                                AimiliApplication.instance.serverStore.updateServer(res.getOrNull() ?: server)
-                                                Toast.makeText(context, "✅ [${server.name}] 测活通过！延迟: ${server.latencyMs}ms", Toast.LENGTH_SHORT).show()
-                                            } else {
-                                                Toast.makeText(context, "⚠️ [${server.name}] 测活失败: ${res.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
-                                            }
-                                        }
-                                    }) {
-                                        Icon(Icons.Rounded.NetworkPing, contentDescription = "测试连通性", tint = MaterialTheme.colorScheme.primary)
-                                    }
-                                    IconButton(onClick = {
-                                        deleteCandidate = server
-                                    }) {
-                                        Icon(Icons.Rounded.Delete, contentDescription = "删除服务器", tint = MaterialTheme.colorScheme.error)
-                                    }
+
+                // 3. 标签片组: “明文连接” “加密连接”(选中)
+                ConnectedChipGroup(
+                    chips = protocolChips,
+                    selectedIndex = selectedProtocolChipIndex,
+                    onSelected = { selectedProtocolChipIndex = it }
+                )
+
+                // 4. “连通性测试并保存” 填充按钮（宽 380dp，带 check_circle 图标）
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Button(
+                        onClick = {
+                            isTestingConnection = true
+                            val targetId = editingServerId ?: UUID.randomUUID().toString()
+                            val newServer = ServerProfile(
+                                id = targetId,
+                                name = inputName.trim().ifEmpty { "AimiliVPN 网关" },
+                                host = inputHost.trim().ifEmpty { "127.0.0.1" },
+                                port = inputPort.toIntOrNull() ?: 8787,
+                                path = inputPath.trim().trim('/'),
+                                username = inputUser.trim(),
+                                password = inputPass.trim(),
+                                isTls = selectedProtocolChipIndex == 1
+                            )
+                            scope.launch {
+                                val res = AimiliApplication.instance.apiClient.testConnection(newServer)
+                                isTestingConnection = false
+                                val profileToSave = res.getOrNull() ?: newServer
+
+                                if (editingServerId != null && servers.any { it.id == editingServerId }) {
+                                    AimiliApplication.instance.serverStore.updateServer(profileToSave)
+                                    Toast.makeText(context, "✅ [${profileToSave.name}] 配置已更新并安全保存！", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    AimiliApplication.instance.serverStore.addServer(profileToSave)
+                                    editingServerId = profileToSave.id
+                                    Toast.makeText(context, "✅ 新服务器 [${profileToSave.name}] 已成功添加！", Toast.LENGTH_SHORT).show()
                                 }
-                            },
-                            onClick = {
-                                editingServerId = server.id
-                                inputName = server.name
-                                inputHost = server.host
-                                inputPort = server.port.toString()
-                                inputPath = server.path
-                                inputUser = server.username
-                                inputPass = server.password
-                                selectedProtocolChipIndex = if (server.isTls) 1 else 0
-                                Toast.makeText(context, "已载入 [${server.name}] 参数至下方表单，可直接修改或保存", Toast.LENGTH_SHORT).show()
                             }
+                        },
+                        modifier = Modifier
+                            .widthIn(max = 380.dp)
+                            .fillMaxWidth()
+                            .height(56.dp),
+                        shape = RoundedCornerShape(50),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.CheckCircle,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = if (isTestingConnection) "正在测试连通性..." else "连通性测试并保存",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold
                         )
                     }
                 }
-            }
 
-            // 2. 4个横向相连的描边按钮组: “服务器备注名称”“主机地址或域名”“网页端口”“安全访问路径”
-            ConnectedButtonGroup(
-                items = listOf(
-                    ConnectedButtonItem("服务器备注", ConnectedButtonStyle.Outlined) {},
-                    ConnectedButtonItem("主机地址", ConnectedButtonStyle.Outlined) {},
-                    ConnectedButtonItem("网页端口", ConnectedButtonStyle.Outlined) {},
-                    ConnectedButtonItem("安全路径", ConnectedButtonStyle.Outlined) {}
-                )
-            )
-
-            // Dynamic editable fields based on current input
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = inputName,
-                    onValueChange = { inputName = it },
-                    label = { Text("服务器备注名称") },
-                    singleLine = true,
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = inputHost,
-                        onValueChange = { inputHost = it },
-                        label = { Text("主机地址或域名") },
-                        singleLine = true,
-                        shape = RoundedCornerShape(16.dp),
-                        modifier = Modifier.weight(2f)
-                    )
-                    OutlinedTextField(
-                        value = inputPort,
-                        onValueChange = { inputPort = it },
-                        label = { Text("Web 端口") },
-                        singleLine = true,
-                        shape = RoundedCornerShape(16.dp),
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = inputPath,
-                        onValueChange = { inputPath = it },
-                        label = { Text("安全访问路径") },
-                        singleLine = true,
-                        shape = RoundedCornerShape(16.dp),
-                        modifier = Modifier.weight(1f)
-                    )
-                    OutlinedTextField(
-                        value = inputUser,
-                        onValueChange = { inputUser = it },
-                        label = { Text("Web 管理账号") },
-                        singleLine = true,
-                        shape = RoundedCornerShape(16.dp),
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-                OutlinedTextField(
-                    value = inputPass,
-                    onValueChange = { inputPass = it },
-                    label = { Text("Web 管理密码") },
-                    visualTransformation = PasswordVisualTransformation(),
-                    singleLine = true,
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-
-            // 3. 标签片组: “明文连接” “加密连接”(选中)
-            ConnectedChipGroup(
-                chips = protocolChips,
-                selectedIndex = selectedProtocolChipIndex,
-                onSelected = { selectedProtocolChipIndex = it }
-            )
-
-            // 4. “连通性测试并保存” 填充按钮（宽 380dp，带 check_circle 图标）
-            Box(
-                modifier = Modifier.fillMaxWidth(),
-                contentAlignment = Alignment.Center
-            ) {
-                Button(
-                    onClick = {
-                        isTestingConnection = true
-                        val targetId = editingServerId ?: UUID.randomUUID().toString()
-                        val newServer = ServerProfile(
-                            id = targetId,
-                            name = inputName.trim().ifEmpty { "AimiliVPN 网关" },
-                            host = inputHost.trim().ifEmpty { "127.0.0.1" },
-                            port = inputPort.toIntOrNull() ?: 8787,
-                            path = inputPath.trim().trim('/'),
-                            username = inputUser.trim(),
-                            password = inputPass.trim(),
-                            isTls = selectedProtocolChipIndex == 1
-                        )
-                        scope.launch {
-                            val res = AimiliApplication.instance.apiClient.testConnection(newServer)
-                            isTestingConnection = false
-                            val profileToSave = res.getOrNull() ?: newServer
-
-                            if (editingServerId != null && servers.any { it.id == editingServerId }) {
-                                AimiliApplication.instance.serverStore.updateServer(profileToSave)
-                                Toast.makeText(context, "✅ [${profileToSave.name}] 配置已更新并安全保存！", Toast.LENGTH_SHORT).show()
-                            } else {
-                                AimiliApplication.instance.serverStore.addServer(profileToSave)
-                                editingServerId = profileToSave.id
-                                Toast.makeText(context, "✅ 新服务器 [${profileToSave.name}] 已成功添加！", Toast.LENGTH_SHORT).show()
-                            }
-                        }
-                    },
-                    modifier = Modifier
-                        .width(380.dp)
-                        .height(56.dp),
-                    shape = RoundedCornerShape(50),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary
-                    )
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.CheckCircle,
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        text = if (isTestingConnection) "正在测试连通性..." else "连通性测试并保存",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
-
-            // 5. 2项列表: “生物识别安全锁” 与 “明文传输风险提醒”
-            // 内部叠放: 中部靠右放置 add 图标的填充 FAB
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp)
-            ) {
+                // 5. 2项列表: “生物识别安全锁” 与 “明文传输风险提醒” (不再与 FAB 重叠遮挡)
                 Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     // Item 1: 生物识别安全锁
                     ConnectedListItem(
@@ -414,35 +445,8 @@ fun SettingsSecurityScreen(
                     )
                 }
 
-                // FAB: 点击清空表单，进入纯净新增服务器模式
-                FloatingActionButton(
-                    onClick = {
-                        editingServerId = null
-                        inputName = "新服务器网关"
-                        inputHost = ""
-                        inputPort = "8787"
-                        inputPath = "enter"
-                        inputUser = "admin"
-                        inputPass = ""
-                        Toast.makeText(context, "已切换为新增模式，请输入新服务器参数并测试保存", Toast.LENGTH_SHORT).show()
-                    },
-                    shape = RoundedCornerShape(16.dp),
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                    elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 4.dp),
-                    modifier = Modifier
-                        .align(Alignment.CenterEnd)
-                        .padding(end = 12.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Add,
-                        contentDescription = "新增服务器",
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
+                Spacer(Modifier.height(80.dp))
             }
-
-            Spacer(Modifier.height(80.dp))
         }
     }
 
