@@ -1,5 +1,6 @@
 package com.aimili.vpn.ui.screens
 
+import android.content.res.Configuration
 import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -33,6 +34,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.FloatingActionButtonDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -82,7 +84,9 @@ fun SettingsSecurityScreen(
     val scrollState = rememberScrollState()
 
     val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
     val isTablet = configuration.screenWidthDp >= 600
+    val isTabletLandscape = isTablet && isLandscape
 
     // Tracking which server is being edited (null = adding a new server)
     var editingServerId by remember { mutableStateOf<String?>(servers.firstOrNull()?.id) }
@@ -162,7 +166,7 @@ fun SettingsSecurityScreen(
                     inputPath = "enter"
                     inputUser = "admin"
                     inputPass = ""
-                    Toast.makeText(context, "已切换为新增模式，可在下方表单填写或扫码导入！", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "已切换为新增模式，可在右/下方表单填写或扫码导入！", Toast.LENGTH_SHORT).show()
                 },
                 shape = RoundedCornerShape(16.dp),
                 containerColor = MaterialTheme.colorScheme.primary,
@@ -188,261 +192,518 @@ fun SettingsSecurityScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .widthIn(max = if (isTablet) 840.dp else 500.dp)
+                    .widthIn(max = if (isTabletLandscape) 1100.dp else if (isTablet) 840.dp else 500.dp)
                     .align(Alignment.TopCenter)
                     .verticalScroll(scrollState),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Spacer(Modifier.height(4.dp))
 
-                // 1. 动态已纳管服务器列表（支持任意服务器的连通性测试、点击载入编辑、删除确认）
-                if (servers.isEmpty()) {
-                    Surface(
+                if (isTabletLandscape) {
+                    // ==================== 平板横屏：左右双列工作台布局 ====================
+                    Row(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(16.dp),
-                        color = MaterialTheme.colorScheme.surfaceContainerLow
+                        horizontalArrangement = Arrangement.spacedBy(20.dp)
                     ) {
-                        Text(
-                            text = "暂无已纳管的 VPS，请点击下方表单或右上角二维码扫码添加服务器",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(16.dp)
-                        )
-                    }
-                } else {
-                    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                        servers.forEachIndexed { index, server ->
-                            ConnectedListItem(
-                                index = index,
-                                total = servers.size,
-                                headline = server.name,
-                                supportingText = "地址 ${server.host}，端口 ${server.port}，${if (server.isOnline) "连通正常 (${server.latencyMs}ms)" else "离线/待测"}",
-                                leadingIcon = Icons.Rounded.Dns,
-                                trailingContent = {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        IconButton(onClick = {
-                                            scope.launch {
-                                                val res = AimiliApplication.instance.apiClient.testConnection(server)
-                                                if (res.isSuccess) {
-                                                    AimiliApplication.instance.serverStore.updateServer(res.getOrNull() ?: server)
-                                                    Toast.makeText(context, "✅ [${server.name}] 测活通过！延迟: ${server.latencyMs}ms", Toast.LENGTH_SHORT).show()
-                                                } else {
-                                                    Toast.makeText(context, "⚠️ [${server.name}] 测活失败: ${res.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
+                        // 左侧：服务器管理列表
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Text(
+                                text = "已纳管网关列表 (${servers.size} 台)",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+
+                            if (servers.isEmpty()) {
+                                Surface(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(16.dp),
+                                    color = MaterialTheme.colorScheme.surfaceContainerLow
+                                ) {
+                                    Text(
+                                        text = "暂无已纳管的 VPS，请在右侧表单填写或右上角扫码添加。",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(16.dp)
+                                    )
+                                }
+                            } else {
+                                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                    servers.forEachIndexed { index, server ->
+                                        ConnectedListItem(
+                                            index = index,
+                                            total = servers.size,
+                                            headline = server.name,
+                                            supportingText = "地址 ${server.host}:${server.port}，${if (server.isOnline) "连通 (${server.latencyMs}ms)" else "待测"}",
+                                            leadingIcon = Icons.Rounded.Dns,
+                                            trailingContent = {
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    IconButton(onClick = {
+                                                        scope.launch {
+                                                            val res = AimiliApplication.instance.apiClient.testConnection(server)
+                                                            if (res.isSuccess) {
+                                                                AimiliApplication.instance.serverStore.updateServer(res.getOrNull() ?: server)
+                                                                Toast.makeText(context, "✅ [${server.name}] 测活通过！延迟: ${server.latencyMs}ms", Toast.LENGTH_SHORT).show()
+                                                            } else {
+                                                                Toast.makeText(context, "⚠️ [${server.name}] 测活失败: ${res.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
+                                                            }
+                                                        }
+                                                    }) {
+                                                        Icon(Icons.Rounded.NetworkPing, contentDescription = "测试连通性", tint = MaterialTheme.colorScheme.primary)
+                                                    }
+                                                    IconButton(onClick = {
+                                                        deleteCandidate = server
+                                                    }) {
+                                                        Icon(Icons.Rounded.Delete, contentDescription = "删除服务器", tint = MaterialTheme.colorScheme.error)
+                                                    }
                                                 }
+                                            },
+                                            onClick = {
+                                                editingServerId = server.id
+                                                inputName = server.name
+                                                inputHost = server.host
+                                                inputPort = server.port.toString()
+                                                inputPath = server.path
+                                                inputUser = server.username
+                                                inputPass = server.password
+                                                selectedProtocolChipIndex = if (server.isTls) 1 else 0
+                                                Toast.makeText(context, "已载入 [${server.name}] 至右侧表单", Toast.LENGTH_SHORT).show()
                                             }
-                                        }) {
-                                            Icon(Icons.Rounded.NetworkPing, contentDescription = "测试连通性", tint = MaterialTheme.colorScheme.primary)
-                                        }
-                                        IconButton(onClick = {
-                                            deleteCandidate = server
-                                        }) {
-                                            Icon(Icons.Rounded.Delete, contentDescription = "删除服务器", tint = MaterialTheme.colorScheme.error)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        // 右侧：服务器配置表单与安全偏好
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(14.dp)
+                        ) {
+                            Text(
+                                text = if (editingServerId != null) "编辑服务器参数" else "新增服务器参数",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+
+                            OutlinedTextField(
+                                value = inputName,
+                                onValueChange = { inputName = it },
+                                label = { Text("服务器备注名称") },
+                                singleLine = true,
+                                shape = RoundedCornerShape(16.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                OutlinedTextField(
+                                    value = inputHost,
+                                    onValueChange = { inputHost = it },
+                                    label = { Text("主机地址或域名") },
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(16.dp),
+                                    modifier = Modifier.weight(2f)
+                                )
+                                OutlinedTextField(
+                                    value = inputPort,
+                                    onValueChange = { inputPort = it },
+                                    label = { Text("Web 端口") },
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(16.dp),
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                OutlinedTextField(
+                                    value = inputPath,
+                                    onValueChange = { inputPath = it },
+                                    label = { Text("安全访问路径") },
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(16.dp),
+                                    modifier = Modifier.weight(1f)
+                                )
+                                OutlinedTextField(
+                                    value = inputUser,
+                                    onValueChange = { inputUser = it },
+                                    label = { Text("Web 管理账号") },
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(16.dp),
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                            OutlinedTextField(
+                                value = inputPass,
+                                onValueChange = { inputPass = it },
+                                label = { Text("Web 管理密码") },
+                                visualTransformation = PasswordVisualTransformation(),
+                                singleLine = true,
+                                shape = RoundedCornerShape(16.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            ConnectedChipGroup(
+                                chips = protocolChips,
+                                selectedIndex = selectedProtocolChipIndex,
+                                onSelected = { selectedProtocolChipIndex = it }
+                            )
+
+                            Button(
+                                onClick = {
+                                    isTestingConnection = true
+                                    val targetId = editingServerId ?: UUID.randomUUID().toString()
+                                    val newServer = ServerProfile(
+                                        id = targetId,
+                                        name = inputName.trim().ifEmpty { "AimiliVPN 网关" },
+                                        host = inputHost.trim().ifEmpty { "127.0.0.1" },
+                                        port = inputPort.toIntOrNull() ?: 8787,
+                                        path = inputPath.trim().trim('/'),
+                                        username = inputUser.trim(),
+                                        password = inputPass.trim(),
+                                        isTls = selectedProtocolChipIndex == 1
+                                    )
+                                    scope.launch {
+                                        val res = AimiliApplication.instance.apiClient.testConnection(newServer)
+                                        isTestingConnection = false
+                                        val profileToSave = res.getOrNull() ?: newServer
+
+                                        if (editingServerId != null && servers.any { it.id == editingServerId }) {
+                                            AimiliApplication.instance.serverStore.updateServer(profileToSave)
+                                            Toast.makeText(context, "✅ [${profileToSave.name}] 配置已更新并安全保存！", Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            AimiliApplication.instance.serverStore.addServer(profileToSave)
+                                            editingServerId = profileToSave.id
+                                            Toast.makeText(context, "✅ 新服务器 [${profileToSave.name}] 已成功添加！", Toast.LENGTH_SHORT).show()
                                         }
                                     }
                                 },
-                                onClick = {
-                                    editingServerId = server.id
-                                    inputName = server.name
-                                    inputHost = server.host
-                                    inputPort = server.port.toString()
-                                    inputPath = server.path
-                                    inputUser = server.username
-                                    inputPass = server.password
-                                    selectedProtocolChipIndex = if (server.isTls) 1 else 0
-                                    Toast.makeText(context, "已载入 [${server.name}] 参数至下方表单，可直接修改或保存", Toast.LENGTH_SHORT).show()
-                                }
-                            )
-                        }
-                    }
-                }
-
-                // 2. 4个横向相连的描边按钮组: “服务器备注名称”“主机地址或域名”“网页端口”“安全访问路径”
-                ConnectedButtonGroup(
-                    items = listOf(
-                        ConnectedButtonItem("服务器备注", ConnectedButtonStyle.Outlined) {},
-                        ConnectedButtonItem("主机地址", ConnectedButtonStyle.Outlined) {},
-                        ConnectedButtonItem("网页端口", ConnectedButtonStyle.Outlined) {},
-                        ConnectedButtonItem("安全路径", ConnectedButtonStyle.Outlined) {}
-                    )
-                )
-
-                // Dynamic editable fields based on current input
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = inputName,
-                        onValueChange = { inputName = it },
-                        label = { Text("服务器备注名称") },
-                        singleLine = true,
-                        shape = RoundedCornerShape(16.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(
-                            value = inputHost,
-                            onValueChange = { inputHost = it },
-                            label = { Text("主机地址或域名") },
-                            singleLine = true,
-                            shape = RoundedCornerShape(16.dp),
-                            modifier = Modifier.weight(2f)
-                        )
-                        OutlinedTextField(
-                            value = inputPort,
-                            onValueChange = { inputPort = it },
-                            label = { Text("Web 端口") },
-                            singleLine = true,
-                            shape = RoundedCornerShape(16.dp),
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(
-                            value = inputPath,
-                            onValueChange = { inputPath = it },
-                            label = { Text("安全访问路径") },
-                            singleLine = true,
-                            shape = RoundedCornerShape(16.dp),
-                            modifier = Modifier.weight(1f)
-                        )
-                        OutlinedTextField(
-                            value = inputUser,
-                            onValueChange = { inputUser = it },
-                            label = { Text("Web 管理账号") },
-                            singleLine = true,
-                            shape = RoundedCornerShape(16.dp),
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                    OutlinedTextField(
-                        value = inputPass,
-                        onValueChange = { inputPass = it },
-                        label = { Text("Web 管理密码") },
-                        visualTransformation = PasswordVisualTransformation(),
-                        singleLine = true,
-                        shape = RoundedCornerShape(16.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-
-                // 3. 标签片组: “明文连接” “加密连接”(选中)
-                ConnectedChipGroup(
-                    chips = protocolChips,
-                    selectedIndex = selectedProtocolChipIndex,
-                    onSelected = { selectedProtocolChipIndex = it }
-                )
-
-                // 4. “连通性测试并保存” 填充按钮（宽 380dp，带 check_circle 图标）
-                Box(
-                    modifier = Modifier.fillMaxWidth(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Button(
-                        onClick = {
-                            isTestingConnection = true
-                            val targetId = editingServerId ?: UUID.randomUUID().toString()
-                            val newServer = ServerProfile(
-                                id = targetId,
-                                name = inputName.trim().ifEmpty { "AimiliVPN 网关" },
-                                host = inputHost.trim().ifEmpty { "127.0.0.1" },
-                                port = inputPort.toIntOrNull() ?: 8787,
-                                path = inputPath.trim().trim('/'),
-                                username = inputUser.trim(),
-                                password = inputPass.trim(),
-                                isTls = selectedProtocolChipIndex == 1
-                            )
-                            scope.launch {
-                                val res = AimiliApplication.instance.apiClient.testConnection(newServer)
-                                isTestingConnection = false
-                                val profileToSave = res.getOrNull() ?: newServer
-
-                                if (editingServerId != null && servers.any { it.id == editingServerId }) {
-                                    AimiliApplication.instance.serverStore.updateServer(profileToSave)
-                                    Toast.makeText(context, "✅ [${profileToSave.name}] 配置已更新并安全保存！", Toast.LENGTH_SHORT).show()
-                                } else {
-                                    AimiliApplication.instance.serverStore.addServer(profileToSave)
-                                    editingServerId = profileToSave.id
-                                    Toast.makeText(context, "✅ 新服务器 [${profileToSave.name}] 已成功添加！", Toast.LENGTH_SHORT).show()
-                                }
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(52.dp),
+                                shape = RoundedCornerShape(50),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.primary,
+                                    contentColor = MaterialTheme.colorScheme.onPrimary
+                                )
+                            ) {
+                                Icon(Icons.Rounded.CheckCircle, contentDescription = null, modifier = Modifier.size(20.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    text = if (isTestingConnection) "正在测试连通性..." else "连通性测试并保存",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.Bold
+                                )
                             }
-                        },
-                        modifier = Modifier
-                            .widthIn(max = 380.dp)
-                            .fillMaxWidth()
-                            .height(56.dp),
-                        shape = RoundedCornerShape(50),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary,
-                            contentColor = MaterialTheme.colorScheme.onPrimary
+
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                            // 安全偏好
+                            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                ConnectedListItem(
+                                    index = 0,
+                                    total = 2,
+                                    headline = "生物识别安全锁",
+                                    supportingText = "后台超过一分钟或冷启动时需要验证",
+                                    leadingIcon = Icons.Rounded.Fingerprint,
+                                    trailingContent = {
+                                        Switch(
+                                            checked = biometricEnabled,
+                                            onCheckedChange = {
+                                                biometricEnabled = it
+                                                AimiliApplication.instance.serverStore.setBiometricEnabled(it)
+                                                Toast.makeText(context, "生物识别安全锁已${if (it) "开启" else "关闭"}", Toast.LENGTH_SHORT).show()
+                                            },
+                                            colors = SwitchDefaults.colors(
+                                                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                                                checkedTrackColor = MaterialTheme.colorScheme.primary
+                                            )
+                                        )
+                                    },
+                                    onClick = {
+                                        biometricEnabled = !biometricEnabled
+                                        AimiliApplication.instance.serverStore.setBiometricEnabled(biometricEnabled)
+                                    }
+                                )
+
+                                ConnectedListItem(
+                                    index = 1,
+                                    total = 2,
+                                    headline = "明文传输风险提醒",
+                                    supportingText = "检测到未启用加密连接时显示警告",
+                                    leadingIcon = Icons.Rounded.Warning,
+                                    trailingContent = {
+                                        Switch(
+                                            checked = cleartextWarningEnabled,
+                                            onCheckedChange = {
+                                                cleartextWarningEnabled = it
+                                                AimiliApplication.instance.serverStore.setCleartextWarningEnabled(it)
+                                                Toast.makeText(context, "明文提醒已${if (it) "开启" else "关闭"}", Toast.LENGTH_SHORT).show()
+                                            },
+                                            colors = SwitchDefaults.colors(
+                                                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                                                checkedTrackColor = MaterialTheme.colorScheme.primary
+                                            )
+                                        )
+                                    },
+                                    onClick = {
+                                        cleartextWarningEnabled = !cleartextWarningEnabled
+                                        AimiliApplication.instance.serverStore.setCleartextWarningEnabled(cleartextWarningEnabled)
+                                    }
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    // ==================== 手机 / 竖屏：垂直流式布局 ====================
+                    // 1. 动态已纳管服务器列表
+                    if (servers.isEmpty()) {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerLow
+                        ) {
+                            Text(
+                                text = "暂无已纳管的 VPS，请点击下方表单或右上角二维码扫码添加服务器",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(16.dp)
+                            )
+                        }
+                    } else {
+                        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            servers.forEachIndexed { index, server ->
+                                ConnectedListItem(
+                                    index = index,
+                                    total = servers.size,
+                                    headline = server.name,
+                                    supportingText = "地址 ${server.host}，端口 ${server.port}，${if (server.isOnline) "连通正常 (${server.latencyMs}ms)" else "离线/待测"}",
+                                    leadingIcon = Icons.Rounded.Dns,
+                                    trailingContent = {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            IconButton(onClick = {
+                                                scope.launch {
+                                                    val res = AimiliApplication.instance.apiClient.testConnection(server)
+                                                    if (res.isSuccess) {
+                                                        AimiliApplication.instance.serverStore.updateServer(res.getOrNull() ?: server)
+                                                        Toast.makeText(context, "✅ [${server.name}] 测活通过！延迟: ${server.latencyMs}ms", Toast.LENGTH_SHORT).show()
+                                                    } else {
+                                                        Toast.makeText(context, "⚠️ [${server.name}] 测活失败: ${res.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
+                                                    }
+                                                }
+                                            }) {
+                                                Icon(Icons.Rounded.NetworkPing, contentDescription = "测试连通性", tint = MaterialTheme.colorScheme.primary)
+                                            }
+                                            IconButton(onClick = {
+                                                deleteCandidate = server
+                                            }) {
+                                                Icon(Icons.Rounded.Delete, contentDescription = "删除服务器", tint = MaterialTheme.colorScheme.error)
+                                            }
+                                        }
+                                    },
+                                    onClick = {
+                                        editingServerId = server.id
+                                        inputName = server.name
+                                        inputHost = server.host
+                                        inputPort = server.port.toString()
+                                        inputPath = server.path
+                                        inputUser = server.username
+                                        inputPass = server.password
+                                        selectedProtocolChipIndex = if (server.isTls) 1 else 0
+                                        Toast.makeText(context, "已载入 [${server.name}] 参数至下方表单，可直接修改或保存", Toast.LENGTH_SHORT).show()
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    // 2. 4个横向相连的描边按钮组
+                    ConnectedButtonGroup(
+                        items = listOf(
+                            ConnectedButtonItem("服务器备注", ConnectedButtonStyle.Outlined) {},
+                            ConnectedButtonItem("主机地址", ConnectedButtonStyle.Outlined) {},
+                            ConnectedButtonItem("网页端口", ConnectedButtonStyle.Outlined) {},
+                            ConnectedButtonItem("安全路径", ConnectedButtonStyle.Outlined) {}
                         )
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.CheckCircle,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp)
+                    )
+
+                    // 表单输入项
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = inputName,
+                            onValueChange = { inputName = it },
+                            label = { Text("服务器备注名称") },
+                            singleLine = true,
+                            shape = RoundedCornerShape(16.dp),
+                            modifier = Modifier.fillMaxWidth()
                         )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            text = if (isTestingConnection) "正在测试连通性..." else "连通性测试并保存",
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.Bold
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedTextField(
+                                value = inputHost,
+                                onValueChange = { inputHost = it },
+                                label = { Text("主机地址或域名") },
+                                singleLine = true,
+                                shape = RoundedCornerShape(16.dp),
+                                modifier = Modifier.weight(2f)
+                            )
+                            OutlinedTextField(
+                                value = inputPort,
+                                onValueChange = { inputPort = it },
+                                label = { Text("Web 端口") },
+                                singleLine = true,
+                                shape = RoundedCornerShape(16.dp),
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedTextField(
+                                value = inputPath,
+                                onValueChange = { inputPath = it },
+                                label = { Text("安全访问路径") },
+                                singleLine = true,
+                                shape = RoundedCornerShape(16.dp),
+                                modifier = Modifier.weight(1f)
+                            )
+                            OutlinedTextField(
+                                value = inputUser,
+                                onValueChange = { inputUser = it },
+                                label = { Text("Web 管理账号") },
+                                singleLine = true,
+                                shape = RoundedCornerShape(16.dp),
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        OutlinedTextField(
+                            value = inputPass,
+                            onValueChange = { inputPass = it },
+                            label = { Text("Web 管理密码") },
+                            visualTransformation = PasswordVisualTransformation(),
+                            singleLine = true,
+                            shape = RoundedCornerShape(16.dp),
+                            modifier = Modifier.fillMaxWidth()
                         )
                     }
-                }
 
-                // 5. 2项列表: “生物识别安全锁” 与 “明文传输风险提醒” (不再与 FAB 重叠遮挡)
-                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    // Item 1: 生物识别安全锁
-                    ConnectedListItem(
-                        index = 0,
-                        total = 2,
-                        headline = "生物识别安全锁",
-                        supportingText = "后台超过一分钟或冷启动时需要验证",
-                        leadingIcon = Icons.Rounded.Fingerprint,
-                        trailingContent = {
-                            Switch(
-                                checked = biometricEnabled,
-                                onCheckedChange = {
-                                    biometricEnabled = it
-                                    AimiliApplication.instance.serverStore.setBiometricEnabled(it)
-                                    Toast.makeText(context, "生物识别安全锁已${if (it) "开启" else "关闭"}", Toast.LENGTH_SHORT).show()
-                                },
-                                colors = SwitchDefaults.colors(
-                                    checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                                    checkedTrackColor = MaterialTheme.colorScheme.primary
-                                )
-                            )
-                        },
-                        onClick = {
-                            biometricEnabled = !biometricEnabled
-                            AimiliApplication.instance.serverStore.setBiometricEnabled(biometricEnabled)
-                        }
+                    // 3. 标签片组: “明文连接” “加密连接”(选中)
+                    ConnectedChipGroup(
+                        chips = protocolChips,
+                        selectedIndex = selectedProtocolChipIndex,
+                        onSelected = { selectedProtocolChipIndex = it }
                     )
 
-                    // Item 2: 明文传输风险提醒
-                    ConnectedListItem(
-                        index = 1,
-                        total = 2,
-                        headline = "明文传输风险提醒",
-                        supportingText = "检测到未启用加密连接时显示警告",
-                        leadingIcon = Icons.Rounded.Warning,
-                        trailingContent = {
-                            Switch(
-                                checked = cleartextWarningEnabled,
-                                onCheckedChange = {
-                                    cleartextWarningEnabled = it
-                                    AimiliApplication.instance.serverStore.setCleartextWarningEnabled(it)
-                                    Toast.makeText(context, "明文提醒已${if (it) "开启" else "关闭"}", Toast.LENGTH_SHORT).show()
-                                },
-                                colors = SwitchDefaults.colors(
-                                    checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                                    checkedTrackColor = MaterialTheme.colorScheme.primary
+                    // 4. “连通性测试并保存” 填充按钮（宽 380dp，带 check_circle 图标）
+                    Box(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Button(
+                            onClick = {
+                                isTestingConnection = true
+                                val targetId = editingServerId ?: UUID.randomUUID().toString()
+                                val newServer = ServerProfile(
+                                    id = targetId,
+                                    name = inputName.trim().ifEmpty { "AimiliVPN 网关" },
+                                    host = inputHost.trim().ifEmpty { "127.0.0.1" },
+                                    port = inputPort.toIntOrNull() ?: 8787,
+                                    path = inputPath.trim().trim('/'),
+                                    username = inputUser.trim(),
+                                    password = inputPass.trim(),
+                                    isTls = selectedProtocolChipIndex == 1
                                 )
+                                scope.launch {
+                                    val res = AimiliApplication.instance.apiClient.testConnection(newServer)
+                                    isTestingConnection = false
+                                    val profileToSave = res.getOrNull() ?: newServer
+
+                                    if (editingServerId != null && servers.any { it.id == editingServerId }) {
+                                        AimiliApplication.instance.serverStore.updateServer(profileToSave)
+                                        Toast.makeText(context, "✅ [${profileToSave.name}] 配置已更新并安全保存！", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        AimiliApplication.instance.serverStore.addServer(profileToSave)
+                                        editingServerId = profileToSave.id
+                                        Toast.makeText(context, "✅ 新服务器 [${profileToSave.name}] 已成功添加！", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            },
+                            modifier = Modifier
+                                .widthIn(max = 380.dp)
+                                .fillMaxWidth()
+                                .height(56.dp),
+                            shape = RoundedCornerShape(50),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary
                             )
-                        },
-                        onClick = {
-                            cleartextWarningEnabled = !cleartextWarningEnabled
-                            AimiliApplication.instance.serverStore.setCleartextWarningEnabled(cleartextWarningEnabled)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.CheckCircle,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = if (isTestingConnection) "正在测试连通性..." else "连通性测试并保存",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold
+                            )
                         }
-                    )
+                    }
+
+                    // 5. 2项安全偏好列表 (不再与 FAB 重合遮挡)
+                    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        ConnectedListItem(
+                            index = 0,
+                            total = 2,
+                            headline = "生物识别安全锁",
+                            supportingText = "后台超过一分钟或冷启动时需要验证",
+                            leadingIcon = Icons.Rounded.Fingerprint,
+                            trailingContent = {
+                                Switch(
+                                    checked = biometricEnabled,
+                                    onCheckedChange = {
+                                        biometricEnabled = it
+                                        AimiliApplication.instance.serverStore.setBiometricEnabled(it)
+                                        Toast.makeText(context, "生物识别安全锁已${if (it) "开启" else "关闭"}", Toast.LENGTH_SHORT).show()
+                                    },
+                                    colors = SwitchDefaults.colors(
+                                        checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                                        checkedTrackColor = MaterialTheme.colorScheme.primary
+                                    )
+                                )
+                            },
+                            onClick = {
+                                biometricEnabled = !biometricEnabled
+                                AimiliApplication.instance.serverStore.setBiometricEnabled(biometricEnabled)
+                            }
+                        )
+
+                        ConnectedListItem(
+                            index = 1,
+                            total = 2,
+                            headline = "明文传输风险提醒",
+                            supportingText = "检测到未启用加密连接时显示警告",
+                            leadingIcon = Icons.Rounded.Warning,
+                            trailingContent = {
+                                Switch(
+                                    checked = cleartextWarningEnabled,
+                                    onCheckedChange = {
+                                        cleartextWarningEnabled = it
+                                        AimiliApplication.instance.serverStore.setCleartextWarningEnabled(it)
+                                        Toast.makeText(context, "明文提醒已${if (it) "开启" else "关闭"}", Toast.LENGTH_SHORT).show()
+                                    },
+                                    colors = SwitchDefaults.colors(
+                                        checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                                        checkedTrackColor = MaterialTheme.colorScheme.primary
+                                    )
+                                )
+                            },
+                            onClick = {
+                                cleartextWarningEnabled = !cleartextWarningEnabled
+                                AimiliApplication.instance.serverStore.setCleartextWarningEnabled(cleartextWarningEnabled)
+                            }
+                        )
+                    }
                 }
 
                 Spacer(Modifier.height(80.dp))

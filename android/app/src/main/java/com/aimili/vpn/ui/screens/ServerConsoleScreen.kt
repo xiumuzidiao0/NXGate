@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -22,9 +23,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Article
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ExpandLess
-import androidx.compose.material.icons.rounded.Hub
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Speed
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -33,6 +35,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -63,6 +66,126 @@ import com.aimili.vpn.ui.components.ConnectedListItem
 import com.aimili.vpn.ui.components.GlobalServerSwitcherTitle
 import com.aimili.vpn.ui.components.SpeedWaveformCard
 import kotlinx.coroutines.launch
+
+@Composable
+fun TunnelChipCard(
+    tunnel: TunnelItem,
+    onProbeUnlock: () -> Unit,
+    onStopTunnel: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // Row 1: DevName + Status Badge + Flag + IP
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = tunnel.devName,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer
+                    ) {
+                        Text(
+                            text = if (tunnel.status == "connected") "● 在线" else "● 连接中",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+
+                Text(
+                    text = "${countryFlag(tunnel.country)} ${tunnel.nodeIp}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+
+            // Row 2: Latency + Throughput
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = if (tunnel.latencyMs > 0) "物理延迟: ${tunnel.latencyMs}ms" else "延迟: 测活就绪",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = if (tunnel.throughputBps > 0) "吞吐: %.1f MB/s (断流检测通过)".format(tunnel.throughputBps / 1000000.0) else "在线待命",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+
+            // Row 3: AI & Streaming unlock badges
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("实测解锁:", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                UnlockPill("ChatGPT", tunnel.openai)
+                UnlockPill("Claude", tunnel.claude)
+                UnlockPill("Gemini", tunnel.gemini)
+                UnlockPill("Netflix", tunnel.netflix)
+            }
+
+            // Row 4: Action Buttons (测解锁 & 断开 - 对应 Web 按钮)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedButton(
+                    onClick = onProbeUnlock,
+                    modifier = Modifier.height(34.dp),
+                    shape = RoundedCornerShape(17.dp)
+                ) {
+                    Icon(Icons.Rounded.Speed, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("测解锁", style = MaterialTheme.typography.labelMedium)
+                }
+                Spacer(Modifier.width(8.dp))
+                Button(
+                    onClick = onStopTunnel,
+                    modifier = Modifier.height(34.dp),
+                    shape = RoundedCornerShape(17.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError
+                    )
+                ) {
+                    Icon(Icons.Rounded.Close, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("断开", style = MaterialTheme.typography.labelMedium)
+                }
+            }
+        }
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -104,6 +227,7 @@ fun ServerConsoleScreen(
                     devIndex = 1,
                     latencyMs = 42,
                     country = "日本",
+                    nodeIp = "153.121.8.4",
                     throughputBps = 1800000,
                     openai = "unlocked",
                     claude = "unlocked",
@@ -115,6 +239,7 @@ fun ServerConsoleScreen(
                     devIndex = 2,
                     latencyMs = 55,
                     country = "日本",
+                    nodeIp = "122.215.9.18",
                     throughputBps = 920000,
                     uptimeSeconds = 2880
                 )
@@ -201,12 +326,12 @@ fun ServerConsoleScreen(
                 Spacer(Modifier.height(4.dp))
 
                 if (isTabletLandscape) {
-                    // ==================== 平板横屏：左右双列响应式仪表盘 ====================
+                    // ==================== 平板横屏：左右双列响应式布局 ====================
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        // 左侧：实时波形 + 系统主网关
+                        // 左侧列：实时波形 + 系统主网关
                         Column(
                             modifier = Modifier.weight(1f),
                             verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -217,9 +342,7 @@ fun ServerConsoleScreen(
                             )
 
                             Card(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(158.dp),
+                                modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(20.dp),
                                 colors = CardDefaults.cardColors(
                                     containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
@@ -227,7 +350,7 @@ fun ServerConsoleScreen(
                             ) {
                                 Column(
                                     modifier = Modifier
-                                        .fillMaxSize()
+                                        .fillMaxWidth()
                                         .padding(20.dp),
                                     verticalArrangement = Arrangement.Center
                                 ) {
@@ -287,10 +410,10 @@ fun ServerConsoleScreen(
                             )
                         }
 
-                        // 右侧：并发隧道列表 + 系统日志入口
+                        // 右侧列：并发网卡列表（带测解锁与断开按键）+ 系统日志
                         Column(
                             modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             Text(
                                 text = "并发在线独立出口 (${tunnelList.size} 条)",
@@ -299,54 +422,40 @@ fun ServerConsoleScreen(
                                 color = MaterialTheme.colorScheme.onSurface
                             )
 
-                            val itemsCount = tunnelList.size + 1
-                            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                                tunnelList.forEachIndexed { index, tunnel ->
-                                    ConnectedListItem(
-                                        index = index,
-                                        total = itemsCount,
-                                        headline = tunnel.title,
-                                        supportingText = tunnel.subtitle,
-                                        leadingIcon = Icons.Rounded.Hub,
-                                        trailingContent = {
-                                            if (index == 0) {
-                                                IconButton(onClick = {
-                                                    Toast.makeText(context, "重新测速该隧道并刷新延迟与解锁状态...", Toast.LENGTH_SHORT).show()
-                                                }) {
-                                                    Icon(Icons.Rounded.Speed, contentDescription = "测速", tint = MaterialTheme.colorScheme.primary)
-                                                }
-                                            } else {
-                                                IconButton(onClick = {
-                                                    if (activeServer != null) {
-                                                        scope.launch {
-                                                            AimiliApplication.instance.apiClient.stopTunnel(activeServer, tunnel.id)
-                                                            tunnelList = tunnelList.filter { it.id != tunnel.id }
-                                                            Toast.makeText(context, "已释放虚拟网卡 ${tunnel.devName} 并清理远端策略路由", Toast.LENGTH_SHORT).show()
-                                                        }
-                                                    }
-                                                }) {
-                                                    Icon(Icons.Rounded.Close, contentDescription = "释放该网卡", tint = MaterialTheme.colorScheme.error)
-                                                }
+                            tunnelList.forEach { tunnel ->
+                                TunnelChipCard(
+                                    tunnel = tunnel,
+                                    onProbeUnlock = {
+                                        if (activeServer != null) {
+                                            scope.launch {
+                                                AimiliApplication.instance.apiClient.probeTunnelUnlock(activeServer, tunnel.id)
+                                                Toast.makeText(context, "正在对网卡 [${tunnel.devName}] 执行三大 AI 与流媒体实测解锁探测...", Toast.LENGTH_SHORT).show()
                                             }
-                                        },
-                                        onClick = {
-                                            Toast.makeText(context, "设备: ${tunnel.devName} (出口: ${tunnel.nodeIp} ${tunnel.country})", Toast.LENGTH_SHORT).show()
                                         }
-                                    )
-                                }
-
-                                ConnectedListItem(
-                                    index = itemsCount - 1,
-                                    total = itemsCount,
-                                    headline = "实时事件与系统日志",
-                                    supportingText = "向上拖拽可展开日志抽屉，支持按信息、警告、错误过滤。",
-                                    leadingIcon = Icons.AutoMirrored.Rounded.Article,
-                                    trailingContent = {
-                                        Icon(Icons.Rounded.ExpandLess, contentDescription = "展开日志", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                                     },
-                                    onClick = { showLogSheet = true }
+                                    onStopTunnel = {
+                                        if (activeServer != null) {
+                                            scope.launch {
+                                                AimiliApplication.instance.apiClient.stopTunnel(activeServer, tunnel.id)
+                                                tunnelList = tunnelList.filter { it.id != tunnel.id }
+                                                Toast.makeText(context, "已断开并注销虚拟网卡 ${tunnel.devName}", Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
+                                    }
                                 )
                             }
+
+                            ConnectedListItem(
+                                index = 0,
+                                total = 1,
+                                headline = "实时事件与系统日志",
+                                supportingText = "向上拖拽可展开日志抽屉，支持按信息、警告、错误过滤。",
+                                leadingIcon = Icons.AutoMirrored.Rounded.Article,
+                                trailingContent = {
+                                    Icon(Icons.Rounded.ExpandLess, contentDescription = "展开日志", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                },
+                                onClick = { showLogSheet = true }
+                            )
                         }
                     }
                 } else {
@@ -429,47 +538,42 @@ fun ServerConsoleScreen(
                         )
                     )
 
-                    // 4. 动态并发隧道列表项与日志项
-                    val itemsCount = tunnelList.size + 1
-                    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                        tunnelList.forEachIndexed { index, tunnel ->
-                            ConnectedListItem(
-                                index = index,
-                                total = itemsCount,
-                                headline = tunnel.title,
-                                supportingText = tunnel.subtitle,
-                                leadingIcon = Icons.Rounded.Hub,
-                                trailingContent = {
-                                    if (index == 0) {
-                                        IconButton(onClick = {
-                                            Toast.makeText(context, "重新测速该隧道并刷新延迟与解锁状态...", Toast.LENGTH_SHORT).show()
-                                        }) {
-                                            Icon(Icons.Rounded.Speed, contentDescription = "测速", tint = MaterialTheme.colorScheme.primary)
-                                        }
-                                    } else {
-                                        IconButton(onClick = {
-                                            if (activeServer != null) {
-                                                scope.launch {
-                                                    AimiliApplication.instance.apiClient.stopTunnel(activeServer, tunnel.id)
-                                                    tunnelList = tunnelList.filter { it.id != tunnel.id }
-                                                    Toast.makeText(context, "已释放虚拟网卡 ${tunnel.devName} 并清理远端策略路由", Toast.LENGTH_SHORT).show()
-                                                }
-                                            }
-                                        }) {
-                                            Icon(Icons.Rounded.Close, contentDescription = "释放该网卡", tint = MaterialTheme.colorScheme.error)
+                    // 4. 并发独立网卡卡片列表 (参照 Web 控制台支持断开和测解锁)
+                    Text(
+                        text = "并发在线独立出口 (${tunnelList.size} 条)",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        tunnelList.forEach { tunnel ->
+                            TunnelChipCard(
+                                tunnel = tunnel,
+                                onProbeUnlock = {
+                                    if (activeServer != null) {
+                                        scope.launch {
+                                            AimiliApplication.instance.apiClient.probeTunnelUnlock(activeServer, tunnel.id)
+                                            Toast.makeText(context, "已对网卡 [${tunnel.devName}] 启动解锁探测！", Toast.LENGTH_SHORT).show()
                                         }
                                     }
                                 },
-                                onClick = {
-                                    Toast.makeText(context, "设备: ${tunnel.devName} (出口: ${tunnel.nodeIp} ${tunnel.country})", Toast.LENGTH_SHORT).show()
+                                onStopTunnel = {
+                                    if (activeServer != null) {
+                                        scope.launch {
+                                            AimiliApplication.instance.apiClient.stopTunnel(activeServer, tunnel.id)
+                                            tunnelList = tunnelList.filter { it.id != tunnel.id }
+                                            Toast.makeText(context, "已断开并注销虚拟网卡 ${tunnel.devName}", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
                                 }
                             )
                         }
 
                         // Last item: 实时事件与系统日志
                         ConnectedListItem(
-                            index = itemsCount - 1,
-                            total = itemsCount,
+                            index = 0,
+                            total = 1,
                             headline = "实时事件与系统日志",
                             supportingText = "向上拖拽可展开日志抽屉，支持按信息、警告、错误过滤。",
                             leadingIcon = Icons.AutoMirrored.Rounded.Article,

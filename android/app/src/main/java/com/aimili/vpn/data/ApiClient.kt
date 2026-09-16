@@ -183,6 +183,15 @@ class ApiClient {
         }
     }
 
+    suspend fun probeTunnelUnlock(profile: ServerProfile, tunnelId: String): Result<Boolean> = withContext(Dispatchers.IO) {
+        try {
+            val req = buildRequest(profile, "/api/unlock/probe", "POST", JSONObject().put("tunnel_id", tunnelId).toString())
+            client.newCall(req).execute().use { resp -> Result.success(resp.isSuccessful) }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     suspend fun fetchPortRules(profile: ServerProfile): Result<List<PortRuleItem>> = withContext(Dispatchers.IO) {
         try {
             val req = buildRequest(profile, "/api/proxy/ports")
