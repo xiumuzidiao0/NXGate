@@ -39,8 +39,10 @@ import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -71,42 +73,9 @@ import com.aimili.vpn.ui.components.ConnectedButtonGroup
 import com.aimili.vpn.ui.components.ConnectedButtonStyle
 import com.aimili.vpn.ui.components.ConnectedChipGroup
 import com.aimili.vpn.ui.components.GlobalServerSwitcherTitle
+import com.aimili.vpn.ui.components.UnlockPill
+import com.aimili.vpn.ui.components.countryFlag
 import kotlinx.coroutines.launch
-
-fun countryFlag(code: String): String {
-    return when (code.uppercase()) {
-        "JP" -> "🇯🇵"
-        "US" -> "🇺🇸"
-        "KR" -> "🇰🇷"
-        "SG" -> "🇸🇬"
-        "HK" -> "🇭🇰"
-        "TW" -> "🇹🇼"
-        "DE" -> "🇩🇪"
-        "GB", "UK" -> "🇬🇧"
-        "CA" -> "🇨🇦"
-        "AU" -> "🇦🇺"
-        else -> "🌐"
-    }
-}
-
-@Composable
-fun UnlockPill(label: String, status: String) {
-    val isOk = status == "unlocked"
-    val color = if (isOk) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
-    Surface(
-        shape = RoundedCornerShape(4.dp),
-        color = if (isOk) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f) else MaterialTheme.colorScheme.surfaceContainerHigh,
-        border = BorderStroke(0.5.dp, color.copy(alpha = 0.5f))
-    ) {
-        Text(
-            text = "$label ${if (isOk) "✓" else "✕"}",
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = if (isOk) FontWeight.Bold else FontWeight.Normal,
-            color = if (isOk) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
-        )
-    }
-}
 
 @Composable
 fun FullNodeCard(
@@ -230,7 +199,7 @@ fun FullNodeCard(
 
             Spacer(Modifier.height(2.dp))
 
-            // Row 5: Action Button Group (56dp height or compact 44dp)
+            // Row 5: Action Button Group
             ConnectedButtonGroup(
                 items = listOf(
                     ConnectedButtonItem(
@@ -279,7 +248,7 @@ fun NodeSquareScreen(
     var isSearchActive by remember { mutableStateOf(false) }
 
     var selectedChipIndex by remember { mutableIntStateOf(0) }
-    val chipList = listOf("全部", "日本 180", "美国 45", "住宅宽带", "智能全通")
+    val chipList = listOf("全部", "日本", "美国", "原生家宽", "三大AI全通")
 
     val sortOptions = listOf("延迟最低", "带宽最大", "信誉分最高")
     var selectedSortOption by remember { mutableStateOf(sortOptions[0]) }
@@ -288,46 +257,40 @@ fun NodeSquareScreen(
     var showBlacklistSheet by remember { mutableStateOf(false) }
     val blacklistSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    // Full nodes list from server
-    var allNodes by remember {
-        mutableStateOf(
-            listOf(
-                NodeCandidate("jp-1", "220.92.176.236", 1194, "JP", "日本", 32, "中华电信骨干", 96, 48200000, "residential", false, "unlocked", "unlocked", "unlocked", "unlocked"),
-                NodeCandidate("us-1", "142.250.80.45", 443, "US", "美国", 138, "Comcast", 82, 22500000, "hosting", false, "unlocked", "blocked", "unlocked", "unlocked"),
-                NodeCandidate("sg-1", "47.238.2.197", 1194, "SG", "新加坡", 68, "Singtel", 91, 35100000, "residential", false, "unlocked", "unlocked", "unlocked", "unlocked"),
-                NodeCandidate("jp-2", "118.238.203.45", 1194, "JP", "日本", 45, "NTT OCN", 94, 52000000, "residential", true, "unlocked", "unlocked", "unlocked", "unlocked"),
-                NodeCandidate("us-2", "198.51.100.22", 443, "US", "美国", 125, "Charter Spectrum", 88, 38000000, "residential", false, "unlocked", "unlocked", "unlocked", "unlocked"),
-                NodeCandidate("kr-1", "211.234.118.90", 1194, "KR", "韩国", 58, "Korea Telecom (KT)", 89, 44000000, "residential", false, "unlocked", "unlocked", "unlocked", "unlocked"),
-                NodeCandidate("de-1", "185.220.101.5", 443, "DE", "德国", 168, "Deutsche Telekom", 85, 29000000, "residential", false, "unlocked", "unlocked", "unlocked", "unlocked")
-            )
-        )
-    }
+    // Full nodes list from server (dynamically loaded)
+    var allNodes by remember { mutableStateOf<List<NodeCandidate>>(emptyList()) }
+    var isLoadingNodes by remember { mutableStateOf(false) }
+    var nodeLoadError by remember { mutableStateOf<String?>(null) }
 
-    var blacklistItems by remember {
-        mutableStateOf(
-            listOf(
-                BlacklistRecord("218.146.192.89:1685", "218.146.192.89", "KR", "吞吐量趋零 (断流)"),
-                BlacklistRecord("118.238.203.45:443", "118.238.203.45", "JP", "TCP 握手敲门未响应"),
-                BlacklistRecord("49.213.12.18:1194", "49.213.12.18", "US", "物理出网验证超时")
-            )
-        )
-    }
+    var blacklistItems by remember { mutableStateOf<List<BlacklistRecord>>(emptyList()) }
 
-    // Pull real nodes from active server
-    LaunchedEffect(activeServer?.id) {
+    fun refreshAllNodes() {
         if (activeServer != null) {
-            val nodesRes = AimiliApplication.instance.apiClient.fetchNodes(activeServer)
-            if (nodesRes.isSuccess && !nodesRes.getOrNull().isNullOrEmpty()) {
-                allNodes = nodesRes.getOrNull()!!
-            }
-            val blRes = AimiliApplication.instance.apiClient.fetchBlacklist(activeServer)
-            if (blRes.isSuccess && !blRes.getOrNull().isNullOrEmpty()) {
-                blacklistItems = blRes.getOrNull()!!
+            isLoadingNodes = true
+            nodeLoadError = null
+            scope.launch {
+                val nodesRes = AimiliApplication.instance.apiClient.fetchNodes(activeServer)
+                isLoadingNodes = false
+                if (nodesRes.isSuccess) {
+                    allNodes = nodesRes.getOrNull() ?: emptyList()
+                } else {
+                    nodeLoadError = nodesRes.exceptionOrNull()?.message ?: "连接超时"
+                }
+
+                val blRes = AimiliApplication.instance.apiClient.fetchBlacklist(activeServer)
+                if (blRes.isSuccess) {
+                    blacklistItems = blRes.getOrNull() ?: emptyList()
+                }
             }
         }
     }
 
-    // Filter nodes
+    // Pull real nodes whenever active server changes
+    LaunchedEffect(activeServer?.id) {
+        refreshAllNodes()
+    }
+
+    // Dynamic filtering across all nodes
     val filteredNodes = remember(allNodes, selectedChipIndex, searchQuery, selectedSortOption) {
         var list = allNodes.filter { node ->
             val matchesQuery = searchQuery.isEmpty() ||
@@ -397,9 +360,9 @@ fun NodeSquareScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .widthIn(max = if (isTablet) 920.dp else 500.dp)
+                    .widthIn(max = if (isTablet) 960.dp else 500.dp)
                     .align(Alignment.TopCenter),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Spacer(Modifier.height(2.dp))
 
@@ -407,7 +370,7 @@ fun NodeSquareScreen(
                     OutlinedTextField(
                         value = searchQuery,
                         onValueChange = { searchQuery = it },
-                        label = { Text("搜索 IP / 国家代码 / 运营商") },
+                        label = { Text("搜索 IP / 国家代码 / 运营商关键词") },
                         singleLine = true,
                         shape = RoundedCornerShape(16.dp),
                         modifier = Modifier.fillMaxWidth()
@@ -434,7 +397,12 @@ fun NodeSquareScreen(
                         onValueChange = {},
                         readOnly = true,
                         label = { Text("排序规则") },
-                        supportingText = { Text("按${selectedSortOption}优先显示候选节点 (共 ${filteredNodes.size} 个可用)") },
+                        supportingText = {
+                            Text(
+                                text = if (isLoadingNodes) "正在加载全量节点清单..." else "按${selectedSortOption}优先显示 (当前共展示 ${filteredNodes.size} 个可用节点)",
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        },
                         leadingIcon = {
                             Icon(Icons.AutoMirrored.Rounded.Sort, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                         },
@@ -485,11 +453,40 @@ fun NodeSquareScreen(
                             onClick = { showBlacklistSheet = true }
                         )
                     ),
-                    height = 48.dp
+                    height = 46.dp
                 )
 
-                // 3. 全量候选节点流 (平板横屏下采用 2 列自适应网格，竖屏/手机采用平滑 LazyColumn)
-                if (filteredNodes.isEmpty()) {
+                if (isLoadingNodes) {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.primary)
+                }
+
+                // 3. 全量候选节点流 (所有节点全部展示，支持平板横屏双列网格)
+                if (allNodes.isEmpty() && !isLoadingNodes) {
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 16.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerLow
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(20.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = if (nodeLoadError != null) "拉取节点失败: $nodeLoadError" else "当前服务器暂未拉取到候选节点，请检查网络或点击重试",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(Modifier.height(10.dp))
+                            OutlinedButton(onClick = { refreshAllNodes() }) {
+                                Icon(Icons.Rounded.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("立即重新拉取全部节点")
+                            }
+                        }
+                    }
+                } else if (filteredNodes.isEmpty()) {
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -505,7 +502,7 @@ fun NodeSquareScreen(
                         )
                     }
                 } else if (isTabletLandscape) {
-                    // 平板横屏：2列响应式网格
+                    // 平板横屏：2列响应式大网格
                     LazyVerticalGrid(
                         columns = GridCells.Fixed(2),
                         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -542,7 +539,7 @@ fun NodeSquareScreen(
                         }
                     }
                 } else {
-                    // 竖屏/手机：单列平滑可滚动流
+                    // 竖屏/手机：单列平滑可滚动流 (全量展示所有节点)
                     LazyColumn(
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                         modifier = Modifier
