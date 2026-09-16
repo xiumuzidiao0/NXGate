@@ -318,8 +318,8 @@ fun ServerConsoleScreen(
                             verticalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
                             SpeedWaveformCard(
-                                downSpeedStr = activeServer?.downSpeedStr ?: "12.4 兆每秒",
-                                upSpeedStr = "1.2 兆每秒"
+                                downSpeedStr = activeServer?.downSpeedStr ?: "12.4 Mb/s",
+                                upSpeedStr = "1.2 Mb/s"
                             )
 
                             Card(
@@ -460,8 +460,8 @@ fun ServerConsoleScreen(
                     // ==================== 竖屏/手机：单列垂直布局 ====================
                     // 1. 实时网速波形卡片（高 164dp）（背景 surfaceContainerHigh）
                     SpeedWaveformCard(
-                        downSpeedStr = activeServer?.downSpeedStr ?: "12.4 兆每秒",
-                        upSpeedStr = "1.2 兆每秒"
+                        downSpeedStr = activeServer?.downSpeedStr ?: "12.4 Mb/s",
+                        upSpeedStr = "1.2 Mb/s"
                     )
 
                     // 2. 系统主出口网关填充卡片（高 158dp）

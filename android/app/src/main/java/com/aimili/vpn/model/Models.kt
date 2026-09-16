@@ -15,8 +15,8 @@ data class ServerProfile(
     val ipType: String = "原生家宽",
     val ispName: String = "中华电信骨干",
     val unlockStatus: String = "全通过",
-    val downSpeedStr: String = "8.4 兆每秒",
-    val totalTrafficStr: String = "12.1 吉字节",
+    val downSpeedStr: String = "8.4 Mb/s",
+    val totalTrafficStr: String = "12.1 Gb",
     val activeConns: Int = 38,
     val orderIndex: Int = 0
 ) {
@@ -106,7 +106,7 @@ data class TunnelItem(
     val subtitle: String
         get() {
             val c = if (country.isNotEmpty()) "$country 出口 " else ""
-            val tp = if (throughputBps > 0) "• 吞吐 %.1f MB/s".format(throughputBps / 1000000.0) else ""
+            val tp = if (throughputBps > 0) "• 吞吐 %.1f Mb/s".format(throughputBps / 1000000.0) else ""
             val hours = uptimeSeconds / 3600
             val mins = (uptimeSeconds % 3600) / 60
             val up = if (hours > 0) "${hours}h${mins}m" else "${mins}m"
@@ -231,10 +231,10 @@ data class NodeCandidate(
     val netflix: String = "unknown"
 ) {
     val title: String
-        get() = "${countryLong}节点 $ip 延迟${if (latencyMs > 0) "${latencyMs}毫秒" else "待测"}"
+        get() = "${countryLong}节点 $ip 延迟${if (latencyMs > 0) "${latencyMs}ms" else "待测"}"
 
     val speedMbStr: String
-        get() = "%.1f 兆每秒".format(speedBps / 1000000.0)
+        get() = "%.1f Mb/s".format(speedBps / 1000000.0)
 
     val ipTypeDisplay: String
         get() = when (ipType) {

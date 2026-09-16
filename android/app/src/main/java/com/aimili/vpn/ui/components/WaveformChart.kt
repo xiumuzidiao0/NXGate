@@ -49,8 +49,8 @@ enum class SpeedUnit {
  */
 @Composable
 fun SpeedWaveformCard(
-    downSpeedStr: String = "12.4 兆每秒",
-    upSpeedStr: String = "1.2 兆每秒",
+    downSpeedStr: String = "12.4 Mb/s",
+    upSpeedStr: String = "1.2 Mb/s",
     modifier: Modifier = Modifier
 ) {
     var unit by remember { mutableStateOf(SpeedUnit.MB_S) }

@@ -2,6 +2,7 @@ package com.aimili.vpn.ui.screens
 
 import android.content.res.Configuration
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,21 +17,27 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.ColorLens
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Dns
 import androidx.compose.material.icons.rounded.Fingerprint
 import androidx.compose.material.icons.rounded.NetworkPing
+import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.QrCodeScanner
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.FloatingActionButtonDefaults
@@ -48,6 +55,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -56,6 +64,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -64,6 +74,8 @@ import androidx.compose.ui.unit.dp
 import com.aimili.vpn.AimiliApplication
 import com.aimili.vpn.data.ApiClient
 import com.aimili.vpn.model.ServerProfile
+import com.aimili.vpn.theme.AVAILABLE_PALETTES
+import com.aimili.vpn.ui.components.AppExposedDropdown
 import com.aimili.vpn.ui.components.ConnectedButtonItem
 import com.aimili.vpn.ui.components.ConnectedButtonGroup
 import com.aimili.vpn.ui.components.ConnectedButtonStyle
@@ -453,6 +465,11 @@ fun SettingsSecurityScreen(
                                     }
                                 )
                             }
+
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                            // 外观与主题调色板 (包含莫奈动态取色)
+                            ThemeAppearanceSettingsSection()
                         }
                     }
                 } else {
@@ -704,6 +721,9 @@ fun SettingsSecurityScreen(
                             }
                         )
                     }
+
+                    // 6. 外观与主题个性化 (支持莫奈动态取色)
+                    ThemeAppearanceSettingsSection()
                 }
 
                 Spacer(Modifier.height(80.dp))
@@ -807,3 +827,131 @@ fun SettingsSecurityScreen(
         )
     }
 }
+
+@Composable
+fun ThemeAppearanceSettingsSection(modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val serverStore = AimiliApplication.instance.serverStore
+    val themeMode by serverStore.themeMode.collectAsState()
+    val themePalette by serverStore.themePalette.collectAsState()
+
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Rounded.Palette,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                }
+                Spacer(Modifier.width(12.dp))
+                Column {
+                    Text(
+                        text = "外观与个性化调色板",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "支持 Android 12+ 壁纸莫奈动态取色与精选 M3 色系",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            // 1. 深浅模式切换
+            ConnectedChipGroup(
+                chips = listOf("🌓 跟随系统", "☀️ 浅色模式", "🌙 深色模式"),
+                selectedIndex = when (themeMode) {
+                    "light" -> 1
+                    "dark" -> 2
+                    else -> 0
+                },
+                onSelected = { idx ->
+                    val newMode = when (idx) {
+                        1 -> "light"
+                        2 -> "dark"
+                        else -> "system"
+                    }
+                    serverStore.setThemeMode(newMode)
+                    val label = when (idx) {
+                        1 -> "浅色模式"
+                        2 -> "深色模式"
+                        else -> "跟随系统"
+                    }
+                    Toast.makeText(context, "已切换为「$label」", Toast.LENGTH_SHORT).show()
+                }
+            )
+
+            // 2. 调色板下拉选择器
+            val selectedPal = AVAILABLE_PALETTES.find { it.id == themePalette } ?: AVAILABLE_PALETTES.first()
+            AppExposedDropdown(
+                label = "选择主题色调",
+                options = AVAILABLE_PALETTES,
+                selectedOption = selectedPal,
+                onOptionSelected = { pal ->
+                    serverStore.setThemePalette(pal.id)
+                    Toast.makeText(context, "已激活「${pal.name}」", Toast.LENGTH_SHORT).show()
+                },
+                optionLabel = { it.name },
+                leadingIcon = Icons.Rounded.ColorLens,
+                supportingText = if (themePalette == "monet") "✨ 从系统桌面壁纸动态提取莫奈色系 (Android 12+ 专属)" else selectedPal.description
+            )
+
+            // 3. 颜色快选色盘圆球
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                AVAILABLE_PALETTES.forEach { pal ->
+                    val isSelected = pal.id == themePalette
+                    Surface(
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(CircleShape)
+                            .clickable {
+                                serverStore.setThemePalette(pal.id)
+                                Toast.makeText(context, "已激活「${pal.name}」", Toast.LENGTH_SHORT).show()
+                            },
+                        shape = CircleShape,
+                        color = pal.primaryColor,
+                        border = if (isSelected) BorderStroke(3.dp, MaterialTheme.colorScheme.onSurface) else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                    ) {
+                        if (isSelected) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Check,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
