@@ -68,7 +68,7 @@ func TestCheckThroughput(t *testing.T) {
 
 	config := ThroughputConfig{
 		TestURL:        "https://speed.cloudflare.com/__down?bytes=524288", // 512KB
-		MinBytesPerSec: 10 * 1024,                                           // Very low threshold for test
+		MinBytesPerSec: 10 * 1024,                                          // Very low threshold for test
 		Timeout:        10 * time.Second,
 	}
 
@@ -94,8 +94,8 @@ func TestCheckThroughput(t *testing.T) {
 func TestCheckThroughputTimeout(t *testing.T) {
 	config := ThroughputConfig{
 		TestURL:        "https://speed.cloudflare.com/__down?bytes=10485760", // 10MB
-		MinBytesPerSec: 1000 * 1024,                                           // 1 MB/s
-		Timeout:        1 * time.Second,                                       // Very short timeout
+		MinBytesPerSec: 1000 * 1024,                                          // 1 MB/s
+		Timeout:        1 * time.Second,                                      // Very short timeout
 	}
 
 	start := time.Now()
@@ -118,7 +118,7 @@ func TestCheckThroughputWithRetry(t *testing.T) {
 
 	config := ThroughputConfig{
 		TestURL:        "https://speed.cloudflare.com/__down?bytes=262144", // 256KB
-		MinBytesPerSec: 10 * 1024,                                           // 10 KB/s minimum
+		MinBytesPerSec: 10 * 1024,                                          // 10 KB/s minimum
 		Timeout:        8 * time.Second,
 	}
 

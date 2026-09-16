@@ -47,7 +47,6 @@ func DefaultProbeConfig() ProbeConfig {
 	}
 }
 
-
 type NodePool struct {
 	cfg        *config.Config
 	fetcher    *Fetcher
@@ -783,4 +782,3 @@ func FilterReachableNodes(nodes []*Node, timeout time.Duration) []*Node {
 	}
 	return reachable
 }
-
