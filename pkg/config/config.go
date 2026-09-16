@@ -202,6 +202,12 @@ func (c *Config) GetSettings() SettingsDTO {
 	}
 }
 
+func (c *Config) GetUICredentials() (string, string) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.UIUsername, c.UIPassword
+}
+
 func (c *Config) VerifyUICredentials(user, pass string) bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()

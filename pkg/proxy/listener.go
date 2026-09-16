@@ -71,8 +71,8 @@ func (l *PortListener) getAuthenticator() *Authenticator {
 	if !l.cfg.IsUIAuthEnabled() {
 		return NewAuthenticator("", "")
 	}
-	settings := l.cfg.GetSettings()
-	return NewAuthenticator(settings.UIUsername, settings.UIPassword)
+	user, pass := l.cfg.GetUICredentials()
+	return NewAuthenticator(user, pass)
 }
 
 func (l *PortListener) Start(ctx context.Context) error {
