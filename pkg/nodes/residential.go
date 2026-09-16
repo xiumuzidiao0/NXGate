@@ -25,11 +25,11 @@ type Classification struct {
 // ResidentialDetector 家宽/住宅 IP 智能甄选引擎
 // 基于 freesub 项目的五层瀑布式判定机制
 type ResidentialDetector struct {
-	cdnNetworks       []*net.IPNet      // CDN 网段黑名单
-	datacenterASNs    map[int]bool      // 云厂商 ASN 黑名单
-	residentialASNs   map[int]bool      // 主流运营商 ASN 白名单
-	idcNamePatterns   []string          // 机房 ISP 名称关键词
-	resNamePatterns   []string          // 家宽 ISP 名称关键词
+	cdnNetworks     []*net.IPNet // CDN 网段黑名单
+	datacenterASNs  map[int]bool // 云厂商 ASN 黑名单
+	residentialASNs map[int]bool // 主流运营商 ASN 白名单
+	idcNamePatterns []string     // 机房 ISP 名称关键词
+	resNamePatterns []string     // 家宽 ISP 名称关键词
 }
 
 func NewResidentialDetector() *ResidentialDetector {
@@ -88,7 +88,7 @@ func (d *ResidentialDetector) initDatacenterASNs() {
 
 		// 欧洲云厂商
 		24940, 213230, // Hetzner
-		16276, // OVH
+		16276,                      // OVH
 		51167, 12876, 12989, 16276, // OVH SAS
 		60068, // CDN77
 
@@ -128,11 +128,11 @@ func (d *ResidentialDetector) initDatacenterASNs() {
 func (d *ResidentialDetector) initResidentialASNs() {
 	resASNs := []int{
 		// === 台湾 ===
-		3462,  // Chunghwa Telecom (中华电信)
-		9924,  // Taiwan Mobile (台湾大哥大)
-		17709, // Aptg Telecom (亚太电信)
-		4780,  // FET (远传电信)
-		18049, // Kbro (凯擘大宽频)
+		3462,   // Chunghwa Telecom (中华电信)
+		9924,   // Taiwan Mobile (台湾大哥大)
+		17709,  // Aptg Telecom (亚太电信)
+		4780,   // FET (远传电信)
+		18049,  // Kbro (凯擘大宽频)
 		131584, // Taiwan Fixed Network (台湾固网)
 
 		// === 日本 ===
@@ -148,11 +148,11 @@ func (d *ResidentialDetector) initResidentialASNs() {
 		10010, // Yahoo! Japan (Tokai)
 
 		// === 韩国 ===
-		4766,  // KT (Korea Telecom)
-		9318,  // SK Broadband
-		9316,  // Hanaro Telecom (SK)
-		3786,  // LG Uplus (LG U+)
-		9644,  // SK Telecom
+		4766, // KT (Korea Telecom)
+		9318, // SK Broadband
+		9316, // Hanaro Telecom (SK)
+		3786, // LG Uplus (LG U+)
+		9644, // SK Telecom
 
 		// === 香港 ===
 		9304,  // HGC (和记环球电讯)
@@ -166,18 +166,18 @@ func (d *ResidentialDetector) initResidentialASNs() {
 		10111, // M1 Limited
 
 		// === 美国 ===
-		7922,  // Comcast Cable (康卡斯特)
-		20115, // Charter Communications (Spectrum)
-		22773, // Cox Communications
-		7018,  // AT&T Services
-		701,   // Verizon Business / UUNet
-		6167,  // Verizon Wireless
-		6128,  // Cablevision (Optimum)
-		11427, // Time Warner Cable (now Charter)
-		33363, // Bright House Networks
-		11426, // TWC (Time Warner Cable Midwest)
-		12271, // Charter Communications (legacy)
-		10796, // TWC Northeast
+		7922,                                            // Comcast Cable (康卡斯特)
+		20115,                                           // Charter Communications (Spectrum)
+		22773,                                           // Cox Communications
+		7018,                                            // AT&T Services
+		701,                                             // Verizon Business / UUNet
+		6167,                                            // Verizon Wireless
+		6128,                                            // Cablevision (Optimum)
+		11427,                                           // Time Warner Cable (now Charter)
+		33363,                                           // Bright House Networks
+		11426,                                           // TWC (Time Warner Cable Midwest)
+		12271,                                           // Charter Communications (legacy)
+		10796,                                           // TWC Northeast
 		33491, 33650, 33652, 33660, 33662, 33667, 33668, // TWC regions
 
 		// === 英国 ===
@@ -202,23 +202,23 @@ func (d *ResidentialDetector) initResidentialASNs() {
 		12322, // Free SAS (Free.fr)
 
 		// === 加拿大 ===
-		812,   // Rogers Communications
-		5645,  // Rogers Cable
-		6327,  // Shaw Communications
-		855,   // Bell Canada
-		577,   // Bell Aliant
-		6799,  // Videotron (Quebec)
+		812,  // Rogers Communications
+		5645, // Rogers Cable
+		6327, // Shaw Communications
+		855,  // Bell Canada
+		577,  // Bell Aliant
+		6799, // Videotron (Quebec)
 
 		// === 澳大利亚 ===
-		1221,  // Telstra
-		4764,  // TPG Internet (TPG Telecom)
-		9443,  // Vocus
-		4739,  // Internode (iiNet)
-		7545,  // TPG
+		1221, // Telstra
+		4764, // TPG Internet (TPG Telecom)
+		9443, // Vocus
+		4739, // Internode (iiNet)
+		7545, // TPG
 
 		// === 新西兰 ===
-		4648,  // Spark NZ (formerly Telecom NZ)
-		9503,  // Vodafone NZ
+		4648, // Spark NZ (formerly Telecom NZ)
+		9503, // Vodafone NZ
 
 		// === 印度 ===
 		9498,  // Bharti Airtel
@@ -234,8 +234,8 @@ func (d *ResidentialDetector) initResidentialASNs() {
 		23724, // IDC Frontier / Yahoo BB (Japan)
 
 		// === 中东 ===
-		8968,  // Etisalat (UAE)
-		5384,  // Emirates Internet (UAE)
+		8968, // Etisalat (UAE)
+		5384, // Emirates Internet (UAE)
 
 		// === 南美 ===
 		7738,  // Telecom Argentina

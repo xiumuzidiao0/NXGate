@@ -32,12 +32,12 @@ type Node struct {
 	ISP             string        `json:"isp"`
 	City            string        `json:"city"`
 	Region          string        `json:"region"`
-	ASN             int           `json:"asn"`              // 自治系统编号
-	RDNS            string        `json:"rdns,omitempty"`   // 反向DNS记录
+	ASN             int           `json:"asn"`            // 自治系统编号
+	RDNS            string        `json:"rdns,omitempty"` // 反向DNS记录
 	IsHosting       bool          `json:"is_hosting"`
-	IsResidential   bool          `json:"is_residential"`   // 家宽/住宅IP标识
-	ResConfidence   int           `json:"res_confidence"`   // 家宽判定置信度 (0-100)
-	ResReason       string        `json:"res_reason"`       // 家宽判定依据
+	IsResidential   bool          `json:"is_residential"` // 家宽/住宅IP标识
+	ResConfidence   int           `json:"res_confidence"` // 家宽判定置信度 (0-100)
+	ResReason       string        `json:"res_reason"`     // 家宽判定依据
 	IsFavorite      bool          `json:"is_favorite"`
 	ReputationScore int           `json:"reputation_score"` // 历史综合稳定性信誉评分 (0-100)
 	Unlock          *UnlockResult `json:"unlock,omitempty"` // AI与主流流媒体解锁状态

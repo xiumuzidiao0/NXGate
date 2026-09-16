@@ -30,10 +30,10 @@ type IPCacheEntry struct {
 }
 
 type IPEnricher struct {
-	mu               sync.RWMutex
-	cachePath        string
-	cache            map[string]*IPCacheEntry
-	client           *http.Client
+	mu                  sync.RWMutex
+	cachePath           string
+	cache               map[string]*IPCacheEntry
+	client              *http.Client
 	residentialDetector *ResidentialDetector
 }
 
@@ -95,8 +95,8 @@ type ipApiItem struct {
 	City       string `json:"city"`
 	ISP        string `json:"isp"`
 	Org        string `json:"org"`
-	AS         string `json:"as"`       // "AS15169 Google LLC"
-	Reverse    string `json:"reverse"`  // rDNS
+	AS         string `json:"as"`      // "AS15169 Google LLC"
+	Reverse    string `json:"reverse"` // rDNS
 	Hosting    bool   `json:"hosting"`
 	Mobile     bool   `json:"mobile"`
 	Proxy      bool   `json:"proxy"`

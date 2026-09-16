@@ -10,12 +10,12 @@ import (
 
 // ThroughputConfig defines the configuration for throughput testing
 type ThroughputConfig struct {
-	TestURL         string        // URL to download from for bandwidth testing
-	MinBytesPerSec  int64         // Minimum acceptable throughput (bytes/sec)
-	Timeout         time.Duration // Total timeout for the test
-	MaxAttempts     int           // Number of retry attempts
-	SampleDuration  time.Duration // How long to measure throughput
-	MinSampleBytes  int64         // Minimum bytes to read for valid test
+	TestURL        string        // URL to download from for bandwidth testing
+	MinBytesPerSec int64         // Minimum acceptable throughput (bytes/sec)
+	Timeout        time.Duration // Total timeout for the test
+	MaxAttempts    int           // Number of retry attempts
+	SampleDuration time.Duration // How long to measure throughput
+	MinSampleBytes int64         // Minimum bytes to read for valid test
 }
 
 // ThroughputResult contains the result of a throughput test
@@ -41,12 +41,12 @@ func (r ThroughputResult) String() string {
 // DefaultThroughputConfig returns the default configuration for throughput testing
 func DefaultThroughputConfig() ThroughputConfig {
 	return ThroughputConfig{
-		TestURL:         "https://speed.cloudflare.com/__down?bytes=1000000", // 1MB test file
-		MinBytesPerSec:  70 * 1024,                                            // 70 KB/s minimum (freesub standard)
-		Timeout:         8 * time.Second,
-		MaxAttempts:     2,
-		SampleDuration:  5 * time.Second,
-		MinSampleBytes:  50 * 1024, // At least 50KB downloaded for valid test
+		TestURL:        "https://speed.cloudflare.com/__down?bytes=1000000", // 1MB test file
+		MinBytesPerSec: 70 * 1024,                                           // 70 KB/s minimum (freesub standard)
+		Timeout:        8 * time.Second,
+		MaxAttempts:    2,
+		SampleDuration: 5 * time.Second,
+		MinSampleBytes: 50 * 1024, // At least 50KB downloaded for valid test
 	}
 }
 
