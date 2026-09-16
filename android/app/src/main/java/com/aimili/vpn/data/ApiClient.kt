@@ -282,6 +282,50 @@ class ApiClient {
         }
     }
 
+    suspend fun saveDynamicGroup(profile: ServerProfile, group: DynamicGroupCard): Result<Boolean> = withContext(Dispatchers.IO) {
+        try {
+            val json = JSONObject().apply {
+                put("id", group.id)
+                put("name", group.name)
+                put("enabled", group.enabled)
+                put("is_system", group.isSystem)
+                put("country", group.country)
+                put("ip_type", group.ipType)
+                put("unlock_filter", group.unlockFilter)
+                put("sort_by", group.sortBy)
+                put("target_count", group.targetCount)
+                put("interval_minutes", group.intervalMinutes)
+            }
+            val req = buildRequest(profile, "/api/tunnel-groups", "POST", json.toString())
+            client.newCall(req).execute().use { resp -> Result.success(resp.isSuccessful) }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun deleteDynamicGroup(profile: ServerProfile, groupId: String): Result<Boolean> = withContext(Dispatchers.IO) {
+        try {
+            val req = buildRequest(profile, "/api/tunnel-groups?id=${Uri.encode(groupId)}", "DELETE")
+            client.newCall(req).execute().use { resp -> Result.success(resp.isSuccessful) }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun addSingBoxNode(profile: ServerProfile, protocol: String, port: String, outbound: String): Result<Boolean> = withContext(Dispatchers.IO) {
+        try {
+            val json = JSONObject().apply {
+                put("protocol", protocol)
+                put("port", port)
+                put("outbound", outbound)
+            }
+            val req = buildRequest(profile, "/api/singbox/nodes", "POST", json.toString())
+            client.newCall(req).execute().use { resp -> Result.success(resp.isSuccessful) }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     suspend fun fetchSingBoxNodes(profile: ServerProfile): Result<List<InboundProtocolItem>> = withContext(Dispatchers.IO) {
         try {
             val req = buildRequest(profile, "/api/singbox/nodes")
