@@ -25,6 +25,12 @@ class ServerStore(context: Context) {
     private val _cleartextWarningEnabled = MutableStateFlow(true)
     val cleartextWarningEnabled: StateFlow<Boolean> = _cleartextWarningEnabled.asStateFlow()
 
+    private val _themeMode = MutableStateFlow("system") // "system", "light", "dark"
+    val themeMode: StateFlow<String> = _themeMode.asStateFlow()
+
+    private val _themePalette = MutableStateFlow("teal") // "monet", "teal", "ocean", "emerald", "purple", "amber", "rose"
+    val themePalette: StateFlow<String> = _themePalette.asStateFlow()
+
     init {
         loadData()
     }
@@ -62,8 +68,8 @@ class ServerStore(context: Context) {
                     ipType = "原生家宽",
                     ispName = "中华电信骨干",
                     unlockStatus = "全通过",
-                    downSpeedStr = "8.4 兆每秒",
-                    totalTrafficStr = "12.1 吉字节",
+                    downSpeedStr = "8.4 Mb/s",
+                    totalTrafficStr = "12.1 Gb",
                     activeConns = 38,
                     orderIndex = 0
                 )
@@ -84,8 +90,8 @@ class ServerStore(context: Context) {
                     ipType = "机房托管",
                     ispName = "Comcast Business",
                     unlockStatus = "通义与双子通过，克劳德阻断",
-                    downSpeedStr = "2.1 兆每秒",
-                    totalTrafficStr = "6.5 吉字节",
+                    downSpeedStr = "2.1 Mb/s",
+                    totalTrafficStr = "6.5 Gb",
                     activeConns = 12,
                     orderIndex = 1
                 )
@@ -99,6 +105,9 @@ class ServerStore(context: Context) {
 
         _biometricEnabled.value = prefs.getBoolean(KEY_BIOMETRIC, true)
         _cleartextWarningEnabled.value = prefs.getBoolean(KEY_CLEARTEXT_WARN, true)
+        _themeMode.value = prefs.getString(KEY_THEME_MODE, "system") ?: "system"
+        val defaultPalette = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) "monet" else "teal"
+        _themePalette.value = prefs.getString(KEY_THEME_PALETTE, defaultPalette) ?: defaultPalette
     }
 
     fun setActiveServer(id: String) {
@@ -177,6 +186,16 @@ class ServerStore(context: Context) {
         prefs.edit().putBoolean(KEY_CLEARTEXT_WARN, enabled).apply()
     }
 
+    fun setThemeMode(mode: String) {
+        _themeMode.value = mode
+        prefs.edit().putString(KEY_THEME_MODE, mode).apply()
+    }
+
+    fun setThemePalette(palette: String) {
+        _themePalette.value = palette
+        prefs.edit().putString(KEY_THEME_PALETTE, palette).apply()
+    }
+
     private fun saveList(list: List<ServerProfile>) {
         val array = JSONArray()
         list.forEach { array.put(serializeServer(it)) }
@@ -207,6 +226,15 @@ class ServerStore(context: Context) {
     }
 
     private fun deserializeServer(obj: JSONObject): ServerProfile {
+        var downSpeed = obj.optString("downSpeedStr", "8.4 Mb/s")
+        if (downSpeed.contains("兆每秒")) {
+            downSpeed = downSpeed.replace("兆每秒", "Mb/s").trim()
+        }
+        var totalTraffic = obj.optString("totalTrafficStr", "12.1 Gb")
+        if (totalTraffic.contains("吉字节")) {
+            totalTraffic = totalTraffic.replace("吉字节", "Gb").trim()
+        }
+
         return ServerProfile(
             id = obj.optString("id", UUID.randomUUID().toString()),
             name = obj.optString("name", "AimiliVPN 网关"),
@@ -222,8 +250,8 @@ class ServerStore(context: Context) {
             ipType = obj.optString("ipType", "原生家宽"),
             ispName = obj.optString("ispName", "中华电信骨干"),
             unlockStatus = obj.optString("unlockStatus", "全通过"),
-            downSpeedStr = obj.optString("downSpeedStr", "8.4 兆每秒"),
-            totalTrafficStr = obj.optString("totalTrafficStr", "12.1 吉字节"),
+            downSpeedStr = downSpeed,
+            totalTrafficStr = totalTraffic,
             activeConns = obj.optInt("activeConns", 38),
             orderIndex = obj.optInt("orderIndex", 0)
         )
@@ -234,5 +262,7 @@ class ServerStore(context: Context) {
         private const val KEY_ACTIVE_SERVER_ID = "active_server_id"
         private const val KEY_BIOMETRIC = "biometric_enabled"
         private const val KEY_CLEARTEXT_WARN = "cleartext_warn_enabled"
+        private const val KEY_THEME_MODE = "theme_mode_str"
+        private const val KEY_THEME_PALETTE = "theme_palette_str"
     }
 }

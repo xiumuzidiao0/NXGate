@@ -603,6 +603,28 @@ class ApiClient {
         }
     }
 
+    suspend fun addBlacklist(profile: ServerProfile, nodeId: String, ip: String, country: String): Result<Boolean> = withContext(Dispatchers.IO) {
+        try {
+            val body = JSONObject().put("node_id", nodeId).put("ip", ip).put("country", country).toString()
+            executeCall(profile, "/api/blacklist", "POST", body).use { resp ->
+                Result.success(resp.isSuccessful)
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun removeBlacklist(profile: ServerProfile, nodeId: String): Result<Boolean> = withContext(Dispatchers.IO) {
+        try {
+            val body = JSONObject().put("node_id", nodeId).toString()
+            executeCall(profile, "/api/blacklist/remove", "POST", body).use { resp ->
+                Result.success(resp.isSuccessful)
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     suspend fun resurrectBlacklist(profile: ServerProfile): Result<Boolean> = withContext(Dispatchers.IO) {
         try {
             executeCall(profile, "/api/blacklist/resurrect", "POST", "{}").use { resp ->

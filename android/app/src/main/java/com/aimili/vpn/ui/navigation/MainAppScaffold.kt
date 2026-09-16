@@ -82,9 +82,9 @@ fun MainAppScaffold() {
         ClusterSummary(
             onlineCount = servers.count { it.isOnline },
             offlineCount = servers.count { !it.isOnline },
-            downSpeedStr = "10.2 兆每秒",
-            upSpeedStr = "1.4 兆每秒",
-            todayTrafficStr = "18.6 吉字节"
+            downSpeedStr = "10.2 Mb/s",
+            upSpeedStr = "1.4 Mb/s",
+            todayTrafficStr = "18.6 Gb"
         )
     }
 

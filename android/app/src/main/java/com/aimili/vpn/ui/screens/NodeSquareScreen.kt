@@ -25,8 +25,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Sort
+import androidx.compose.material.icons.rounded.Block
 import androidx.compose.material.icons.rounded.Category
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Flag
+import androidx.compose.material.icons.rounded.Lan
 import androidx.compose.material.icons.rounded.Public
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.RocketLaunch
@@ -81,6 +85,8 @@ import kotlinx.coroutines.launch
 @Composable
 fun FullNodeCard(
     node: NodeCandidate,
+    isMaster: Boolean = false,
+    onSetMaster: () -> Unit,
     isStarred: Boolean,
     onToggleStar: () -> Unit,
     onStartTunnel: () -> Unit,
@@ -100,7 +106,7 @@ fun FullNodeCard(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // Row 1: Country Flag + Country Name + IP:Port + Latency Badge
+            // Row 1: Country Flag + Country Name + IP:Port + (主连 Badge) + Latency Badge
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -119,6 +125,21 @@ fun FullNodeCard(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    if (isMaster) {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            modifier = Modifier.padding(start = 6.dp)
+                        ) {
+                            Text(
+                                text = "主连",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
                 }
 
                 val latencyColor = when {
@@ -200,28 +221,35 @@ fun FullNodeCard(
 
             Spacer(Modifier.height(2.dp))
 
-            // Row 5: Action Button Group
+            // Row 5: Action Button Group (设为主出口, 拉起网卡, 星标, 屏蔽)
             ConnectedButtonGroup(
                 items = listOf(
                     ConnectedButtonItem(
-                        text = if (isStarred) "已星标" else "设为星标",
+                        text = if (isMaster) "当前主连" else "设为主出口",
+                        style = if (isMaster) ConnectedButtonStyle.Tonal else ConnectedButtonStyle.Filled,
+                        icon = if (isMaster) Icons.Rounded.CheckCircle else Icons.Rounded.Lan,
+                        onClick = onSetMaster
+                    ),
+                    ConnectedButtonItem(
+                        text = "拉起网卡",
+                        style = ConnectedButtonStyle.Tonal,
+                        icon = Icons.Rounded.RocketLaunch,
+                        onClick = onStartTunnel
+                    ),
+                    ConnectedButtonItem(
+                        text = if (isStarred) "已星标" else "星标",
                         style = if (isStarred) ConnectedButtonStyle.Filled else ConnectedButtonStyle.Tonal,
                         icon = if (isStarred) Icons.Rounded.Star else Icons.Rounded.StarBorder,
                         onClick = onToggleStar
                     ),
                     ConnectedButtonItem(
-                        text = "拉起网卡",
-                        style = ConnectedButtonStyle.Filled,
-                        icon = Icons.Rounded.RocketLaunch,
-                        onClick = onStartTunnel
-                    ),
-                    ConnectedButtonItem(
                         text = "屏蔽",
                         style = ConnectedButtonStyle.Outlined,
+                        icon = Icons.Rounded.Block,
                         onClick = onBlacklist
                     )
                 ),
-                height = 46.dp
+                height = 42.dp
             )
         }
     }
@@ -263,6 +291,7 @@ fun NodeSquareScreen(
 
     var blacklistItems by remember { mutableStateOf<List<BlacklistRecord>>(emptyList()) }
     var showBlacklistSheet by remember { mutableStateOf(false) }
+    var activeMasterIp by remember { mutableStateOf(activeServer?.exitIp ?: "") }
     val blacklistSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     // Dynamic country dropdown options calculated from allNodes (matching Web)
@@ -314,6 +343,14 @@ fun NodeSquareScreen(
                 val blRes = AimiliApplication.instance.apiClient.fetchBlacklist(activeServer)
                 if (blRes.isSuccess) {
                     blacklistItems = blRes.getOrNull() ?: emptyList()
+                }
+
+                val statusRes = AimiliApplication.instance.apiClient.fetchStatus(activeServer)
+                if (statusRes.isSuccess) {
+                    val info = statusRes.getOrNull()
+                    if (info != null && info.nodeIp.isNotEmpty()) {
+                        activeMasterIp = info.nodeIp
+                    }
                 }
             }
         }
@@ -602,8 +639,25 @@ fun NodeSquareScreen(
                             .weight(1f)
                     ) {
                         items(filteredNodes, key = { it.id }) { node ->
+                            val isMaster = node.ip == activeMasterIp || (activeServer != null && activeServer.exitIp == node.ip)
                             FullNodeCard(
                                 node = node,
+                                isMaster = isMaster,
+                                onSetMaster = {
+                                    if (activeServer != null) {
+                                        scope.launch {
+                                            Toast.makeText(context, "正在请求将 [${node.countryLong.ifEmpty { node.countryShort }} ${node.ip}] 设为系统主出口...", Toast.LENGTH_SHORT).show()
+                                            val res = AimiliApplication.instance.apiClient.connectMaster(activeServer, node.id)
+                                            if (res.isSuccess) {
+                                                activeMasterIp = node.ip
+                                                Toast.makeText(context, "✅ 已将 [${node.countryLong.ifEmpty { node.countryShort }} ${node.ip}] 设为主网关出口！", Toast.LENGTH_SHORT).show()
+                                                refreshAllNodes()
+                                            } else {
+                                                Toast.makeText(context, "⚠️ 切换主出口失败: ${res.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
+                                            }
+                                        }
+                                    }
+                                },
                                 isStarred = node.isFavorite,
                                 onToggleStar = {
                                     if (activeServer != null) {
@@ -623,7 +677,21 @@ fun NodeSquareScreen(
                                     }
                                 },
                                 onBlacklist = {
-                                    Toast.makeText(context, "已将节点 [${node.ip}] 加入隔离屏蔽库", Toast.LENGTH_SHORT).show()
+                                    if (activeServer != null) {
+                                        scope.launch {
+                                            val res = AimiliApplication.instance.apiClient.addBlacklist(activeServer, node.id, node.ip, node.countryShort)
+                                            if (res.isSuccess) {
+                                                allNodes = allNodes.filter { it.id != node.id }
+                                                Toast.makeText(context, "已将节点 [${node.ip}] 移入 24 小时隔离屏蔽库", Toast.LENGTH_SHORT).show()
+                                                val blRes = AimiliApplication.instance.apiClient.fetchBlacklist(activeServer)
+                                                if (blRes.isSuccess) {
+                                                    blacklistItems = blRes.getOrNull() ?: emptyList()
+                                                }
+                                            } else {
+                                                Toast.makeText(context, "屏蔽失败: ${res.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
+                                    }
                                 }
                             )
                         }
@@ -637,8 +705,25 @@ fun NodeSquareScreen(
                             .weight(1f)
                     ) {
                         items(filteredNodes, key = { it.id }) { node ->
+                            val isMaster = node.ip == activeMasterIp || (activeServer != null && activeServer.exitIp == node.ip)
                             FullNodeCard(
                                 node = node,
+                                isMaster = isMaster,
+                                onSetMaster = {
+                                    if (activeServer != null) {
+                                        scope.launch {
+                                            Toast.makeText(context, "正在请求将 [${node.countryLong.ifEmpty { node.countryShort }} ${node.ip}] 设为系统主出口...", Toast.LENGTH_SHORT).show()
+                                            val res = AimiliApplication.instance.apiClient.connectMaster(activeServer, node.id)
+                                            if (res.isSuccess) {
+                                                activeMasterIp = node.ip
+                                                Toast.makeText(context, "✅ 已将 [${node.countryLong.ifEmpty { node.countryShort }} ${node.ip}] 设为主网关出口！", Toast.LENGTH_SHORT).show()
+                                                refreshAllNodes()
+                                            } else {
+                                                Toast.makeText(context, "⚠️ 切换主出口失败: ${res.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
+                                            }
+                                        }
+                                    }
+                                },
                                 isStarred = node.isFavorite,
                                 onToggleStar = {
                                     if (activeServer != null) {
@@ -658,7 +743,21 @@ fun NodeSquareScreen(
                                     }
                                 },
                                 onBlacklist = {
-                                    Toast.makeText(context, "已将节点 [${node.ip}] 加入隔离屏蔽库", Toast.LENGTH_SHORT).show()
+                                    if (activeServer != null) {
+                                        scope.launch {
+                                            val res = AimiliApplication.instance.apiClient.addBlacklist(activeServer, node.id, node.ip, node.countryShort)
+                                            if (res.isSuccess) {
+                                                allNodes = allNodes.filter { it.id != node.id }
+                                                Toast.makeText(context, "已将节点 [${node.ip}] 移入 24 小时隔离屏蔽库", Toast.LENGTH_SHORT).show()
+                                                val blRes = AimiliApplication.instance.apiClient.fetchBlacklist(activeServer)
+                                                if (blRes.isSuccess) {
+                                                    blacklistItems = blRes.getOrNull() ?: emptyList()
+                                                }
+                                            } else {
+                                                Toast.makeText(context, "屏蔽失败: ${res.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
+                                    }
                                 }
                             )
                         }
@@ -732,14 +831,36 @@ fun NodeSquareScreen(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(10.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween
+                                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
                                     text = "${item.ip} (${item.country}) - ${item.reason}",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.error
+                                    color = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.weight(1f)
                                 )
+                                IconButton(
+                                    onClick = {
+                                        if (activeServer != null) {
+                                            scope.launch {
+                                                AimiliApplication.instance.apiClient.removeBlacklist(activeServer, item.nodeId)
+                                                blacklistItems = blacklistItems.filter { it.nodeId != item.nodeId }
+                                                Toast.makeText(context, "已解除对 [${item.ip}] 的屏蔽！", Toast.LENGTH_SHORT).show()
+                                                refreshAllNodes()
+                                            }
+                                        }
+                                    },
+                                    modifier = Modifier.size(28.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Delete,
+                                        contentDescription = "解除屏蔽",
+                                        tint = MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
                             }
                         }
                     }

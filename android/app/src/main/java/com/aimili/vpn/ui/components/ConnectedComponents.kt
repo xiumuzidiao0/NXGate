@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
@@ -67,6 +68,12 @@ fun ConnectedButtonGroup(
         horizontalArrangement = Arrangement.spacedBy(3.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        val isCompact = items.size >= 4
+        val contentPadding = if (isCompact) PaddingValues(horizontal = 4.dp, vertical = 0.dp) else ButtonDefaults.ContentPadding
+        val textStyle = if (isCompact) MaterialTheme.typography.labelMedium else MaterialTheme.typography.labelLarge
+        val iconSize = if (isCompact) 14.dp else 18.dp
+        val iconSpacing = if (isCompact) 3.dp else 6.dp
+
         items.forEachIndexed { index, item ->
             val shape = connectedButtonShape(index, items.size)
             when (item.style) {
@@ -77,18 +84,19 @@ fun ConnectedButtonGroup(
                             .weight(1f)
                             .height(height),
                         shape = shape,
+                        contentPadding = contentPadding,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.primary,
                             contentColor = MaterialTheme.colorScheme.onPrimary
                         )
                     ) {
                         if (item.icon != null) {
-                            Icon(item.icon, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(6.dp))
+                            Icon(item.icon, contentDescription = null, modifier = Modifier.size(iconSize))
+                            Spacer(Modifier.width(iconSpacing))
                         }
                         Text(
                             text = item.text,
-                            style = MaterialTheme.typography.labelLarge,
+                            style = textStyle,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -101,18 +109,19 @@ fun ConnectedButtonGroup(
                             .weight(1f)
                             .height(height),
                         shape = shape,
+                        contentPadding = contentPadding,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.secondaryContainer,
                             contentColor = MaterialTheme.colorScheme.onSecondaryContainer
                         )
                     ) {
                         if (item.icon != null) {
-                            Icon(item.icon, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(6.dp))
+                            Icon(item.icon, contentDescription = null, modifier = Modifier.size(iconSize))
+                            Spacer(Modifier.width(iconSpacing))
                         }
                         Text(
                             text = item.text,
-                            style = MaterialTheme.typography.labelLarge,
+                            style = textStyle,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -125,18 +134,19 @@ fun ConnectedButtonGroup(
                             .weight(1f)
                             .height(height),
                         shape = shape,
+                        contentPadding = contentPadding,
                         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
                         colors = ButtonDefaults.outlinedButtonColors(
                             contentColor = MaterialTheme.colorScheme.primary
                         )
                     ) {
                         if (item.icon != null) {
-                            Icon(item.icon, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(6.dp))
+                            Icon(item.icon, contentDescription = null, modifier = Modifier.size(iconSize))
+                            Spacer(Modifier.width(iconSpacing))
                         }
                         Text(
                             text = item.text,
-                            style = MaterialTheme.typography.labelLarge,
+                            style = textStyle,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
