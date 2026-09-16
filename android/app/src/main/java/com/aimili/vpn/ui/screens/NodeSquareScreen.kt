@@ -25,6 +25,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Sort
+import androidx.compose.material.icons.rounded.Category
+import androidx.compose.material.icons.rounded.Flag
+import androidx.compose.material.icons.rounded.Public
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.RocketLaunch
 import androidx.compose.material.icons.rounded.Search
@@ -32,10 +35,7 @@ import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.StarBorder
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -68,6 +68,7 @@ import com.aimili.vpn.AimiliApplication
 import com.aimili.vpn.model.BlacklistRecord
 import com.aimili.vpn.model.NodeCandidate
 import com.aimili.vpn.model.ServerProfile
+import com.aimili.vpn.ui.components.AppExposedDropdown
 import com.aimili.vpn.ui.components.ConnectedButtonItem
 import com.aimili.vpn.ui.components.ConnectedButtonGroup
 import com.aimili.vpn.ui.components.ConnectedButtonStyle
@@ -99,7 +100,7 @@ fun FullNodeCard(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // Row 1: Country + IP:Port + Latency Badge
+            // Row 1: Country Flag + Country Name + IP:Port + Latency Badge
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -226,6 +227,10 @@ fun FullNodeCard(
     }
 }
 
+data class CountryFilterOption(val code: String, val label: String)
+data class IpTypeFilterOption(val key: String, val label: String)
+data class SortFilterOption(val key: String, val label: String)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NodeSquareScreen(
@@ -247,15 +252,9 @@ fun NodeSquareScreen(
     var searchQuery by remember { mutableStateOf("") }
     var isSearchActive by remember { mutableStateOf(false) }
 
+    // Quick filter chips
     var selectedChipIndex by remember { mutableIntStateOf(0) }
     val chipList = listOf("全部", "日本", "美国", "原生家宽", "三大AI全通")
-
-    val sortOptions = listOf("延迟最低", "带宽最大", "信誉分最高")
-    var selectedSortOption by remember { mutableStateOf(sortOptions[0]) }
-    var dropdownExpanded by remember { mutableStateOf(false) }
-
-    var showBlacklistSheet by remember { mutableStateOf(false) }
-    val blacklistSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     // Full nodes list from server (dynamically loaded)
     var allNodes by remember { mutableStateOf<List<NodeCandidate>>(emptyList()) }
@@ -263,6 +262,41 @@ fun NodeSquareScreen(
     var nodeLoadError by remember { mutableStateOf<String?>(null) }
 
     var blacklistItems by remember { mutableStateOf<List<BlacklistRecord>>(emptyList()) }
+    var showBlacklistSheet by remember { mutableStateOf(false) }
+    val blacklistSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    // Dynamic country dropdown options calculated from allNodes (matching Web)
+    val countryOptions = remember(allNodes) {
+        val countMap = allNodes.groupingBy { it.countryShort.uppercase() }.eachCount()
+        val list = mutableListOf(CountryFilterOption("", "全部国家/地区 (共 ${allNodes.size} 节点)"))
+        countMap.entries.sortedByDescending { it.value }.forEach { (code, count) ->
+            val flag = countryFlag(code)
+            val name = allNodes.find { it.countryShort.equals(code, ignoreCase = true) }?.countryLong ?: code
+            list.add(CountryFilterOption(code, "$flag $name ($code · $count)"))
+        }
+        list
+    }
+    var selectedCountryOption by remember { mutableStateOf(countryOptions.first()) }
+
+    // IP Type dropdown options (matching Web)
+    val ipTypeOptions = remember {
+        listOf(
+            IpTypeFilterOption("all", "全部网络类型"),
+            IpTypeFilterOption("residential", "🏠 原生住宅宽带 (家宽)"),
+            IpTypeFilterOption("hosting", "🏢 机房/数据中心 IP")
+        )
+    }
+    var selectedIpTypeOption by remember { mutableStateOf(ipTypeOptions.first()) }
+
+    // Sort dropdown options (matching Web)
+    val sortOptions = remember {
+        listOf(
+            SortFilterOption("latency_asc", "⚡ 按测速延迟 (低 ➔ 高)"),
+            SortFilterOption("speed_desc", "🚀 按节点带宽 (大 ➔ 小)"),
+            SortFilterOption("score_desc", "⭐ 按综合评分 (高 ➔ 低)")
+        )
+    }
+    var selectedSortOption by remember { mutableStateOf(sortOptions.first()) }
 
     fun refreshAllNodes() {
         if (activeServer != null) {
@@ -290,14 +324,32 @@ fun NodeSquareScreen(
         refreshAllNodes()
     }
 
+    // Update country options selection if options change
+    LaunchedEffect(countryOptions) {
+        if (selectedCountryOption.code.isNotEmpty()) {
+            selectedCountryOption = countryOptions.find { it.code == selectedCountryOption.code } ?: countryOptions.first()
+        } else {
+            selectedCountryOption = countryOptions.first()
+        }
+    }
+
     // Dynamic filtering across all nodes
-    val filteredNodes = remember(allNodes, selectedChipIndex, searchQuery, selectedSortOption) {
+    val filteredNodes = remember(allNodes, selectedChipIndex, selectedCountryOption, selectedIpTypeOption, selectedSortOption, searchQuery) {
         var list = allNodes.filter { node ->
             val matchesQuery = searchQuery.isEmpty() ||
                     node.ip.contains(searchQuery, ignoreCase = true) ||
                     node.countryShort.contains(searchQuery, ignoreCase = true) ||
                     node.countryLong.contains(searchQuery, ignoreCase = true) ||
                     node.isp.contains(searchQuery, ignoreCase = true)
+
+            val matchesCountry = selectedCountryOption.code.isEmpty() ||
+                    node.countryShort.equals(selectedCountryOption.code, ignoreCase = true)
+
+            val matchesIpType = when (selectedIpTypeOption.key) {
+                "residential" -> node.ipType == "residential"
+                "hosting" -> node.ipType == "hosting"
+                else -> true
+            }
 
             val matchesChip = when (selectedChipIndex) {
                 1 -> node.countryShort.equals("JP", ignoreCase = true)
@@ -306,13 +358,13 @@ fun NodeSquareScreen(
                 4 -> node.openai == "unlocked" && node.claude == "unlocked" && node.gemini == "unlocked"
                 else -> true
             }
-            matchesQuery && matchesChip
+            matchesQuery && matchesCountry && matchesIpType && matchesChip
         }
 
-        list = when (selectedSortOption) {
-            "延迟最低" -> list.sortedBy { if (it.latencyMs > 0) it.latencyMs else 9999 }
-            "带宽最大" -> list.sortedByDescending { it.speedBps }
-            "信誉分最高" -> list.sortedByDescending { it.score }
+        list = when (selectedSortOption.key) {
+            "latency_asc" -> list.sortedBy { if (it.latencyMs > 0) it.latencyMs else 9999 }
+            "speed_desc" -> list.sortedByDescending { it.speedBps }
+            "score_desc" -> list.sortedByDescending { it.score }
             else -> list
         }
         list
@@ -377,7 +429,7 @@ fun NodeSquareScreen(
                     )
                 }
 
-                // 1. 横向排列的标签片组
+                // 1. 横向快捷标签片
                 Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
                     ConnectedChipGroup(
                         chips = chipList,
@@ -386,53 +438,91 @@ fun NodeSquareScreen(
                     )
                 }
 
-                // 2. 描边下拉菜单（Exposed Dropdown Menu）
-                ExposedDropdownMenuBox(
-                    expanded = dropdownExpanded,
-                    onExpandedChange = { dropdownExpanded = !dropdownExpanded },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    OutlinedTextField(
-                        value = selectedSortOption,
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("排序规则") },
-                        supportingText = {
-                            Text(
-                                text = if (isLoadingNodes) "正在加载全量节点清单..." else "按${selectedSortOption}优先显示 (当前共展示 ${filteredNodes.size} 个可用节点)",
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        },
-                        leadingIcon = {
-                            Icon(Icons.AutoMirrored.Rounded.Sort, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                        },
-                        trailingIcon = {
-                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = dropdownExpanded)
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .menuAnchor(),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
-                    )
-
-                    ExposedDropdownMenu(
-                        expanded = dropdownExpanded,
-                        onDismissRequest = { dropdownExpanded = false }
+                // 2. 下拉框筛选控制区域 (平板横屏三列并排，手机自适应堆叠)
+                if (isTabletLandscape) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        sortOptions.forEach { option ->
-                            DropdownMenuItem(
-                                text = { Text(option, style = MaterialTheme.typography.bodyLarge) },
-                                onClick = {
-                                    selectedSortOption = option
-                                    dropdownExpanded = false
-                                }
+                        AppExposedDropdown(
+                            label = "国家/地区分类",
+                            options = countryOptions,
+                            selectedOption = selectedCountryOption,
+                            onOptionSelected = { selectedCountryOption = it },
+                            optionLabel = { it.label },
+                            leadingIcon = Icons.Rounded.Flag,
+                            modifier = Modifier.weight(1.2f)
+                        )
+                        AppExposedDropdown(
+                            label = "网络类型",
+                            options = ipTypeOptions,
+                            selectedOption = selectedIpTypeOption,
+                            onOptionSelected = { selectedIpTypeOption = it },
+                            optionLabel = { it.label },
+                            leadingIcon = Icons.Rounded.Category,
+                            modifier = Modifier.weight(1f)
+                        )
+                        AppExposedDropdown(
+                            label = "排序规则",
+                            options = sortOptions,
+                            selectedOption = selectedSortOption,
+                            onOptionSelected = { selectedSortOption = it },
+                            optionLabel = { it.label },
+                            leadingIcon = Icons.AutoMirrored.Rounded.Sort,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        AppExposedDropdown(
+                            label = "按国家或地区分类选择",
+                            options = countryOptions,
+                            selectedOption = selectedCountryOption,
+                            onOptionSelected = { selectedCountryOption = it },
+                            optionLabel = { it.label },
+                            leadingIcon = Icons.Rounded.Flag,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            AppExposedDropdown(
+                                label = "网络类型",
+                                options = ipTypeOptions,
+                                selectedOption = selectedIpTypeOption,
+                                onOptionSelected = { selectedIpTypeOption = it },
+                                optionLabel = { it.label },
+                                leadingIcon = Icons.Rounded.Category,
+                                modifier = Modifier.weight(1f)
+                            )
+                            AppExposedDropdown(
+                                label = "排序方式",
+                                options = sortOptions,
+                                selectedOption = selectedSortOption,
+                                onOptionSelected = { selectedSortOption = it },
+                                optionLabel = { it.label },
+                                leadingIcon = Icons.AutoMirrored.Rounded.Sort,
+                                modifier = Modifier.weight(1f)
                             )
                         }
                     }
                 }
 
-                // Action buttons bar at the top of list
+                // 3. 操作按钮与计数条
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (isLoadingNodes) "正在加载全量节点..." else "当前展示 ${filteredNodes.size} / 全库 ${allNodes.size} 个节点",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
                 ConnectedButtonGroup(
                     items = listOf(
                         ConnectedButtonItem(
@@ -442,25 +532,25 @@ fun NodeSquareScreen(
                                 if (activeServer != null) {
                                     scope.launch {
                                         AimiliApplication.instance.apiClient.probeNodes(activeServer)
-                                        Toast.makeText(context, "已触发远端对全量候选节点进行并发敲门与测速！", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, "已触发远端对候选节点进行并发测速！", Toast.LENGTH_SHORT).show()
                                     }
                                 }
                             }
                         ),
                         ConnectedButtonItem(
-                            text = "屏蔽库管理 (${blacklistItems.size})",
+                            text = "屏蔽库 (${blacklistItems.size})",
                             style = ConnectedButtonStyle.Tonal,
                             onClick = { showBlacklistSheet = true }
                         )
                     ),
-                    height = 46.dp
+                    height = 44.dp
                 )
 
                 if (isLoadingNodes) {
                     LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.primary)
                 }
 
-                // 3. 全量候选节点流 (所有节点全部展示，支持平板横屏双列网格)
+                // 4. 全量候选节点流 (所有节点全部展示，平板横屏 2 列响应式网格，手机单列平滑可滚动流)
                 if (allNodes.isEmpty() && !isLoadingNodes) {
                     Surface(
                         modifier = Modifier
@@ -495,7 +585,7 @@ fun NodeSquareScreen(
                         color = MaterialTheme.colorScheme.surfaceContainerLow
                     ) {
                         Text(
-                            text = "未找到符合当前筛选条件的节点，请尝试切换上方标签或点击全量测速。",
+                            text = "未找到符合当前筛选条件的节点，请尝试切换上方国家下拉框或点击全量测速。",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(20.dp)
@@ -528,7 +618,7 @@ fun NodeSquareScreen(
                                     if (activeServer != null) {
                                         scope.launch {
                                             AimiliApplication.instance.apiClient.startTunnel(activeServer, node.id)
-                                            Toast.makeText(context, "已在 [${activeServer.name}] 为该节点拉起独立并发隧道！", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(context, "已在 [${activeServer.name}] 为该节点拉起独立并发网卡！", Toast.LENGTH_SHORT).show()
                                         }
                                     }
                                 },
@@ -563,7 +653,7 @@ fun NodeSquareScreen(
                                     if (activeServer != null) {
                                         scope.launch {
                                             AimiliApplication.instance.apiClient.startTunnel(activeServer, node.id)
-                                            Toast.makeText(context, "已在 [${activeServer.name}] 为该节点拉起独立并发隧道！", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(context, "已在 [${activeServer.name}] 为该节点拉起独立并发网卡！", Toast.LENGTH_SHORT).show()
                                         }
                                     }
                                 },
