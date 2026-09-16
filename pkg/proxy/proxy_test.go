@@ -260,3 +260,145 @@ func TestGatewaySocks5AndHTTP(t *testing.T) {
 		}
 	})
 }
+
+func TestPortListenerSocks5WithAuthAndUDP(t *testing.T) {
+	// Setup dummy target UDP echo server
+	udpEcho, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 0})
+	if err != nil {
+		t.Fatalf("failed to listen udp echo server: %v", err)
+	}
+	defer udpEcho.Close()
+	udpEchoPort := udpEcho.LocalAddr().(*net.UDPAddr).Port
+
+	go func() {
+		buf := make([]byte, 2048)
+		for {
+			n, from, err := udpEcho.ReadFrom(buf)
+			if err != nil {
+				return
+			}
+			_, _ = udpEcho.WriteTo(buf[:n], from)
+		}
+	}()
+
+	cfg := &config.Config{
+		ProxyHost:           "127.0.0.1",
+		ProxyMaxConnections: 64,
+	}
+
+	rule := PortRule{
+		Port:     0,
+		Enabled:  true,
+		AuthMode: "custom",
+		AuthUser: "secuser",
+		AuthPass: "sec%pass@123",
+	}
+
+	listener := NewPortListener(rule, cfg, nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go func() {
+		_ = listener.Start(ctx)
+	}()
+
+	var listenerPort int
+	for i := 0; i < 50; i++ {
+		listener.mu.Lock()
+		if listener.listener != nil {
+			listenerPort = listener.listener.Addr().(*net.TCPAddr).Port
+			listener.mu.Unlock()
+			break
+		}
+		listener.mu.Unlock()
+		time.Sleep(10 * time.Millisecond)
+	}
+	if listenerPort == 0 {
+		t.Fatal("listener failed to start")
+	}
+	defer listener.Close()
+
+	// 1. Connect without auth -> should be rejected
+	noAuthConn, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", listenerPort))
+	if err != nil {
+		t.Fatalf("dial listener failed: %v", err)
+	}
+	_, _ = noAuthConn.Write([]byte{0x05, 0x01, 0x00}) // method 0x00
+	noAuthResp := make([]byte, 2)
+	_, _ = io.ReadFull(noAuthConn, noAuthResp)
+	noAuthConn.Close()
+	if noAuthResp[1] != 0xff {
+		t.Fatalf("expected 0xff (no acceptable methods) for unauthenticated client, got: 0x%02x", noAuthResp[1])
+	}
+
+	// 2. Connect with auth and perform UDP Associate
+	tcpConn, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", listenerPort))
+	if err != nil {
+		t.Fatalf("dial listener failed: %v", err)
+	}
+	defer tcpConn.Close()
+
+	// Method negotiation: offer 0x00 and 0x02
+	_, _ = tcpConn.Write([]byte{0x05, 0x02, 0x00, 0x02})
+	methodResp := make([]byte, 2)
+	if _, err := io.ReadFull(tcpConn, methodResp); err != nil || methodResp[1] != 0x02 {
+		t.Fatalf("expected method 0x02 selected, got: %v", methodResp)
+	}
+
+	// Subnegotiation: RFC 1929 username/password
+	user := "secuser"
+	pass := "sec%pass@123"
+	authReq := []byte{0x01, byte(len(user))}
+	authReq = append(authReq, []byte(user)...)
+	authReq = append(authReq, byte(len(pass)))
+	authReq = append(authReq, []byte(pass)...)
+	_, _ = tcpConn.Write(authReq)
+
+	authResp := make([]byte, 2)
+	if _, err := io.ReadFull(tcpConn, authResp); err != nil || authResp[1] != 0x00 {
+		t.Fatalf("expected auth status 0x00 success, got: %v", authResp)
+	}
+
+	// UDP ASSOCIATE command: VER 0x05, CMD 0x03, RSV 0x00, ATYP 0x01, ADDR 0.0.0.0, PORT 0
+	_, _ = tcpConn.Write([]byte{0x05, 0x03, 0x00, 0x01, 0, 0, 0, 0, 0, 0})
+	assocReply := make([]byte, 10)
+	if _, err := io.ReadFull(tcpConn, assocReply); err != nil || assocReply[1] != 0x00 {
+		t.Fatalf("expected udp associate success, got: %v", assocReply)
+	}
+
+	relayIP := net.IP(assocReply[4:8])
+	relayPort := int(binary.BigEndian.Uint16(assocReply[8:10]))
+
+	// Send UDP packet through relay to echo server
+	clientUDP, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 0})
+	if err != nil {
+		t.Fatalf("failed to create client udp: %v", err)
+	}
+	defer clientUDP.Close()
+
+	udpPayload := []byte("hello-socks5-authenticated-udp")
+	reqPacket := make([]byte, 10+len(udpPayload))
+	reqPacket[0] = 0x00
+	reqPacket[1] = 0x00
+	reqPacket[2] = 0x00
+	reqPacket[3] = 0x01
+	copy(reqPacket[4:8], net.ParseIP("127.0.0.1").To4())
+	binary.BigEndian.PutUint16(reqPacket[8:10], uint16(udpEchoPort))
+	copy(reqPacket[10:], udpPayload)
+
+	_, err = clientUDP.WriteTo(reqPacket, &net.UDPAddr{IP: relayIP, Port: relayPort})
+	if err != nil {
+		t.Fatalf("failed to write to udp relay: %v", err)
+	}
+
+	_ = clientUDP.SetReadDeadline(time.Now().Add(2 * time.Second))
+	recvBuf := make([]byte, 2048)
+	n, _, err := clientUDP.ReadFrom(recvBuf)
+	if err != nil {
+		t.Fatalf("failed to receive echoed udp packet through auth relay: %v", err)
+	}
+
+	if n < 10 || string(recvBuf[10:n]) != string(udpPayload) {
+		t.Fatalf("payload mismatch in auth udp associate test")
+	}
+}

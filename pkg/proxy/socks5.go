@@ -223,30 +223,63 @@ func handleSocks5UDPAssociate(client net.Conn, atyp byte, devName string, tun *t
 		return fmt.Errorf("read udp associate address failed: %w", err)
 	}
 
-	// 2. Bind local UDP relay listener on the same IP interface as client TCP connection
+	// 2. Bind local UDP relay listener on the same IP network family as client TCP connection
 	var bindIP net.IP
 	if tcpAddr, ok := client.LocalAddr().(*net.TCPAddr); ok && tcpAddr != nil {
 		bindIP = tcpAddr.IP
 	}
+
+	udpNetwork := "udp4"
+	isIPv6 := false
+	if bindIP != nil && bindIP.To4() == nil && bindIP.To16() != nil {
+		udpNetwork = "udp6"
+		isIPv6 = true
+	}
 	if bindIP == nil || bindIP.IsUnspecified() {
 		bindIP = net.ParseIP("127.0.0.1")
+		udpNetwork = "udp4"
+		isIPv6 = false
 	}
 
-	relayConn, err := net.ListenUDP("udp4", &net.UDPAddr{IP: bindIP, Port: 0})
+	relayConn, err := net.ListenUDP(udpNetwork, &net.UDPAddr{IP: bindIP, Port: 0})
 	if err != nil {
-		_, _ = client.Write([]byte{socks5Version, repGeneralFailure, 0x00, atypIPv4, 0, 0, 0, 0, 0, 0})
-		return fmt.Errorf("listen udp relay failed: %w", err)
+		// Fallback to IPv4 loopback
+		bindIP = net.ParseIP("127.0.0.1")
+		isIPv6 = false
+		relayConn, err = net.ListenUDP("udp4", &net.UDPAddr{IP: bindIP, Port: 0})
+		if err != nil {
+			_, _ = client.Write([]byte{socks5Version, repGeneralFailure, 0x00, atypIPv4, 0, 0, 0, 0, 0, 0})
+			return fmt.Errorf("listen udp relay failed: %w", err)
+		}
 	}
 	defer relayConn.Close()
 
 	relayPort := relayConn.LocalAddr().(*net.UDPAddr).Port
 
 	// 3. Send SOCKS5 reply with BND.ADDR and BND.PORT over TCP
-	bndIP := bindIP.To4()
-	if bndIP == nil {
-		bndIP = net.ParseIP("127.0.0.1").To4()
+	var reply []byte
+	if isIPv6 {
+		bndIP6 := bindIP.To16()
+		reply = make([]byte, 22)
+		reply[0] = socks5Version
+		reply[1] = repSuccess
+		reply[2] = 0x00
+		reply[3] = atypIPv6
+		copy(reply[4:20], bndIP6)
+		binary.BigEndian.PutUint16(reply[20:22], uint16(relayPort))
+	} else {
+		bndIP4 := bindIP.To4()
+		if bndIP4 == nil {
+			bndIP4 = net.ParseIP("127.0.0.1").To4()
+		}
+		reply = make([]byte, 10)
+		reply[0] = socks5Version
+		reply[1] = repSuccess
+		reply[2] = 0x00
+		reply[3] = atypIPv4
+		copy(reply[4:8], bndIP4)
+		binary.BigEndian.PutUint16(reply[8:10], uint16(relayPort))
 	}
-	reply := []byte{socks5Version, repSuccess, 0x00, atypIPv4, bndIP[0], bndIP[1], bndIP[2], bndIP[3], byte(relayPort >> 8), byte(relayPort & 0xff)}
 	if _, err := client.Write(reply); err != nil {
 		return err
 	}

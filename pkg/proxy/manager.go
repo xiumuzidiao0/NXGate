@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"aimili-vpngate-go/pkg/config"
@@ -131,6 +132,13 @@ func (m *MultiPortManager) ApplyRules(newRules []PortRule) error {
 		}
 		if portMap[r.Port] {
 			return fmt.Errorf("存在重复配置的代理端口: %d", r.Port)
+		}
+		if r.AuthMode == "custom" {
+			u := strings.TrimSpace(r.AuthUser)
+			p := strings.TrimSpace(r.AuthPass)
+			if (u != "" && p == "") || (u == "" && p != "") {
+				return fmt.Errorf("端口 %d 的自定义认证模式必须同时填写用户名和密码，或选择免密模式", r.Port)
+			}
 		}
 		portMap[r.Port] = true
 	}

@@ -68,7 +68,11 @@ func (l *PortListener) getAuthenticator() *Authenticator {
 		return NewAuthenticator(l.rule.AuthUser, l.rule.AuthPass)
 	}
 	// Default: follow Web credentials
-	return NewAuthenticator(l.cfg.GetSettings().UIUsername, l.cfg.GetSettings().UIPassword)
+	if !l.cfg.IsUIAuthEnabled() {
+		return NewAuthenticator("", "")
+	}
+	settings := l.cfg.GetSettings()
+	return NewAuthenticator(settings.UIUsername, settings.UIPassword)
 }
 
 func (l *PortListener) Start(ctx context.Context) error {
