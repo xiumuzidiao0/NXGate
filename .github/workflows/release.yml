@@ -1,0 +1,95 @@
+name: Automated Release Publisher
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build & Publish Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "stable"
+          cache: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Verify Version Consistency with Tag
+        run: |
+          chmod +x scripts/check-version.sh
+          ./scripts/check-version.sh
+          TAG_VER="${GITHUB_REF#refs/tags/v}"
+          CODE_VER="$(cat VERSION | tr -d '\r\n ')"
+          if [ "$TAG_VER" != "$CODE_VER" ]; then
+            echo "::error::Git Tag (v$TAG_VER) 与代码定义版本 (v$CODE_VER) 不一致！请使用 ./scripts/check-version.sh --set 进行统一。"
+            exit 1
+          fi
+
+      - name: Run Full Test Suite
+        run: |
+          go test -v -count=1 ./...
+          npm --prefix web install
+          npx --prefix web playwright install --with-deps chromium
+          npm --prefix web run test:ui
+
+      - name: Build Multi-architecture Release Artifacts
+        run: |
+          chmod +x scripts/build.sh
+          ./scripts/build.sh
+
+      - name: Verify Artifacts Completeness
+        run: |
+          EXPECTED_FILES=(
+            "dist/aimilivpn_linux_amd64"
+            "dist/aimilivpn_linux_amd64.gz"
+            "dist/aimilivpn_linux_arm64"
+            "dist/aimilivpn_linux_arm64.gz"
+            "dist/aimilivpn_linux_386"
+            "dist/aimilivpn_linux_386.gz"
+            "dist/aimilivpn_linux_arm"
+            "dist/aimilivpn_linux_arm.gz"
+            "dist/SHA256SUMS.txt"
+          )
+          for f in "${EXPECTED_FILES[@]}"; do
+            if [ ! -s "$f" ]; then
+              echo "::error::Missing or empty release artifact: $f"
+              exit 1
+            fi
+          done
+          echo "All 9 release artifacts verified."
+
+      - name: Create or Update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "${{ github.ref_name }} - AimiliVPN Gateway Release"
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            dist/aimilivpn_linux_amd64
+            dist/aimilivpn_linux_amd64.gz
+            dist/aimilivpn_linux_arm64
+            dist/aimilivpn_linux_arm64.gz
+            dist/aimilivpn_linux_386
+            dist/aimilivpn_linux_386.gz
+            dist/aimilivpn_linux_arm
+            dist/aimilivpn_linux_arm.gz
+            dist/SHA256SUMS.txt
