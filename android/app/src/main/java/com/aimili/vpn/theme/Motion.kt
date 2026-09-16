@@ -20,8 +20,24 @@ object AimiliMotion {
         stiffness = Spring.StiffnessMedium
     )
 
+    // HyperOS / MIUIX Folme Spring Physics (源自 flutter_miuix)
+    val folmeFloat: FiniteAnimationSpec<Float> = spring(
+        dampingRatio = 0.85f,
+        stiffness = 320f
+    )
+
+    val folmeOffset: FiniteAnimationSpec<IntOffset> = spring(
+        dampingRatio = 0.85f,
+        stiffness = 320f
+    )
+
     fun <T> expressive(): FiniteAnimationSpec<T> = spring(
         dampingRatio = 0.82f,
         stiffness = Spring.StiffnessMedium
+    )
+
+    fun <T> folme(): FiniteAnimationSpec<T> = spring(
+        dampingRatio = 0.85f,
+        stiffness = 320f
     )
 }

@@ -196,6 +196,22 @@ class ServerStore(context: Context) {
         prefs.edit().putString(KEY_THEME_PALETTE, palette).apply()
     }
 
+    fun updateServerTraffic(serverId: String, downSpeedStr: String, upSpeedStr: String, totalTrafficStr: String, activeConns: Int) {
+        val list = _servers.value.map {
+            if (it.id == serverId) {
+                it.copy(
+                    downSpeedStr = downSpeedStr,
+                    totalTrafficStr = totalTrafficStr,
+                    activeConns = activeConns
+                )
+            } else it
+        }
+        _servers.value = list
+        if (_activeServer.value?.id == serverId) {
+            _activeServer.value = list.find { it.id == serverId }
+        }
+    }
+
     private fun saveList(list: List<ServerProfile>) {
         val array = JSONArray()
         list.forEach { array.put(serializeServer(it)) }

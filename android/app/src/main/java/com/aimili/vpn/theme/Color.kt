@@ -13,13 +13,14 @@ data class AppThemePalette(
 )
 
 val AVAILABLE_PALETTES = listOf(
-    AppThemePalette("monet", "✨ 壁纸莫奈动态取色", "从系统壁纸提取动态色彩 (Android 12+)", Color(0xFF6750A4)),
-    AppThemePalette("teal", "🌿 默认青翠 (Teal)", "Aimili 标志性青碧护眼色系 (默认)", Color(0xFF00696E)),
-    AppThemePalette("ocean", "🌊 极客苍蓝 (Ocean)", "沉稳专业深海科技纯蓝色系", Color(0xFF0061A4)),
-    AppThemePalette("emerald", "🌲 原野翡翠 (Emerald)", "自然原野翡翠绿色系", Color(0xFF1B6D36)),
-    AppThemePalette("purple", "🔮 暮光紫罗 (Amethyst)", "优雅高贵紫罗兰色系", Color(0xFF7A4B95)),
-    AppThemePalette("amber", "🌅 晚霞琥珀 (Amber)", "温暖夕阳琥珀橙色系", Color(0xFF9C4300)),
-    AppThemePalette("rose", "🌸 暗夜樱粉 (Rose)", "现代活力粉樱浪漫色系", Color(0xFF984061))
+    AppThemePalette("monet", "壁纸莫奈动态取色", "从系统壁纸提取动态色彩 (Android 12+)", Color(0xFF6750A4)),
+    AppThemePalette("miuix", "小米澎湃 (HyperOS · MIUIX)", "移植自 flutter_miuix 的经典超凡蓝与层级卡片", Color(0xFF3482FF)),
+    AppThemePalette("teal", "默认青翠 (Teal)", "Aimili 标志性青碧护眼色系 (默认)", Color(0xFF00696E)),
+    AppThemePalette("ocean", "极客苍蓝 (Ocean)", "沉稳专业深海科技纯蓝色系", Color(0xFF0061A4)),
+    AppThemePalette("emerald", "原野翡翠 (Emerald)", "自然原野翡翠绿色系", Color(0xFF1B6D36)),
+    AppThemePalette("purple", "暮光紫罗 (Amethyst)", "优雅高贵紫罗兰色系", Color(0xFF7A4B95)),
+    AppThemePalette("amber", "晚霞琥珀 (Amber)", "温暖夕阳琥珀橙色系", Color(0xFF9C4300)),
+    AppThemePalette("rose", "暗夜樱粉 (Rose)", "现代活力粉樱浪漫色系", Color(0xFF984061))
 )
 
 // ==========================================
@@ -382,4 +383,128 @@ val RoseDarkColorScheme: ColorScheme = darkColorScheme(
     onSurfaceVariant = Color(0xFFD6C2C6),
     outline = Color(0xFF9E8C90),
     outlineVariant = Color(0xFF514347)
+)
+
+// ==========================================
+// 7. 小米澎湃 (HyperOS · MIUIX 风格)
+// 源自 /home/xmzd/flutter_miuix 的 Colors.kt，与 HyperOS 规范一致
+// ==========================================
+val MiuixLightPrimary = Color(0xFF3482FF) // HyperOS 超凡蔚蓝
+val MiuixLightOnPrimary = Color(0xFFFFFFFF)
+val MiuixLightPrimaryContainer = Color(0xFFEAF2FF) // HyperOS TertiaryContainer
+val MiuixLightOnPrimaryContainer = Color(0xFF3482FF)
+val MiuixLightSecondary = Color(0xFF4B5C78)
+val MiuixLightOnSecondary = Color(0xFFFFFFFF)
+val MiuixLightSecondaryContainer = Color(0xFFF0F0F0) // HyperOS SecondaryVariant
+val MiuixLightOnSecondaryContainer = Color(0xFF303030)
+val MiuixLightTertiary = Color(0xFF2E6DD8)
+val MiuixLightOnTertiary = Color(0xFFFFFFFF)
+val MiuixLightTertiaryContainer = Color(0xFFDCE8FF)
+val MiuixLightOnTertiaryContainer = Color(0xFF002255)
+val MiuixLightSurface = Color(0xFFF7F7F7) // HyperOS 极简浅灰底色
+val MiuixLightSurfaceContainerLow = Color(0xFFF0F0F0)
+val MiuixLightSurfaceContainer = Color(0xFFFFFFFF) // 纯白高光卡片 (HyperOS Card)
+val MiuixLightSurfaceContainerHigh = Color(0xFFE8E8E8)
+val MiuixLightSurfaceContainerHighest = Color(0xFFE0E0E0)
+val MiuixLightOnSurface = Color(0xFF000000)
+val MiuixLightOnSurfaceVariant = Color(0xFF757575)
+val MiuixLightOutline = Color(0xFFD9D9D9)
+val MiuixLightOutlineVariant = Color(0xFFE0E0E0)
+val MiuixLightInverseSurface = Color(0xFF242424)
+val MiuixLightInverseOnSurface = Color(0xFFF2F2F2)
+val MiuixLightInversePrimary = Color(0xFF277AF7)
+val MiuixLightError = Color(0xFFE94634)
+val MiuixLightOnError = Color(0xFFFFFFFF)
+val MiuixLightErrorContainer = Color(0xFFFDF6F4)
+val MiuixLightOnErrorContainer = Color(0xFF410002)
+
+val MiuixDarkPrimary = Color(0xFF277AF7) // HyperOS 暗夜蔚蓝
+val MiuixDarkOnPrimary = Color(0xFFFFFFFF)
+val MiuixDarkPrimaryContainer = Color(0xFF2B3B54) // HyperOS 暗夜 TertiaryContainer
+val MiuixDarkOnPrimaryContainer = Color(0xFF76A9FF)
+val MiuixDarkSecondary = Color(0xFF8B9CB8)
+val MiuixDarkOnSecondary = Color(0xFF141E2D)
+val MiuixDarkSecondaryContainer = Color(0xFF383838) // HyperOS 暗夜 SecondaryVariant
+val MiuixDarkOnSecondaryContainer = Color(0xFFD9D9D9)
+val MiuixDarkTertiary = Color(0xFF85B1FF)
+val MiuixDarkOnTertiary = Color(0xFF00296A)
+val MiuixDarkTertiaryContainer = Color(0xFF1D3E78)
+val MiuixDarkOnTertiaryContainer = Color(0xFFD6E3FF)
+val MiuixDarkSurface = Color(0xFF000000) // 纯粹深邃黑 (OLED 友好)
+val MiuixDarkSurfaceContainerLow = Color(0xFF181818)
+val MiuixDarkSurfaceContainer = Color(0xFF242424) // HyperOS 标志性 242424 悬浮卡片
+val MiuixDarkSurfaceContainerHigh = Color(0xFF2D2D2D)
+val MiuixDarkSurfaceContainerHighest = Color(0xFF353535)
+val MiuixDarkOnSurface = Color(0xFFF2F2F2)
+val MiuixDarkOnSurfaceVariant = Color(0xFFA0A0A0)
+val MiuixDarkOutline = Color(0xFF404040)
+val MiuixDarkOutlineVariant = Color(0xFF393939)
+val MiuixDarkInverseSurface = Color(0xFFF7F7F7)
+val MiuixDarkInverseOnSurface = Color(0xFF000000)
+val MiuixDarkInversePrimary = Color(0xFF3482FF)
+val MiuixDarkError = Color(0xFFF12522)
+val MiuixDarkOnError = Color(0xFFFFFFFF)
+val MiuixDarkErrorContainer = Color(0xFF2E0603)
+val MiuixDarkOnErrorContainer = Color(0xFFFFDAD6)
+
+val MiuixLightColorScheme: ColorScheme = lightColorScheme(
+    primary = MiuixLightPrimary,
+    onPrimary = MiuixLightOnPrimary,
+    primaryContainer = MiuixLightPrimaryContainer,
+    onPrimaryContainer = MiuixLightOnPrimaryContainer,
+    secondary = MiuixLightSecondary,
+    onSecondary = MiuixLightOnSecondary,
+    secondaryContainer = MiuixLightSecondaryContainer,
+    onSecondaryContainer = MiuixLightOnSecondaryContainer,
+    tertiary = MiuixLightTertiary,
+    onTertiary = MiuixLightOnTertiary,
+    tertiaryContainer = MiuixLightTertiaryContainer,
+    onTertiaryContainer = MiuixLightOnTertiaryContainer,
+    surface = MiuixLightSurface,
+    surfaceContainerLow = MiuixLightSurfaceContainerLow,
+    surfaceContainer = MiuixLightSurfaceContainer,
+    surfaceContainerHigh = MiuixLightSurfaceContainerHigh,
+    surfaceContainerHighest = MiuixLightSurfaceContainerHighest,
+    onSurface = MiuixLightOnSurface,
+    onSurfaceVariant = MiuixLightOnSurfaceVariant,
+    outline = MiuixLightOutline,
+    outlineVariant = MiuixLightOutlineVariant,
+    inverseSurface = MiuixLightInverseSurface,
+    inverseOnSurface = MiuixLightInverseOnSurface,
+    inversePrimary = MiuixLightInversePrimary,
+    error = MiuixLightError,
+    onError = MiuixLightOnError,
+    errorContainer = MiuixLightErrorContainer,
+    onErrorContainer = MiuixLightOnErrorContainer
+)
+
+val MiuixDarkColorScheme: ColorScheme = darkColorScheme(
+    primary = MiuixDarkPrimary,
+    onPrimary = MiuixDarkOnPrimary,
+    primaryContainer = MiuixDarkPrimaryContainer,
+    onPrimaryContainer = MiuixDarkOnPrimaryContainer,
+    secondary = MiuixDarkSecondary,
+    onSecondary = MiuixDarkOnSecondary,
+    secondaryContainer = MiuixDarkSecondaryContainer,
+    onSecondaryContainer = MiuixDarkOnSecondaryContainer,
+    tertiary = MiuixDarkTertiary,
+    onTertiary = MiuixDarkOnTertiary,
+    tertiaryContainer = MiuixDarkTertiaryContainer,
+    onTertiaryContainer = MiuixDarkOnTertiaryContainer,
+    surface = MiuixDarkSurface,
+    surfaceContainerLow = MiuixDarkSurfaceContainerLow,
+    surfaceContainer = MiuixDarkSurfaceContainer,
+    surfaceContainerHigh = MiuixDarkSurfaceContainerHigh,
+    surfaceContainerHighest = MiuixDarkSurfaceContainerHighest,
+    onSurface = MiuixDarkOnSurface,
+    onSurfaceVariant = MiuixDarkOnSurfaceVariant,
+    outline = MiuixDarkOutline,
+    outlineVariant = MiuixDarkOutlineVariant,
+    inverseSurface = MiuixDarkInverseSurface,
+    inverseOnSurface = MiuixDarkInverseOnSurface,
+    inversePrimary = MiuixDarkInversePrimary,
+    error = MiuixDarkError,
+    onError = MiuixDarkOnError,
+    errorContainer = MiuixDarkErrorContainer,
+    onErrorContainer = MiuixDarkOnErrorContainer
 )
