@@ -464,28 +464,28 @@ func TestSocks5NoAuthAcceptsClientUserPassOffer(t *testing.T) {
 	}
 }
 
-func TestPortListenerWithDefaultWebAuth(t *testing.T) {
+func TestPortListenerWithRandomProxyAuth(t *testing.T) {
 	cfg := &config.Config{
-		UIUsername: "webadmin",
-		UIPassword: "webpassword",
-		ProxyHost:  "127.0.0.1",
+		ProxyUser: "vpn_random",
+		ProxyPass: "pass123456",
+		ProxyHost: "127.0.0.1",
 	}
 
 	rule := PortRule{
 		Port:     0,
 		Enabled:  true,
-		AuthMode: "default_web",
+		AuthMode: "random",
 	}
 
 	listener := NewPortListener(rule, cfg, nil)
 	auth := listener.getAuthenticator()
 	if !auth.IsEnabled() {
-		t.Fatal("expected authenticator to be enabled under default_web mode")
+		t.Fatal("expected authenticator to be enabled under random proxy auth mode")
 	}
-	if !auth.Verify("webadmin", "webpassword") {
-		t.Fatal("expected web credentials to verify successfully")
+	if !auth.Verify("vpn_random", "pass123456") {
+		t.Fatal("expected proxy credentials to verify successfully")
 	}
-	if auth.Verify("webadmin", "wrongpassword") {
+	if auth.Verify("vpn_random", "wrongpassword") {
 		t.Fatal("expected wrong password to fail")
 	}
 }

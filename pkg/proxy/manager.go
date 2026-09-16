@@ -67,7 +67,7 @@ func (m *MultiPortManager) loadRules() {
 			BoundTunnelIDs:  nil, // all healthy tunnels
 			Policy:          PolicyRoundRobin,
 			IntervalSeconds: 300,
-			AuthMode:        "default_web",
+			AuthMode:        "random",
 		},
 	}
 	m.saveRulesLocked()

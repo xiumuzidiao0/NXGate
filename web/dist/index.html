@@ -807,15 +807,15 @@
 
         <div class="form-group">
             <label class="form-label">代理账密鉴权设置</label>
-            <input type="hidden" id="rule-auth-mode" value="default_web">
+            <input type="hidden" id="rule-auth-mode" value="random">
             <div class="choice-grid">
-                <div id="card-auth-default_web" class="choice-card selected" data-action="selectAuthMode" data-args="[&quot;default_web&quot;]">
-                    <div class="choice-card-title">跟随管理密码 (推荐)</div>
-                    <div class="choice-card-desc">自动同步 Web 控制台管理员用户名和密码</div>
+                <div id="card-auth-random" class="choice-card selected" data-action="selectAuthMode" data-args="[&quot;random&quot;]">
+                    <div class="choice-card-title">系统随机账密 (推荐)</div>
+                    <div class="choice-card-desc">使用系统独立生成的安全随机账密，解耦防脱节</div>
                 </div>
                 <div id="card-auth-none" class="choice-card" data-action="selectAuthMode" data-args="[&quot;none&quot;]">
                     <div class="choice-card-title">免密直接连接</div>
-                    <div class="choice-card-desc">关闭认证，无需输入账号密码即可使用代理</div>
+                    <div class="choice-card-desc">关闭认证，无需输入账号密码即可使用代理 (适合本地)</div>
                 </div>
                 <div id="card-auth-custom" class="choice-card" data-action="selectAuthMode" data-args="[&quot;custom&quot;]">
                     <div class="choice-card-title">自定义独立账密</div>
@@ -830,8 +830,11 @@
                 <input id="rule-auth-user" class="input-field w-full"  type="text" placeholder="设置代理账号">
             </div>
             <div  class="flex-1">
-                <label class="form-label">代理密码 (留空视为免密)</label>
-                <input id="rule-auth-pass" class="input-field w-full"  type="text" placeholder="设置代理密码">
+                <label class="form-label">代理密码</label>
+                <div class="flex gap-2">
+                    <input id="rule-auth-pass" class="input-field w-full"  type="text" placeholder="设置代理密码">
+                    <button type="button" class="btn btn-outline btn-sm whitespace-nowrap" data-action="generateRandomPortAuth">🎲 随机生成</button>
+                </div>
             </div>
         </div>
 
