@@ -89,7 +89,7 @@ func (f *Fetcher) FetchNodes(ctx context.Context) (*FetchResult, error) {
 		{"GitHub Raw 直链镜像", "https://raw.githubusercontent.com/baoweise-bot/aimili-vpngate/main/mirror/vpngate.csv"},
 		{"Fastly 全球加速 CDN", "https://fastly.jsdelivr.net/gh/baoweise-bot/aimili-vpngate@main/mirror/vpngate.csv"},
 		{"GitHub 镜像加速源", "https://ghproxy.net/https://raw.githubusercontent.com/baoweise-bot/aimili-vpngate/main/mirror/vpngate.csv"},
-		{"用户 GitHub 镜像源", "https://raw.githubusercontent.com/xiumuzidiao0/aimili-vpngate-go/main/mirror/vpngate.csv"},
+		{"用户 GitHub 镜像源", "https://raw.githubusercontent.com/xiumuzidiao0/NXGate/main/mirror/vpngate.csv"},
 		{"jsDelivr 全球加速 CDN", "https://cdn.jsdelivr.net/gh/baoweise-bot/aimili-vpngate@main/mirror/vpngate.csv"},
 	}
 

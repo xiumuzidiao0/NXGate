@@ -4,9 +4,9 @@
 
 **面向 Linux VPS 的多出口流量调度、全球原生住宅宽带智能发现与边缘抗封锁单端口代理网关系统**
 
-[![正式版本](https://img.shields.io/github/v/release/xiumuzidiao0/aimili-vpngate-go?style=flat-square&label=正式版&color=16a34a)](https://github.com/xiumuzidiao0/aimili-vpngate-go/releases/latest)
+[![正式版本](https://img.shields.io/github/v/release/xiumuzidiao0/NXGate?style=flat-square&label=正式版&color=16a34a)](https://github.com/xiumuzidiao0/NXGate/releases/latest)
 [![Go Version](https://img.shields.io/badge/Go-1.25.13+-00ADD8?style=flat-square&logo=go)](https://go.dev/)
-[![Platform](https://img.shields.io/badge/平台-amd64%20%7C%20arm64%20%7C%20386%20%7C%20arm-6366f1?style=flat-square)](https://github.com/xiumuzidiao0/aimili-vpngate-go/releases/latest)
+[![Platform](https://img.shields.io/badge/平台-amd64%20%7C%20arm64%20%7C%20386%20%7C%20arm-6366f1?style=flat-square)](https://github.com/xiumuzidiao0/NXGate/releases/latest)
 [![License](https://img.shields.io/badge/License-GPL--3.0-334155?style=flat-square)](LICENSE)
 
 </div>
@@ -22,7 +22,7 @@
 使用 `root` 用户在受支持的 Linux VPS (Ubuntu / Debian / CentOS / Rocky / AlmaLinux / Alpine) 上执行：
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/xiumuzidiao0/aimili-vpngate-go/main/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/xiumuzidiao0/NXGate/main/install.sh | bash
 ```
 
 安装脚本将自动：
@@ -131,7 +131,7 @@ nx menu           # 打开终端交互式可视化控制中心 (亦可直接输�
 ## 目录结构说明
 
 ```text
-aimili-vpngate-go/
+nxgate/
 ├── .github/workflows/
 │   ├── ci.yml                 # 持续集成质量准入流水线 (版本核验/安全审计/全包测试/多端UI测试)
 │   ├── release.yml            # 自动化跨平台交叉编译与 GitHub Release 产物发布流水线

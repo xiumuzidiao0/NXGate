@@ -25,8 +25,8 @@
 
 ```bash
 # 1. 克隆代码库
-git clone https://github.com/xiumuzidiao0/aimili-vpngate-go.git
-cd aimili-vpngate-go
+git clone https://github.com/xiumuzidiao0/NXGate.git
+cd NXGate
 
 # 2. 安装前端测试依赖
 npm --prefix web install

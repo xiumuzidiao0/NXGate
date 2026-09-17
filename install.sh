@@ -19,7 +19,7 @@ INSTALL_DIR="/opt/aimilivpn"
 BIN_PATH="${INSTALL_DIR}/aimilivpn"
 CONFIG_FILE="${INSTALL_DIR}/config.env"
 SERVICE_FILE="/etc/systemd/system/aimilivpn.service"
-GITHUB_REPO="https://github.com/xiumuzidiao0/aimili-vpngate-go.git"
+GITHUB_REPO="https://github.com/xiumuzidiao0/NXGate.git"
 DEFAULT_VERSION="2.5.5"
 REQUIRED_GO_VERSION="1.25.13"
 
@@ -101,21 +101,21 @@ download_release_binary() {
     detect_arch
 
     local urls=(
-        "https://github.com/xiumuzidiao0/aimili-vpngate-go/releases/latest/download/aimilivpn_linux_${GO_ARCH}"
-        "https://ghproxy.net/https://github.com/xiumuzidiao0/aimili-vpngate-go/releases/latest/download/aimilivpn_linux_${GO_ARCH}"
-        "https://mirror.ghproxy.com/https://github.com/xiumuzidiao0/aimili-vpngate-go/releases/latest/download/aimilivpn_linux_${GO_ARCH}"
-        "https://github.com/xiumuzidiao0/aimili-vpngate-go/releases/download/v2.5.5/aimilivpn_linux_${GO_ARCH}"
-        "https://ghproxy.net/https://github.com/xiumuzidiao0/aimili-vpngate-go/releases/download/v2.5.5/aimilivpn_linux_${GO_ARCH}"
-        "https://mirror.ghproxy.com/https://github.com/xiumuzidiao0/aimili-vpngate-go/releases/download/v2.5.5/aimilivpn_linux_${GO_ARCH}"
+        "https://github.com/xiumuzidiao0/NXGate/releases/latest/download/aimilivpn_linux_${GO_ARCH}"
+        "https://ghproxy.net/https://github.com/xiumuzidiao0/NXGate/releases/latest/download/aimilivpn_linux_${GO_ARCH}"
+        "https://mirror.ghproxy.com/https://github.com/xiumuzidiao0/NXGate/releases/latest/download/aimilivpn_linux_${GO_ARCH}"
+        "https://github.com/xiumuzidiao0/NXGate/releases/download/v2.5.5/aimilivpn_linux_${GO_ARCH}"
+        "https://ghproxy.net/https://github.com/xiumuzidiao0/NXGate/releases/download/v2.5.5/aimilivpn_linux_${GO_ARCH}"
+        "https://mirror.ghproxy.com/https://github.com/xiumuzidiao0/NXGate/releases/download/v2.5.5/aimilivpn_linux_${GO_ARCH}"
     )
 
     for u in "${urls[@]}"; do
         echo -e "  -> 尝试从源拉取预编译程序: ${u} ..."
         local checksum_url
         if [[ "$u" == *"/latest/"* ]]; then
-            checksum_url="https://github.com/xiumuzidiao0/aimili-vpngate-go/releases/latest/download/SHA256SUMS.txt"
+            checksum_url="https://github.com/xiumuzidiao0/NXGate/releases/latest/download/SHA256SUMS.txt"
         else
-            checksum_url="https://github.com/xiumuzidiao0/aimili-vpngate-go/releases/download/v${DEFAULT_VERSION}/SHA256SUMS.txt"
+            checksum_url="https://github.com/xiumuzidiao0/NXGate/releases/download/v${DEFAULT_VERSION}/SHA256SUMS.txt"
         fi
 
         local expected_hash
@@ -417,7 +417,7 @@ build_and_deploy() {
             "https://baoweise-bot.github.io/aimili-vpngate/vpngate.csv"
             "https://raw.githubusercontent.com/baoweise-bot/aimili-vpngate/main/mirror/vpngate.csv"
             "https://ghproxy.net/https://raw.githubusercontent.com/baoweise-bot/aimili-vpngate/main/mirror/vpngate.csv"
-            "https://raw.githubusercontent.com/xiumuzidiao0/aimili-vpngate-go/main/mirror/vpngate.csv"
+            "https://raw.githubusercontent.com/xiumuzidiao0/NXGate/main/mirror/vpngate.csv"
             "https://cdn.jsdelivr.net/gh/baoweise-bot/aimili-vpngate@main/mirror/vpngate.csv"
         )
         for m_url in "${mirror_csv_urls[@]}"; do
@@ -432,7 +432,7 @@ build_and_deploy() {
         cp -f "${BASH_SOURCE[0]}" "${INSTALL_DIR}/install.sh"
     else
         echo -e "  -> 正在下载本地管理脚本至 ${INSTALL_DIR}/install.sh ..."
-        curl -sSL "https://raw.githubusercontent.com/xiumuzidiao0/aimili-vpngate-go/main/install.sh" -o "${INSTALL_DIR}/install.sh"
+        curl -sSL "https://raw.githubusercontent.com/xiumuzidiao0/NXGate/main/install.sh" -o "${INSTALL_DIR}/install.sh"
     fi
     chmod +x "${INSTALL_DIR}/install.sh"
 
@@ -776,12 +776,12 @@ menu_update() {
     if download_release_binary "${BIN_PATH}.tmp"; then
         mv -f "${BIN_PATH}.tmp" "${BIN_PATH}"
         chmod +x "${BIN_PATH}"
-        curl -sSL -f "https://raw.githubusercontent.com/xiumuzidiao0/aimili-vpngate-go/main/VERSION" -o "${INSTALL_DIR}/VERSION" 2>/dev/null || true
-        curl -sSL -f "https://raw.githubusercontent.com/xiumuzidiao0/aimili-vpngate-go/main/install.sh" -o "${INSTALL_DIR}/install.sh" 2>/dev/null || true
+        curl -sSL -f "https://raw.githubusercontent.com/xiumuzidiao0/NXGate/main/VERSION" -o "${INSTALL_DIR}/VERSION" 2>/dev/null || true
+        curl -sSL -f "https://raw.githubusercontent.com/xiumuzidiao0/NXGate/main/install.sh" -o "${INSTALL_DIR}/install.sh" 2>/dev/null || true
         chmod +x "${INSTALL_DIR}/install.sh" 2>/dev/null || true
         systemctl restart aimilivpn
         local new_ver=$(get_app_version)
-        echo -e "\n${GREEN}🎉 AimiliVPN 已成功极速更新至最新构建 (v${new_ver}) 并重启！${PLAIN}"
+        echo -e "\n${GREEN}🎉 NXGate 已成功极速更新至最新构建 (v${new_ver}) 并重启！${PLAIN}"
         read -p "按回车键返回主菜单..."
         return
     fi

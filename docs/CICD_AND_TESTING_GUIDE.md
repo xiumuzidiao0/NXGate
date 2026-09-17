@@ -233,10 +233,10 @@ ml
 **更新过程日志预期**：
 ```text
 正在检测并拉取最新发行版本 (amd64)...
-  -> 尝试从源拉取预编译程序: https://github.com/xiumuzidiao0/aimili-vpngate-go/releases/latest/download/aimilivpn_linux_amd64 ...
+  -> 尝试从源拉取预编译程序: https://github.com/xiumuzidiao0/NXGate/releases/latest/download/aimilivpn_linux_amd64 ...
   -> 二进制预编译包下载成功并通过 SHA-256 校验 (amd64)！
 
-🎉 AimiliVPN 已成功极速更新至最新构建 (v2.5.2) 并重启！
+🎉 NXGate 已成功极速更新至最新构建 (v2.5.5) 并重启！
 ```
 
 ### 2. 服务端关键指标验证项
