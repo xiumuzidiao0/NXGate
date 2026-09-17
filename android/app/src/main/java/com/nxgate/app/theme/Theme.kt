@@ -24,6 +24,7 @@ fun NXGateTheme(
 ) {
     val context = LocalContext.current
     val colorScheme: ColorScheme = when {
+        paletteId == "liquid_glass" -> if (darkTheme) LiquidGlassDarkColorScheme else LiquidGlassLightColorScheme
         paletteId == "monet" && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         }

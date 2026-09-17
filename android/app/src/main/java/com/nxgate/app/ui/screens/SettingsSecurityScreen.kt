@@ -969,10 +969,11 @@ fun ThemeAppearanceSettingsSection(modifier: Modifier = Modifier) {
             )
 
             // 2. 主题调色架构模式切换
-            val themeModeChips = listOf("Pixel 自由混色", "壁纸莫奈动态", "小米澎湃")
+            val themeModeChips = listOf("Pixel 自由混色", "液态玻璃材质", "壁纸莫奈动态", "小米澎湃")
             val selectedPaletteChipIdx = when (themePalette) {
-                "monet" -> 1
-                "miuix" -> 2
+                "liquid_glass" -> 1
+                "monet" -> 2
+                "miuix" -> 3
                 else -> 0
             }
             ConnectedChipGroup(
@@ -980,14 +981,50 @@ fun ThemeAppearanceSettingsSection(modifier: Modifier = Modifier) {
                 selectedIndex = selectedPaletteChipIdx,
                 onSelected = { idx ->
                     when (idx) {
-                        1 -> serverStore.setThemePalette("monet")
-                        2 -> serverStore.setThemePalette("miuix")
+                        1 -> serverStore.setThemePalette("liquid_glass")
+                        2 -> serverStore.setThemePalette("monet")
+                        3 -> serverStore.setThemePalette("miuix")
                         else -> serverStore.setThemePalette("pixel")
                     }
                 }
             )
 
-            if (themePalette == "pixel" || (themePalette != "monet" && themePalette != "miuix")) {
+            if (themePalette == "liquid_glass") {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Surface(
+                                shape = CircleShape,
+                                color = Color(0xFF0088FF),
+                                modifier = Modifier.size(14.dp)
+                            ) {}
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = "正在应用：AndroidLiquidGlass 液态玻璃透光材质",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                        Text(
+                            text = "借鉴 Apple/VisionOS 物理材质渲染，采用晶莹半透基质、135° 边缘高光棱镜微描边 (Prismatic Highlight) 与自适应大气散射阴影，呈现清澈纯净的透光质感。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            lineHeight = MaterialTheme.typography.bodySmall.lineHeight * 1.3f
+                        )
+                    }
+                }
+            } else if (themePalette == "pixel" || (themePalette != "monet" && themePalette != "miuix")) {
                 val currentAccent = ACCENT_OPTIONS.find { it.id == themeAccent } ?: ACCENT_OPTIONS.first()
                 val currentBase = BASE_TONE_OPTIONS.find { it.id == themeBase } ?: BASE_TONE_OPTIONS.first()
 
