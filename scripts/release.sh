@@ -96,5 +96,5 @@ git push origin "v${TARGET_VER}" -f
 echo -e "\n${GREEN}==================================================================${PLAIN}"
 echo -e "${GREEN}🎉 [Release] v${TARGET_VER} 代码与标签已成功推送到远程！${PLAIN}"
 echo -e "${BLUE}GitHub Actions 将自动执行多架构交叉编译、生成哈希并在 Releases 中发布 9 个完整产物。${PLAIN}"
-echo -e "监控构建流水线: ${YELLOW}https://github.com/xiumuzidiao0/aimili-vpngate-go/actions${PLAIN}"
+echo -e "监控构建流水线: ${YELLOW}https://github.com/xiumuzidiao0/NXGate/actions${PLAIN}"
 echo -e "${GREEN}==================================================================${PLAIN}\n"

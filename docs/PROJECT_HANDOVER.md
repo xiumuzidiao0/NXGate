@@ -2,7 +2,7 @@
 
 **编写日期**：2026-09-16  
 **当前版本**：`v2.5.1`  
-**代码仓库**：`https://github.com/xiumuzidiao0/aimili-vpngate-go`  
+**代码仓库**：`https://github.com/xiumuzidiao0/NXGate`  
 **维护状态**：CI/CD 自动化全绿、线上运行正常、全功能经过端到端验证  
 
 ---
