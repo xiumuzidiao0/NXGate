@@ -135,8 +135,6 @@ fun SettingsSecurityScreen(
     var showScanSimDialog by remember { mutableStateOf(false) }
     var scannedUriInput by remember { mutableStateOf("") }
 
-    var showBiometricEnrollDialog by remember { mutableStateOf(false) }
-
     val onToggleBiometric: (Boolean) -> Unit = { targetChecked ->
         if (targetChecked) {
             val bm = BiometricManager.from(context)
@@ -147,7 +145,8 @@ fun SettingsSecurityScreen(
             )
             when (canAuth) {
                 BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED -> {
-                    showBiometricEnrollDialog = true
+                    Toast.makeText(context, "系统尚未录入指纹或锁屏密码，正在跳转系统设置...", Toast.LENGTH_LONG).show()
+                    openSecuritySettings(context)
                 }
                 BiometricManager.BIOMETRIC_ERROR_NO_HARDWARE -> {
                     Toast.makeText(context, "当前设备未配备指纹或面容硬件，无法开启安全锁", Toast.LENGTH_SHORT).show()
@@ -891,24 +890,6 @@ fun SettingsSecurityScreen(
                 AimiliApplication.instance.serverStore.addServer(parsed)
                 showScanSimDialog = false
                 Toast.makeText(context, "已成功扫码识别并自动导入 [${parsed.name}]", Toast.LENGTH_SHORT).show()
-            }
-        )
-    }
-
-    // Biometric Enrollment Rationale Dialog
-    if (showBiometricEnrollDialog) {
-        AppPermissionRationaleDialog(
-            title = "系统尚未录入生物识别",
-            description = "检测到您的设备支持生物识别，但系统当前尚未录入任何指纹或面部数据。\n\n请前往系统「安全与隐私」中录入指纹或锁屏密码后，即可开启安全锁防护。",
-            icon = Icons.Rounded.Fingerprint,
-            confirmText = "前往系统设置",
-            dismissText = "暂不开启",
-            onConfirm = {
-                showBiometricEnrollDialog = false
-                openSecuritySettings(context)
-            },
-            onDismiss = {
-                showBiometricEnrollDialog = false
             }
         )
     }
