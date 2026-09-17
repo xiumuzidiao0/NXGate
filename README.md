@@ -1,8 +1,8 @@
-# AimiliVPN (Go 高性能重构版)
+# NXGate (自适应多出口智能路由网关)
 
 <div align="center">
 
-**面向 Linux VPS 的现代化 VPNGate 节点自适应管理、多出口流量调度与边缘抗封锁单端口代理网关**
+**面向 Linux VPS 的多出口流量调度、全球原生住宅宽带智能发现与边缘抗封锁单端口代理网关系统**
 
 [![正式版本](https://img.shields.io/github/v/release/xiumuzidiao0/aimili-vpngate-go?style=flat-square&label=正式版&color=16a34a)](https://github.com/xiumuzidiao0/aimili-vpngate-go/releases/latest)
 [![Go Version](https://img.shields.io/badge/Go-1.25.13+-00ADD8?style=flat-square&logo=go)](https://go.dev/)
@@ -11,7 +11,7 @@
 
 </div>
 
-采用 **Go 1.25.13+ 原生高并发模型与系统底层零拷贝技术** 对传统 VPN 代理系统进行工业级重构。编译后生成**单一可执行二进制文件**（内置 5 视图现代化深空响应式 SPA Web 控制台），内存常驻极低（< 15MB），专为资源受限的轻量级 Linux VPS（如 256MB / 512MB 内存机型）打造，同时具备高吞吐、零泄漏与物理级策略路由强隔离能力。
+采用 **Go 1.25.13+ 原生高并发模型与系统底层零拷贝技术** 打造的新一代多出口自适应网关 **NXGate**。编译后生成**单一可执行二进制文件**（内置 5 视图现代化响应式 SPA Web 控制台，并提供 Material 3 原生 Android 配套客户端），内存常驻极低（< 15MB），专为 Linux VPS 打造，具备高吞吐、零泄漏与物理级策略路由强隔离能力。
 
 ---
 
@@ -28,19 +28,19 @@ curl -sSL https://raw.githubusercontent.com/xiumuzidiao0/aimili-vpngate-go/main/
 安装脚本将自动：
 - 识别 CPU 架构，优先从官方加速源秒级拉取预编译静态二进制包（约 7.5MB）；
 - 自动安装配置系统级网络依赖与 OpenVPN；
-- 部署 `aimilivpn` 守护进程并注册 `systemd` 服务实现开机自愈自启；
-- 创建全局快捷指令 `ml` 与 `aimili`。
+- 部署 `aimilivpn` (NXGate) 守护进程并注册 `systemd` 服务实现开机自愈自启；
+- 创建全局快捷指令 `nx`（同时保留 `ml` 兼容）。
 
 ### 2. 终端极速更新与命令行快捷操作
 
 系统支持全自动免交互命令行操作，亦可随时唤出终端控制菜单：
 
 ```bash
-ml update         # 从 GitHub Release 官方源秒级极速更新至最新发行版本并自动热重启
-ml status         # 查看当前运行状态、Web 入口与管理账密
-ml restart        # 安全平滑重启 AimiliVPN 服务
-ml logs           # 查看实时 journalctl 运行日志流
-ml menu           # 打开终端交互式可视化控制中心
+nx update         # 从 GitHub Release 官方源秒级极速更新至最新发行版本并自动热重启
+nx status         # 查看当前运行状态、Web 入口与管理账密
+nx restart        # 安全平滑重启 NXGate 网关服务
+nx logs           # 查看实时 journalctl 运行日志流
+nx menu           # 打开终端交互式可视化控制中心 (亦可直接输入 nx 唤出)
 ```
 
 ---

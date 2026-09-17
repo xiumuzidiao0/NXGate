@@ -636,7 +636,7 @@ func (s *Server) handleAppInfo(w http.ResponseWriter, r *http.Request) {
 
 	resp := AppInfoResponse{
 		OK:               true,
-		App:              "aimili-vpngate-go",
+		App:              "nxgate",
 		Version:          config.Version,
 		ServerTime:       time.Now().UTC().Format(time.RFC3339),
 		Status:           string(vpnState.Status),
@@ -684,13 +684,13 @@ func (s *Server) handleAppProfile(w http.ResponseWriter, r *http.Request) {
 	username, password := s.cfg.GetUICredentials()
 	tls := r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
 
-	name := "AimiliVPN (" + host + ")"
+	name := "NXGate (" + host + ")"
 	if customName := r.URL.Query().Get("name"); customName != "" {
 		name = customName
 	}
 
 	profile := ServerProfile{
-		Type:      "aimili_server",
+		Type:      "nxgate_server",
 		Version:   1,
 		Name:      name,
 		Host:      host,
@@ -714,7 +714,7 @@ func (s *Server) handleAppProfile(w http.ResponseWriter, r *http.Request) {
 	} else {
 		q.Set("tls", "0")
 	}
-	connectURI := "aimili://server?" + q.Encode()
+	connectURI := "nxgate://server?" + q.Encode()
 
 	s.writeJSON(w, http.StatusOK, AppProfileResponse{
 		OK:         true,

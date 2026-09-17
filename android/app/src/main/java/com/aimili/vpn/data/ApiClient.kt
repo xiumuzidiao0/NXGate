@@ -739,13 +739,13 @@ class ApiClient {
         fun parseAimiliUri(rawUri: String): ServerProfile? {
             try {
                 val uri = Uri.parse(rawUri)
-                if (uri.scheme == "aimili" && uri.host == "server") {
+                if ((uri.scheme == "nxgate" || uri.scheme == "aimili") && uri.host == "server") {
                     val host = uri.getQueryParameter("host") ?: return null
                     val port = uri.getQueryParameter("port")?.toIntOrNull() ?: 8787
                     val path = uri.getQueryParameter("path") ?: "enter"
                     val user = uri.getQueryParameter("user") ?: "admin"
                     val pass = uri.getQueryParameter("pass") ?: ""
-                    val name = uri.getQueryParameter("name") ?: "AimiliVPN ($host)"
+                    val name = uri.getQueryParameter("name") ?: "NXGate ($host)"
                     val isTls = uri.getQueryParameter("tls") == "1"
 
                     return ServerProfile(
