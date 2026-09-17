@@ -47,6 +47,8 @@ import androidx.compose.ui.unit.dp
 import com.nxgate.app.NXGateApplication
 import com.nxgate.app.model.ClusterSummary
 import com.nxgate.app.theme.AimiliMotion
+import com.nxgate.app.ui.components.LiquidGlassBottomBar
+import com.nxgate.app.ui.components.LiquidGlassNavigationRail
 import com.nxgate.app.ui.screens.ClusterHubScreen
 import com.nxgate.app.ui.screens.NodeSquareScreen
 import com.nxgate.app.ui.screens.RoutingMatrixScreen
@@ -126,38 +128,10 @@ fun MainAppScaffold() {
             ),
         bottomBar = {
             if (!isSettingsOpen && !useNavRail) {
-                NavigationBar(
-                    modifier = Modifier.height(80.dp),
-                    containerColor = MaterialTheme.colorScheme.surfaceContainer
-                ) {
-                    AppNavDestination.entries.forEach { destination ->
-                        val isSelected = currentDestination == destination
-                        NavigationBarItem(
-                            selected = isSelected,
-                            onClick = { currentDestination = destination },
-                            icon = {
-                                Icon(
-                                    imageVector = destination.icon,
-                                    contentDescription = destination.title,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            },
-                            label = {
-                                Text(
-                                    text = destination.title,
-                                    style = MaterialTheme.typography.labelMedium
-                                )
-                            },
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                                unselectedIconColor = MaterialTheme.colorScheme.onSurface,
-                                selectedTextColor = MaterialTheme.colorScheme.onSurface,
-                                unselectedTextColor = MaterialTheme.colorScheme.onSurface,
-                                indicatorColor = MaterialTheme.colorScheme.secondaryContainer
-                            )
-                        )
-                    }
-                }
+                LiquidGlassBottomBar(
+                    currentDestination = currentDestination,
+                    onDestinationSelected = { currentDestination = it }
+                )
             }
         },
         containerColor = MaterialTheme.colorScheme.surface
@@ -167,42 +141,12 @@ fun MainAppScaffold() {
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            // Adaptive Navigation Rail for Tablet in Landscape mode
+            // Adaptive Liquid Glass Navigation Rail for Tablet in Landscape mode
             if (!isSettingsOpen && useNavRail) {
-                NavigationRail(
-                    modifier = Modifier
-                        .width(80.dp)
-                        .fillMaxHeight(),
-                    containerColor = MaterialTheme.colorScheme.surfaceContainer
-                ) {
-                    AppNavDestination.entries.forEach { destination ->
-                        val isSelected = currentDestination == destination
-                        NavigationRailItem(
-                            selected = isSelected,
-                            onClick = { currentDestination = destination },
-                            icon = {
-                                Icon(
-                                    imageVector = destination.icon,
-                                    contentDescription = destination.title,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            },
-                            label = {
-                                Text(
-                                    text = destination.title,
-                                    style = MaterialTheme.typography.labelMedium
-                                )
-                            },
-                            colors = NavigationRailItemDefaults.colors(
-                                selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                                unselectedIconColor = MaterialTheme.colorScheme.onSurface,
-                                selectedTextColor = MaterialTheme.colorScheme.onSurface,
-                                unselectedTextColor = MaterialTheme.colorScheme.onSurface,
-                                indicatorColor = MaterialTheme.colorScheme.secondaryContainer
-                            )
-                        )
-                    }
-                }
+                LiquidGlassNavigationRail(
+                    currentDestination = currentDestination,
+                    onDestinationSelected = { currentDestination = it }
+                )
             }
 
             Box(
