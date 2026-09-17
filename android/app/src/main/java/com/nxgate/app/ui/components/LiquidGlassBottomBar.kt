@@ -116,8 +116,15 @@ private fun LiquidTabItem(
         label = "TabScale"
     )
 
+    // 适当提亮未选中状态在透光液态玻璃上的对比度与可视度
+    val unselectedContentColor = if (isDark) {
+        Color(0xFFF1F5F9).copy(alpha = 0.82f) // 墨曜透光基底上提亮为晶澈银白，避免被背景杂色吞噬
+    } else {
+        Color(0xFF1E293B).copy(alpha = 0.88f) // 浅色透光冰晶上保持深色高对比度
+    }
+
     val contentColor by animateColorAsState(
-        targetValue = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+        targetValue = if (isSelected) MaterialTheme.colorScheme.primary else unselectedContentColor,
         label = "TabContentColor"
     )
 
@@ -168,7 +175,7 @@ private fun LiquidTabItem(
             Text(
                 text = destination.title,
                 style = MaterialTheme.typography.labelSmall,
-                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
                 color = contentColor
             )
         }
@@ -234,8 +241,14 @@ private fun LiquidRailItem(
 ) {
     val interactionSource = remember { MutableInteractionSource() }
 
+    val unselectedContentColor = if (isDark) {
+        Color(0xFFF1F5F9).copy(alpha = 0.82f)
+    } else {
+        Color(0xFF1E293B).copy(alpha = 0.88f)
+    }
+
     val contentColor by animateColorAsState(
-        targetValue = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+        targetValue = if (isSelected) MaterialTheme.colorScheme.primary else unselectedContentColor,
         label = "RailContentColor"
     )
 
@@ -276,7 +289,7 @@ private fun LiquidRailItem(
             Text(
                 text = destination.title,
                 style = MaterialTheme.typography.labelSmall,
-                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
                 color = contentColor
             )
         }

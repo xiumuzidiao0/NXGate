@@ -107,7 +107,7 @@ fun ClusterHubScreen(
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary,
                 elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 6.dp),
-                modifier = Modifier.padding(16.dp)
+                modifier = Modifier.padding(bottom = 80.dp, end = 8.dp)
             ) {
                 Icon(
                     imageVector = Icons.Rounded.Add,
@@ -258,7 +258,7 @@ fun ClusterHubScreen(
                     }
                 }
 
-                Spacer(Modifier.height(80.dp))
+                Spacer(Modifier.height(88.dp))
             }
         }
     }
