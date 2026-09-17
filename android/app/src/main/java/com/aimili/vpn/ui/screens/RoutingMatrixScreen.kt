@@ -6,6 +6,7 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -531,12 +532,14 @@ fun RoutingMatrixScreen(
                                     } else {
                                         dynamicGroups.forEach { group ->
                                             Card(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            shape = RoundedCornerShape(20.dp),
-                                            colors = CardDefaults.cardColors(
-                                                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
-                                            )
-                                        ) {
+                                                modifier = Modifier.fillMaxWidth(),
+                                                shape = RoundedCornerShape(20.dp),
+                                                colors = CardDefaults.cardColors(
+                                                    containerColor = MaterialTheme.colorScheme.surfaceContainer
+                                                ),
+                                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                                                elevation = CardDefaults.cardElevation(defaultElevation = 1.5.dp)
+                                            ) {
                                             Column(
                                                 modifier = Modifier
                                                     .fillMaxWidth()

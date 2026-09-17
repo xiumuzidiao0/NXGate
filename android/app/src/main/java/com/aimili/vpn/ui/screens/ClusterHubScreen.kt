@@ -1,6 +1,7 @@
 package com.aimili.vpn.ui.screens
 
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -191,8 +192,10 @@ fun ClusterHubScreen(
                                 .clickable { onSelectServerAndOpenConsole(server) },
                             shape = RoundedCornerShape(20.dp),
                             colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
-                            )
+                                containerColor = MaterialTheme.colorScheme.surfaceContainer
+                            ),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 1.5.dp)
                         ) {
                             Column(
                                 modifier = Modifier
