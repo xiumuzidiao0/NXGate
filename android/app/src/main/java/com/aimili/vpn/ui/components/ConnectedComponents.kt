@@ -227,7 +227,7 @@ fun ConnectedListItem(
     trailingContent: @Composable () -> Unit,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    backgroundColor: Color = MaterialTheme.colorScheme.surfaceContainerLow,
+    backgroundColor: Color = MaterialTheme.colorScheme.surfaceContainer,
     iconContainerColor: Color = MaterialTheme.colorScheme.primaryContainer
 ) {
     val shape = connectedListShape(index, total)
@@ -239,7 +239,8 @@ fun ConnectedListItem(
             .clip(shape)
             .clickable { onClick() },
         shape = shape,
-        color = backgroundColor
+        color = backgroundColor,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
         Row(
             modifier = Modifier
