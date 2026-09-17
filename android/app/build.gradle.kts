@@ -5,15 +5,15 @@ plugins {
 }
 
 android {
-    namespace = "com.aimili.vpn"
+    namespace = "com.nxgate.app"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.aimili.vpn"
+        applicationId = "com.nxgate.app"
         minSdk = 26
         targetSdk = 35
         versionCode = 1
-        versionName = "2.5.5"
+        versionName = "2.5.6"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

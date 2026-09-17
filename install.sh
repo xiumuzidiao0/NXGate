@@ -439,7 +439,7 @@ build_and_deploy() {
     register_shortcuts
 }
 
-# 7.4 注册全局快捷命令 (nx, nxgate, ml, aimili)
+# 7.4 注册全局快捷命令 (nx, ml, aimili)
 register_shortcuts() {
     cat > /usr/bin/nx <<'EOF'
 #!/usr/bin/env bash
@@ -451,25 +451,9 @@ fi
 EOF
     chmod +x /usr/bin/nx
     cp -f /usr/bin/nx /usr/local/bin/nx 2>/dev/null || true
-    cp -f /usr/bin/nx /usr/bin/nxgate 2>/dev/null || true
-    cp -f /usr/bin/nx /usr/local/bin/nxgate 2>/dev/null || true
-
-    cat > /usr/bin/ml <<'EOF'
-#!/usr/bin/env bash
-if [ -n "$1" ]; then
-    exec bash /opt/aimilivpn/install.sh "$@"
-else
-    exec bash /opt/aimilivpn/install.sh menu
-fi
-EOF
-    chmod +x /usr/bin/ml
-    cp -f /usr/bin/ml /usr/local/bin/ml 2>/dev/null || true
-    cp -f /usr/bin/ml /usr/bin/aimili 2>/dev/null || true
-
-    ln -sf "${BIN_PATH}" /usr/bin/nxgate 2>/dev/null || true
-    ln -sf "${BIN_PATH}" /usr/local/bin/nxgate 2>/dev/null || true
-    ln -sf "${BIN_PATH}" /usr/bin/aimilivpn 2>/dev/null || true
-    ln -sf "${BIN_PATH}" /usr/local/bin/aimilivpn 2>/dev/null || true
+    cp -f /usr/bin/nx /usr/bin/ml 2>/dev/null || true
+    cp -f /usr/bin/nx /usr/local/bin/ml 2>/dev/null || true
+    cp -f /usr/bin/nx /usr/bin/aimili 2>/dev/null || true
 }
 
 # 7.5 配置并放行防火墙端口
