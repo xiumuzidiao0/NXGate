@@ -109,7 +109,7 @@ class MainActivity : FragmentActivity() {
         val executor = ContextCompat.getMainExecutor(this)
         val promptInfo = BiometricPrompt.PromptInfo.Builder()
             .setTitle("生物识别安全验证")
-            .setSubtitle("请验证指纹、面容或系统安全锁以解锁 AimiliVPN")
+            .setSubtitle("请验证指纹、面容或系统安全锁以解锁 NXGate")
             .setAllowedAuthenticators(
                 BiometricManager.Authenticators.BIOMETRIC_STRONG or
                         BiometricManager.Authenticators.BIOMETRIC_WEAK or

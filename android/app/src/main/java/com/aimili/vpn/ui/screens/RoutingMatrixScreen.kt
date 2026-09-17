@@ -135,7 +135,7 @@ fun RoutingMatrixScreen(
     var availableOutbounds by remember {
         mutableStateOf(
             listOf(
-                AvailableOutbound(7928, "socks5://127.0.0.1:7928", "AimiliVPN 默认出口 (PORT 7928)", true),
+                AvailableOutbound(7928, "socks5://127.0.0.1:7928", "NXGate 默认出口 (PORT 7928)", true),
                 AvailableOutbound(0, "direct", "直连出口 (VPS 本机原生网络)", false)
             )
         )

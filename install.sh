@@ -437,6 +437,19 @@ build_and_deploy() {
     chmod +x "${INSTALL_DIR}/install.sh"
 
     # 创建全局快捷命令 ml 和 aimili 到 /usr/bin 与 /usr/local/bin
+    cat > /usr/bin/nx <<'EOF'
+#!/usr/bin/env bash
+if [ -n "$1" ]; then
+    exec bash /opt/aimilivpn/install.sh "$@"
+else
+    exec bash /opt/aimilivpn/install.sh menu
+fi
+EOF
+    chmod +x /usr/bin/nx
+    cp -f /usr/bin/nx /usr/local/bin/nx 2>/dev/null || true
+    cp -f /usr/bin/nx /usr/bin/nxgate 2>/dev/null || true
+    cp -f /usr/bin/nx /usr/local/bin/nxgate 2>/dev/null || true
+
     cat > /usr/bin/ml <<'EOF'
 #!/usr/bin/env bash
 if [ -n "$1" ]; then
@@ -449,6 +462,8 @@ EOF
     cp -f /usr/bin/ml /usr/local/bin/ml 2>/dev/null || true
     cp -f /usr/bin/ml /usr/bin/aimili 2>/dev/null || true
 
+    ln -sf "${BIN_PATH}" /usr/bin/nxgate 2>/dev/null || true
+    ln -sf "${BIN_PATH}" /usr/local/bin/nxgate 2>/dev/null || true
     ln -sf "${BIN_PATH}" /usr/bin/aimilivpn 2>/dev/null || true
     ln -sf "${BIN_PATH}" /usr/local/bin/aimilivpn 2>/dev/null || true
 }
@@ -555,7 +570,7 @@ print_install_success() {
     local sb_status=$(show_singbox_status)
 
     echo -e "\n${GREEN}==================================================================${PLAIN}"
-    echo -e "${GREEN}        🎉 AimiliVPN (Go 高性能版 v${ver}) 安装部署完成！              ${PLAIN}"
+    echo -e "${GREEN}        🎉 NXGate (自适应多出口路由网关 v${ver}) 安装部署完成！        ${PLAIN}"
     echo -e "${GREEN}==================================================================${PLAIN}"
     echo -e " ${BOLD}Web 管理控制台${PLAIN} : ${CYAN}http://${ip}:${port}/${path}/${PLAIN}"
     echo -e " ${BOLD}管理账号${PLAIN}       : ${YELLOW}${user}${PLAIN}"
@@ -563,7 +578,7 @@ print_install_success() {
     echo -e " ${BOLD}本地自适应代理${PLAIN} : ${GREEN}127.0.0.1:${proxy_port}${PLAIN} (HTTP/HTTPS/SOCKS5 单端口)"
     echo -e " ${BOLD}边缘抗封锁网关${PLAIN} : ${sb_status} (VLESS-REALITY / Hysteria2)"
     echo -e " ${BOLD}当前程序版本${PLAIN}   : ${YELLOW}v${ver}${PLAIN}"
-    echo -e " ${BOLD}终端管理命令${PLAIN}   : 在终端随时输入 ${CYAN}ml${PLAIN} 唤出管理控制中心"
+    echo -e " ${BOLD}终端管理命令${PLAIN}   : 在终端随时输入 ${CYAN}nx${PLAIN} (或 ${CYAN}ml${PLAIN}) 唤出管理控制中心"
     echo -e " ${YELLOW}⚠️ 访问提示${PLAIN}       : 1. 访问时请务必带上后缀路径: ${CYAN}/${path}/${PLAIN} (未带路径将隐藏返回 404)"
     echo -e "                   2. 请确认云厂商控制台安全组已放行 ${CYAN}TCP ${port}${PLAIN} 入站端口"
     echo -e "${GREEN}==================================================================${PLAIN}\n"
@@ -1057,7 +1072,7 @@ main_menu() {
         local sb_status=$(show_singbox_status)
 
         echo -e "${BLUE}==================================================================${PLAIN}"
-        echo -e "${BLUE}      ⚡ AimiliVPN (Go 高性能版) 终端控制中心  v${ver}            ${PLAIN}"
+        echo -e "${BLUE}      ⚡ NXGate (自适应多出口路由网关) 终端控制中心  v${ver}      ${PLAIN}"
         echo -e "${BLUE}==================================================================${PLAIN}"
         echo -e "  ${BOLD}服务运行状态${PLAIN}   : $(show_service_status)"
         echo -e "  ${BOLD}sing-box 入站状态${PLAIN}: ${sb_status}"
@@ -1069,7 +1084,7 @@ main_menu() {
         echo -e "  ${GREEN}[3]${PLAIN} 重启服务               ${GREEN}[4]${PLAIN} 查看实时运行日志"
         echo -e "  ${GREEN}[5]${PLAIN} 智能切换最优节点       ${GREEN}[6]${PLAIN} 查看当前候选节点列表"
         echo -e "  ${GREEN}[7]${PLAIN} 修改管理账号/密码      ${GREEN}[8]${PLAIN} 修改 Web/代理端口与安全路径"
-        echo -e "  ${GREEN}[9]${PLAIN} 检查并在线更新版本     ${RED}[10]${PLAIN} 卸载 AimiliVPN"
+        echo -e "  ${GREEN}[9]${PLAIN} 检查并在线更新版本     ${RED}[10]${PLAIN} 卸载 NXGate"
         echo -e "  ${CYAN}[11]${PLAIN} 🚀 管理 / 安装 sing-box 边缘抗封锁入站网关"
         echo -e "  ${YELLOW}[0]${PLAIN} 退出终端管理"
         echo -e "${BLUE}==================================================================${PLAIN}"

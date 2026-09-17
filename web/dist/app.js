@@ -1600,7 +1600,7 @@
             if (titleEl && titles[viewName]) {
                 titleEl.innerText = titles[viewName];
             }
-            document.title = `${titles[viewName] || '控制台'} · AimiliVPN`;
+            document.title = `${titles[viewName] || '控制台'} · NXGate`;
 
             // 5. 同步浏览器 Hash 路由，便于后退/前进
             if (window.location.hash !== '#' + viewName) {
@@ -1780,7 +1780,7 @@
                         尚未在系统中检测到 sing-box 边缘服务端
                     </div>
                     <div class="empty-guide-copy">
-                        在 VPS 终端执行安装后，即可在此直接纳管 VLESS-REALITY、Hysteria2、TUIC、Shadowsocks 2022 等顶级抗封锁协议，并一键将其流量通过 AimiliVPN 的全球家宽住宅池分流出海。
+                        在 VPS 终端执行安装后，即可在此直接纳管 VLESS-REALITY、Hysteria2、TUIC、Shadowsocks 2022 等顶级抗封锁协议，并一键将其流量通过 NXGate 的全球家宽住宅池分流出海。
                     </div>
                     <div class="command-box">
                         <span>bash &lt;(curl -fsSL https://raw.githubusercontent.com/xiumuzidiao0/sing-box/main/install.sh)</span>
@@ -1799,7 +1799,7 @@
                         暂无活跃的抗封锁入站配置
                     </div>
                     <div class="empty-guide-copy compact">
-                        点击下方按钮即可一键新建 VLESS-REALITY 或 Hysteria2 入站，系统将自动分配端口、计算 TLS 凭证，并链式绑定至 AimiliVPN 代理出口。
+                        点击下方按钮即可一键新建 VLESS-REALITY 或 Hysteria2 入站，系统将自动分配端口、计算 TLS 凭证，并链式绑定至 NXGate 代理出口。
                     </div>
                     <button class="btn" data-action="openAddSingBoxModal">
                         + 新建第一个抗封锁入站节点
@@ -2070,7 +2070,7 @@
             if (targetType === 'default') {
                 const defOb = (singBoxOverview.available_outbounds || []).find(o => o.is_default);
                 targetOutbound = defOb ? defOb.addr : '127.0.0.1:7928';
-                label = `AimiliVPN 默认住宅出口 (${targetOutbound})`;
+                label = `NXGate 默认住宅出口 (${targetOutbound})`;
             }
 
             if (!confirm(`确定将所有 sing-box 入站节点批量切换至【${label}】吗？`)) return;
@@ -2206,7 +2206,7 @@
             const port = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
             const proto = window.location.protocol === 'https:' ? 'https' : 'http';
 
-            document.getElementById('app-server-name').value = `AimiliVPN (${host})`;
+            document.getElementById('app-server-name').value = `NXGate (${host})`;
             document.getElementById('app-server-protocol').value = proto;
             document.getElementById('app-server-host').value = host;
             document.getElementById('app-server-port').value = port;
@@ -2237,7 +2237,7 @@
         }
 
         function renderAppProfileQRCode() {
-            const name = (document.getElementById('app-server-name')?.value || '').trim() || 'AimiliVPN';
+            const name = (document.getElementById('app-server-name')?.value || '').trim() || 'NXGate';
             const proto = document.getElementById('app-server-protocol')?.value || 'http';
             const host = (document.getElementById('app-server-host')?.value || '').trim() || window.location.hostname || '127.0.0.1';
             const port = parseInt(document.getElementById('app-server-port')?.value) || (window.location.port ? parseInt(window.location.port) : 8787);
@@ -2246,10 +2246,10 @@
             const pass = (currentAppProfile && currentAppProfile.password) || '';
             const isTls = proto === 'https';
 
-            const uri = `aimili://server?host=${encodeURIComponent(host)}&port=${port}&path=${encodeURIComponent(path)}&user=${encodeURIComponent(user)}&pass=${encodeURIComponent(pass)}&name=${encodeURIComponent(name)}&tls=${isTls ? '1' : '0'}`;
+            const uri = `nxgate://server?host=${encodeURIComponent(host)}&port=${port}&path=${encodeURIComponent(path)}&user=${encodeURIComponent(user)}&pass=${encodeURIComponent(pass)}&name=${encodeURIComponent(name)}&tls=${isTls ? '1' : '0'}`;
 
             const jsonProfile = {
-                type: 'aimili_server',
+                type: 'nxgate_server',
                 version: 1,
                 name: name,
                 host: host,

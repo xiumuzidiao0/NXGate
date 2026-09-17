@@ -25,7 +25,7 @@ func main() {
 	flag.Parse()
 
 	if *showVersion {
-		fmt.Printf("AimiliVPN Go Gateway v%s\n", config.Version)
+		fmt.Printf("NXGate Multi-Egress Gateway v%s\n", config.Version)
 		os.Exit(0)
 	}
 
@@ -35,7 +35,7 @@ func main() {
 	_ = stats.InitRingLog(1000)
 	stats.StartTrafficTicker()
 
-	stats.LogInfo("Main", "=== AimiliVPN 代理网关 (Go 高性能重构版 v%s) 启动中 ===", config.Version)
+	stats.LogInfo("Main", "=== NXGate 自适应多出口路由网关 (v%s) 启动中 ===", config.Version)
 
 	// Preflight checks
 	if err := vpn.CheckTUNDevice(); err != nil {

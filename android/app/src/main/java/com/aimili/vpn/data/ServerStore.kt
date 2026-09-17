@@ -68,7 +68,7 @@ class ServerStore(context: Context) {
             list.add(
                 ServerProfile(
                     id = "tokyo-residential",
-                    name = "东京住宅网关",
+                    name = "东京住宅网关 (NXGate)",
                     host = "47.238.2.197",
                     port = 8787,
                     path = "enter",
@@ -90,7 +90,7 @@ class ServerStore(context: Context) {
             list.add(
                 ServerProfile(
                     id = "silicon-valley-ai",
-                    name = "硅谷智能专属池",
+                    name = "硅谷智能专属池 (NXGate)",
                     host = "104.28.0.8",
                     port = 8787,
                     path = "enter",
@@ -278,7 +278,7 @@ class ServerStore(context: Context) {
 
         return ServerProfile(
             id = obj.optString("id", UUID.randomUUID().toString()),
-            name = obj.optString("name", "AimiliVPN 网关"),
+            name = obj.optString("name", "NXGate 网关"),
             host = obj.optString("host", "127.0.0.1"),
             port = obj.optInt("port", 8787),
             path = obj.optString("path", "enter"),

@@ -40,7 +40,7 @@ func TestAppInfoAndProfileAPI(t *testing.T) {
 	if err := json.NewDecoder(wInfo.Body).Decode(&appInfo); err != nil {
 		t.Fatalf("decode app info json: %v", err)
 	}
-	if !appInfo.OK || appInfo.App != "aimili-vpngate-go" || appInfo.Version != config.Version {
+	if !appInfo.OK || appInfo.App != "nxgate" || appInfo.Version != config.Version {
 		t.Fatalf("unexpected app info: %+v", appInfo)
 	}
 	if len(appInfo.Capabilities) == 0 {
@@ -68,8 +68,8 @@ func TestAppInfoAndProfileAPI(t *testing.T) {
 	if p.Host != "47.238.2.197" || p.Port != 8787 || p.Path != "enter" || p.Username != "testuser" || p.Password != "testpassword" || p.Name != "Tokyo-VPS" {
 		t.Fatalf("unexpected profile values: %+v", p)
 	}
-	if !strings.HasPrefix(appProfile.ConnectURI, "aimili://server?") {
-		t.Fatalf("expected connect URI prefix aimili://server?, got: %s", appProfile.ConnectURI)
+	if !strings.HasPrefix(appProfile.ConnectURI, "nxgate://server?") {
+		t.Fatalf("expected connect URI prefix nxgate://server?, got: %s", appProfile.ConnectURI)
 	}
 	if !strings.Contains(appProfile.ConnectURI, "host=47.238.2.197") || !strings.Contains(appProfile.ConnectURI, "user=testuser") {
 		t.Fatalf("expected connect URI to contain host and user, got: %s", appProfile.ConnectURI)
