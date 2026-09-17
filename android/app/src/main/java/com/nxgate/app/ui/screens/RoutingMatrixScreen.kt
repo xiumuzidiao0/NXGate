@@ -416,9 +416,9 @@ fun RoutingMatrixScreen(
                                             color = MaterialTheme.colorScheme.surfaceContainerLow
                                         ) {
                                             Text(
-                                                text = "当前服务器尚未配置独立代理端口规则，请点击下方「新建端口规则」添加。",
+                                                text = if (activeServer == null) "当前尚未纳管任何服务器，请前往「概览」或「设置」添加 VPS 网关。" else "当前服务器尚未配置独立代理端口规则，请点击下方「新建代理端口」添加。",
                                                 style = MaterialTheme.typography.bodyMedium,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                color = MaterialTheme.colorScheme.onSurface,
                                                 modifier = Modifier.padding(20.dp)
                                             )
                                         }
@@ -523,9 +523,9 @@ fun RoutingMatrixScreen(
                                             color = MaterialTheme.colorScheme.surfaceContainerLow
                                         ) {
                                             Text(
-                                                text = "当前服务器尚未配置动态自适应组，请点击下方「新建自适应组」添加。",
+                                                text = if (activeServer == null) "当前尚未纳管任何服务器，请前往「概览」或「设置」添加 VPS 网关。" else "当前服务器尚未配置动态自适应组，请点击下方「新建自适应组」添加。",
                                                 style = MaterialTheme.typography.bodyMedium,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                color = MaterialTheme.colorScheme.onSurface,
                                                 modifier = Modifier.padding(20.dp)
                                             )
                                         }
@@ -657,9 +657,9 @@ fun RoutingMatrixScreen(
                                             color = MaterialTheme.colorScheme.surfaceContainerLow
                                         ) {
                                             Text(
-                                                text = "当前服务器尚未创建边缘抗封锁入站节点，请点击下方「新建入站节点」创建。",
+                                                text = if (activeServer == null) "当前尚未纳管任何服务器，请前往「概览」或「设置」添加 VPS 网关。" else "当前服务器尚未创建边缘抗封锁入站节点，请点击下方「新建入站节点」创建。",
                                                 style = MaterialTheme.typography.bodyMedium,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                color = MaterialTheme.colorScheme.onSurface,
                                                 modifier = Modifier.padding(20.dp)
                                             )
                                         }

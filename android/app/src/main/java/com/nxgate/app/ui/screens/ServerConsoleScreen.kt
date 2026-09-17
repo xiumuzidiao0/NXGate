@@ -23,6 +23,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Article
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Dns
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Speed
@@ -58,6 +59,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.nxgate.app.NXGateApplication
 import com.nxgate.app.model.LiveTrafficInfo
@@ -368,13 +370,13 @@ fun ServerConsoleScreen(
                             Spacer(Modifier.width(12.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "明文传输风险提醒",
+                                    text = "HTTP 未加密传输提醒",
                                     style = MaterialTheme.typography.titleSmall,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onErrorContainer
                                 )
                                 Text(
-                                    text = "当前服务器 [${activeServer.name}] (${activeServer.host}:${activeServer.port}) 未启用 TLS 加密，在公共 WiFi 或非受信任网络中管理可能存在明文窃听风险。建议配置 HTTPS 证书。",
+                                    text = "当前服务器 [${activeServer.name}] (${activeServer.host}:${activeServer.port}) 使用 HTTP 协议连接，未启用 HTTPS 安全加密，在公共 WiFi 或非受信任网络中管理可能存在被窃听风险。建议配置 HTTPS。",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.9f)
                                 )
@@ -386,7 +388,33 @@ fun ServerConsoleScreen(
                     }
                 }
 
-                if (isTabletLandscape) {
+                if (activeServer == null) {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp),
+                        shape = RoundedCornerShape(20.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainer
+                        ),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 1.5.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(28.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Icon(Icons.Rounded.Dns, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(48.dp))
+                            Spacer(Modifier.height(14.dp))
+                            Text("暂未纳管任何网关服务器", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                            Spacer(Modifier.height(8.dp))
+                            Text("请前往「概览」或「设置」通过相机扫码或手动添加您的 VPS 网关。", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface, textAlign = TextAlign.Center)
+                        }
+                    }
+                } else if (isTabletLandscape) {
                     // ==================== 平板横屏：左右双列响应式布局 ====================
                     Row(
                         modifier = Modifier.fillMaxWidth(),
