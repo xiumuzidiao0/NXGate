@@ -112,16 +112,16 @@ fun SettingsSecurityScreen(
 
     // Form inputs state initialized from first server or default
     val initialServer = servers.firstOrNull()
-    var inputName by remember { mutableStateOf(initialServer?.name ?: "东京住宅网关") }
-    var inputHost by remember { mutableStateOf(initialServer?.host ?: "47.238.2.197") }
+    var inputName by remember { mutableStateOf(initialServer?.name ?: "") }
+    var inputHost by remember { mutableStateOf(initialServer?.host ?: "") }
     var inputPort by remember { mutableStateOf(initialServer?.port?.toString() ?: "8787") }
     var inputPath by remember { mutableStateOf(initialServer?.path ?: "enter") }
-    var inputUser by remember { mutableStateOf(initialServer?.username ?: "xmzd") }
-    var inputPass by remember { mutableStateOf(initialServer?.password ?: "a18979346882") }
+    var inputUser by remember { mutableStateOf(initialServer?.username ?: "admin") }
+    var inputPass by remember { mutableStateOf(initialServer?.password ?: "") }
 
-    // Protocol chip: "明文连接", "加密连接" (selected)
+    // Protocol chip: "HTTP", "HTTPS" (selected)
     var selectedProtocolChipIndex by remember { mutableIntStateOf(if (initialServer?.isTls == true) 1 else 0) }
-    val protocolChips = listOf("明文连接", "加密连接")
+    val protocolChips = listOf("HTTP", "HTTPS")
 
     // Security preferences switch states
     var biometricEnabled by remember { mutableStateOf(NXGateApplication.instance.serverStore.biometricEnabled.value) }
@@ -439,7 +439,7 @@ fun SettingsSecurityScreen(
                                         )
                                         Spacer(Modifier.width(6.dp))
                                         Text(
-                                            text = "明文传输警告：HTTP 通信未经 TLS 加密，请仅在受信任私网中使用。",
+                                            text = "HTTP 连接提示：通信未经 HTTPS 加密，请仅在受信任私网中使用。",
                                             style = MaterialTheme.typography.labelSmall,
                                             color = MaterialTheme.colorScheme.onErrorContainer
                                         )
@@ -520,8 +520,8 @@ fun SettingsSecurityScreen(
                                 ConnectedListItem(
                                     index = 1,
                                     total = 2,
-                                    headline = "明文传输风险提醒",
-                                    supportingText = "检测到未启用加密连接时显示警告",
+                                    headline = "HTTP 传输风险提醒",
+                                    supportingText = "检测到使用 HTTP 未加密连接时显示警告",
                                     leadingIcon = Icons.Rounded.Warning,
                                     trailingContent = {
                                         Switch(
@@ -529,7 +529,7 @@ fun SettingsSecurityScreen(
                                             onCheckedChange = {
                                                 cleartextWarningEnabled = it
                                                 NXGateApplication.instance.serverStore.setCleartextWarningEnabled(it)
-                                                Toast.makeText(context, "明文提醒已${if (it) "开启" else "关闭"}", Toast.LENGTH_SHORT).show()
+                                                Toast.makeText(context, "HTTP 传输提醒已${if (it) "开启" else "关闭"}", Toast.LENGTH_SHORT).show()
                                             },
                                             colors = SwitchDefaults.colors(
                                                 checkedThumbColor = MaterialTheme.colorScheme.onPrimary,

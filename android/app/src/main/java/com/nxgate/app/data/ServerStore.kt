@@ -63,55 +63,6 @@ class ServerStore(context: Context) {
             }
         }
 
-        // Seed with the required real server profiles if empty
-        if (list.isEmpty()) {
-            list.add(
-                ServerProfile(
-                    id = "tokyo-residential",
-                    name = "东京住宅网关 (NXGate)",
-                    host = "47.238.2.197",
-                    port = 8787,
-                    path = "enter",
-                    username = "xmzd",
-                    password = "a18979346882",
-                    isTls = false,
-                    latencyMs = 38,
-                    isOnline = true,
-                    exitIp = "114.119.18.2",
-                    ipType = "原生家宽",
-                    ispName = "中华电信骨干",
-                    unlockStatus = "全通过",
-                    downSpeedStr = "8.4 Mb/s",
-                    totalTrafficStr = "12.1 Gb",
-                    activeConns = 38,
-                    orderIndex = 0
-                )
-            )
-            list.add(
-                ServerProfile(
-                    id = "silicon-valley-ai",
-                    name = "硅谷智能专属池 (NXGate)",
-                    host = "104.28.0.8",
-                    port = 8787,
-                    path = "enter",
-                    username = "admin",
-                    password = "aimilivpn",
-                    isTls = true,
-                    latencyMs = 142,
-                    isOnline = true,
-                    exitIp = "23.94.102.8",
-                    ipType = "机房托管",
-                    ispName = "Comcast Business",
-                    unlockStatus = "通义与双子通过，克劳德阻断",
-                    downSpeedStr = "2.1 Mb/s",
-                    totalTrafficStr = "6.5 Gb",
-                    activeConns = 12,
-                    orderIndex = 1
-                )
-            )
-            saveList(list)
-        }
-
         _servers.value = list
         val savedActiveId = prefs.getString(KEY_ACTIVE_SERVER_ID, list.firstOrNull()?.id)
         _activeServer.value = list.find { it.id == savedActiveId } ?: list.firstOrNull()

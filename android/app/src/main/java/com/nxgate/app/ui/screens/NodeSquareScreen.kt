@@ -625,15 +625,17 @@ fun NodeSquareScreen(
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Text(
-                                text = if (nodeLoadError != null) "拉取节点失败: $nodeLoadError" else "当前服务器暂未拉取到候选节点，请检查网络或点击重试",
+                                text = if (activeServer == null) "当前尚未纳管任何服务器，请点击右上角或前往「设置」扫码添加 VPS 网关。" else (if (nodeLoadError != null) "拉取节点失败: $nodeLoadError" else "当前服务器暂未拉取到候选节点，请检查网络或点击重试"),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Spacer(Modifier.height(10.dp))
-                            OutlinedButton(onClick = { refreshAllNodes() }) {
-                                Icon(Icons.Rounded.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text("立即重新拉取全部节点")
+                            if (activeServer != null) {
+                                OutlinedButton(onClick = { refreshAllNodes() }) {
+                                    Icon(Icons.Rounded.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("立即重新拉取全部节点")
+                                }
                             }
                         }
                     }
