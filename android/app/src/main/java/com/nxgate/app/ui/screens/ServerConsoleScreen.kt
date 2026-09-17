@@ -812,6 +812,9 @@ fun ServerConsoleScreen(
                         }
                     }
                 }
+
+                // 底部留白确保穿透悬浮液态玻璃底栏后完整可见
+                Spacer(Modifier.height(88.dp))
             }
         }
     }

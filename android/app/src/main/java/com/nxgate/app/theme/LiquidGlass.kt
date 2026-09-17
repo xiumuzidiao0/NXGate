@@ -28,19 +28,19 @@ import androidx.compose.ui.unit.dp
  */
 object LiquidGlassDefaults {
     val DefaultCornerRadius = 32.dp
-    val HighlightBorderWidth = 1.2.dp
+    val HighlightBorderWidth = 1.dp // 精准 1px 细腻微反光描边
 
-    // Light Theme Liquid Glass Palette (Highly Translucent & Crystal Clear)
-    val LightSubstrateColor = Color(0xFFFFFFFF).copy(alpha = 0.55f)
-    val LightGlassTint = Color(0xFFE2EFFF).copy(alpha = 0.25f)
-    val LightHighlightTop = Color.White.copy(alpha = 0.90f)
-    val LightHighlightBottom = Color(0xFF8FB3DD).copy(alpha = 0.35f)
+    // Light Theme: 极致通透冰晶 (36% 纯净透光基底 + 1px 棱镜微反光描边)
+    val LightSubstrateColor = Color(0xFFFFFFFF).copy(alpha = 0.36f)
+    val LightGlassTint = Color(0xFFE8F2FF).copy(alpha = 0.15f)
+    val LightHighlightTop = Color.White.copy(alpha = 0.85f)
+    val LightHighlightBottom = Color(0xFF6B8DB5).copy(alpha = 0.25f)
 
-    // Dark Theme Liquid Glass Palette (Translucent Obsidian)
-    val DarkSubstrateColor = Color(0xFF0E1622).copy(alpha = 0.65f)
-    val DarkGlassTint = Color(0xFF1E2E44).copy(alpha = 0.35f)
+    // Dark Theme: 晶莹墨曜岩 (48% 透光基底 + 1px 棱镜微反光描边)
+    val DarkSubstrateColor = Color(0xFF0C131D).copy(alpha = 0.48f)
+    val DarkGlassTint = Color(0xFF1E2E44).copy(alpha = 0.20f)
     val DarkHighlightTop = Color.White.copy(alpha = 0.50f)
-    val DarkHighlightBottom = Color(0xFF1C2C40).copy(alpha = 0.25f)
+    val DarkHighlightBottom = Color(0xFF263A50).copy(alpha = 0.35f)
 }
 
 /**
@@ -71,11 +71,11 @@ fun Modifier.liquidGlass(
         end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
     )
 
-    // Glass refraction gloss overlay (subtle diagonal sheen)
+    // Glass refraction gloss overlay (轻盈微反光掠影，避免过厚遮挡背景穿透效果)
     val glossBrush = Brush.linearGradient(
         colors = listOf(
-            Color.White.copy(alpha = if (isDark) 0.12f else 0.28f),
-            Color.White.copy(alpha = if (isDark) 0.02f else 0.08f),
+            Color.White.copy(alpha = if (isDark) 0.06f else 0.12f),
+            Color.White.copy(alpha = if (isDark) 0.01f else 0.03f),
             Color.Transparent
         ),
         start = Offset(0f, 0f),
