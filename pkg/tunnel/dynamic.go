@@ -205,23 +205,9 @@ func (m *DynamicGroupManager) SaveGroup(g *DynamicGroup) error {
 	m.groups[g.ID] = g
 	m.saveLocked()
 
-	// Sync system primary group settings back to global config and config.env for CLI consistency
-	if (g.IsSystem || g.ID == SystemPrimaryGroupID) && m.cfg != nil {
-		var countries []string
-		if strings.TrimSpace(g.Country) != "" {
-			for _, c := range strings.Split(g.Country, ",") {
-				c = strings.ToUpper(strings.TrimSpace(c))
-				if len(c) == 2 {
-					countries = append(countries, c)
-				}
-			}
-		}
-		_ = m.cfg.UpdateSettings(config.SettingsDTO{
-			AutoRotateMinutes:  g.IntervalMinutes,
-			AutoRotateIPType:   g.IPType,
-			DiscoveryCountries: countries,
-		})
-	}
+	// 注意：禁止将单个自适应组（如 system-primary）的局部国家偏好反向同步回全局的 DiscoveryCountries。
+	// 动态自适应组各司其职，拥有自己独立的国家与策略参数，全局节点池必须面向全球所有国家开放，
+	// 否则会导致其他自适应组（如韩国组、美国组）以及节点广场无法获取对应国家的候选节点。
 
 	stats.LogInfo("DynamicGroup", "保存动态自适应组 [%s] (%s): 目标数=%d, 策略=%s, 解锁筛选=%s, 周期=%d分钟",
 		g.ID, g.Name, g.TargetCount, g.SortBy, g.UnlockFilter, g.IntervalMinutes)
