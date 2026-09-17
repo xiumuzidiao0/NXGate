@@ -20,7 +20,7 @@ BIN_PATH="${INSTALL_DIR}/aimilivpn"
 CONFIG_FILE="${INSTALL_DIR}/config.env"
 SERVICE_FILE="/etc/systemd/system/aimilivpn.service"
 GITHUB_REPO="https://github.com/xiumuzidiao0/NXGate.git"
-DEFAULT_VERSION="2.5.5"
+DEFAULT_VERSION="2.5.6"
 REQUIRED_GO_VERSION="1.25.13"
 
 get_app_version() {
@@ -104,9 +104,9 @@ download_release_binary() {
         "https://github.com/xiumuzidiao0/NXGate/releases/latest/download/aimilivpn_linux_${GO_ARCH}"
         "https://ghproxy.net/https://github.com/xiumuzidiao0/NXGate/releases/latest/download/aimilivpn_linux_${GO_ARCH}"
         "https://mirror.ghproxy.com/https://github.com/xiumuzidiao0/NXGate/releases/latest/download/aimilivpn_linux_${GO_ARCH}"
-        "https://github.com/xiumuzidiao0/NXGate/releases/download/v2.5.5/aimilivpn_linux_${GO_ARCH}"
-        "https://ghproxy.net/https://github.com/xiumuzidiao0/NXGate/releases/download/v2.5.5/aimilivpn_linux_${GO_ARCH}"
-        "https://mirror.ghproxy.com/https://github.com/xiumuzidiao0/NXGate/releases/download/v2.5.5/aimilivpn_linux_${GO_ARCH}"
+        "https://github.com/xiumuzidiao0/NXGate/releases/download/v2.5.6/aimilivpn_linux_${GO_ARCH}"
+        "https://ghproxy.net/https://github.com/xiumuzidiao0/NXGate/releases/download/v2.5.6/aimilivpn_linux_${GO_ARCH}"
+        "https://mirror.ghproxy.com/https://github.com/xiumuzidiao0/NXGate/releases/download/v2.5.6/aimilivpn_linux_${GO_ARCH}"
     )
 
     for u in "${urls[@]}"; do
@@ -594,6 +594,28 @@ show_service_status() {
     else
         echo -e "${RED}● 已停止 (Inactive)${PLAIN}"
     fi
+}
+
+menu_status() {
+    local ip=$(get_public_ip)
+    local port=$(get_config_val "UI_PORT")
+    local path=$(get_config_val "UI_PATH")
+    local user=$(get_config_val "UI_USERNAME")
+    local pass=$(get_config_val "UI_PASSWORD")
+    local proxy_port=$(get_config_val "LOCAL_PROXY_PORT")
+    local ver=$(get_app_version)
+    local sb_status=$(show_singbox_status)
+
+    echo -e "\n${BLUE}==================================================================${PLAIN}"
+    echo -e "${BLUE}        ⚡ NXGate (自适应多出口路由网关) 运行状态信息            ${PLAIN}"
+    echo -e "${BLUE}==================================================================${PLAIN}"
+    echo -e " ${BOLD}服务运行状态${PLAIN}   : $(show_service_status)"
+    echo -e " ${BOLD}sing-box 入站状态${PLAIN}: ${sb_status}"
+    echo -e " ${BOLD}Web 控制台入口${PLAIN}  : ${CYAN}http://${ip}:${port}/${path}/${PLAIN}"
+    echo -e " ${BOLD}管理账号/密码${PLAIN}   : ${YELLOW}${user}${PLAIN} / ${YELLOW}${pass}${PLAIN}"
+    echo -e " ${BOLD}本地代理端口${PLAIN}     : ${GREEN}127.0.0.1:${proxy_port}${PLAIN} (HTTP/SOCKS5 单端口自适应)"
+    echo -e " ${BOLD}当前程序版本${PLAIN}   : ${YELLOW}v${ver}${PLAIN}"
+    echo -e "${BLUE}==================================================================${PLAIN}\n"
 }
 
 menu_start() {

@@ -82,7 +82,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
-          name: "${{ github.ref_name }} - AimiliVPN Gateway Release"
+          name: "${{ github.ref_name }} - NXGate Multi-Egress Gateway Release"
           draft: false
           prerelease: false
           generate_release_notes: true
@@ -96,3 +96,4 @@ jobs:
             dist/aimilivpn_linux_arm
             dist/aimilivpn_linux_arm.gz
             dist/SHA256SUMS.txt
+            nxgate-release.apk
