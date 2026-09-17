@@ -149,20 +149,21 @@ fun FullNodeCard(
                     }
                 }
 
-                val latencyColor = when {
-                    node.latencyMs in 1..80 -> MaterialTheme.colorScheme.primary
-                    node.latencyMs in 81..180 -> MaterialTheme.colorScheme.tertiary
-                    else -> MaterialTheme.colorScheme.error
+                val (latencyBg, latencyTextColor) = when {
+                    node.latencyMs in 1..80 -> MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) to MaterialTheme.colorScheme.primary
+                    node.latencyMs in 81..180 -> MaterialTheme.colorScheme.tertiary.copy(alpha = 0.15f) to MaterialTheme.colorScheme.tertiary
+                    node.latencyMs > 180 -> MaterialTheme.colorScheme.error.copy(alpha = 0.15f) to MaterialTheme.colorScheme.error
+                    else -> MaterialTheme.colorScheme.surfaceContainerHigh to MaterialTheme.colorScheme.onSurface
                 }
                 Surface(
                     shape = RoundedCornerShape(8.dp),
-                    color = latencyColor.copy(alpha = 0.15f)
+                    color = latencyBg
                 ) {
                     Text(
                         text = if (node.latencyMs > 0) "${node.latencyMs} ms" else "待测",
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
-                        color = latencyColor,
+                        color = latencyTextColor,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                     )
                 }
@@ -624,7 +625,7 @@ fun NodeSquareScreen(
                             Text(
                                 text = if (nodeLoadError != null) "拉取节点失败: $nodeLoadError" else "当前服务器暂未拉取到候选节点，请检查网络或点击重试",
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                             Spacer(Modifier.height(10.dp))
                             OutlinedButton(onClick = { refreshAllNodes() }) {
@@ -645,7 +646,7 @@ fun NodeSquareScreen(
                         Text(
                             text = "未找到符合当前筛选条件的节点，请尝试切换上方国家下拉框或点击全量测速。",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.padding(20.dp)
                         )
                     }
@@ -811,7 +812,7 @@ fun NodeSquareScreen(
                 Text(
                     text = "包含因吞吐量低于 70KB/s、握手超时或离线而被系统自动隔离的死节点 (${blacklistItems.size} 个)",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurface
                 )
 
                 Spacer(Modifier.height(14.dp))

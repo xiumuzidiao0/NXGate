@@ -943,7 +943,7 @@ fun ThemeAppearanceSettingsSection(modifier: Modifier = Modifier) {
                     Text(
                         text = "参考 Google Pixel 桌面标准：强调色与基准底色解耦混色",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                 }
             }
@@ -1130,7 +1130,7 @@ fun ThemeAppearanceSettingsSection(modifier: Modifier = Modifier) {
                     Text(
                         text = "正在从当前系统壁纸提取动态色彩 (Monet)。基准底色与强调色均由系统壁纸自动生成。",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.padding(14.dp)
                     )
                 }
@@ -1143,7 +1143,7 @@ fun ThemeAppearanceSettingsSection(modifier: Modifier = Modifier) {
                     Text(
                         text = "正在使用小米澎湃 (HyperOS · MIUIX) 主题。基准色为纯黑/纯白双层悬浮卡片，强调色为经典超凡蔚蓝。",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.padding(14.dp)
                     )
                 }
