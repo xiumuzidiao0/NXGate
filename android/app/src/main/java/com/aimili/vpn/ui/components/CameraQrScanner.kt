@@ -143,34 +143,22 @@ fun CameraQrScannerDialog(
 
     var manualInput by remember { mutableStateOf("") }
     var showManualMode by remember { mutableStateOf(false) }
-    var showPermissionRationale by remember { mutableStateOf(!hasCameraPermission) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { isGranted ->
         hasCameraPermission = isGranted
         if (!isGranted) {
-            Toast.makeText(context, "未授予相机权限，您仍可手动粘贴配置链接", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "相机权限未授予，可手动粘贴配置链接", Toast.LENGTH_SHORT).show()
             showManualMode = true
         }
     }
 
-    if (showPermissionRationale && !hasCameraPermission && !showManualMode) {
-        AppPermissionRationaleDialog(
-            title = "申请相机权限",
-            description = "AimiliVPN 需要使用系统相机扫描 Web 控制台顶栏「手机 App 绑定」展示的二维码，以便快速导入服务器节点配置。\n\n画面仅在本地内存中即时解析，绝不会存储或上传。",
-            icon = Icons.Rounded.CameraAlt,
-            confirmText = "授权相机",
-            dismissText = "手动粘贴",
-            onConfirm = {
-                showPermissionRationale = false
-                permissionLauncher.launch(Manifest.permission.CAMERA)
-            },
-            onDismiss = {
-                showPermissionRationale = false
-                showManualMode = true
-            }
-        )
+    // 自动向安卓系统发起权限请求，直接弹出系统授权窗口，无需额外造按钮拦截
+    LaunchedEffect(Unit) {
+        if (!hasCameraPermission) {
+            permissionLauncher.launch(Manifest.permission.CAMERA)
+        }
     }
 
     Dialog(

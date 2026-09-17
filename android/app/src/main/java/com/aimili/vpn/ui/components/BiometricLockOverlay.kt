@@ -27,6 +27,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -38,6 +39,13 @@ fun BiometricLockOverlay(
     isLocked: Boolean,
     onUnlockRequested: () -> Unit
 ) {
+    // 锁定状态出现时，自动直接调用安卓系统生物识别弹窗，无需用户先手动点按钮
+    LaunchedEffect(isLocked) {
+        if (isLocked) {
+            onUnlockRequested()
+        }
+    }
+
     AnimatedVisibility(
         visible = isLocked,
         enter = fadeIn(),
