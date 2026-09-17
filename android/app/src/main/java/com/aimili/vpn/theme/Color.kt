@@ -43,8 +43,8 @@ val TealLightSurfaceContainerLow = Color(0xFFEEF5F5)
 val TealLightSurfaceContainer = Color(0xFFE8EFEF)
 val TealLightSurfaceContainerHigh = Color(0xFFE2EAEA)
 val TealLightSurfaceContainerHighest = Color(0xFFDDE4E4)
-val TealLightOnSurface = Color(0xFF161D1D)
-val TealLightOnSurfaceVariant = Color(0xFF3F4948)
+val TealLightOnSurface = Color(0xFF000000)
+val TealLightOnSurfaceVariant = Color(0xFF1B1F20)
 val TealLightOutline = Color(0xFF6F7979)
 val TealLightOutlineVariant = Color(0xFFBEC8C8)
 val TealLightInverseSurface = Color(0xFF2B3232)
@@ -151,8 +151,8 @@ val OceanLightColorScheme: ColorScheme = lightColorScheme(
     surfaceContainer = Color(0xFFECEEF4),
     surfaceContainerHigh = Color(0xFFE6E8EE),
     surfaceContainerHighest = Color(0xFFE0E2E8),
-    onSurface = Color(0xFF1A1C1E),
-    onSurfaceVariant = Color(0xFF43474E),
+    onSurface = Color(0xFF000000),
+    onSurfaceVariant = Color(0xFF1A1C1E),
     outline = Color(0xFF73777F),
     outlineVariant = Color(0xFFC3C7CF)
 )
@@ -202,8 +202,8 @@ val EmeraldLightColorScheme: ColorScheme = lightColorScheme(
     surfaceContainer = Color(0xFFEBEFE6),
     surfaceContainerHigh = Color(0xFFE5E9E0),
     surfaceContainerHighest = Color(0xFFE0E4DB),
-    onSurface = Color(0xFF1A1C19),
-    onSurfaceVariant = Color(0xFF424940),
+    onSurface = Color(0xFF000000),
+    onSurfaceVariant = Color(0xFF1A1D1A),
     outline = Color(0xFF72796F),
     outlineVariant = Color(0xFFC2C9BD)
 )
@@ -253,8 +253,8 @@ val PurpleLightColorScheme: ColorScheme = lightColorScheme(
     surfaceContainer = Color(0xFFEEE8F0),
     surfaceContainerHigh = Color(0xFFE8E2EA),
     surfaceContainerHighest = Color(0xFFE2DCE4),
-    onSurface = Color(0xFF1E1A20),
-    onSurfaceVariant = Color(0xFF4B454D),
+    onSurface = Color(0xFF000000),
+    onSurfaceVariant = Color(0xFF1E1A20),
     outline = Color(0xFF7C757F),
     outlineVariant = Color(0xFFCDC4CE)
 )
@@ -304,8 +304,8 @@ val AmberLightColorScheme: ColorScheme = lightColorScheme(
     surfaceContainer = Color(0xFFF0E9E4),
     surfaceContainerHigh = Color(0xFFEAE3DE),
     surfaceContainerHighest = Color(0xFFE4DDD8),
-    onSurface = Color(0xFF201A17),
-    onSurfaceVariant = Color(0xFF53433C),
+    onSurface = Color(0xFF000000),
+    onSurfaceVariant = Color(0xFF201A17),
     outline = Color(0xFF85736B),
     outlineVariant = Color(0xFFD8C2B8)
 )
@@ -355,8 +355,8 @@ val RoseLightColorScheme: ColorScheme = lightColorScheme(
     surfaceContainer = Color(0xFFEDDCE1),
     surfaceContainerHigh = Color(0xFFE7D6DB),
     surfaceContainerHighest = Color(0xFFE1D0D5),
-    onSurface = Color(0xFF201A1B),
-    onSurfaceVariant = Color(0xFF514347),
+    onSurface = Color(0xFF000000),
+    onSurfaceVariant = Color(0xFF201A1B),
     outline = Color(0xFF847377),
     outlineVariant = Color(0xFFD6C2C6)
 )
@@ -407,7 +407,7 @@ val MiuixLightSurfaceContainer = Color(0xFFFFFFFF) // 纯白高光卡片 (HyperO
 val MiuixLightSurfaceContainerHigh = Color(0xFFE8E8E8)
 val MiuixLightSurfaceContainerHighest = Color(0xFFE0E0E0)
 val MiuixLightOnSurface = Color(0xFF000000)
-val MiuixLightOnSurfaceVariant = Color(0xFF757575)
+val MiuixLightOnSurfaceVariant = Color(0xFF1F1F1F)
 val MiuixLightOutline = Color(0xFFD9D9D9)
 val MiuixLightOutlineVariant = Color(0xFFE0E0E0)
 val MiuixLightInverseSurface = Color(0xFF242424)
@@ -436,7 +436,7 @@ val MiuixDarkSurfaceContainer = Color(0xFF242424) // HyperOS 标志性 242424 �
 val MiuixDarkSurfaceContainerHigh = Color(0xFF2D2D2D)
 val MiuixDarkSurfaceContainerHighest = Color(0xFF353535)
 val MiuixDarkOnSurface = Color(0xFFF2F2F2)
-val MiuixDarkOnSurfaceVariant = Color(0xFFA0A0A0)
+val MiuixDarkOnSurfaceVariant = Color(0xFFC8C8CC)
 val MiuixDarkOutline = Color(0xFF404040)
 val MiuixDarkOutlineVariant = Color(0xFF393939)
 val MiuixDarkInverseSurface = Color(0xFFF7F7F7)
@@ -533,6 +533,8 @@ data class BaseToneOption(
     val darkContainerHigh: Color,
     val lightOnSurface: Color,
     val darkOnSurface: Color,
+    val lightOnSurfaceVariant: Color,
+    val darkOnSurfaceVariant: Color,
     val lightOutline: Color,
     val darkOutline: Color
 )
@@ -559,9 +561,11 @@ val BASE_TONE_OPTIONS = listOf(
         darkContainer = Color(0xFF1C1F23),
         lightContainerHigh = Color(0xFFE9ECEF),
         darkContainerHigh = Color(0xFF25292E),
-        lightOnSurface = Color(0xFF1F2328),
+        lightOnSurface = Color(0xFF000000),
         darkOnSurface = Color(0xFFF0F2F5),
-        lightOutline = Color(0xFFD0D7DE),
+        lightOnSurfaceVariant = Color(0xFF1A1C1E),
+        darkOnSurfaceVariant = Color(0xFFC7CDD4),
+        lightOutline = Color(0xFFC5CCD4),
         darkOutline = Color(0xFF3B4149)
     ),
     BaseToneOption(
@@ -574,8 +578,10 @@ val BASE_TONE_OPTIONS = listOf(
         darkContainer = Color(0xFF141B22),
         lightContainerHigh = Color(0xFFDDE6F0),
         darkContainerHigh = Color(0xFF1C242D),
-        lightOnSurface = Color(0xFF141A21),
+        lightOnSurface = Color(0xFF000000),
         darkOnSurface = Color(0xFFE9EFF5),
+        lightOnSurfaceVariant = Color(0xFF141A21),
+        darkOnSurfaceVariant = Color(0xFFBCCAD8),
         lightOutline = Color(0xFFBCCAD8),
         darkOutline = Color(0xFF2E3D4D)
     ),
@@ -589,8 +595,10 @@ val BASE_TONE_OPTIONS = listOf(
         darkContainer = Color(0xFF1F1B17),
         lightContainerHigh = Color(0xFFEEE5D7),
         darkContainerHigh = Color(0xFF29241F),
-        lightOnSurface = Color(0xFF221D18),
+        lightOnSurface = Color(0xFF000000),
         darkOnSurface = Color(0xFFF4EFEA),
+        lightOnSurfaceVariant = Color(0xFF1E1813),
+        darkOnSurfaceVariant = Color(0xFFD6C8B8),
         lightOutline = Color(0xFFD2C5B4),
         darkOutline = Color(0xFF453D35)
     ),
@@ -606,7 +614,9 @@ val BASE_TONE_OPTIONS = listOf(
         darkContainerHigh = Color(0xFF222226),
         lightOnSurface = Color(0xFF000000),
         darkOnSurface = Color(0xFFF5F5F7),
-        lightOutline = Color(0xFFCCCCCC),
+        lightOnSurfaceVariant = Color(0xFF111111),
+        darkOnSurfaceVariant = Color(0xFFD5D5D9),
+        lightOutline = Color(0xFFC0C0C0),
         darkOutline = Color(0xFF38383A)
     )
 )
@@ -639,7 +649,7 @@ fun buildPixelColorScheme(
             surfaceContainerHigh = base.darkContainerHigh,
             surfaceContainerHighest = base.darkContainerHigh,
             onSurface = base.darkOnSurface,
-            onSurfaceVariant = base.darkOutline,
+            onSurfaceVariant = base.darkOnSurfaceVariant,
             outline = base.darkOutline,
             outlineVariant = base.darkContainerHigh,
             background = base.darkSurface,
@@ -665,7 +675,7 @@ fun buildPixelColorScheme(
             surfaceContainerHigh = base.lightContainerHigh,
             surfaceContainerHighest = base.lightContainerHigh,
             onSurface = base.lightOnSurface,
-            onSurfaceVariant = base.lightOutline,
+            onSurfaceVariant = base.lightOnSurfaceVariant,
             outline = base.lightOutline,
             outlineVariant = base.lightContainerHigh,
             background = base.lightSurface,

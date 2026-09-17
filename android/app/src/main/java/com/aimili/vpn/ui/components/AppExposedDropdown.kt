@@ -57,7 +57,12 @@ fun <T> AppExposedDropdown(
             modifier = Modifier
                 .fillMaxWidth()
                 .menuAnchor(),
-            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
+            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(
+                focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                focusedLabelColor = MaterialTheme.colorScheme.primary,
+                unfocusedLabelColor = MaterialTheme.colorScheme.onSurface
+            )
         )
 
         ExposedDropdownMenu(

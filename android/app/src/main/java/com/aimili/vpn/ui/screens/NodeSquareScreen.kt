@@ -129,7 +129,8 @@ fun FullNodeCard(
                     Text(
                         text = "${node.ip}:${node.port}",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                     if (isMaster) {
                         Surface(
@@ -176,7 +177,7 @@ fun FullNodeCard(
                 Text(
                     text = "运营商: ${node.isp.ifEmpty { "全球骨干网络" }}",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.weight(1f)
                 )
                 val isRes = node.ipType == "residential"
@@ -191,14 +192,15 @@ fun FullNodeCard(
                         Icon(
                             imageVector = if (isRes) Icons.Rounded.Home else Icons.Rounded.Domain,
                             contentDescription = null,
-                            tint = if (isRes) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                            tint = if (isRes) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.size(12.dp)
                         )
                         Spacer(Modifier.width(3.dp))
                         Text(
                             text = if (isRes) "原生家宽" else "机房托管",
                             style = MaterialTheme.typography.labelSmall,
-                            color = if (isRes) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                            fontWeight = FontWeight.Medium,
+                            color = if (isRes) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
                         )
                     }
                 }
@@ -229,7 +231,7 @@ fun FullNodeCard(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("实测解锁:", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("实测解锁:", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
                 UnlockPill("ChatGPT", node.openai)
                 UnlockPill("Claude", node.claude)
                 UnlockPill("Gemini", node.gemini)

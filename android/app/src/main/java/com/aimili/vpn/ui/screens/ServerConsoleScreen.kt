@@ -141,10 +141,11 @@ fun TunnelChipCard(
                 Text(
                     text = if (tunnel.latencyMs > 0) "物理延迟: ${tunnel.latencyMs}ms" else "延迟: 测活就绪",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                    text = if (tunnel.throughputBps > 0) "吞吐: %.1f MB/s (断流检测通过)".format(tunnel.throughputBps / 1000000.0) else "在线待命",
+                    text = if (tunnel.throughputBps > 0) "吞吐: %.1f Mb/s (断流检测通过)".format((tunnel.throughputBps * 8.0) / 1_000_000.0) else "在线待命",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -156,7 +157,7 @@ fun TunnelChipCard(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("实测解锁:", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("实测解锁:", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
                 UnlockPill("ChatGPT", tunnel.openai)
                 UnlockPill("Claude", tunnel.claude)
                 UnlockPill("Gemini", tunnel.gemini)
@@ -423,7 +424,7 @@ fun ServerConsoleScreen(
                                     Text(
                                         text = "设备：主网卡零号，策略表一百\n节点：$masterNodeText\n已运行：$masterUptime，${masterInfo.status}",
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        color = MaterialTheme.colorScheme.onSurface,
                                         lineHeight = MaterialTheme.typography.bodyMedium.lineHeight * 1.35f
                                     )
                                 }
@@ -567,7 +568,7 @@ fun ServerConsoleScreen(
                             Text(
                                 text = "设备：主网卡零号，策略表一百\n节点：$masterNodeText\n已运行：$masterUptime，${masterInfo.status}",
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                color = MaterialTheme.colorScheme.onSurface,
                                 lineHeight = MaterialTheme.typography.bodyMedium.lineHeight * 1.35f
                             )
                         }

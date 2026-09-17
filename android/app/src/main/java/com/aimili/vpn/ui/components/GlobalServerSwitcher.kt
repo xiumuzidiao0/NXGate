@@ -143,7 +143,7 @@ fun GlobalServerSwitcherTitle(
                 Text(
                     text = "选择后当前控制台将直接拉取该 VPS 的实时指标与策略",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurface
                 )
 
                 Spacer(Modifier.height(16.dp))
@@ -211,7 +211,7 @@ fun GlobalServerSwitcherTitle(
                                     Text(
                                         text = "${server.host}:${server.port} • 出口: ${server.exitIp} (${server.ipType})",
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = if (isCurrent) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant
+                                        color = if (isCurrent) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
                                     )
                                 }
 
