@@ -35,8 +35,14 @@ class ServerStore(context: Context) {
     private val _themeMode = MutableStateFlow("system") // "system", "light", "dark"
     val themeMode: StateFlow<String> = _themeMode.asStateFlow()
 
-    private val _themePalette = MutableStateFlow("teal") // "monet", "teal", "ocean", "emerald", "purple", "amber", "rose"
+    private val _themePalette = MutableStateFlow("pixel") // "monet", "pixel", "miuix", "teal", "ocean", etc.
     val themePalette: StateFlow<String> = _themePalette.asStateFlow()
+
+    private val _themeAccent = MutableStateFlow("teal") // "teal", "bay_blue", "miuix_blue", "mint", "coral", "iris", "amber", "rose"
+    val themeAccent: StateFlow<String> = _themeAccent.asStateFlow()
+
+    private val _themeBase = MutableStateFlow("neutral") // "neutral", "slate", "sand", "oled"
+    val themeBase: StateFlow<String> = _themeBase.asStateFlow()
 
     init {
         loadData()
@@ -115,6 +121,8 @@ class ServerStore(context: Context) {
         _themeMode.value = prefs.getString(KEY_THEME_MODE, "system") ?: "system"
         val defaultPalette = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) "monet" else "teal"
         _themePalette.value = prefs.getString(KEY_THEME_PALETTE, defaultPalette) ?: defaultPalette
+        _themeAccent.value = prefs.getString(KEY_THEME_ACCENT, "teal") ?: "teal"
+        _themeBase.value = prefs.getString(KEY_THEME_BASE, "neutral") ?: "neutral"
     }
 
     fun setActiveServer(id: String) {
@@ -203,6 +211,16 @@ class ServerStore(context: Context) {
         prefs.edit().putString(KEY_THEME_PALETTE, palette).apply()
     }
 
+    fun setThemeAccent(accent: String) {
+        _themeAccent.value = accent
+        prefs.edit().putString(KEY_THEME_ACCENT, accent).apply()
+    }
+
+    fun setThemeBase(base: String) {
+        _themeBase.value = base
+        prefs.edit().putString(KEY_THEME_BASE, base).apply()
+    }
+
     fun updateServerTraffic(serverId: String, downSpeedStr: String, upSpeedStr: String, totalTrafficStr: String, activeConns: Int) {
         val list = _servers.value.map {
             if (it.id == serverId) {
@@ -287,5 +305,7 @@ class ServerStore(context: Context) {
         private const val KEY_CLEARTEXT_WARN = "cleartext_warn_enabled"
         private const val KEY_THEME_MODE = "theme_mode_str"
         private const val KEY_THEME_PALETTE = "theme_palette_str"
+        private const val KEY_THEME_ACCENT = "theme_accent_str"
+        private const val KEY_THEME_BASE = "theme_base_str"
     }
 }

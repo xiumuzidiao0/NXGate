@@ -2,6 +2,7 @@ package com.aimili.vpn.ui.screens
 
 import android.content.res.Configuration
 import android.widget.Toast
+import androidx.biometric.BiometricManager
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -75,14 +76,18 @@ import com.aimili.vpn.AimiliApplication
 import com.aimili.vpn.MainActivity
 import com.aimili.vpn.data.ApiClient
 import com.aimili.vpn.model.ServerProfile
+import com.aimili.vpn.theme.ACCENT_OPTIONS
 import com.aimili.vpn.theme.AVAILABLE_PALETTES
+import com.aimili.vpn.theme.BASE_TONE_OPTIONS
 import com.aimili.vpn.ui.components.AppExposedDropdown
+import com.aimili.vpn.ui.components.AppPermissionRationaleDialog
 import com.aimili.vpn.ui.components.CameraQrScannerDialog
 import com.aimili.vpn.ui.components.ConnectedButtonItem
 import com.aimili.vpn.ui.components.ConnectedButtonGroup
 import com.aimili.vpn.ui.components.ConnectedButtonStyle
 import com.aimili.vpn.ui.components.ConnectedChipGroup
 import com.aimili.vpn.ui.components.ConnectedListItem
+import com.aimili.vpn.ui.components.openSecuritySettings
 import kotlinx.coroutines.launch
 import java.util.UUID
 
@@ -130,21 +135,39 @@ fun SettingsSecurityScreen(
     var showScanSimDialog by remember { mutableStateOf(false) }
     var scannedUriInput by remember { mutableStateOf("") }
 
+    var showBiometricEnrollDialog by remember { mutableStateOf(false) }
+
     val onToggleBiometric: (Boolean) -> Unit = { targetChecked ->
         if (targetChecked) {
-            MainActivity.instance?.showBiometricPrompt(
-                onSuccess = {
-                    biometricEnabled = true
-                    AimiliApplication.instance.serverStore.setBiometricEnabled(true)
-                    Toast.makeText(context, "生物识别安全锁已开启，切出后台与冷启动时将验证", Toast.LENGTH_SHORT).show()
-                },
-                onError = { err ->
-                    Toast.makeText(context, "指纹/面容验证未通过: $err", Toast.LENGTH_SHORT).show()
+            val bm = BiometricManager.from(context)
+            val canAuth = bm.canAuthenticate(
+                BiometricManager.Authenticators.BIOMETRIC_STRONG or
+                        BiometricManager.Authenticators.BIOMETRIC_WEAK or
+                        BiometricManager.Authenticators.DEVICE_CREDENTIAL
+            )
+            when (canAuth) {
+                BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED -> {
+                    showBiometricEnrollDialog = true
                 }
-            ) ?: run {
-                biometricEnabled = true
-                AimiliApplication.instance.serverStore.setBiometricEnabled(true)
-                Toast.makeText(context, "生物识别安全锁已开启", Toast.LENGTH_SHORT).show()
+                BiometricManager.BIOMETRIC_ERROR_NO_HARDWARE -> {
+                    Toast.makeText(context, "当前设备未配备指纹或面容硬件，无法开启安全锁", Toast.LENGTH_SHORT).show()
+                }
+                else -> {
+                    MainActivity.instance?.showBiometricPrompt(
+                        onSuccess = {
+                            biometricEnabled = true
+                            AimiliApplication.instance.serverStore.setBiometricEnabled(true)
+                            Toast.makeText(context, "生物识别安全锁已开启，切出后台与冷启动时将验证", Toast.LENGTH_SHORT).show()
+                        },
+                        onError = { err ->
+                            Toast.makeText(context, "指纹/面容验证未通过: $err", Toast.LENGTH_SHORT).show()
+                        }
+                    ) ?: run {
+                        biometricEnabled = true
+                        AimiliApplication.instance.serverStore.setBiometricEnabled(true)
+                        Toast.makeText(context, "生物识别安全锁已开启", Toast.LENGTH_SHORT).show()
+                    }
+                }
             }
         } else {
             MainActivity.instance?.showBiometricPrompt(
@@ -871,6 +894,24 @@ fun SettingsSecurityScreen(
             }
         )
     }
+
+    // Biometric Enrollment Rationale Dialog
+    if (showBiometricEnrollDialog) {
+        AppPermissionRationaleDialog(
+            title = "系统尚未录入生物识别",
+            description = "检测到您的设备支持生物识别，但系统当前尚未录入任何指纹或面部数据。\n\n请前往系统「安全与隐私」中录入指纹或锁屏密码后，即可开启安全锁防护。",
+            icon = Icons.Rounded.Fingerprint,
+            confirmText = "前往系统设置",
+            dismissText = "暂不开启",
+            onConfirm = {
+                showBiometricEnrollDialog = false
+                openSecuritySettings(context)
+            },
+            onDismiss = {
+                showBiometricEnrollDialog = false
+            }
+        )
+    }
 }
 
 @Composable
@@ -879,6 +920,8 @@ fun ThemeAppearanceSettingsSection(modifier: Modifier = Modifier) {
     val serverStore = AimiliApplication.instance.serverStore
     val themeMode by serverStore.themeMode.collectAsState()
     val themePalette by serverStore.themePalette.collectAsState()
+    val themeAccent by serverStore.themeAccent.collectAsState()
+    val themeBase by serverStore.themeBase.collectAsState()
 
     Card(
         modifier = modifier.fillMaxWidth(),
@@ -911,20 +954,20 @@ fun ThemeAppearanceSettingsSection(modifier: Modifier = Modifier) {
                 Spacer(Modifier.width(12.dp))
                 Column {
                     Text(
-                        text = "外观与个性化调色板",
+                        text = "外观与调色板",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "支持 Android 12+ 壁纸莫奈动态取色与精选 M3 色系",
+                        text = "参考 Google Pixel 桌面标准：强调色与基准底色解耦混色",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
 
-            // 1. 深浅模式切换
+            // 1. 深浅明暗模式
             ConnectedChipGroup(
                 chips = listOf("跟随系统", "浅色模式", "深色模式"),
                 selectedIndex = when (themeMode) {
@@ -939,61 +982,189 @@ fun ThemeAppearanceSettingsSection(modifier: Modifier = Modifier) {
                         else -> "system"
                     }
                     serverStore.setThemeMode(newMode)
-                    val label = when (idx) {
-                        1 -> "浅色模式"
-                        2 -> "深色模式"
-                        else -> "跟随系统"
-                    }
-                    Toast.makeText(context, "已切换为「$label」", Toast.LENGTH_SHORT).show()
                 }
             )
 
-            // 2. 调色板下拉选择器
-            val selectedPal = AVAILABLE_PALETTES.find { it.id == themePalette } ?: AVAILABLE_PALETTES.first()
-            AppExposedDropdown(
-                label = "选择主题色调",
-                options = AVAILABLE_PALETTES,
-                selectedOption = selectedPal,
-                onOptionSelected = { pal ->
-                    serverStore.setThemePalette(pal.id)
-                    Toast.makeText(context, "已激活「${pal.name}」", Toast.LENGTH_SHORT).show()
-                },
-                optionLabel = { it.name },
-                leadingIcon = Icons.Rounded.ColorLens,
-                supportingText = if (themePalette == "monet") "从系统桌面壁纸动态提取莫奈色系 (Android 12+ 专属)" else selectedPal.description
+            // 2. 主题调色架构模式切换
+            val themeModeChips = listOf("Pixel 自由混色", "壁纸莫奈动态", "小米澎湃")
+            val selectedPaletteChipIdx = when (themePalette) {
+                "monet" -> 1
+                "miuix" -> 2
+                else -> 0
+            }
+            ConnectedChipGroup(
+                chips = themeModeChips,
+                selectedIndex = selectedPaletteChipIdx,
+                onSelected = { idx ->
+                    when (idx) {
+                        1 -> serverStore.setThemePalette("monet")
+                        2 -> serverStore.setThemePalette("miuix")
+                        else -> serverStore.setThemePalette("pixel")
+                    }
+                }
             )
 
-            // 3. 颜色快选色盘圆球
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                AVAILABLE_PALETTES.forEach { pal ->
-                    val isSelected = pal.id == themePalette
-                    Surface(
-                        modifier = Modifier
-                            .size(38.dp)
-                            .clip(CircleShape)
-                            .clickable {
-                                serverStore.setThemePalette(pal.id)
-                                Toast.makeText(context, "已激活「${pal.name}」", Toast.LENGTH_SHORT).show()
-                            },
-                        shape = CircleShape,
-                        color = pal.primaryColor,
-                        border = if (isSelected) BorderStroke(3.dp, MaterialTheme.colorScheme.onSurface) else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+            if (themePalette == "pixel" || (themePalette != "monet" && themePalette != "miuix")) {
+                val currentAccent = ACCENT_OPTIONS.find { it.id == themeAccent } ?: ACCENT_OPTIONS.first()
+                val currentBase = BASE_TONE_OPTIONS.find { it.id == themeBase } ?: BASE_TONE_OPTIONS.first()
+
+                // 2.1 强调色区域 (用于主按钮、开关与高光交互)
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        text = "强调色 (用于主按钮、开关与交互高光)",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        if (isSelected) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = Icons.Rounded.Check,
-                                    contentDescription = null,
-                                    tint = Color.White,
-                                    modifier = Modifier.size(20.dp)
-                                )
+                        ACCENT_OPTIONS.forEach { acc ->
+                            val isSelected = acc.id == themeAccent
+                            Surface(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .clickable {
+                                        serverStore.setThemeAccent(acc.id)
+                                        serverStore.setThemePalette("pixel")
+                                        Toast.makeText(context, "强调色已设为「${acc.name}」", Toast.LENGTH_SHORT).show()
+                                    },
+                                shape = CircleShape,
+                                color = acc.lightPrimary,
+                                border = if (isSelected) BorderStroke(3.dp, MaterialTheme.colorScheme.onSurface) else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                            ) {
+                                if (isSelected) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Check,
+                                            contentDescription = null,
+                                            tint = Color.White,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
+                }
+
+                // 2.2 基准色区域 (用于卡片底色、页面背景与边框灰阶)
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        text = "基准底色 (用于卡片底色、页面背景与边框灰阶)",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        BASE_TONE_OPTIONS.forEach { baseOpt ->
+                            val isSelected = baseOpt.id == themeBase
+                            Surface(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(42.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .clickable {
+                                        serverStore.setThemeBase(baseOpt.id)
+                                        serverStore.setThemePalette("pixel")
+                                        Toast.makeText(context, "基准色已设为「${baseOpt.name}」", Toast.LENGTH_SHORT).show()
+                                    },
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (isSelected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainer,
+                                border = BorderStroke(if (isSelected) 2.dp else 1.dp, if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant)
+                            ) {
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = baseOpt.name,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (isSelected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 2.3 Pixel 风格双色对比预览胶囊
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Surface(
+                                shape = CircleShape,
+                                color = currentAccent.lightPrimary,
+                                modifier = Modifier.size(16.dp)
+                            ) {}
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                text = "强调色: ${currentAccent.name}",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = currentBase.darkSurface,
+                                modifier = Modifier.size(16.dp)
+                            ) {}
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                text = "基准底色: ${currentBase.name}",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                }
+            } else if (themePalette == "monet") {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerLow
+                ) {
+                    Text(
+                        text = "正在从当前系统壁纸提取动态色彩 (Monet)。基准底色与强调色均由系统壁纸自动生成。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(14.dp)
+                    )
+                }
+            } else {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerLow
+                ) {
+                    Text(
+                        text = "正在使用小米澎湃 (HyperOS · MIUIX) 主题。基准色为纯黑/纯白双层悬浮卡片，强调色为经典超凡蔚蓝。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(14.dp)
+                    )
                 }
             }
         }

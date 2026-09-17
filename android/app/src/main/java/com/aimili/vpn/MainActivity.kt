@@ -47,6 +47,8 @@ class MainActivity : FragmentActivity() {
         setContent {
             val themeMode by serverStore.themeMode.collectAsState()
             val themePalette by serverStore.themePalette.collectAsState()
+            val themeAccent by serverStore.themeAccent.collectAsState()
+            val themeBase by serverStore.themeBase.collectAsState()
             val isAppLocked by serverStore.isAppLocked.collectAsState()
 
             val darkTheme = when (themeMode) {
@@ -57,7 +59,9 @@ class MainActivity : FragmentActivity() {
 
             AimiliTheme(
                 darkTheme = darkTheme,
-                paletteId = themePalette
+                paletteId = themePalette,
+                accentId = themeAccent,
+                baseId = themeBase
             ) {
                 Box(modifier = Modifier.fillMaxSize()) {
                     MainAppScaffold()
