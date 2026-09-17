@@ -13,7 +13,6 @@ data class AppThemePalette(
 )
 
 val AVAILABLE_PALETTES = listOf(
-    AppThemePalette("liquid_glass", "液态玻璃 (Liquid Glass)", "源自 AndroidLiquidGlass 的晶莹透光与高光棱镜质感", Color(0xFF0088FF)),
     AppThemePalette("monet", "壁纸莫奈动态取色", "从系统壁纸提取动态色彩 (Android 12+)", Color(0xFF6750A4)),
     AppThemePalette("miuix", "小米澎湃 (HyperOS · MIUIX)", "移植自 flutter_miuix 的经典超凡蓝与层级卡片", Color(0xFF3482FF)),
     AppThemePalette("teal", "默认青翠 (Teal)", "Aimili 标志性青碧护眼色系 (默认)", Color(0xFF00696E)),
@@ -587,7 +586,6 @@ data class BaseToneOption(
 )
 
 val ACCENT_OPTIONS = listOf(
-    AccentColorOption("liquid_glass", "冰晶液态", Color(0xFF0088FF), Color(0xFF47A3FF), Color(0xFFD6EBFF), Color(0xFF003870), Color(0xFF001D40), Color(0xFFD6EBFF)),
     AccentColorOption("teal", "青翠绿野", Color(0xFF00696E), Color(0xFF80D5DA), Color(0xFF9CF1F6), Color(0xFF0B4F52), Color(0xFF002022), Color(0xFF9CF1F6)),
     AccentColorOption("bay_blue", "晴空海蓝", Color(0xFF1A73E8), Color(0xFF8AB4F8), Color(0xFFD3E3FD), Color(0xFF0842A0), Color(0xFF041E49), Color(0xFFD3E3FD)),
     AccentColorOption("miuix_blue", "澎湃超凡", Color(0xFF3482FF), Color(0xFF277AF7), Color(0xFFEAF2FF), Color(0xFF2B3B54), Color(0xFF001D4D), Color(0xFFDCE8FF)),
@@ -615,23 +613,6 @@ val BASE_TONE_OPTIONS = listOf(
         darkOnSurfaceVariant = Color(0xFFC7CDD4),
         lightOutline = Color(0xFFC5CCD4),
         darkOutline = Color(0xFF3B4149)
-    ),
-    BaseToneOption(
-        id = "crystal",
-        name = "冰川晶透",
-        description = "透光玻璃与冰晶高光基底 (Liquid Glass)",
-        lightSurface = Color(0xFFEDF3FA),
-        darkSurface = Color(0xFF0A0E14),
-        lightContainer = Color(0xFFFFFFFF),
-        darkContainer = Color(0xFF141A22),
-        lightContainerHigh = Color(0xFFE0EAF6),
-        darkContainerHigh = Color(0xFF1C2533),
-        lightOnSurface = Color(0xFF000000),
-        darkOnSurface = Color(0xFFF0F6FC),
-        lightOnSurfaceVariant = Color(0xFF141B24),
-        darkOnSurfaceVariant = Color(0xFFB8CBDC),
-        lightOutline = Color(0xFFB8CCE4),
-        darkOutline = Color(0xFF283648)
     ),
     BaseToneOption(
         id = "slate",
@@ -756,66 +737,3 @@ fun buildPixelColorScheme(
         )
     }
 }
-
-// ==========================================
-// 9. 液态玻璃专用透光色彩方案 (源自 AndroidLiquidGlass)
-// ==========================================
-val LiquidGlassLightColorScheme: ColorScheme = lightColorScheme(
-    primary = Color(0xFF0088FF),
-    onPrimary = Color.White,
-    primaryContainer = Color(0xFFD6EBFF),
-    onPrimaryContainer = Color(0xFF001D40),
-    secondary = Color(0xFF0088FF),
-    onSecondary = Color.White,
-    secondaryContainer = Color(0xFFD6EBFF),
-    onSecondaryContainer = Color(0xFF001D40),
-    tertiary = Color(0xFF339DFF),
-    onTertiary = Color.White,
-    tertiaryContainer = Color(0xFFCCE4FF),
-    onTertiaryContainer = Color(0xFF00224A),
-    surface = Color(0xFFEDF3FA),
-    surfaceContainerLow = Color.White,
-    surfaceContainer = Color.White,
-    surfaceContainerHigh = Color(0xFFE0EAF6),
-    surfaceContainerHighest = Color.White,
-    onSurface = Color(0xFF000000),
-    onSurfaceVariant = Color(0xFF141B24),
-    outline = Color(0xFFB8CCE4),
-    outlineVariant = Color(0xFFD6E4F4),
-    background = Color(0xFFEDF3FA),
-    onBackground = Color(0xFF000000),
-    error = Color(0xFFBA1A1A),
-    onError = Color.White,
-    errorContainer = Color(0xFFFFDAD6),
-    onErrorContainer = Color(0xFF410002)
-)
-
-val LiquidGlassDarkColorScheme: ColorScheme = darkColorScheme(
-    primary = Color(0xFF47A3FF),
-    onPrimary = Color(0xFF002F5E),
-    primaryContainer = Color(0xFF004482),
-    onPrimaryContainer = Color(0xFFD6EBFF),
-    secondary = Color(0xFF47A3FF),
-    onSecondary = Color(0xFF002F5E),
-    secondaryContainer = Color(0xFF004482),
-    onSecondaryContainer = Color(0xFFD6EBFF),
-    tertiary = Color(0xFF70B7FF),
-    onTertiary = Color(0xFF002F5E),
-    tertiaryContainer = Color(0xFF004482),
-    onTertiaryContainer = Color(0xFFD6EBFF),
-    surface = Color(0xFF0A0E14),
-    surfaceContainerLow = Color(0xFF10151C),
-    surfaceContainer = Color(0xFF141A22),
-    surfaceContainerHigh = Color(0xFF1C2533),
-    surfaceContainerHighest = Color(0xFF243040),
-    onSurface = Color(0xFFEFF5FC),
-    onSurfaceVariant = Color(0xFFC0D0E2),
-    outline = Color(0xFF384A60),
-    outlineVariant = Color(0xFF202C3A),
-    background = Color(0xFF0A0E14),
-    onBackground = Color(0xFFEFF5FC),
-    error = Color(0xFFFFB4AB),
-    onError = Color(0xFF690005),
-    errorContainer = Color(0xFF93000A),
-    onErrorContainer = Color(0xFFFFDAD6)
-)
