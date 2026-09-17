@@ -183,17 +183,9 @@ func (np *NodePool) rebuildCandidatesLocked() {
 	var all []*Node
 	var filtered []*Node
 
-	allowedCountries := make(map[string]bool)
-	for _, c := range np.cfg.DiscoveryCountries {
-		allowedCountries[strings.ToUpper(strings.TrimSpace(c))] = true
-	}
-
 	for _, n := range np.nodeStore {
 		all = append(all, n)
 		if np.blacklist.IsBlacklisted(n.ID) {
-			continue
-		}
-		if len(allowedCountries) > 0 && !allowedCountries[n.CountryShort] {
 			continue
 		}
 		filtered = append(filtered, n)
