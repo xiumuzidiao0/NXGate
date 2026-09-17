@@ -201,7 +201,7 @@ fun ClusterHubScreen(
                                 verticalArrangement = Arrangement.Center
                             ) {
                                 Text(
-                                    text = "${server.name} 在线 ${server.latencyMs}毫秒",
+                                    text = "${server.name} 在线 ${server.latencyMs}ms",
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSurface
@@ -210,7 +210,7 @@ fun ClusterHubScreen(
                                 Text(
                                     text = "物理出口：${server.exitIp} ${server.ipType}\n智能解锁：${server.unlockStatus}\n下行 ${server.downSpeedStr}，总计 ${server.totalTrafficStr}，活跃连接 ${server.activeConns}",
                                     style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    color = MaterialTheme.colorScheme.onSurface,
                                     lineHeight = MaterialTheme.typography.bodyMedium.lineHeight * 1.35f
                                 )
                             }

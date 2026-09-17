@@ -375,8 +375,8 @@ fun RoutingMatrixScreen(
                             Text(
                                 text = title,
                                 style = MaterialTheme.typography.titleSmall,
-                                fontWeight = if (selectedTabIndex == index) FontWeight.Bold else FontWeight.Normal,
-                                color = if (selectedTabIndex == index) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                fontWeight = if (selectedTabIndex == index) FontWeight.Bold else FontWeight.Medium,
+                                color = if (selectedTabIndex == index) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                             )
                         }
                     )
@@ -574,7 +574,7 @@ fun RoutingMatrixScreen(
                                                 Text(
                                                     text = group.description,
                                                     style = MaterialTheme.typography.bodyMedium,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    color = MaterialTheme.colorScheme.onSurface,
                                                     lineHeight = MaterialTheme.typography.bodyMedium.lineHeight * 1.35f
                                                 )
                                                 Spacer(Modifier.height(12.dp))

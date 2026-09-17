@@ -212,7 +212,7 @@ fun SpeedWaveformCard(
                     Text(
                         text = "活跃连接：${liveTraffic.activeConnections} 个 • 实时采样率：3秒/次 • 点击卡片切换单位",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                 }
             }
