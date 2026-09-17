@@ -101,6 +101,10 @@ val AimiliLightColorScheme: ColorScheme = lightColorScheme(
     inverseSurface = TealLightInverseSurface,
     inverseOnSurface = TealLightInverseOnSurface,
     inversePrimary = TealLightInversePrimary,
+    error = Color(0xFFBA1A1A),
+    onError = Color.White,
+    errorContainer = Color(0xFFFFDAD6),
+    onErrorContainer = Color(0xFF410002)
 )
 
 val AimiliDarkColorScheme: ColorScheme = darkColorScheme(
@@ -128,6 +132,10 @@ val AimiliDarkColorScheme: ColorScheme = darkColorScheme(
     inverseSurface = TealDarkInverseSurface,
     inverseOnSurface = TealDarkInverseOnSurface,
     inversePrimary = TealDarkInversePrimary,
+    error = Color(0xFFFFB4AB),
+    onError = Color(0xFF690005),
+    errorContainer = Color(0xFF93000A),
+    onErrorContainer = Color(0xFFFFDAD6)
 )
 
 // ==========================================
@@ -518,7 +526,9 @@ data class AccentColorOption(
     val lightPrimary: Color,
     val darkPrimary: Color,
     val lightContainer: Color,
-    val darkContainer: Color
+    val darkContainer: Color,
+    val lightOnContainer: Color,
+    val darkOnContainer: Color
 )
 
 data class BaseToneOption(
@@ -540,14 +550,14 @@ data class BaseToneOption(
 )
 
 val ACCENT_OPTIONS = listOf(
-    AccentColorOption("teal", "青翠绿野", Color(0xFF00696E), Color(0xFF80D5DA), Color(0xFF9CF1F6), Color(0xFF0B4F52)),
-    AccentColorOption("bay_blue", "晴空海蓝", Color(0xFF1A73E8), Color(0xFF8AB4F8), Color(0xFFD3E3FD), Color(0xFF0842A0)),
-    AccentColorOption("miuix_blue", "澎湃超凡", Color(0xFF3482FF), Color(0xFF277AF7), Color(0xFFEAF2FF), Color(0xFF2B3B54)),
-    AccentColorOption("mint", "薄荷青竹", Color(0xFF00875A), Color(0xFF48D08D), Color(0xFFCEF5E1), Color(0xFF005236)),
-    AccentColorOption("coral", "珊瑚暖橙", Color(0xFFE64A19), Color(0xFFFF8A65), Color(0xFFFFDBCF), Color(0xFF782508)),
-    AccentColorOption("iris", "紫鸢霓裳", Color(0xFF7C4DFF), Color(0xFFB388FF), Color(0xFFEDE7F6), Color(0xFF4A148C)),
-    AccentColorOption("amber", "琥珀暖阳", Color(0xFFD84315), Color(0xFFFFB74D), Color(0xFFFFF3E0), Color(0xFF6E2805)),
-    AccentColorOption("rose", "暗夜樱粉", Color(0xFFC2185B), Color(0xFFF48FB1), Color(0xFFFCE4EC), Color(0xFF68002D))
+    AccentColorOption("teal", "青翠绿野", Color(0xFF00696E), Color(0xFF80D5DA), Color(0xFF9CF1F6), Color(0xFF0B4F52), Color(0xFF002022), Color(0xFF9CF1F6)),
+    AccentColorOption("bay_blue", "晴空海蓝", Color(0xFF1A73E8), Color(0xFF8AB4F8), Color(0xFFD3E3FD), Color(0xFF0842A0), Color(0xFF041E49), Color(0xFFD3E3FD)),
+    AccentColorOption("miuix_blue", "澎湃超凡", Color(0xFF3482FF), Color(0xFF277AF7), Color(0xFFEAF2FF), Color(0xFF2B3B54), Color(0xFF001D4D), Color(0xFFDCE8FF)),
+    AccentColorOption("mint", "薄荷青竹", Color(0xFF00875A), Color(0xFF48D08D), Color(0xFFCEF5E1), Color(0xFF005236), Color(0xFF00210B), Color(0xFFCEF5E1)),
+    AccentColorOption("coral", "珊瑚暖橙", Color(0xFFE64A19), Color(0xFFFF8A65), Color(0xFFFFDBCF), Color(0xFF782508), Color(0xFF380D00), Color(0xFFFFDBCF)),
+    AccentColorOption("iris", "紫鸢霓裳", Color(0xFF7C4DFF), Color(0xFFB388FF), Color(0xFFEDE7F6), Color(0xFF4A148C), Color(0xFF21005D), Color(0xFFEDE7F6)),
+    AccentColorOption("amber", "琥珀暖阳", Color(0xFFD84315), Color(0xFFFFB74D), Color(0xFFFFF3E0), Color(0xFF6E2805), Color(0xFF330E00), Color(0xFFFFF3E0)),
+    AccentColorOption("rose", "暗夜樱粉", Color(0xFFC2185B), Color(0xFFF48FB1), Color(0xFFFCE4EC), Color(0xFF68002D), Color(0xFF3B0018), Color(0xFFFCE4EC))
 )
 
 val BASE_TONE_OPTIONS = listOf(
@@ -634,15 +644,15 @@ fun buildPixelColorScheme(
             primary = accent.darkPrimary,
             onPrimary = Color(0xFF001F25),
             primaryContainer = accent.darkContainer,
-            onPrimaryContainer = accent.darkPrimary,
-            secondary = base.darkContainerHigh,
-            onSecondary = base.darkOnSurface,
-            secondaryContainer = base.darkContainerHigh,
-            onSecondaryContainer = base.darkOnSurface,
+            onPrimaryContainer = accent.darkOnContainer,
+            secondary = accent.darkPrimary,
+            onSecondary = Color(0xFF001F25),
+            secondaryContainer = accent.darkContainer,
+            onSecondaryContainer = accent.darkOnContainer,
             tertiary = accent.darkPrimary,
             onTertiary = Color.White,
             tertiaryContainer = accent.darkContainer,
-            onTertiaryContainer = accent.darkPrimary,
+            onTertiaryContainer = accent.darkOnContainer,
             surface = base.darkSurface,
             surfaceContainerLow = base.darkSurface,
             surfaceContainer = base.darkContainer,
@@ -653,22 +663,26 @@ fun buildPixelColorScheme(
             outline = base.darkOutline,
             outlineVariant = base.darkContainerHigh,
             background = base.darkSurface,
-            onBackground = base.darkOnSurface
+            onBackground = base.darkOnSurface,
+            error = Color(0xFFFFB4AB),
+            onError = Color(0xFF690005),
+            errorContainer = Color(0xFF93000A),
+            onErrorContainer = Color(0xFFFFDAD6)
         )
     } else {
         lightColorScheme(
             primary = accent.lightPrimary,
             onPrimary = Color.White,
             primaryContainer = accent.lightContainer,
-            onPrimaryContainer = accent.lightPrimary,
-            secondary = base.lightContainerHigh,
-            onSecondary = base.lightOnSurface,
-            secondaryContainer = base.lightContainerHigh,
-            onSecondaryContainer = base.lightOnSurface,
+            onPrimaryContainer = accent.lightOnContainer,
+            secondary = accent.lightPrimary,
+            onSecondary = Color.White,
+            secondaryContainer = accent.lightContainer,
+            onSecondaryContainer = accent.lightOnContainer,
             tertiary = accent.lightPrimary,
             onTertiary = Color.White,
             tertiaryContainer = accent.lightContainer,
-            onTertiaryContainer = accent.lightPrimary,
+            onTertiaryContainer = accent.lightOnContainer,
             surface = base.lightSurface,
             surfaceContainerLow = base.lightSurface,
             surfaceContainer = base.lightContainer,
@@ -679,7 +693,11 @@ fun buildPixelColorScheme(
             outline = base.lightOutline,
             outlineVariant = base.lightContainerHigh,
             background = base.lightSurface,
-            onBackground = base.lightOnSurface
+            onBackground = base.lightOnSurface,
+            error = Color(0xFFBA1A1A),
+            onError = Color.White,
+            errorContainer = Color(0xFFFFDAD6),
+            onErrorContainer = Color(0xFF410002)
         )
     }
 }

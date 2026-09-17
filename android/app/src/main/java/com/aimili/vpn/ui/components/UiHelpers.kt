@@ -58,11 +58,11 @@ fun countryChineseName(code: String): String {
 @Composable
 fun UnlockPill(label: String, status: String) {
     val isOk = status == "unlocked"
-    val color = if (isOk) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+    val borderColor = if (isOk) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f) else MaterialTheme.colorScheme.outline
     Surface(
         shape = RoundedCornerShape(4.dp),
-        color = if (isOk) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f) else MaterialTheme.colorScheme.surfaceContainerHigh,
-        border = BorderStroke(0.5.dp, color.copy(alpha = 0.5f))
+        color = if (isOk) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+        border = BorderStroke(0.5.dp, borderColor)
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
@@ -71,14 +71,14 @@ fun UnlockPill(label: String, status: String) {
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelSmall,
-                fontWeight = if (isOk) FontWeight.Bold else FontWeight.Normal,
-                color = if (isOk) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                fontWeight = if (isOk) FontWeight.Bold else FontWeight.Medium,
+                color = if (isOk) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
             )
             Spacer(Modifier.width(2.dp))
             Icon(
                 imageVector = if (isOk) Icons.Rounded.Check else Icons.Rounded.Close,
                 contentDescription = null,
-                tint = if (isOk) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                tint = if (isOk) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.size(11.dp)
             )
         }
