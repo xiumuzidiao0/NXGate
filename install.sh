@@ -436,7 +436,11 @@ build_and_deploy() {
     fi
     chmod +x "${INSTALL_DIR}/install.sh"
 
-    # 创建全局快捷命令 ml 和 aimili 到 /usr/bin 与 /usr/local/bin
+    register_shortcuts
+}
+
+# 7.4 注册全局快捷命令 (nx, nxgate, ml, aimili)
+register_shortcuts() {
     cat > /usr/bin/nx <<'EOF'
 #!/usr/bin/env bash
 if [ -n "$1" ]; then
@@ -801,9 +805,11 @@ menu_update() {
         curl -sSL -f "https://raw.githubusercontent.com/xiumuzidiao0/NXGate/main/VERSION" -o "${INSTALL_DIR}/VERSION" 2>/dev/null || true
         curl -sSL -f "https://raw.githubusercontent.com/xiumuzidiao0/NXGate/main/install.sh" -o "${INSTALL_DIR}/install.sh" 2>/dev/null || true
         chmod +x "${INSTALL_DIR}/install.sh" 2>/dev/null || true
+        register_shortcuts
         systemctl restart aimilivpn
         local new_ver=$(get_app_version)
         echo -e "\n${GREEN}🎉 NXGate 已成功极速更新至最新构建 (v${new_ver}) 并重启！${PLAIN}"
+        echo -e " ${BOLD}快捷指令已注册${PLAIN}: 在终端随时输入 ${CYAN}nx${PLAIN} 唤出管理控制中心"
         read -p "按回车键返回主菜单..."
         return
     fi
@@ -822,8 +828,10 @@ menu_update() {
                 cp -f "${TMP_DIR}/VERSION" "${INSTALL_DIR}/VERSION" 2>/dev/null || true
                 mkdir -p "${INSTALL_DIR}/mirror"
                 cp -f "${TMP_DIR}/mirror/vpngate.csv" "${INSTALL_DIR}/mirror/" 2>/dev/null || true
+                register_shortcuts
                 systemctl restart aimilivpn
                 echo -e "\n${GREEN}🎉 源码就地编译更新完成并已重启服务！(v$(get_app_version))${PLAIN}"
+                echo -e " ${BOLD}快捷指令已注册${PLAIN}: 在终端随时输入 ${CYAN}nx${PLAIN} 唤出管理控制中心"
             else
                 echo -e "${RED}编译失败！${PLAIN}"
             fi
@@ -1136,6 +1144,13 @@ main_menu() {
 check_root
 detect_os
 detect_arch
+
+# 如果已部署过服务但缺少新版快捷命令，自动平滑补齐 nx 与 nxgate
+if [ -f "${BIN_PATH}" ]; then
+    if [ ! -f "/usr/bin/nx" ] || [ ! -f "/usr/local/bin/nx" ]; then
+        register_shortcuts >/dev/null 2>&1 || true
+    fi
+fi
 
 # 命令行快捷操作分发
 case "$1" in
