@@ -1,3 +1,3 @@
 # Keep data models
--keep class com.aimili.vpn.model.** { *; }
--keep class com.aimili.vpn.data.** { *; }
+-keep class com.nxgate.app.model.** { *; }
+-keep class com.nxgate.app.data.** { *; }
