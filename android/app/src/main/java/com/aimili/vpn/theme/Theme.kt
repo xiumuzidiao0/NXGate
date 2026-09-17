@@ -17,7 +17,9 @@ import androidx.core.view.WindowCompat
 @Composable
 fun AimiliTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    paletteId: String = "teal",
+    paletteId: String = "pixel",
+    accentId: String = "teal",
+    baseId: String = "neutral",
     content: @Composable () -> Unit
 ) {
     val context = LocalContext.current
@@ -26,12 +28,15 @@ fun AimiliTheme(
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         }
         paletteId == "miuix" -> if (darkTheme) MiuixDarkColorScheme else MiuixLightColorScheme
+        paletteId == "pixel" || paletteId == "custom" -> {
+            buildPixelColorScheme(accentId, baseId, darkTheme)
+        }
         paletteId == "ocean" -> if (darkTheme) OceanDarkColorScheme else OceanLightColorScheme
         paletteId == "emerald" -> if (darkTheme) EmeraldDarkColorScheme else EmeraldLightColorScheme
         paletteId == "purple" -> if (darkTheme) PurpleDarkColorScheme else PurpleLightColorScheme
         paletteId == "amber" -> if (darkTheme) AmberDarkColorScheme else AmberLightColorScheme
         paletteId == "rose" -> if (darkTheme) RoseDarkColorScheme else RoseLightColorScheme
-        else -> if (darkTheme) AimiliDarkColorScheme else AimiliLightColorScheme
+        else -> buildPixelColorScheme(accentId, baseId, darkTheme)
     }
 
     val view = LocalView.current

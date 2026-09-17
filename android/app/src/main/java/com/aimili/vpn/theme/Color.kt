@@ -508,3 +508,168 @@ val MiuixDarkColorScheme: ColorScheme = darkColorScheme(
     errorContainer = MiuixDarkErrorContainer,
     onErrorContainer = MiuixDarkOnErrorContainer
 )
+
+// ==========================================
+// 8. Google Pixel 桌面标准：强调色与基准底色解耦体系
+// ==========================================
+data class AccentColorOption(
+    val id: String,
+    val name: String,
+    val lightPrimary: Color,
+    val darkPrimary: Color,
+    val lightContainer: Color,
+    val darkContainer: Color
+)
+
+data class BaseToneOption(
+    val id: String,
+    val name: String,
+    val description: String,
+    val lightSurface: Color,
+    val darkSurface: Color,
+    val lightContainer: Color,
+    val darkContainer: Color,
+    val lightContainerHigh: Color,
+    val darkContainerHigh: Color,
+    val lightOnSurface: Color,
+    val darkOnSurface: Color,
+    val lightOutline: Color,
+    val darkOutline: Color
+)
+
+val ACCENT_OPTIONS = listOf(
+    AccentColorOption("teal", "青翠绿野", Color(0xFF00696E), Color(0xFF80D5DA), Color(0xFF9CF1F6), Color(0xFF0B4F52)),
+    AccentColorOption("bay_blue", "晴空海蓝", Color(0xFF1A73E8), Color(0xFF8AB4F8), Color(0xFFD3E3FD), Color(0xFF0842A0)),
+    AccentColorOption("miuix_blue", "澎湃超凡", Color(0xFF3482FF), Color(0xFF277AF7), Color(0xFFEAF2FF), Color(0xFF2B3B54)),
+    AccentColorOption("mint", "薄荷青竹", Color(0xFF00875A), Color(0xFF48D08D), Color(0xFFCEF5E1), Color(0xFF005236)),
+    AccentColorOption("coral", "珊瑚暖橙", Color(0xFFE64A19), Color(0xFFFF8A65), Color(0xFFFFDBCF), Color(0xFF782508)),
+    AccentColorOption("iris", "紫鸢霓裳", Color(0xFF7C4DFF), Color(0xFFB388FF), Color(0xFFEDE7F6), Color(0xFF4A148C)),
+    AccentColorOption("amber", "琥珀暖阳", Color(0xFFD84315), Color(0xFFFFB74D), Color(0xFFFFF3E0), Color(0xFF6E2805)),
+    AccentColorOption("rose", "暗夜樱粉", Color(0xFFC2185B), Color(0xFFF48FB1), Color(0xFFFCE4EC), Color(0xFF68002D))
+)
+
+val BASE_TONE_OPTIONS = listOf(
+    BaseToneOption(
+        id = "neutral",
+        name = "中性协调",
+        description = "Google Pixel 标准中性底色",
+        lightSurface = Color(0xFFF8F9FA),
+        darkSurface = Color(0xFF121417),
+        lightContainer = Color(0xFFFFFFFF),
+        darkContainer = Color(0xFF1C1F23),
+        lightContainerHigh = Color(0xFFE9ECEF),
+        darkContainerHigh = Color(0xFF25292E),
+        lightOnSurface = Color(0xFF1F2328),
+        darkOnSurface = Color(0xFFF0F2F5),
+        lightOutline = Color(0xFFD0D7DE),
+        darkOutline = Color(0xFF3B4149)
+    ),
+    BaseToneOption(
+        id = "slate",
+        name = "极简冷灰",
+        description = "科技纯净冷调白灰与玄岩",
+        lightSurface = Color(0xFFF0F4F8),
+        darkSurface = Color(0xFF0B1015),
+        lightContainer = Color(0xFFFFFFFF),
+        darkContainer = Color(0xFF141B22),
+        lightContainerHigh = Color(0xFFDDE6F0),
+        darkContainerHigh = Color(0xFF1C242D),
+        lightOnSurface = Color(0xFF141A21),
+        darkOnSurface = Color(0xFFE9EFF5),
+        lightOutline = Color(0xFFBCCAD8),
+        darkOutline = Color(0xFF2E3D4D)
+    ),
+    BaseToneOption(
+        id = "sand",
+        name = "暖阳米沙",
+        description = "温润柔和暖沙与米白质感",
+        lightSurface = Color(0xFFFAF7F2),
+        darkSurface = Color(0xFF151210),
+        lightContainer = Color(0xFFFFFFFF),
+        darkContainer = Color(0xFF1F1B17),
+        lightContainerHigh = Color(0xFFEEE5D7),
+        darkContainerHigh = Color(0xFF29241F),
+        lightOnSurface = Color(0xFF221D18),
+        darkOnSurface = Color(0xFFF4EFEA),
+        lightOutline = Color(0xFFD2C5B4),
+        darkOutline = Color(0xFF453D35)
+    ),
+    BaseToneOption(
+        id = "oled",
+        name = "深邃玄黑",
+        description = "高反差通透纯黑 (OLED 专属)",
+        lightSurface = Color(0xFFF5F5F5),
+        darkSurface = Color(0xFF000000),
+        lightContainer = Color(0xFFFFFFFF),
+        darkContainer = Color(0xFF18181A),
+        lightContainerHigh = Color(0xFFE0E0E0),
+        darkContainerHigh = Color(0xFF222226),
+        lightOnSurface = Color(0xFF000000),
+        darkOnSurface = Color(0xFFF5F5F7),
+        lightOutline = Color(0xFFCCCCCC),
+        darkOutline = Color(0xFF38383A)
+    )
+)
+
+fun buildPixelColorScheme(
+    accentId: String,
+    baseId: String,
+    darkTheme: Boolean
+): ColorScheme {
+    val accent = ACCENT_OPTIONS.find { it.id == accentId } ?: ACCENT_OPTIONS.first()
+    val base = BASE_TONE_OPTIONS.find { it.id == baseId } ?: BASE_TONE_OPTIONS.first()
+
+    return if (darkTheme) {
+        darkColorScheme(
+            primary = accent.darkPrimary,
+            onPrimary = Color(0xFF001F25),
+            primaryContainer = accent.darkContainer,
+            onPrimaryContainer = accent.darkPrimary,
+            secondary = base.darkContainerHigh,
+            onSecondary = base.darkOnSurface,
+            secondaryContainer = base.darkContainerHigh,
+            onSecondaryContainer = base.darkOnSurface,
+            tertiary = accent.darkPrimary,
+            onTertiary = Color.White,
+            tertiaryContainer = accent.darkContainer,
+            onTertiaryContainer = accent.darkPrimary,
+            surface = base.darkSurface,
+            surfaceContainerLow = base.darkSurface,
+            surfaceContainer = base.darkContainer,
+            surfaceContainerHigh = base.darkContainerHigh,
+            surfaceContainerHighest = base.darkContainerHigh,
+            onSurface = base.darkOnSurface,
+            onSurfaceVariant = base.darkOutline,
+            outline = base.darkOutline,
+            outlineVariant = base.darkContainerHigh,
+            background = base.darkSurface,
+            onBackground = base.darkOnSurface
+        )
+    } else {
+        lightColorScheme(
+            primary = accent.lightPrimary,
+            onPrimary = Color.White,
+            primaryContainer = accent.lightContainer,
+            onPrimaryContainer = accent.lightPrimary,
+            secondary = base.lightContainerHigh,
+            onSecondary = base.lightOnSurface,
+            secondaryContainer = base.lightContainerHigh,
+            onSecondaryContainer = base.lightOnSurface,
+            tertiary = accent.lightPrimary,
+            onTertiary = Color.White,
+            tertiaryContainer = accent.lightContainer,
+            onTertiaryContainer = accent.lightPrimary,
+            surface = base.lightSurface,
+            surfaceContainerLow = base.lightSurface,
+            surfaceContainer = base.lightContainer,
+            surfaceContainerHigh = base.lightContainerHigh,
+            surfaceContainerHighest = base.lightContainerHigh,
+            onSurface = base.lightOnSurface,
+            onSurfaceVariant = base.lightOutline,
+            outline = base.lightOutline,
+            outlineVariant = base.lightContainerHigh,
+            background = base.lightSurface,
+            onBackground = base.lightOnSurface
+        )
+    }
+}

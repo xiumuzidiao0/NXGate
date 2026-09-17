@@ -143,6 +143,7 @@ fun CameraQrScannerDialog(
 
     var manualInput by remember { mutableStateOf("") }
     var showManualMode by remember { mutableStateOf(false) }
+    var showPermissionRationale by remember { mutableStateOf(!hasCameraPermission) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -154,10 +155,22 @@ fun CameraQrScannerDialog(
         }
     }
 
-    LaunchedEffect(Unit) {
-        if (!hasCameraPermission) {
-            permissionLauncher.launch(Manifest.permission.CAMERA)
-        }
+    if (showPermissionRationale && !hasCameraPermission && !showManualMode) {
+        AppPermissionRationaleDialog(
+            title = "申请相机权限",
+            description = "AimiliVPN 需要使用系统相机扫描 Web 控制台顶栏「手机 App 绑定」展示的二维码，以便快速导入服务器节点配置。\n\n画面仅在本地内存中即时解析，绝不会存储或上传。",
+            icon = Icons.Rounded.CameraAlt,
+            confirmText = "授权相机",
+            dismissText = "手动粘贴",
+            onConfirm = {
+                showPermissionRationale = false
+                permissionLauncher.launch(Manifest.permission.CAMERA)
+            },
+            onDismiss = {
+                showPermissionRationale = false
+                showManualMode = true
+            }
+        )
     }
 
     Dialog(
