@@ -2,6 +2,7 @@ package com.aimili.vpn.ui.screens
 
 import android.content.res.Configuration
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,6 +26,7 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Speed
+import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -45,6 +47,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -233,6 +236,9 @@ fun ServerConsoleScreen(
     var serverLogs by remember { mutableStateOf<List<SystemLogEntry>>(emptyList()) }
     var isLoadingLogs by remember { mutableStateOf(false) }
 
+    val cleartextWarningEnabled by AimiliApplication.instance.serverStore.cleartextWarningEnabled.collectAsState()
+    var dismissCleartextBanner by remember(activeServer?.id) { mutableStateOf(false) }
+
     var showLogSheet by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
@@ -337,6 +343,45 @@ fun ServerConsoleScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Spacer(Modifier.height(4.dp))
+
+                // 明文传输风险警示横幅 (当未启用 TLS 且开启明文提醒时展示)
+                if (cleartextWarningEnabled && activeServer?.isTls == false && !dismissCleartextBanner) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.85f),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Warning,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "明文传输风险提醒",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                                Text(
+                                    text = "当前服务器 [${activeServer.name}] (${activeServer.host}:${activeServer.port}) 未启用 TLS 加密，在公共 WiFi 或非受信任网络中管理可能存在明文窃听风险。建议配置 HTTPS 证书。",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.9f)
+                                )
+                            }
+                            IconButton(onClick = { dismissCleartextBanner = true }) {
+                                Icon(Icons.Rounded.Close, contentDescription = "关闭提醒", tint = MaterialTheme.colorScheme.error)
+                            }
+                        }
+                    }
+                }
 
                 if (isTabletLandscape) {
                     // ==================== 平板横屏：左右双列响应式布局 ====================

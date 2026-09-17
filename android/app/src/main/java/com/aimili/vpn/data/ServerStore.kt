@@ -25,6 +25,13 @@ class ServerStore(context: Context) {
     private val _cleartextWarningEnabled = MutableStateFlow(true)
     val cleartextWarningEnabled: StateFlow<Boolean> = _cleartextWarningEnabled.asStateFlow()
 
+    private val _isAppLocked = MutableStateFlow(false)
+    val isAppLocked: StateFlow<Boolean> = _isAppLocked.asStateFlow()
+
+    fun setAppLocked(locked: Boolean) {
+        _isAppLocked.value = locked
+    }
+
     private val _themeMode = MutableStateFlow("system") // "system", "light", "dark"
     val themeMode: StateFlow<String> = _themeMode.asStateFlow()
 

@@ -72,10 +72,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.aimili.vpn.AimiliApplication
+import com.aimili.vpn.MainActivity
 import com.aimili.vpn.data.ApiClient
 import com.aimili.vpn.model.ServerProfile
 import com.aimili.vpn.theme.AVAILABLE_PALETTES
 import com.aimili.vpn.ui.components.AppExposedDropdown
+import com.aimili.vpn.ui.components.CameraQrScannerDialog
 import com.aimili.vpn.ui.components.ConnectedButtonItem
 import com.aimili.vpn.ui.components.ConnectedButtonGroup
 import com.aimili.vpn.ui.components.ConnectedButtonStyle
@@ -127,6 +129,40 @@ fun SettingsSecurityScreen(
     // QR Code Manual Scan Dialog
     var showScanSimDialog by remember { mutableStateOf(false) }
     var scannedUriInput by remember { mutableStateOf("") }
+
+    val onToggleBiometric: (Boolean) -> Unit = { targetChecked ->
+        if (targetChecked) {
+            MainActivity.instance?.showBiometricPrompt(
+                onSuccess = {
+                    biometricEnabled = true
+                    AimiliApplication.instance.serverStore.setBiometricEnabled(true)
+                    Toast.makeText(context, "生物识别安全锁已开启，切出后台与冷启动时将验证", Toast.LENGTH_SHORT).show()
+                },
+                onError = { err ->
+                    Toast.makeText(context, "指纹/面容验证未通过: $err", Toast.LENGTH_SHORT).show()
+                }
+            ) ?: run {
+                biometricEnabled = true
+                AimiliApplication.instance.serverStore.setBiometricEnabled(true)
+                Toast.makeText(context, "生物识别安全锁已开启", Toast.LENGTH_SHORT).show()
+            }
+        } else {
+            MainActivity.instance?.showBiometricPrompt(
+                onSuccess = {
+                    biometricEnabled = false
+                    AimiliApplication.instance.serverStore.setBiometricEnabled(false)
+                    Toast.makeText(context, "生物识别安全锁已解除", Toast.LENGTH_SHORT).show()
+                },
+                onError = { err ->
+                    Toast.makeText(context, "验证未通过，未能关闭安全锁: $err", Toast.LENGTH_SHORT).show()
+                }
+            ) ?: run {
+                biometricEnabled = false
+                AimiliApplication.instance.serverStore.setBiometricEnabled(false)
+                Toast.makeText(context, "生物识别安全锁已关闭", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -362,6 +398,33 @@ fun SettingsSecurityScreen(
                                 onSelected = { selectedProtocolChipIndex = it }
                             )
 
+                            if (selectedProtocolChipIndex == 0 && cleartextWarningEnabled) {
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
+                                    border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f)),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Warning,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.error,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(Modifier.width(6.dp))
+                                        Text(
+                                            text = "明文传输警告：HTTP 通信未经 TLS 加密，请仅在受信任私网中使用。",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onErrorContainer
+                                        )
+                                    }
+                                }
+                            }
+
                             Button(
                                 onClick = {
                                     isTestingConnection = true
@@ -422,21 +485,14 @@ fun SettingsSecurityScreen(
                                     trailingContent = {
                                         Switch(
                                             checked = biometricEnabled,
-                                            onCheckedChange = {
-                                                biometricEnabled = it
-                                                AimiliApplication.instance.serverStore.setBiometricEnabled(it)
-                                                Toast.makeText(context, "生物识别安全锁已${if (it) "开启" else "关闭"}", Toast.LENGTH_SHORT).show()
-                                            },
+                                            onCheckedChange = { onToggleBiometric(it) },
                                             colors = SwitchDefaults.colors(
                                                 checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
                                                 checkedTrackColor = MaterialTheme.colorScheme.primary
                                             )
                                         )
                                     },
-                                    onClick = {
-                                        biometricEnabled = !biometricEnabled
-                                        AimiliApplication.instance.serverStore.setBiometricEnabled(biometricEnabled)
-                                    }
+                                    onClick = { onToggleBiometric(!biometricEnabled) }
                                 )
 
                                 ConnectedListItem(
@@ -609,6 +665,33 @@ fun SettingsSecurityScreen(
                         onSelected = { selectedProtocolChipIndex = it }
                     )
 
+                    if (selectedProtocolChipIndex == 0 && cleartextWarningEnabled) {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
+                            border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Warning,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    text = "明文传输警告：HTTP 通信未经 TLS 加密，请仅在受信任私网中使用。",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                            }
+                        }
+                    }
+
                     // 4. “连通性测试并保存” 填充按钮（宽 380dp，带 check_circle 图标）
                     Box(
                         modifier = Modifier.fillMaxWidth(),
@@ -769,60 +852,22 @@ fun SettingsSecurityScreen(
         )
     }
 
-    // QR Scan / URI Import Dialog
+    // Camera QR Scan & URI Import Dialog
     if (showScanSimDialog) {
-        AlertDialog(
-            onDismissRequest = { showScanSimDialog = false },
-            shape = RoundedCornerShape(28.dp),
-            containerColor = MaterialTheme.colorScheme.surfaceContainer,
-            title = {
-                Text("扫码 / URI 快捷导入", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = "支持通过相机扫描 Web 控制台顶栏“手机 App 绑定”二维码，或直接粘贴 aimili://server 专属链接：",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    OutlinedTextField(
-                        value = scannedUriInput,
-                        onValueChange = { scannedUriInput = it },
-                        label = { Text("aimili://server 协议内容") },
-                        singleLine = false,
-                        maxLines = 4,
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        val parsed = ApiClient.parseAimiliUri(scannedUriInput)
-                        if (parsed != null) {
-                            inputName = parsed.name
-                            inputHost = parsed.host
-                            inputPort = parsed.port.toString()
-                            inputPath = parsed.path
-                            inputUser = parsed.username
-                            inputPass = parsed.password
-                            selectedProtocolChipIndex = if (parsed.isTls) 1 else 0
-                            editingServerId = parsed.id
-                            AimiliApplication.instance.serverStore.addServer(parsed)
-                            showScanSimDialog = false
-                            Toast.makeText(context, "已成功扫码识别并自动导入 [${parsed.name}]", Toast.LENGTH_SHORT).show()
-                        } else {
-                            Toast.makeText(context, "无效的 aimili:// 协议内容", Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                ) {
-                    Text("解析并导入", fontWeight = FontWeight.Bold)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showScanSimDialog = false }) {
-                    Text("取消")
-                }
+        CameraQrScannerDialog(
+            onDismiss = { showScanSimDialog = false },
+            onServerScanned = { parsed ->
+                inputName = parsed.name
+                inputHost = parsed.host
+                inputPort = parsed.port.toString()
+                inputPath = parsed.path
+                inputUser = parsed.username
+                inputPass = parsed.password
+                selectedProtocolChipIndex = if (parsed.isTls) 1 else 0
+                editingServerId = parsed.id
+                AimiliApplication.instance.serverStore.addServer(parsed)
+                showScanSimDialog = false
+                Toast.makeText(context, "已成功扫码识别并自动导入 [${parsed.name}]", Toast.LENGTH_SHORT).show()
             }
         )
     }
