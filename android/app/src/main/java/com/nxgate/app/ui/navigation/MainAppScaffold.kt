@@ -40,6 +40,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
@@ -126,102 +127,107 @@ fun MainAppScaffold() {
                 orientation = Orientation.Horizontal,
                 onDragStopped = { dragOffset = 0f }
             ),
-        bottomBar = {
-            if (!isSettingsOpen && !useNavRail) {
-                LiquidGlassBottomBar(
-                    currentDestination = currentDestination,
-                    onDestinationSelected = { currentDestination = it }
-                )
-            }
-        },
         containerColor = MaterialTheme.colorScheme.surface
     ) { innerPadding ->
-        Row(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
+                .padding(top = innerPadding.calculateTopPadding())
         ) {
-            // Adaptive Liquid Glass Navigation Rail for Tablet in Landscape mode
-            if (!isSettingsOpen && useNavRail) {
-                LiquidGlassNavigationRail(
-                    currentDestination = currentDestination,
-                    onDestinationSelected = { currentDestination = it }
-                )
-            }
-
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
+            Row(
+                modifier = Modifier.fillMaxSize()
             ) {
-                // Main views or Settings screen with M3 Expressive animated transition
-                AnimatedContent(
-                    targetState = isSettingsOpen to currentDestination,
-                    transitionSpec = {
-                        if (targetState.first != initialState.first) {
-                            if (targetState.first) {
-                                slideInHorizontally(animationSpec = AimiliMotion.expressiveOffset) { it } togetherWith
-                                        slideOutHorizontally(animationSpec = AimiliMotion.expressiveOffset) { -it / 3 }
+                // Adaptive Liquid Glass Navigation Rail for Tablet in Landscape mode
+                if (!isSettingsOpen && useNavRail) {
+                    LiquidGlassNavigationRail(
+                        currentDestination = currentDestination,
+                        onDestinationSelected = { currentDestination = it }
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                ) {
+                    // Main views or Settings screen with M3 Expressive animated transition
+                    AnimatedContent(
+                        targetState = isSettingsOpen to currentDestination,
+                        transitionSpec = {
+                            if (targetState.first != initialState.first) {
+                                if (targetState.first) {
+                                    slideInHorizontally(animationSpec = AimiliMotion.expressiveOffset) { it } togetherWith
+                                            slideOutHorizontally(animationSpec = AimiliMotion.expressiveOffset) { -it / 3 }
+                                } else {
+                                    slideInHorizontally(animationSpec = AimiliMotion.expressiveOffset) { -it / 3 } togetherWith
+                                            slideOutHorizontally(animationSpec = AimiliMotion.expressiveOffset) { it }
+                                }
                             } else {
-                                slideInHorizontally(animationSpec = AimiliMotion.expressiveOffset) { -it / 3 } togetherWith
-                                        slideOutHorizontally(animationSpec = AimiliMotion.expressiveOffset) { it }
+                                fadeIn(animationSpec = AimiliMotion.expressiveFloat) togetherWith
+                                        fadeOut(animationSpec = AimiliMotion.expressiveFloat)
                             }
+                        },
+                        label = "ScreenTransition"
+                    ) { (settingsOpen, destination) ->
+                        if (settingsOpen) {
+                            SettingsSecurityScreen(
+                                servers = servers,
+                                onBack = { isSettingsOpen = false }
+                            )
                         } else {
-                            fadeIn(animationSpec = AimiliMotion.expressiveFloat) togetherWith
-                                    fadeOut(animationSpec = AimiliMotion.expressiveFloat)
-                        }
-                    },
-                    label = "ScreenTransition"
-                ) { (settingsOpen, destination) ->
-                    if (settingsOpen) {
-                        SettingsSecurityScreen(
-                            servers = servers,
-                            onBack = { isSettingsOpen = false }
-                        )
-                    } else {
-                        when (destination) {
-                            AppNavDestination.Dashboard -> {
-                                ClusterHubScreen(
-                                    servers = servers,
-                                    activeServer = activeServer,
-                                    summary = clusterSummary,
-                                    onSelectServerAndOpenConsole = { server ->
-                                        serverStore.setActiveServer(server.id)
-                                        currentDestination = AppNavDestination.Monitoring
-                                    },
-                                    onOpenSettings = { isSettingsOpen = true }
-                                )
-                            }
-                            AppNavDestination.Monitoring -> {
-                                ServerConsoleScreen(
-                                    activeServer = activeServer,
-                                    allServers = servers,
-                                    onSelectServer = { serverStore.setActiveServer(it) },
-                                    onPreviousServer = { serverStore.selectPreviousServer() },
-                                    onNextServer = { serverStore.selectNextServer() }
-                                )
-                            }
-                            AppNavDestination.Routing -> {
-                                RoutingMatrixScreen(
-                                    activeServer = activeServer,
-                                    allServers = servers,
-                                    onSelectServer = { serverStore.setActiveServer(it) },
-                                    onPreviousServer = { serverStore.selectPreviousServer() },
-                                    onNextServer = { serverStore.selectNextServer() }
-                                )
-                            }
-                            AppNavDestination.Nodes -> {
-                                NodeSquareScreen(
-                                    activeServer = activeServer,
-                                    allServers = servers,
-                                    onSelectServer = { serverStore.setActiveServer(it) },
-                                    onPreviousServer = { serverStore.selectPreviousServer() },
-                                    onNextServer = { serverStore.selectNextServer() }
-                                )
+                            when (destination) {
+                                AppNavDestination.Dashboard -> {
+                                    ClusterHubScreen(
+                                        servers = servers,
+                                        activeServer = activeServer,
+                                        summary = clusterSummary,
+                                        onSelectServerAndOpenConsole = { server ->
+                                            serverStore.setActiveServer(server.id)
+                                            currentDestination = AppNavDestination.Monitoring
+                                        },
+                                        onOpenSettings = { isSettingsOpen = true }
+                                    )
+                                }
+                                AppNavDestination.Monitoring -> {
+                                    ServerConsoleScreen(
+                                        activeServer = activeServer,
+                                        allServers = servers,
+                                        onSelectServer = { serverStore.setActiveServer(it) },
+                                        onPreviousServer = { serverStore.selectPreviousServer() },
+                                        onNextServer = { serverStore.selectNextServer() }
+                                    )
+                                }
+                                AppNavDestination.Routing -> {
+                                    RoutingMatrixScreen(
+                                        activeServer = activeServer,
+                                        allServers = servers,
+                                        onSelectServer = { serverStore.setActiveServer(it) },
+                                        onPreviousServer = { serverStore.selectPreviousServer() },
+                                        onNextServer = { serverStore.selectNextServer() }
+                                    )
+                                }
+                                AppNavDestination.Nodes -> {
+                                    NodeSquareScreen(
+                                        activeServer = activeServer,
+                                        allServers = servers,
+                                        onSelectServer = { serverStore.setActiveServer(it) },
+                                        onPreviousServer = { serverStore.selectPreviousServer() },
+                                        onNextServer = { serverStore.selectNextServer() }
+                                    )
+                                }
                             }
                         }
                     }
                 }
+            }
+
+            // Suspended floating liquid glass bottom bar directly overlaid on top of scrollable content
+            if (!isSettingsOpen && !useNavRail) {
+                LiquidGlassBottomBar(
+                    currentDestination = currentDestination,
+                    onDestinationSelected = { currentDestination = it },
+                    modifier = Modifier.align(Alignment.BottomCenter)
+                )
             }
         }
     }

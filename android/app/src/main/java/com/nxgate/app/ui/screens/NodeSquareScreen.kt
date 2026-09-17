@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -660,6 +661,7 @@ fun NodeSquareScreen(
                         columns = GridCells.Fixed(2),
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        contentPadding = PaddingValues(bottom = 88.dp),
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f)
@@ -726,6 +728,7 @@ fun NodeSquareScreen(
                     // 竖屏/手机：单列平滑可滚动流 (全量展示所有节点)
                     LazyColumn(
                         verticalArrangement = Arrangement.spacedBy(10.dp),
+                        contentPadding = PaddingValues(bottom = 88.dp),
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f)
