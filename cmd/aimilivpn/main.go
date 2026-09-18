@@ -37,7 +37,8 @@ func main() {
 
 	stats.LogInfo("Main", "=== NXGate 自适应多出口路由网关 (v%s) 启动中 ===", config.Version)
 
-	// Preflight checks
+	// Preflight checks & SSH anti-lockout protection
+	tunnel.EnsureSSHPolicyRouting()
 	if err := vpn.CheckTUNDevice(); err != nil {
 		stats.LogWarn("Main", "警告: %v", err)
 	}

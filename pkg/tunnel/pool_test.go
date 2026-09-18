@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -209,3 +210,118 @@ func TestStopTunnelWaitsForCleanup(t *testing.T) {
 		t.Fatal("cleanup completion channel was not closed")
 	}
 }
+
+func TestPrepareSafeOpenVPNConfig(t *testing.T) {
+	dangerousConfig := `client
+dev tun
+proto udp
+remote 198.51.100.1 1194
+redirect-gateway def1
+redirect-private def1
+route-gateway 10.211.254.254
+route 10.0.0.0 255.0.0.0
+route-ipv6 ::/0
+dhcp-option DNS 10.211.254.254
+dhcp-option DOMAIN bad.local
+block-outside-dns
+register-dns
+topology subnet
+up /etc/openvpn/update-resolv-conf
+down /etc/openvpn/update-resolv-conf
+script-security 2
+iproute /bin/ip
+verb 4
+auth-user-pass
+<ca>
+-----BEGIN CERTIFICATE-----
+MIIB...
+-----END CERTIFICATE-----
+</ca>
+`
+	authPath := "/tmp/test_auth.txt"
+	devName := "tun0"
+
+	safe := prepareSafeOpenVPNConfig(dangerousConfig, authPath, devName)
+	fullText := strings.Join(safe, "\n")
+
+	// 1. Must NOT contain dangerous routing, gateway, DNS or script directives
+	forbiddenPrefixes := []string{
+		"redirect-gateway",
+		"redirect-private",
+		"route-gateway",
+		"route ",
+		"route-ipv6",
+		"dhcp-option",
+		"block-outside-dns",
+		"register-dns",
+		"topology",
+		"up ",
+		"down ",
+		"script-security 2",
+		"iproute",
+	}
+	for _, line := range safe {
+		for _, f := range forbiddenPrefixes {
+			if strings.HasPrefix(strings.ToLower(line), f) {
+				t.Errorf("expected config lines to NOT start with forbidden directive %q, but line was: %s", f, line)
+			}
+		}
+	}
+
+	// 2. Must contain core isolation directives
+	required := []string{
+		"route-noexec",
+		"route-nopull",
+		"pull-filter ignore \"redirect-gateway\"",
+		"pull-filter ignore \"redirect-private\"",
+		"pull-filter ignore \"route-gateway\"",
+		"pull-filter ignore \"route\"",
+		"pull-filter ignore \"route-ipv6\"",
+		"pull-filter ignore \"dhcp-option\"",
+		"pull-filter ignore \"topology\"",
+		"pull-filter ignore \"block-outside-dns\"",
+		"pull-filter ignore \"register-dns\"",
+		"pull-filter ignore \"ip-win32\"",
+		"script-security 1",
+		"dev tun0",
+		"dev-type tun",
+		"auth-user-pass " + authPath,
+	}
+	for _, r := range required {
+		if !strings.Contains(fullText, r) {
+			t.Errorf("expected config to contain required directive %q, but missing from:\n%s", r, fullText)
+		}
+	}
+
+	// 3. Must preserve certificate blocks
+	if !strings.Contains(fullText, "-----BEGIN CERTIFICATE-----") || !strings.Contains(fullText, "-----END CERTIFICATE-----") {
+		t.Errorf("certificate block was corrupted")
+	}
+}
+
+func TestDetectSSHPorts(t *testing.T) {
+	ports := detectSSHPorts()
+	if len(ports) == 0 {
+		t.Fatalf("expected at least default port 22")
+	}
+	found22 := false
+	for _, p := range ports {
+		if p == 22 {
+			found22 = true
+			break
+		}
+	}
+	if !found22 {
+		t.Errorf("expected port 22 in detected ports: %v", ports)
+	}
+
+	// Test custom file parser
+	tmpFile := filepath.Join(t.TempDir(), "sshd_config")
+	_ = os.WriteFile(tmpFile, []byte("# SSH config\nPort 2222\nport 50022\n# Port 9999\n"), 0644)
+	customPorts := map[int]bool{}
+	parseSSHDConfigFile(tmpFile, customPorts)
+	if !customPorts[2222] || !customPorts[50022] || customPorts[9999] {
+		t.Errorf("failed to parse custom sshd ports: %+v", customPorts)
+	}
+}
+

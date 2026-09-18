@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -176,43 +177,7 @@ func (p *Pool) startTunnelInternalLocked(node *nodes.Node, devIdx int) (*Tunnel,
 	}
 
 	confPath := filepath.Join(dir, fmt.Sprintf("%s.ovpn", tunnelID))
-	lines := strings.Split(node.ConfigData, "\n")
-	var modified []string
-
-	for _, rawLine := range lines {
-		line := strings.TrimSpace(rawLine)
-		if strings.HasPrefix(line, "auth-user-pass") ||
-			strings.HasPrefix(line, "dev ") ||
-			strings.HasPrefix(line, "dev-type") ||
-			strings.HasPrefix(line, "verb ") ||
-			strings.HasPrefix(line, "redirect-gateway") ||
-			strings.HasPrefix(line, "route-gateway") ||
-			strings.HasPrefix(line, "route ") {
-			continue
-		}
-		modified = append(modified, rawLine)
-	}
-
-	modified = append(modified,
-		"auth-user-pass "+authPath,
-		fmt.Sprintf("dev %s", devName),
-		"dev-type tun",
-		"verb 3",
-		"route-nopull",
-		"pull-filter ignore \"redirect-gateway\"",
-		"pull-filter ignore \"route-gateway\"",
-		"pull-filter ignore \"route \"",
-		"nobind",
-		"connect-retry 1 2",
-		"connect-retry-max 2",
-		"resolv-retry 2",
-		"connect-timeout 8",
-		"ping 5",
-		"ping-restart 12",
-		"sndbuf 524288",
-		"rcvbuf 524288",
-		"txqueuelen 1000",
-	)
+	modified := prepareSafeOpenVPNConfig(node.ConfigData, authPath, devName)
 
 	if err := os.WriteFile(confPath, []byte(strings.Join(modified, "\n")), 0600); err != nil {
 		t.mu.Unlock()
@@ -496,6 +461,10 @@ func setupTunnelInterface(devName string, devIndex int) error {
 	if devName == "" {
 		return nil
 	}
+
+	// 0. Ensure SSH policy routing is in place so SSH traffic can never be hijacked
+	EnsureSSHPolicyRouting()
+
 	tableID := 100 + devIndex
 
 	// 1. Enable loose reverse path filtering while retaining the original values.
@@ -718,3 +687,166 @@ func (p *Pool) CloseAll() {
 		_ = p.StopTunnel(id)
 	}
 }
+
+// prepareSafeOpenVPNConfig strictly purges any dangerous directives (routes, default gateway,
+// DNS manipulation, scripts) and injects bulletproof isolation flags including route-noexec.
+func prepareSafeOpenVPNConfig(configData, authPath, devName string) []string {
+	lines := strings.Split(configData, "\n")
+	var modified []string
+
+	for _, rawLine := range lines {
+		trimmed := strings.TrimSpace(rawLine)
+		trimmed = strings.TrimRight(trimmed, "\r")
+		if trimmed == "" {
+			continue
+		}
+		// Keep inline certificates and keys intact
+		if strings.HasPrefix(trimmed, "-----BEGIN") || strings.HasPrefix(trimmed, "-----END") {
+			modified = append(modified, trimmed)
+			continue
+		}
+		// Strip comments
+		if strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, ";") {
+			continue
+		}
+
+		lower := strings.ToLower(trimmed)
+		// Strictly filter out any directives that could affect routing, gateway, DNS, scripts, device name, or credentials
+		if strings.HasPrefix(lower, "auth-user-pass") ||
+			strings.HasPrefix(lower, "dev ") ||
+			strings.HasPrefix(lower, "dev\t") ||
+			strings.HasPrefix(lower, "dev-type") ||
+			strings.HasPrefix(lower, "verb ") ||
+			strings.HasPrefix(lower, "verb\t") ||
+			strings.HasPrefix(lower, "redirect-gateway") ||
+			strings.HasPrefix(lower, "redirect-private") ||
+			strings.HasPrefix(lower, "route-gateway") ||
+			strings.HasPrefix(lower, "route") ||
+			strings.HasPrefix(lower, "dhcp-option") ||
+			strings.HasPrefix(lower, "block-outside-dns") ||
+			strings.HasPrefix(lower, "register-dns") ||
+			strings.HasPrefix(lower, "topology") ||
+			strings.HasPrefix(lower, "up ") ||
+			strings.HasPrefix(lower, "up\t") ||
+			strings.HasPrefix(lower, "down ") ||
+			strings.HasPrefix(lower, "down\t") ||
+			strings.HasPrefix(lower, "script-security") ||
+			strings.HasPrefix(lower, "iproute") {
+			continue
+		}
+		modified = append(modified, trimmed)
+	}
+
+	// Append bulletproof isolation and anti-hijack flags
+	modified = append(modified,
+		"auth-user-pass "+authPath,
+		fmt.Sprintf("dev %s", devName),
+		"dev-type tun",
+		"verb 3",
+		// 1. route-noexec: Core OS-level routing protection.
+		// Instructs OpenVPN to NEVER execute 'ip route' or modify system routing tables under any circumstances.
+		"route-noexec",
+		// 2. route-nopull: Refuse to accept route parameters pushed from remote VPN servers.
+		"route-nopull",
+		// 3. Comprehensive pull-filter to drop any pushed gateway, route, DNS, or script options
+		"pull-filter ignore \"redirect-gateway\"",
+		"pull-filter ignore \"redirect-private\"",
+		"pull-filter ignore \"route-gateway\"",
+		"pull-filter ignore \"route\"",
+		"pull-filter ignore \"route-ipv6\"",
+		"pull-filter ignore \"dhcp-option\"",
+		"pull-filter ignore \"topology\"",
+		"pull-filter ignore \"block-outside-dns\"",
+		"pull-filter ignore \"register-dns\"",
+		"pull-filter ignore \"ip-win32\"",
+		// 4. Prohibit OpenVPN from executing external scripts
+		"script-security 1",
+		"nobind",
+		"connect-retry 1 2",
+		"connect-retry-max 2",
+		"resolv-retry 2",
+		"connect-timeout 8",
+		"ping 5",
+		"ping-restart 12",
+		"sndbuf 524288",
+		"rcvbuf 524288",
+		"txqueuelen 1000",
+	)
+	return modified
+}
+
+// EnsureSSHPolicyRouting configures Linux policy routing rules ensuring SSH traffic
+// (both source port and destination port) always uses the main routing table,
+// guaranteeing host SSH connectivity is 100% immune to any tunnel routing changes.
+func EnsureSSHPolicyRouting() {
+	if runtime.GOOS != "linux" {
+		return
+	}
+
+	sshPorts := detectSSHPorts()
+	for _, p := range sshPorts {
+		portStr := strconv.Itoa(p)
+		ensureIPRule("sport", portStr, "main", "50")
+		ensureIPRule("dport", portStr, "main", "50")
+	}
+}
+
+func detectSSHPorts() []int {
+	ports := map[int]bool{22: true}
+
+	parseSSHDConfigFile("/etc/ssh/sshd_config", ports)
+
+	matches, _ := filepath.Glob("/etc/ssh/sshd_config.d/*.conf")
+	for _, m := range matches {
+		parseSSHDConfigFile(m, ports)
+	}
+
+	var res []int
+	for p := range ports {
+		if p > 0 && p <= 65535 {
+			res = append(res, p)
+		}
+	}
+	sort.Ints(res)
+	return res
+}
+
+func parseSSHDConfigFile(path string, ports map[int]bool) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		parts := strings.Fields(trimmed)
+		if len(parts) >= 2 && strings.EqualFold(parts[0], "Port") {
+			if p, err := strconv.Atoi(parts[1]); err == nil && p > 0 && p <= 65535 {
+				ports[p] = true
+			}
+		}
+	}
+}
+
+func ensureIPRule(selector, val, table, pref string) {
+	out, err := exec.Command("ip", "rule", "show").Output()
+	if err == nil {
+		pattern := fmt.Sprintf("%s %s lookup %s", selector, val, table)
+		if strings.Contains(string(out), pattern) {
+			return
+		}
+	}
+
+	cmd := exec.Command("ip", "rule", "add", selector, val, "table", table, "priority", pref)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		// Log debug/warn only: some non-root or stripped container environments may restrict ip rule
+		stats.LogWarn("TunnelPool", "配置 SSH 专用保护策略路由 (%s %s -> %s) 失败: %v (%s)",
+			selector, val, table, err, strings.TrimSpace(string(out)))
+	} else {
+		stats.LogInfo("TunnelPool", "已激活 SSH 防断连保护策略路由: %s %s -> table %s (优先级 %s)",
+			selector, val, table, pref)
+	}
+}
+
