@@ -164,6 +164,7 @@ install_dependencies() {
         $PKG_MGR install -y openvpn curl git ca-certificates iptables iproute psmisc || \
         $PKG_MGR install -y openvpn curl git ca-certificates iptables iproute2 psmisc
     fi
+    ensure_ssh_firewall_and_routing_safety
 }
 
 # 5. 安装或确保 Go 编译环境
@@ -456,8 +457,62 @@ EOF
     cp -f /usr/bin/nx /usr/bin/aimili 2>/dev/null || true
 }
 
+# 7.4.1 全方位确保 SSH 端口在所有防火墙与策略路由中永远畅通放行 (绝对杜绝断连)
+ensure_ssh_firewall_and_routing_safety() {
+    local ssh_ports=()
+    if [ -f /etc/ssh/sshd_config ]; then
+        while read -r p; do
+            [[ "$p" =~ ^[0-9]+$ ]] && ssh_ports+=("$p")
+        done < <(grep -E '^[[:space:]]*Port[[:space:]]+[0-9]+' /etc/ssh/sshd_config 2>/dev/null | awk '{print $2}')
+    fi
+    for f in /etc/ssh/sshd_config.d/*.conf; do
+        if [ -f "$f" ]; then
+            while read -r p; do
+                [[ "$p" =~ ^[0-9]+$ ]] && ssh_ports+=("$p")
+            done < <(grep -E '^[[:space:]]*Port[[:space:]]+[0-9]+' "$f" 2>/dev/null | awk '{print $2}')
+        fi
+    done
+    ssh_ports+=(22)
+
+    local unique_ports=($(echo "${ssh_ports[@]}" | tr ' ' '\n' | sort -nu))
+    for sp in "${unique_ports[@]}"; do
+        [ -z "$sp" ] && continue
+
+        # 1. 内核策略路由锁定：确保 SSH 入站及出站流量永远走主路由表(物理网卡默认网关)，不受任何隧道干扰
+        if command -v ip >/dev/null 2>&1; then
+            ip rule show 2>/dev/null | grep -qw "sport ${sp} lookup main" || ip rule add sport "${sp}" table main priority 50 2>/dev/null || true
+            ip rule show 2>/dev/null | grep -qw "dport ${sp} lookup main" || ip rule add dport "${sp}" table main priority 50 2>/dev/null || true
+        fi
+
+        # 2. UFW 防火墙放行
+        if command -v ufw >/dev/null 2>&1; then
+            ufw allow "${sp}/tcp" >/dev/null 2>&1 || true
+            ufw allow OpenSSH >/dev/null 2>&1 || true
+        fi
+
+        # 3. Firewalld 防火墙放行
+        if command -v firewall-cmd >/dev/null 2>&1 && systemctl is-active firewalld >/dev/null 2>&1; then
+            firewall-cmd --zone=public --add-service=ssh --permanent >/dev/null 2>&1 || true
+            firewall-cmd --zone=public --add-port="${sp}/tcp" --permanent >/dev/null 2>&1 || true
+        fi
+
+        # 4. iptables (IPv4) 放行
+        if command -v iptables >/dev/null 2>&1; then
+            iptables -C INPUT -p tcp --dport "${sp}" -j ACCEPT 2>/dev/null || iptables -I INPUT -p tcp --dport "${sp}" -j ACCEPT 2>/dev/null || true
+        fi
+
+        # 5. ip6tables (IPv6) 放行
+        if command -v ip6tables >/dev/null 2>&1; then
+            ip6tables -C INPUT -p tcp --dport "${sp}" -j ACCEPT 2>/dev/null || ip6tables -I INPUT -p tcp --dport "${sp}" -j ACCEPT 2>/dev/null || true
+        fi
+    done
+}
+
 # 7.5 配置并放行防火墙端口
 configure_firewall() {
+    # 强制优先放行 SSH 端口，无论后续防火墙如何重载，SSH 绝不断连
+    ensure_ssh_firewall_and_routing_safety
+
     local port="$1"
     [ -z "$port" ] && return 0
     echo -e "  -> 正在检查并放行防火墙端口 ${port}/tcp ..."
@@ -790,6 +845,7 @@ menu_update() {
         curl -sSL -f "https://raw.githubusercontent.com/xiumuzidiao0/NXGate/main/install.sh" -o "${INSTALL_DIR}/install.sh" 2>/dev/null || true
         chmod +x "${INSTALL_DIR}/install.sh" 2>/dev/null || true
         register_shortcuts
+        ensure_ssh_firewall_and_routing_safety
         systemctl restart aimilivpn
         local new_ver=$(get_app_version)
         echo -e "\n${GREEN}🎉 NXGate 已成功极速更新至最新构建 (v${new_ver}) 并重启！${PLAIN}"
@@ -813,6 +869,7 @@ menu_update() {
                 mkdir -p "${INSTALL_DIR}/mirror"
                 cp -f "${TMP_DIR}/mirror/vpngate.csv" "${INSTALL_DIR}/mirror/" 2>/dev/null || true
                 register_shortcuts
+                ensure_ssh_firewall_and_routing_safety
                 systemctl restart aimilivpn
                 echo -e "\n${GREEN}🎉 源码就地编译更新完成并已重启服务！(v$(get_app_version))${PLAIN}"
                 echo -e " ${BOLD}快捷指令已注册${PLAIN}: 在终端随时输入 ${CYAN}nx${PLAIN} 唤出管理控制中心"
@@ -1128,6 +1185,9 @@ main_menu() {
 check_root
 detect_os
 detect_arch
+
+# 启动第一时间无条件加固并放行 SSH 端口与策略路由，杜绝任何断连风险
+ensure_ssh_firewall_and_routing_safety >/dev/null 2>&1 || true
 
 # 如果已部署过服务但缺少新版快捷命令，自动平滑补齐 nx 与 nxgate
 if [ -f "${BIN_PATH}" ]; then
