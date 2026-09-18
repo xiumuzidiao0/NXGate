@@ -15,6 +15,15 @@ CYAN='\033[0;36m'
 PLAIN='\033[0m'
 BOLD='\033[1m'
 
+safe_clear() {
+    [ -t 1 ] && [ -n "$TERM" ] && clear 2>/dev/null || true
+}
+
+is_elf_binary() {
+    local f="$1"
+    [ -f "$f" ] && [ -s "$f" ] && head -c 4 "$f" 2>/dev/null | grep -q 'ELF'
+}
+
 INSTALL_DIR="/opt/aimilivpn"
 BIN_PATH="${INSTALL_DIR}/aimilivpn"
 CONFIG_FILE="${INSTALL_DIR}/config.env"
@@ -403,6 +412,11 @@ build_and_deploy() {
         fi
     fi
 
+    if ! is_elf_binary "${BIN_PATH}"; then
+        echo -e "${RED}错误: 二进制可执行文件 ${BIN_PATH} 准备失败或不是合法的 ELF 程序！${PLAIN}"
+        exit 1
+    fi
+
     chmod +x "${BIN_PATH}"
     echo "${DEFAULT_VERSION}" > "${INSTALL_DIR}/VERSION"
 
@@ -442,6 +456,9 @@ build_and_deploy() {
 
 # 7.4 注册全局快捷命令 (nx, ml, aimili)
 register_shortcuts() {
+    # 彻底清理所有历史残留的可能指向 BIN_PATH 的危险软链接，防止 cp 穿透覆盖内核程序
+    rm -f /usr/bin/nxgate /usr/local/bin/nxgate /usr/bin/aimilivpn /usr/local/bin/aimilivpn
+
     cat > /usr/bin/nx <<'EOF'
 #!/usr/bin/env bash
 if [ -n "$1" ]; then
@@ -455,6 +472,9 @@ EOF
     cp -f /usr/bin/nx /usr/bin/ml 2>/dev/null || true
     cp -f /usr/bin/nx /usr/local/bin/ml 2>/dev/null || true
     cp -f /usr/bin/nx /usr/bin/aimili 2>/dev/null || true
+    cp -f /usr/bin/nx /usr/local/bin/aimili 2>/dev/null || true
+    cp -f /usr/bin/nx /usr/bin/nxgate 2>/dev/null || true
+    cp -f /usr/bin/nx /usr/local/bin/nxgate 2>/dev/null || true
 }
 
 # 7.4.1 全方位确保 SSH 端口在所有防火墙与策略路由中永远畅通放行 (绝对杜绝断连)
@@ -686,7 +706,7 @@ menu_logs() {
 
 menu_modify_credentials() {
     while true; do
-        clear
+        safe_clear
         local curr_user=$(get_config_val "UI_USERNAME")
         local curr_pass=$(get_config_val "UI_PASSWORD")
         echo -e "${BLUE}=======================================================${PLAIN}"
@@ -731,7 +751,7 @@ menu_modify_credentials() {
 
 menu_modify_ports_and_path() {
     while true; do
-        clear
+        safe_clear
         local curr_web=$(get_config_val "UI_PORT")
         local curr_proxy=$(get_config_val "LOCAL_PROXY_PORT")
         local curr_path=$(get_config_val "UI_PATH")
@@ -839,6 +859,12 @@ menu_update() {
     echo -e "\n${YELLOW}正在检测并拉取最新发行版本 (${GO_ARCH})...${PLAIN}"
 
     if download_release_binary "${BIN_PATH}.tmp"; then
+        if ! is_elf_binary "${BIN_PATH}.tmp"; then
+            echo -e "${RED}错误: 下载的更新文件不是有效的 ELF 二进制程序，拒绝应用！${PLAIN}"
+            rm -f "${BIN_PATH}.tmp"
+            read -p "按回车键返回主菜单..."
+            return 1
+        fi
         mv -f "${BIN_PATH}.tmp" "${BIN_PATH}"
         chmod +x "${BIN_PATH}"
         curl -sSL -f "https://raw.githubusercontent.com/xiumuzidiao0/NXGate/main/VERSION" -o "${INSTALL_DIR}/VERSION" 2>/dev/null || true
@@ -988,7 +1014,7 @@ setup_singbox_integration() {
 
 menu_singbox() {
     while true; do
-        clear
+        safe_clear
         local sb_cmd=""
         if type -P sing-box &>/dev/null; then
             sb_cmd="sing-box"
@@ -1132,7 +1158,7 @@ menu_singbox() {
 
 main_menu() {
     while true; do
-        clear
+        safe_clear
         local ip=$(get_public_ip)
         local port=$(get_config_val "UI_PORT")
         local path=$(get_config_val "UI_PATH")
@@ -1188,6 +1214,15 @@ detect_arch
 
 # 启动第一时间无条件加固并放行 SSH 端口与策略路由，杜绝任何断连风险
 ensure_ssh_firewall_and_routing_safety >/dev/null 2>&1 || true
+
+# 二进制程序完整性自愈：如果已部署但发现 BIN_PATH 缺失或被误覆盖为脚本，自动自愈重新拉取
+if [ -f "${BIN_PATH}" ] && ! is_elf_binary "${BIN_PATH}"; then
+    echo -e "${YELLOW}检测到内核文件 ${BIN_PATH} 异常（非 ELF 可执行文件），正在自动自愈修复...${PLAIN}"
+    rm -f "${BIN_PATH}"
+    download_release_binary "${BIN_PATH}" || true
+    chmod +x "${BIN_PATH}" 2>/dev/null || true
+    systemctl restart aimilivpn 2>/dev/null || true
+fi
 
 # 如果已部署过服务但缺少新版快捷命令，自动平滑补齐 nx 与 nxgate
 if [ -f "${BIN_PATH}" ]; then
