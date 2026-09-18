@@ -4,222 +4,340 @@
 
 **面向 Linux VPS 的多出口流量调度、全球原生住宅宽带智能发现与边缘抗封锁单端口代理网关系统**
 
-[![正式版本](https://img.shields.io/github/v/release/xiumuzidiao0/NXGate?style=flat-square&label=正式版&color=16a34a)](https://github.com/xiumuzidiao0/NXGate/releases/latest)
+[![Release](https://img.shields.io/github/v/release/xiumuzidiao0/NXGate?style=flat-square&label=Release&color=16a34a)](https://github.com/xiumuzidiao0/NXGate/releases/latest)
 [![Go Version](https://img.shields.io/badge/Go-1.25.13+-00ADD8?style=flat-square&logo=go)](https://go.dev/)
-[![Platform](https://img.shields.io/badge/平台-amd64%20%7C%20arm64%20%7C%20386%20%7C%20arm-6366f1?style=flat-square)](https://github.com/xiumuzidiao0/NXGate/releases/latest)
+[![Platform](https://img.shields.io/badge/Platform-amd64%20%7C%20arm64%20%7C%20386%20%7C%20arm-6366f1?style=flat-square)](https://github.com/xiumuzidiao0/NXGate/releases/latest)
 [![License](https://img.shields.io/badge/License-GPL--3.0-334155?style=flat-square)](LICENSE)
 
 </div>
 
-采用 **Go 1.25.13+ 原生高并发模型与系统底层零拷贝技术** 打造的新一代多出口自适应网关 **NXGate**。编译后生成**单一可执行二进制文件**（内置 5 视图现代化响应式 SPA Web 控制台，并提供 Material 3 原生 Android 配套客户端），内存常驻极低（< 15MB），专为 Linux VPS 打造，具备高吞吐、零泄漏与物理级策略路由强隔离能力。
+NXGate 是一款采用 **Go 1.25.13+ 原生高并发模型与 Linux 内核策略路由** 构建的高性能自适应多出口智能路由网关系统。系统被构建为单一静态可执行二进制文件（内置 5 视图响应式 SPA Web 管理控制台，并提供 Material 3 原生 Android 配套客户端），常驻内存小于 15MB，专为 Linux VPS 与边缘节点设计，具备高并发高吞吐、零路由污染与底层硬件级策略路由强隔离能力。
 
 ---
 
-## 快速安装与终端管理
+## 目录
 
-### 1. 一键极速安装与部署 (推荐)
+- [系统全景架构](#系统全景架构)
+- [核心子系统工程设计](#核心子系统工程设计)
+  - [1. L3/L4 策略路由与宿主机安全内核模型](#1-l3l4-策略路由与宿主机安全内核模型)
+  - [2. 多协议代理中继与 SOCKS5 UDP Associate 穿透](#2-多协议代理中继与-socks5-udp-associate-穿透)
+  - [3. M:N 多端口分流调度与动态自适应出口矩阵](#3-mn-多端口分流调度与动态自适应出口矩阵)
+  - [4. 四阶段节点全生命周期发现与过滤流水线](#4-四阶段节点全生命周期发现与过滤流水线)
+  - [5. 边缘抗审查网关与 7×24h 守护看门狗](#5-边缘抗审查网关与-724h-守护看门狗)
+  - [6. 客户端矩阵 (SPA 控制台与 Android 原生应用)](#6-客户端矩阵-spa-控制台与-android-原生应用)
+- [快速部署与运维管理](#快速部署与运维管理)
+  - [一键安装与部署](#一键安装与部署)
+  - [CLI 快捷指令参考](#cli-快捷指令参考)
+  - [Systemd 服务生命周期](#systemd-服务生命周期)
+- [配置参数规范](#配置参数规范)
+- [源码构建与质量准入](#源码构建与质量准入)
+  - [本地编译运行](#本地编译运行)
+  - [全架构静态交叉编译](#全架构静态交叉编译)
+  - [自动化质量准入审计](#自动化质量准入审计)
+- [开源协议](#开源协议)
 
-使用 `root` 用户在受支持的 Linux VPS (Ubuntu / Debian / CentOS / Rocky / AlmaLinux / Alpine) 上执行：
+---
+
+## 系统全景架构
+
+NXGate 构建了从公网边缘抗封锁入站到全球原生住宅家宽出口的多层解耦流水线：
+
+```text
+                                       ┌──────────────────────────────────────────────────────────┐
+                                       │                    Client Applications                   │
+                                       │   Android Client / Clash Meta / Web / Headless Scraper   │
+                                       └────────────────────────────┬─────────────────────────────┘
+                                                                    │
+                                                 VLESS / Hysteria2 / TUIC / Direct SOCKS5
+                                                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ NXGate Ingress & Core Gateway                                                                                   │
+│                                                                                                                 │
+│   ┌────────────────────────────────────────┐       ┌────────────────────────────────────────────────────────┐   │
+│   │ Edge Anti-Censorship Ingress (sing-box)│       │ Unified Proxy Demuxer (RFC 1928)                       │   │
+│   │ 22 Inbound Protocols (Reality/Hy2/TUIC)├──────►│ Dual-Stack Sniffer: HTTP CONNECT / SOCKS5 TCP / UDP  │   │
+│   │ 30s Heartbeat Watchdog Supervisor      │       │ Isolated Auth Provider (Random Base64 Credential)      │   │
+│   └────────────────────────────────────────┘       └──────────────────────────┬─────────────────────────────┘   │
+│                                                                               │                                 │
+│                                    M:N Port Scheduler (Round-Robin / Random / Interval / Sticky)                │
+│                                                                               │                                 │
+│                                                                               ▼                                 │
+│   ┌─────────────────────────────────────────────────────────────────────────────────────────────────────────┐   │
+│   │ Dynamic Egress Pool & Circuit Breaker                                                                   │   │
+│   │   • System Primary Group (tun0, Priority System Egress)                                                 │   │
+│   │   • Dynamic Groups (tun1..tunN, Auto-Balanced by Country / Residential / Physical AI Unlock)           │   │
+│   │   • Sliding-Window Failure Counter & 15s Sub-Second Failover Engine                                     │   │
+│   └───────────────────────────────────────────────────┬─────────────────────────────────────────────────────┘   │
+└───────────────────────────────────────────────────────┼─────────────────────────────────────────────────────────┘
+                                                        │
+                         Linux Policy Routing (SO_BINDTODEVICE + Isolated Table IDs)
+                                                        │
+┌───────────────────────────────────────────────────────▼─────────────────────────────────────────────────────────┐
+│ Linux Kernel & Network Stack                                                                                    │
+│                                                                                                                 │
+│   [Priority 50]  sport/dport 22 ───────────────────► Table main (Host eth0 Default Gateway, 100% Locked)       │
+│   [Priority 1000] oif tun0      ───────────────────► Table 100  (Default via tun0 dev, route-noexec)           │
+│   [Priority 1000] oif tun1      ───────────────────► Table 101  (Default via tun1 dev, route-noexec)           │
+│   [Priority 1000] oif tunN      ───────────────────► Table 100+N(Default via tunN dev, route-noexec)           │
+└───────────────────────────────────────────────────────┬─────────────────────────────────────────────────────────┘
+                                                        │
+                                                        ▼
+                                       ┌──────────────────────────────────┐
+                                       │     Global VPNGate Exit Matrix   │
+                                       │  Residential Broadband & Datacenter│
+                                       └──────────────────────────────────┘
+```
+
+---
+
+## 核心子系统工程设计
+
+### 1. L3/L4 策略路由与宿主机安全内核模型
+
+为彻底杜绝 OpenVPN 隧道接管宿主机全局网络导致 SSH 失联这一行业通病，NXGate 构筑了内核级防线：
+
+- **路由完全禁执 (`route-noexec` & `route-nopull`)**：
+  OpenVPN 进程以底层标志位启动，物理级剥夺其执行 `ip route` 或修改系统路由表的权限；配合全量过滤链：
+  ```text
+  route-noexec
+  route-nopull
+  pull-filter ignore "redirect-gateway"
+  pull-filter ignore "redirect-private"
+  pull-filter ignore "route-gateway"
+  pull-filter ignore "route"
+  pull-filter ignore "route-ipv6"
+  pull-filter ignore "dhcp-option"
+  pull-filter ignore "topology"
+  pull-filter ignore "block-outside-dns"
+  pull-filter ignore "register-dns"
+  pull-filter ignore "ip-win32"
+  script-security 1
+  ```
+  远端节点推送的任何默认网关、子网路由与 DNS 均被原地丢弃，杜绝系统 `/etc/resolv.conf` 污染。
+- **独占隔离策略路由表 (`Table 100 + devIndex`)**：
+  每个虚拟网卡（`tun0`, `tun1`...）仅在其专属的数字路由表中配置默认出站；宿主机 `main` 路由表永不注入 VPN 路由。
+- **SSH 内核级策略锁定 (`Priority 50`)**：
+  网关启动及运行时自动检索 `/etc/ssh/sshd_config` 及其 `.d` 目录下的所有监听端口，在内核策略路由最高优先级（`priority 50`）注入：
+  ```bash
+  ip rule add sport <SSH_PORT> table main priority 50
+  ip rule add dport <SSH_PORT> table main priority 50
+  ```
+  确保不论 VPN 接口发生任何翻转、换线或宕机，主机 SSH 流量无条件由物理网卡 `eth0` 承载。
+- **反向路径过滤自愈 (`rp_filter = 2`)**：
+  动态开启松散反向路径过滤，在隧道释放时自动恢复内核初始 sysctl 状态。
+
+---
+
+### 2. 多协议代理中继与 SOCKS5 UDP Associate 穿透
+
+NXGate 实现了一套单端口双栈协议嗅探与中继引擎：
+
+- **自适应协议分流 (Protocol Sniffing)**：
+  单监听端口同时接纳 HTTP/1.1、HTTP CONNECT 隧道握手与 RFC 1928 SOCKS5 握手，根据首包特征动态切换状态机。
+- **全链路 RFC 1928 UDP 穿透**：
+  原生实现 SOCKS5 UDP Associate 规范。客户端请求创建 UDP 中继时，网关动态分配独立中继端口，维护 TCP 状态机生命周期关联；上游 Socket 通过 `SO_BINDTODEVICE` 绑定特定 `tunX` 虚拟网卡，完整支持 DNS over UDP、QUIC/HTTP3、VoIP 通话及实时游戏包出海。
+- **高吞吐网络参数调优**：
+  全链路启用 `TCP_NODELAY` 禁用 Nagle 算法，配置 512KB BDP Socket 发送/接收缓冲区，降低大规模流媒体与大文件传输时的上下文切换开销。
+
+---
+
+### 3. M:N 多端口分流调度与动态自适应出口矩阵
+
+支持将 VPS 构建为多端口分布式出海集群：
+
+- **解耦的 M:N 端口规则**：
+  管理员可开启任意数量的本地代理端口（如 `7928`、`7929`、`7930`...），并将端口绑定到任意自适应出口组或特定静态隧道。
+- **四种出口调度策略**：
+  - `round_robin`：请求级轮询切换出口，实现 IP 负载均衡；
+  - `random`：权重随机分发；
+  - `interval`：按设定周期（如每 10 分钟）平滑轮替主用出口；
+  - `sticky`：基于源 IP 维持长连接会话亲和性。
+- **主网关保留规范 (`system-primary`)**：
+  底层严格锁定 `devIndex = 0`（`tun0`）专属于系统主网关出口，并发动态组统一从 `tun1` 向上单调递增，消除网卡资源竞态。
+- **滑动窗口熔断器 (Circuit Breaker) 与零宕机兜底**：
+  自适应组以 15 秒为周期对纳管隧道执行端到端有效性探活。遇出口异常（如志愿节点下线），熔断器在毫秒级将请求透明回退至全局健康出口，杜绝向上游抛出 HTTP 502。
+
+---
+
+### 4. 四阶段节点全生命周期发现与过滤流水线
+
+面向全球海量公网志愿节点，NXGate 引入四阶段严格过滤管道，仅准入高可用优质连接：
+
+```text
+  Raw VPNGate Mirror Feed (~1,000 Nodes)
+                    │
+                    ▼
+  [Phase 1] 48-Worker Concurrent TCP Port Knock (2.5s Timeout)
+            淘汰离线端点与端口阻断，节约 90% 拨号开销
+                    │
+                    ▼
+  [Phase 2] L4 Throughput Check (5s Sampling Download)
+            强制要求物理下行速率 >= 70 KB/s，剔除假死与限速节点
+                    │
+                    ▼
+  [Phase 3] L7 Triple-AI Physical Endpoint Verification
+            物理接口实测通过 OpenAI + Claude + Gemini 官方端点校验
+                    │
+                    ▼
+  [Phase 4] 6-Signal Heuristic Residential Broadband Classifier
+            Cloudflare CDN 黑名单 + ASN 黑名单 + 运营商白名单 + rDNS 逆向分析
+                    │
+                    ▼
+  Active Candidate Pool for Dynamic Routing (~50-100 High-Quality Exits)
+```
+
+1. **Phase 1: 毫秒级端口敲门 (TCP Port Knock)**：并发 48 goroutine 对全量镜像执行轻量 SYN 探测，2.5 秒内排查死端。
+2. **Phase 2: 真实吞吐采样 (Throughput Probing)**：拨号就绪后，经专属出口向测速端点执行切片下载，未达到连续 70 KB/s 阈值者直接淘汰。
+3. **Phase 3: 三大 AI 物理端点核验**：
+   - OpenAI：验证 `ios.chat.openai.com` 鉴权与 `cdn-cgi/trace` 归属；
+   - Claude：验证 `api.anthropic.com` 消息路由鉴权响应与 Cloudflare 边缘阻断；
+   - Gemini：验证 `gemini.google.com` 服务可用性。
+4. **Phase 4: 住宅宽带甄别引擎**：瀑布流评估 ISP、ASN 属性，准确标定原生住宅家宽（Residential）与数据中心（Datacenter）。
+
+---
+
+### 5. 边缘抗审查网关与 7×24h 守护看门狗
+
+- **22 种原生入站协议矩阵**：
+  深度纳管 sing-box 内核，支持 VLESS-REALITY（借用亚马逊/苹果权威 TLS 指纹）、Hysteria2（极速 UDP 拥塞控制）、TUIC v5、Shadowsocks 2022、AnyTLS 等抗审查入站协议，并链式分流至 NXGate 住宅出口。
+- **7×24h 自愈看门狗 (Watchdog)**：
+  独立协程以 30 秒为周期监控进程健康度，遇宿主机 OOM 或意外崩溃自动执行冷启动自愈。
+- **纯 Go 零依赖 Clash Meta / Mihomo YAML 订阅生成**：
+  标准生成 `🚀 节点选择`、`♻️ 自动选择 (URL-Test)`、`⚡ 故障转移 (Fallback)` 与分流规则链，支持安全路径免密下发。
+
+---
+
+### 6. 客户端矩阵 (SPA 控制台与 Android 原生应用)
+
+- **深空 5 视图响应式 SPA 控制台**：
+  内置于 Go 二进制文件（`go:embed`），采用 7 级深空 Surface 色阶。包含仪表盘（Dashboard）、边缘入站（sing-box）、多端口矩阵（Matrix）、节点广场（Nodes）及安全配置（Settings）。覆盖 390px 至 1440px+ 视口。
+- **Material 3 原生 Android 配套客户端 (`com.nxgate.app`)**：
+  - 全流程 Material 3 规范与 Android 12+ 莫奈壁纸动态取色；
+  - 手机端原生贴底 `NavigationBar`，平板横屏自适应左侧 `NavigationRail`；
+  - CameraX + ZXing 离线安全扫码添加服务器；
+  - Android 生物识别硬件锁（BiometricPrompt 指纹/面容/凭据）。
+
+---
+
+## 快速部署与运维管理
+
+### 一键安装与部署
+
+在目标 Linux VPS（支持 Debian / Ubuntu / CentOS / RHEL / Rocky / AlmaLinux / Alpine）以 `root` 权限执行：
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/xiumuzidiao0/NXGate/main/install.sh | bash
 ```
 
-安装脚本将自动：
-- 识别 CPU 架构，优先从官方加速源秒级拉取预编译静态二进制包（约 7.5MB）；
-- 自动安装配置系统级网络依赖与 OpenVPN；
-- 部署 `aimilivpn` (NXGate) 守护进程并注册 `systemd` 服务实现开机自愈自启；
-- 创建全局快捷指令 `nx`（同时保留 `ml` 兼容）。
+安装脚本将自动执行架构匹配、拉取预编译可执行文件、配置网络守护进程服务并写入全局管理指令。
 
-### 2. 终端极速更新与命令行快捷操作
+### CLI 快捷指令参考
 
-系统支持全自动免交互命令行操作，亦可随时唤出终端控制菜单：
+在服务器任意终端位置，使用 `nx`（或兼容别名 `ml`）进行管理：
 
 ```bash
-nx update         # 从 GitHub Release 官方源秒级极速更新至最新发行版本并自动热重启
-nx status         # 查看当前运行状态、Web 入口与管理账密
-nx restart        # 安全平滑重启 NXGate 网关服务
-nx logs           # 查看实时 journalctl 运行日志流
-nx menu           # 打开终端交互式可视化控制中心 (亦可直接输入 nx 唤出)
+nx               # 唤出终端交互式可视化控制中心
+nx status        # 打印当前网关运行状态、sing-box 状态与入口地址
+nx update        # 检查并拉取最新 Release 版本执行热更新与自愈
+nx restart       # 平滑重启网关服务
+nx start         # 启动网关服务
+nx stop          # 停止网关服务
+nx logs          # 查看实时运行日志 (journalctl -u aimilivpn -f)
 ```
 
----
-
-## 核心系统级优化与高级架构 (v2.5.4)
-
-### 1. 🌐 SOCKS5 UDP Associate 全链路穿透 (RFC 1928)
-- **原生 UDP 代理中继**：在单端口统一嗅探（HTTP / SOCKS5）基础上，完整实现 RFC 1928 SOCKS5 UDP Associate 协议，客户端发起 UDP 请求（DNS over UDP、QUIC/HTTP3、VoIP 语音通话、在线游戏数据包）时实现全链路透明代理转发；
-- **TCP 状态机强绑定与网卡穿透**：通过 Linux `SO_BINDTODEVICE`（`createBoundUDPSocket`）将上游 UDP Socket 直接绑定至具体的 `tunX` 虚拟网卡设备，严格受对应策略路由表隔离。
-
-### 2. 🚪 节点端口快速预检机制 (Port Knock)
-- **毫秒级过滤废弃节点**：在全量测速与拨号前，并发 48 goroutines 对候选节点执行 2.5 秒 TCP 快速握手敲门；
-- **节约 90% 拨号开销**：在 OpenVPN 握手前快速淘汰离线与被墙死端口，告别过去逐个节点数十秒死等的痛点。
-
-### 3. 🌊 带宽断流与假死检测 (Throughput Check)
-- **物理吞吐采样**：新隧道握手成功后，通过虚拟网卡专属 HTTP 客户端向测速端点执行 5 秒分块采样下载；
-- **淘汰断流节点**：严苛判定阈值（采样下载达到 50KB 且平均吞吐 >= 70 KB/s），彻底拦截“连上但带宽趋零”的假死志愿节点。
-
-### 4. 🤖 三大 AI 严格物理出网校验 (OpenAI + Claude + Gemini)
-- **真实物理网卡探针**：
-  - OpenAI: `https://ios.chat.openai.com/public-api/mobile/server_status/v1` & `cdn-cgi/trace`
-  - Claude: `https://api.anthropic.com/v1/messages` (鉴权响应拦截) & `cdn-cgi/trace`
-  - Gemini: `https://gemini.google.com/app` 核心应用端点
-- **零误判入池门禁**：当动态组或节点筛选配置为 `unlock: "ai"` 时，强制要求 **三大 AI 必须全部连通解锁** 方可通过准入。
-
-### 5. 🏠 住宅宽带智能甄别引擎 (Residential Broadband Detector)
-- **六重信号瀑布式分析**：基于 Cloudflare CDN 网段黑名单、主流云厂商 ASN 黑名单、全球主流运营商 ISP 白名单、机房/家宽关键词及 rDNS 反向解析；
-- **智能置信度评估**：精准区隔机房托管（Datacenter）与真实原生住宅宽带（Residential），确保出海出口享有最高网络信誉。
-
-### 6. 🔐 独立系统随机账密鉴权体系
-- **与 Web 管理密码彻底解耦**：自动生成纯字母数字的安全随机凭据（`vpn_xxxx` / 16位高强度密码），杜绝 `@`、`%`、`:` 等特殊符号引发的 URL 编码转义与解析断层；
-- **持久化隔离守护**：生成后以 `0600` 权限固化在 `data/proxy_auth.txt`，管理控制台修改 Web 登录密码绝不影响代理链路与 sing-box 出口。
-
-### 7. 👑 系统主出口网关组 (`system-primary`，独占 `tun0`)
-- **网卡强隔离保障**：底层严格保留 `devIndex = 0`（`tun0`）专属于系统主网关出口，并发多出口自适应池统一从 `tun1`、`tun2`... 向上单调递增，彻底杜绝自适应组与主网关争抢网卡的冲突；
-- **自适应策略化接管**：将主连接升级为持久化系统特殊自适应组，支持按国家、网络类型、解锁能力与择优指标自动选拔与保活。
-
-### 8. ⚡ 毫秒级滑动失败窗口熔断器 (Circuit Breaker) & 跨池逃生
-- **15秒周期自愈探针**：自适应组每 15 秒主动向每个在线隧道发包探测，一旦节点因房东断网等原因出现丢包，在 15 秒内自动判定失效并触发替补；
-- **毫秒级跨池逃生**：当某个端口绑定的组发生故障时，调度器在毫秒级内自动回退至全池健康出口（如 `tun0`），绝不向断网节点送死流量，杜绝 502 Bad Gateway。
-
-### 9. 📦 客户端订阅多格式导出 (Clash Meta / Mihomo 专属 YAML 导出)
-- **纯 Go 零依赖生成器**：实现 `GenerateClashYAML()`，将 sing-box 入站节点标准化生成完整的 Clash Meta / Mihomo 配置；
-- **专业策略组装配**：包含 `🚀 节点选择`、`♻️ 自动选择 (URL-Test)`、`⚡ 故障转移 (Fallback)` 与 `🐟 漏网之鱼`，内置国内外 GEOIP 分流规则；
-- **免密安全更新**：客户端通过已验证的安全管理路径或 Token 即可直接更新配置，无需弹出 Basic Auth 认证框；Web 控制台支持一键复制与直接下载 YAML 文件。
-
-### 10. 🛡️ sing-box 边缘抗封锁入站 & 7×24h 后台自愈守护 (Watchdog)
-- **入站矩阵管理**：支持可视化管理 VLESS-REALITY、Hysteria2、TUIC、Shadowsocks、AnyTLS 等 22 种抗审查入站协议；
-- **自愈守护进程**：后台 30 秒独立心跳巡检，一旦 sing-box 发生意外终止，自愈守护程序在 30 秒内安全拉起，实现 7×24 小时无人值守。
-
-### 11. 💻 现代化深空 5 视图 SPA Web 控制台
-- 采用原生 Vanilla JS + 7 级深空 Surface 色阶构建响应式 SPA 架构，彻底消除杂乱堆叠：
-  - **📊 运行概览 (Dashboard)**：实时上下行网速、活跃连接、主网关卡片、流式系统日志；
-  - **🚀 边缘入站 (sing-box)**：抗封锁入站节点列表、链式代理出口选择、Clash 订阅管理；
-  - **🔀 多端口分流 (Matrix)**：M:N 代理端口规则矩阵、动态自适应隧道组参数管理；
-  - **🌐 优质节点 (Nodes)**：全量候选节点筛选、TCP 延迟测速、流媒体与 AI 解锁探测；
-  - **⚙️ 系统设置 (Settings)**：Web 端口、管理账号密码、安全路径、代理端口配置；
-- **多端响应式适配**：覆盖 390px、768px、1024px、1440px 视口，Playwright 端到端自动化回归测试 100% 通过。
-
----
-
-## 核心特性架构对比
-
-| 特性 | 原 Python 版本 | Go 重构版本 (v2.5.4) |
-| :--- | :--- | :--- |
-| **程序分发与体积** | 需 Python 3.10+、海量依赖脚本 | **单一静态二进制文件（约 7.5MB）**，零外部语言依赖 |
-| **内存与 CPU 消耗** | 80MB ~ 150MB | **< 15MB 内存，CPU 占用 < 1%**，抗压能力大幅跃升 |
-| **并发代理模型** | Thread + 全局解释器锁 (GIL) 瓶颈 | **Goroutine + Linux Epoll**，轻松承载数千长连接并发 |
-| **UDP 协议支持** | 仅支持 TCP CONNECT | **完整实现 RFC 1928 SOCKS5 UDP Associate，QUIC/VOIP/DNS 全穿透** |
-| **节点准入门禁** | 盲目拨号死等 | **Phase 1 端口预检 (2.5s) + Phase 2 带宽断流检测 (>=70KB/s)** |
-| **AI 解锁甄别** | 仅依赖入口国家粗判 | **三大 AI (OpenAI + Claude + Gemini) 真实物理网卡端点实测** |
-| **IP 属性识别** | 无区分 | **六重信号瀑布流分类原生住宅家宽（Residential）与机房 IP** |
-| **主连接设备管理** | 设备跳跃无序 | **`tun0` 专享独占保留**，封装为系统自适应组 |
-| **多出口并发调度** | 仅支持单一主连接 | **支持 `tun1..tun63` 多出口并发，M:N 端口调度 (轮询/随机/定时)** |
-| **动态自适应维护** | 无 | **自动按国家/家宽属性/AI解锁能力维持 Top N 节点在线** |
-| **故障熔断自愈** | 无，长达数十秒死等超时 | **毫秒级滑动失败窗口熔断器 + 跨池自动兜底容灾** |
-| **屏蔽库管理** | 盲目拉黑 24 小时 | **精准定性防误杀 + 3小时自动探活复活 + Web 一键自愈** |
-| **边缘抗封锁入站** | 无 | **深度集成 sing-box (Reality / Hy2 / TUIC / SS / AnyTLS) 链式代理** |
-| **出站认证解耦** | 无 | **专有系统随机账密鉴权，彻底与 Web 管理密码解耦防脱节** |
-| **客户端生态导出** | 仅单节点通用 URL | **一键导出 Clash Meta / Mihomo 格式全功能 YAML 订阅** |
-| **守护与高可用** | 意外退出即断网 | **内置 7×24 小时 sing-box Watchdog 自愈守护协程** |
-| **网络性能调优** | 系统默认小缓冲区 | **BDP TCP 512KB Socket 发送/接收缓冲区 + 全链路 NoDelay** |
-| **Web 控制台设计** | 简陋单页 HTML 拼接 | **深空 7 级色阶 5 视图 SPA 架构，折叠侧栏与移动底栏自适应** |
-| **宿主机安全性** | 曾有主路由被篡改风险 | **虚拟网卡严格限制在私有策略路由表 (Table 100+N)，主机 SSH 100% 隔离** |
-
----
-
-## 目录结构说明
-
-```text
-nxgate/
-├── .github/workflows/
-│   ├── ci.yml                 # 持续集成质量准入流水线 (版本核验/安全审计/全包测试/多端UI测试)
-│   ├── release.yml            # 自动化跨平台交叉编译与 GitHub Release 产物发布流水线
-│   └── mirror.yml             # 每 6 小时自动拉取 VPNGate 镜像快照工作流
-├── cmd/
-│   ├── aimilivpn/             # 网关主程序入口 (main.go)
-│   └── mirror/                # VPNGate 镜像抓取与源数据同步工具
-├── docs/
-│   ├── PROJECT_HANDOVER.md    # [核心维护文档] 系统全景架构设计、技术实现细节、生产运维手册与故障排查
-│   ├── CICD_AND_TESTING_GUIDE.md # CI/CD 发布与测试流程标准化指南
-│   └── FREESUB_COMPARISON.md  # 与 freesub 项目的技术特性深度对比与架构演进分析
-├── pkg/
-│   ├── config/                # 环境变量、持久化配置、独立随机代理凭据与版本号定义
-│   ├── nodes/                 # 节点拉取、端口预检 (pool.go)、住宅IP分类 (residential.go)、信誉评分
-│   ├── notify/                # Telegram 告警推送与交互机器人
-│   ├── proxy/                 # HTTP/SOCKS5 嗅探代理、SOCKS5 UDP Associate 穿透、多端口分流管理器
-│   ├── server/                # Web 控制台 HTTP 路由、Clash/singbox 订阅生成、出站解析
-│   ├── singbox/               # 边缘抗封锁协议客户端 API 与 22 种原生协议元数据
-│   ├── stats/                 # 实时上下行流量统计与内存环形日志总线
-│   ├── tunnel/                # Linux 隧道池管理、带宽断流检测 (throughput.go)、三大 AI 解锁探测
-│   └── vpn/                   # OpenVPN 进程监管、TUN 检测与主连接管理器
-├── scripts/
-│   ├── audit.sh               # 静态分析与 govulncheck 依赖安全漏洞扫描脚本
-│   ├── build.sh               # 4 大架构交叉编译打包脚本
-│   ├── check-version.sh       # 版本一致性核验与一键同步工具
-│   ├── release.sh             # 一键自动化发布助手脚本
-│   └── aimilivpn.service      # systemd 系统守护进程配置模板
-├── web/
-│   ├── dist/                  # 现代化响应式深空 5 视图 SPA 控制台前端源码 (index.html, styles.css, app.js)
-│   ├── tests/                 # Playwright 4 端视口自动化回归测试 (ui-smoke.mjs)
-│   ├── embed.go               # go:embed 静态资产打包
-│   └── package.json
-├── config.env.example         # 环境变量配置标准示例模板
-├── install.sh                 # Linux 一键安装、服务部署与终端管理脚本 (ml)
-├── Dockerfile                 # 多阶段极简容器构建镜像
-├── VERSION                    # 全局单一版本信任源定义文件
-└── go.mod
-```
-
----
-
-## 快速上手与本地编译
-
-### 1. 本地直接编译运行
-
-确保机器已安装 Go 1.25.13+ 环境：
+### Systemd 服务生命周期
 
 ```bash
-# 编译当前架构二进制
-go build -ldflags="-s -w" -o aimilivpn ./cmd/aimilivpn
+# 检查守护进程运行状态
+systemctl status aimilivpn
 
-# 启动运行 (需要 root 权限以管理虚拟网卡与策略路由)
-sudo ./aimilivpn
+# 重启网关核心服务
+systemctl restart aimilivpn
+
+# 查看开机启动项
+systemctl is-enabled aimilivpn
 ```
 
-### 2. 交叉编译全架构发行包
+---
+
+## 配置参数规范
+
+配置文件路径位于 `/opt/aimilivpn/config.env`（环境变量覆盖优先级高于文件）：
+
+| 环境变量名 | 默认值 | 允许范围 / 格式 | 功能说明 |
+| :--- | :--- | :--- | :--- |
+| `UI_HOST` | `::` | 字符串 (IP) | Web 管理控制台监听绑定地址 |
+| `UI_PORT` | `8787` | `1-65535` | Web 管理控制台对外服务端口 |
+| `UI_PATH` | `enter` | 纯字母数字字符串 | 控制台访问安全路径前缀（防扫描，如 `/enter/`） |
+| `UI_USERNAME` | `admin` | 字符串 | Web 管理后台登录账号 |
+| `UI_PASSWORD` | *(随机生成)* | 字符串 | Web 管理后台登录强密码 |
+| `LOCAL_PROXY_HOST`| `127.0.0.1` | 字符串 (IP) | 本地默认代理监听地址 |
+| `LOCAL_PROXY_PORT`| `7928` | `1-65535` | 本地默认代理监听端口 (HTTP/SOCKS5 单端口自适应) |
+| `LOCAL_PROXY_MAX_CONNECTIONS` | `512` | `16-4096` | 单代理端口最大允许并发连接数 |
+| `FETCH_INTERVAL_SECONDS` | `900` | `60-86400` | VPNGate 节点镜像全量拉取刷新周期（秒） |
+| `CHECK_INTERVAL_SECONDS` | `20` | `5-300` | 在线主连接与活跃出口健康探测心跳间隔（秒） |
+| `TARGET_VALID_NODES` | `5` | `1-50` | 内存池最小维持的经过端口预检的优质候选节点数 |
+| `MAX_SCAN_ROWS` | `1000` | `10-5000` | 单次从镜像 CSV 中解析的最大行数 |
+| `DISCOVERY_COUNTRIES` | *(空)* | 逗号分隔 ISO 代码 (如 `JP,US`) | 节点发现首选国家过滤白名单（留空为全球） |
+| `DATA_DIR` | `/opt/aimilivpn/data`| 绝对路径 | 运行时证书、路由配置与日志存储目录 |
+
+---
+
+## 源码构建与质量准入
+
+### 本地编译运行
+
+构建环境需满足 Go 1.25.13+：
+
+```bash
+# 1. 克隆代码仓库
+git clone https://github.com/xiumuzidiao0/NXGate.git
+cd NXGate
+
+# 2. 编译当前平台二进制文件
+CGO_ENABLED=0 go build -ldflags="-s -w" -o bin/aimilivpn ./cmd/aimilivpn
+
+# 3. 运行网关服务 (需 root 权限以管理虚拟网卡)
+sudo ./bin/aimilivpn
+```
+
+### 全架构静态交叉编译
+
+内置发行编译脚本可一次性输出 4 种 CPU 架构的无依赖静态程序包：
 
 ```bash
 chmod +x scripts/build.sh
 ./scripts/build.sh
 ```
 
-编译产物将输出在 `dist/` 目录中：
-- `dist/aimilivpn_linux_amd64` (及其 `.gz` 压缩包)
-- `dist/aimilivpn_linux_arm64` (及其 `.gz` 压缩包)
-- `dist/aimilivpn_linux_386` (及其 `.gz` 压缩包)
-- `dist/aimilivpn_linux_arm` (及其 `.gz` 压缩包)
-- `dist/SHA256SUMS.txt` 校验和清单
+输出文件位于 `dist/` 目录：
+- `aimilivpn_linux_amd64` (x86_64 服务器通用)
+- `aimilivpn_linux_arm64` (aarch64 树莓派 / 鲲鹏 / 飞腾 / 甲骨文 ARM)
+- `aimilivpn_linux_386` (32位 x86)
+- `aimilivpn_linux_arm` (32位 ARMv7)
+- `SHA256SUMS.txt` (全产物哈希校验清单)
 
-### 3. 一键发布新版本 (CI/CD)
+### 自动化质量准入审计
+
+代码库受本地 Git Pre-Push 钩子与 GitHub Actions CI/CD 双重准入约束：
 
 ```bash
-# 自动同步版本、运行静态安全审计与全量回归测试、打 Tag 并推送唤起 GitHub Actions
-./scripts/release.sh <新版本号，例如 2.5.5>
+# 1. 静态代码分析与 CVE 漏洞扫描
+bash scripts/audit.sh
+
+# 2. 全量单元与集成测试 (覆盖全部 11 个子包)
+go test -count=1 -v ./...
+
+# 3. 代码库全链路版本一致性核验
+bash scripts/check-version.sh
+
+# 4. 前端视口回归测试
+cd web && npm test
 ```
 
 ---
 
-## 常见问题排查与技术细节
+## 开源协议
 
-### Q1: 为什么主连接与自适应组各出口互不干扰？
-A: 系统采用 Linux 高级策略路由隔离体系。主连接独占 `tun0`（绑定路由表 `Table 100`），并发自适应组出口有序占用 `tun1`、`tun2`...（分别绑定 `Table 101`、`Table 102`...）。主路由表（`main table`）保留宿主机 `eth0` 默认网关，**宿主机 SSH 22 端口及网络 100% 隔离安全**。
-
-### Q2: 遇到部分志愿节点握手成功但无法出网或断流怎么办？
-A: 系统内置了 15 秒高频出网真实性探针、握手门禁测试及 **Throughput 带宽采样过滤机制**。任何握手成功但实际无法连通外网或带宽低于 70 KB/s 的节点，会被自动标记并隔离至屏蔽库（Blacklist），系统毫秒级从自适应池中选取下一个真实通网的候选节点替补，保障出口池时刻处于可用状态。
-
-### Q3: 客户端如何导入 Clash Meta 订阅？
-A: 在 Web 控制台「边缘入站」页面顶部，点击 **「📋 复制 Clash 订阅」** 即可获取专属链接，直接粘贴到 Clash Verge Rev、Mihomo Party、Clash Meta for Android 等客户端中即可一键更新使用。
-
-### Q4: 代理端口鉴权为什么要与 Web 控制台管理员密码解耦？
-A: 系统在 v2.5.4 中引入了**独立系统随机账密体系**。如果代理端口跟随 Web 登录密码，一旦用户在控制台修改密码，就会导致所有客户端与 sing-box 链式出口配置由于缓存脱节而瞬间失效。采用独立的字母数字随机凭据后，不仅能从根本上规避特殊符号 URL 转义问题，还可确保代理通道长效稳定不漂移。
+本项目采用 [GNU General Public License v3.0 (GPL-3.0)](LICENSE) 开源协议授权。
+引用或二次分发请遵循开源许可证要求保留原作者信息。
