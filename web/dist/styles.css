@@ -2046,6 +2046,90 @@ button {
             }
         }
 
+        /* Update Subsystem Styles */
+        .version-trigger {
+            display: inline-flex;
+            align-items: center;
+            cursor: pointer;
+            transition: transform var(--duration-fast) var(--spring), opacity var(--duration-fast);
+        }
+        .version-trigger:hover {
+            transform: translateY(-1px);
+            opacity: 0.9;
+        }
+        .badge-dot-pulse {
+            width: 6px;
+            height: 6px;
+            background: #10b981;
+            border-radius: 50%;
+            margin-left: 5px;
+            box-shadow: 0 0 8px #10b981;
+            animation: pulseGlow 1.8s infinite ease-in-out;
+        }
+        @keyframes pulseGlow {
+            0%, 100% { opacity: 0.4; transform: scale(0.9); }
+            50% { opacity: 1; transform: scale(1.2); }
+        }
+        .badge-new {
+            background: #ef4444;
+            color: #ffffff;
+            font-size: 9px;
+            font-weight: 700;
+            padding: 1px 5px;
+            border-radius: 10px;
+            margin-left: 4px;
+            vertical-align: middle;
+            letter-spacing: 0.5px;
+        }
+        .update-version-row {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+        .update-ver-item {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+        .update-arrow {
+            color: var(--text-muted);
+            font-size: 16px;
+        }
+        .update-release-box {
+            background: var(--surface-1);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-md);
+            padding: 12px;
+            max-height: 220px;
+            overflow-y: auto;
+        }
+        .update-notes-body {
+            line-height: 1.6;
+            word-break: break-word;
+        }
+        .progress-track {
+            width: 100%;
+            height: 6px;
+            background: var(--surface-1);
+            border-radius: 4px;
+            overflow: hidden;
+            position: relative;
+        }
+        .progress-fill.indeterminate {
+            width: 50%;
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary), #38bdf8);
+            border-radius: 4px;
+            position: absolute;
+            animation: progressIndeterminate 1.5s infinite ease-in-out;
+        }
+        @keyframes progressIndeterminate {
+            0% { left: -50%; width: 30%; }
+            50% { left: 30%; width: 50%; }
+            100% { left: 100%; width: 30%; }
+        }
+
         @media (prefers-reduced-motion: reduce) {
             html {
                 scroll-behavior: auto;

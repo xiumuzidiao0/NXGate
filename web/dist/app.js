@@ -599,7 +599,7 @@
         // Settings Modal & Tabs
         function switchSettingsTab(tabKey) {
             document.querySelectorAll('#settings-modal .modal-tab-btn').forEach(b => b.classList.remove('active'));
-            ['base', 'tg', 'app'].forEach(k => {
+            ['base', 'tg', 'app', 'update'].forEach(k => {
                 const el = document.getElementById('tab-content-' + k);
                 if (el) {
                     const isHidden = (k !== tabKey);
@@ -609,6 +609,9 @@
             });
             const activeBtn = document.getElementById('tab-btn-' + tabKey);
             if (activeBtn) activeBtn.classList.add('active');
+            if (tabKey === 'update') {
+                checkForUpdates(true);
+            }
         }
 
         async function loadSettingsForm() {
@@ -2303,6 +2306,232 @@
             }
         }
 
+        // ==========================================
+        //  系统更新与版本管理引擎 (Self-Update Engine)
+        // ==========================================
+        let isUpdating = false;
+
+        function openUpdateModal() {
+            const modal = document.getElementById('update-modal');
+            if (modal) {
+                modal.classList.add('open');
+                modal.hidden = false;
+            }
+            checkForUpdates(true);
+        }
+
+        function closeUpdateModal() {
+            const modal = document.getElementById('update-modal');
+            if (modal) {
+                modal.classList.remove('open');
+                modal.hidden = true;
+            }
+        }
+
+        async function checkForUpdates(silent = false) {
+            const curVerElements = [
+                document.getElementById('update-cur-ver'),
+                document.getElementById('modal-update-cur-ver')
+            ];
+            const latestVerElements = [
+                document.getElementById('update-latest-ver'),
+                document.getElementById('modal-update-latest-ver')
+            ];
+            const statusTags = [
+                document.getElementById('update-status-tag'),
+                document.getElementById('modal-update-status-tag')
+            ];
+            const updateBtns = [
+                document.getElementById('btn-do-update'),
+                document.getElementById('modal-btn-do-update')
+            ];
+            const releaseBoxes = [
+                document.getElementById('update-info-box'),
+                document.getElementById('modal-update-info-box')
+            ];
+
+            statusTags.forEach(t => {
+                if (t) {
+                    t.className = 'badge badge-proto';
+                    t.textContent = '检查中...';
+                }
+            });
+            latestVerElements.forEach(el => {
+                if (el) el.textContent = '查询中...';
+            });
+
+            try {
+                const res = await fetch('/api/update/check');
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+
+                curVerElements.forEach(el => {
+                    if (el) el.textContent = 'v' + String(data.current_version || '2.5.6').replace(/^v/, '');
+                });
+
+                if (!data.ok) {
+                    statusTags.forEach(t => {
+                        if (t) {
+                            t.className = 'badge badge-danger';
+                            t.textContent = '检查失败';
+                        }
+                    });
+                    latestVerElements.forEach(el => {
+                        if (el) el.textContent = '无法获取';
+                    });
+                    if (!silent) showToast(data.error || '检查更新失败', 'error');
+                    return;
+                }
+
+                const latestVer = 'v' + String(data.latest_version || '').replace(/^v/, '');
+                latestVerElements.forEach(el => {
+                    if (el) el.textContent = latestVer;
+                });
+
+                if (data.release_notes || data.release_name) {
+                    const title = data.release_name || `${latestVer} 发行说明`;
+                    const dateStr = data.published_at ? new Date(data.published_at).toLocaleDateString('zh-CN') : '';
+                    const notesFormatted = escapeHtml(data.release_notes || '已检测到远端主干最新稳定版本。').replace(/\n/g, '<br>');
+
+                    const elTitle = document.getElementById('update-release-title');
+                    if (elTitle) elTitle.textContent = title;
+                    const elMTitle = document.getElementById('modal-update-release-title');
+                    if (elMTitle) elMTitle.textContent = title;
+
+                    const elDate = document.getElementById('update-release-date');
+                    if (elDate) elDate.textContent = dateStr;
+                    const elMDate = document.getElementById('modal-update-release-date');
+                    if (elMDate) elMDate.textContent = dateStr;
+
+                    const elNotes = document.getElementById('update-release-notes');
+                    if (elNotes) elNotes.innerHTML = notesFormatted;
+                    const elMNotes = document.getElementById('modal-update-release-notes');
+                    if (elMNotes) elMNotes.innerHTML = notesFormatted;
+
+                    releaseBoxes.forEach(box => {
+                        if (box) box.classList.remove('hidden');
+                    });
+                }
+
+                if (data.has_update) {
+                    statusTags.forEach(t => {
+                        if (t) {
+                            t.className = 'badge badge-success';
+                            t.textContent = '可更新';
+                        }
+                    });
+                    updateBtns.forEach(b => {
+                        if (b) {
+                            b.classList.remove('hidden');
+                            b.hidden = false;
+                        }
+                    });
+                    const badgeNew = document.getElementById('settings-update-badge');
+                    if (badgeNew) badgeNew.classList.remove('hidden');
+                    const dotNew = document.getElementById('header-update-dot');
+                    if (dotNew) dotNew.classList.remove('hidden');
+
+                    if (!silent) showToast(`发现新版本 ${latestVer}，可点击立即升级！`, 'info');
+                } else {
+                    statusTags.forEach(t => {
+                        if (t) {
+                            t.className = 'badge badge-proto';
+                            t.textContent = '已是最新';
+                        }
+                    });
+                    updateBtns.forEach(b => {
+                        if (b) {
+                            b.classList.add('hidden');
+                            b.hidden = true;
+                        }
+                    });
+                    const badgeNew = document.getElementById('settings-update-badge');
+                    if (badgeNew) badgeNew.classList.add('hidden');
+                    const dotNew = document.getElementById('header-update-dot');
+                    if (dotNew) dotNew.classList.add('hidden');
+
+                    if (!silent) showToast('当前已是最新稳定版本 (v' + String(data.current_version || '').replace(/^v/, '') + ')', 'success');
+                }
+            } catch (err) {
+                console.error('检查更新失败:', err);
+                statusTags.forEach(t => {
+                    if (t) {
+                        t.className = 'badge badge-danger';
+                        t.textContent = '网络异常';
+                    }
+                });
+                if (!silent) showToast('检查更新失败，请检查网络连接', 'error');
+            }
+        }
+
+        async function triggerSystemUpdate(force = false) {
+            if (isUpdating) return;
+            const actionDesc = force ? '强制重新安装当前最新构建' : '升级至最新版本';
+            if (!confirm(`确认立即执行系统更新（${actionDesc}）并重启服务吗？`)) return;
+
+            isUpdating = true;
+            const progressBoxes = [
+                document.getElementById('update-progress-box'),
+                document.getElementById('modal-update-progress-box')
+            ];
+            const progressSteps = [
+                document.getElementById('update-progress-step'),
+                document.getElementById('modal-update-progress-step')
+            ];
+            const updateBtns = [
+                document.getElementById('btn-do-update'),
+                document.getElementById('modal-btn-do-update'),
+                document.getElementById('btn-check-update'),
+                document.getElementById('btn-force-update')
+            ];
+
+            progressBoxes.forEach(b => b && b.classList.remove('hidden'));
+            progressSteps.forEach(s => s && (s.textContent = '正在下载官方二进制包并比对 SHA-256 校验和...'));
+            updateBtns.forEach(b => b && (b.disabled = true));
+
+            try {
+                const res = await fetch('/api/update/trigger', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ force: !!force })
+                });
+                const ret = await res.json();
+
+                if (!res.ok || !ret.ok) {
+                    isUpdating = false;
+                    updateBtns.forEach(b => b && (b.disabled = false));
+                    progressSteps.forEach(s => s && (s.textContent = `❌ ${ret.error || '更新失败'}`));
+                    alert('系统更新失败: ' + (ret.error || '未知错误'));
+                    return;
+                }
+
+                // Success! Service is restarting
+                let countdown = 5;
+                const updateMsg = escapeHtml(ret.message || '更新完成！');
+                progressSteps.forEach(s => s && (s.innerHTML = `🎉 <strong>${updateMsg}</strong> 页面将在 <strong>${countdown}</strong> 秒后自动刷新...`));
+
+                const timer = setInterval(() => {
+                    countdown--;
+                    if (countdown <= 0) {
+                        clearInterval(timer);
+                        window.location.reload();
+                    } else {
+                        progressSteps.forEach(s => s && (s.innerHTML = `🎉 <strong>${updateMsg}</strong> 页面将在 <strong>${countdown}</strong> 秒后自动刷新...`));
+                    }
+                }, 1000);
+
+            } catch (err) {
+                isUpdating = false;
+                updateBtns.forEach(b => b && (b.disabled = false));
+                progressSteps.forEach(s => s && (s.textContent = `❌ 网络异常: ${err}`));
+                alert('请求更新失败: ' + err);
+            }
+        }
+
+        function triggerForceUpdate() {
+            triggerSystemUpdate(true);
+        }
+
         const uiActions = {
             toggleSidebar,
             quickConnect,
@@ -2377,7 +2606,12 @@
             openMobileAppModal,
             closeMobileAppModal,
             onAppProfileFieldChanged,
-            testMobileApiConnectivity
+            testMobileApiConnectivity,
+            openUpdateModal,
+            closeUpdateModal,
+            checkForUpdates,
+            triggerSystemUpdate,
+            triggerForceUpdate
         };
 
         function runDataAction(element, dataKey, event) {
@@ -2458,6 +2692,7 @@
             fetchPortRules();
             fetchDynamicGroups();
             setupSSE();
+            setTimeout(() => { checkForUpdates(true); }, 2500);
 
             const initialHash = (window.location.hash || '').replace(/^#/, '');
             if (['dashboard', 'singbox', 'matrix', 'nodes', 'settings'].includes(initialHash)) {
