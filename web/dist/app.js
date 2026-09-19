@@ -476,7 +476,7 @@
                     <tr class="${isCurrent ? 'node-row-current' : (activeTun ? 'node-row-active' : '')}">
                         <td data-label=""  class="text-center">
                             <button class="star-btn ${n.is_favorite ? 'active' : ''}" data-action="toggleFavorite" data-args="${jsonAttr([n.id])}" title="${n.is_favorite ? '取消收藏' : '加入收藏'}">
-                                ${n.is_favorite ? '★' : '☆'}
+                                ${n.is_favorite ? '<svg viewBox="0 0 24 24" width="14" height="14" fill="#f59e0b" stroke="#f59e0b" stroke-width="1.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>' : '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#64748b" stroke-width="1.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>'}
                             </button>
                         </td>
                         <td data-label="地区">
@@ -1162,7 +1162,7 @@
             const btn = document.getElementById('btn-resurrect-bl');
             if (btn) {
                 btn.disabled = true;
-                btn.innerText = '⏳ 正在探活复活...';
+                btn.innerText = '正在探活复活...';
             }
             try {
                 const res = await fetch('/api/blacklist/resurrect', { method: 'POST' });
@@ -2290,12 +2290,12 @@
                 const elapsed = Date.now() - start;
                 if (res.ok) {
                     const data = await res.json();
-                    testEl.innerHTML = `<span class="text-success">✅ API 连通正常！(耗时 ${elapsed}ms, 版本: v${escapeHtml(data.version || '2.5.4')}, 状态: ${escapeHtml(data.status || '就绪')})</span>`;
+                    testEl.innerHTML = `<span class="text-success">API 连通正常！(耗时 ${elapsed}ms, 版本: v${escapeHtml(data.version || '2.5.4')}, 状态: ${escapeHtml(data.status || '就绪')})</span>`;
                 } else {
-                    testEl.innerHTML = `<span class="text-danger">❌ API 测试返回异常 (HTTP ${res.status})</span>`;
+                    testEl.innerHTML = `<span class="text-danger">API 测试返回异常 (HTTP ${res.status})</span>`;
                 }
             } catch (err) {
-                testEl.innerHTML = `<span class="text-danger">❌ 无法连接到 API: ${escapeHtml(err.message)}</span>`;
+                testEl.innerHTML = `<span class="text-danger">无法连接到 API: ${escapeHtml(err.message)}</span>`;
             }
         }
 
@@ -2500,7 +2500,7 @@
                 if (!res.ok || !ret.ok) {
                     isUpdating = false;
                     updateBtns.forEach(b => b && (b.disabled = false));
-                    progressSteps.forEach(s => s && (s.textContent = `❌ ${ret.error || '更新失败'}`));
+                    progressSteps.forEach(s => s && (s.textContent = `${ret.error || '更新失败'}`));
                     alert('系统更新失败: ' + (ret.error || '未知错误'));
                     return;
                 }
@@ -2508,7 +2508,7 @@
                 // Success! Service is restarting
                 let countdown = 5;
                 const updateMsg = escapeHtml(ret.message || '更新完成！');
-                progressSteps.forEach(s => s && (s.innerHTML = `🎉 <strong>${updateMsg}</strong> 页面将在 <strong>${countdown}</strong> 秒后自动刷新...`));
+                progressSteps.forEach(s => s && (s.innerHTML = `<strong>${updateMsg}</strong> 页面将在 <strong>${countdown}</strong> 秒后自动刷新...`));
 
                 const timer = setInterval(() => {
                     countdown--;
@@ -2516,14 +2516,14 @@
                         clearInterval(timer);
                         window.location.reload();
                     } else {
-                        progressSteps.forEach(s => s && (s.innerHTML = `🎉 <strong>${updateMsg}</strong> 页面将在 <strong>${countdown}</strong> 秒后自动刷新...`));
+                        progressSteps.forEach(s => s && (s.innerHTML = `<strong>${updateMsg}</strong> 页面将在 <strong>${countdown}</strong> 秒后自动刷新...`));
                     }
                 }, 1000);
 
             } catch (err) {
                 isUpdating = false;
                 updateBtns.forEach(b => b && (b.disabled = false));
-                progressSteps.forEach(s => s && (s.textContent = `❌ 网络异常: ${err}`));
+                progressSteps.forEach(s => s && (s.textContent = `网络异常: ${err}`));
                 alert('请求更新失败: ' + err);
             }
         }

@@ -120,4 +120,4 @@ npm --prefix web run test:ui
 ./scripts/release.sh 2.5.2
 ```
 
-推送 Tag 后，GitHub Actions 会自动接管编译并在 GitHub Releases 中发布包含 4 大架构共 9 个完整产物的发行版。服务器只需执行 `ml update` 即可完成极速升级。
+推送 Tag 后，GitHub Actions 会自动接管编译并在 GitHub Releases 中发布包含 4 大架构共 9 个完整产物的发行版。服务器只需执行 `nx update` 即可完成极速升级。

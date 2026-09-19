@@ -50,7 +50,7 @@
        │                  ├─ 生成 SHA256SUMS.txt
        │                  └─ 创建 GitHub Release 并上传 9 个附件
        ▼
-[ 5. 生产环境升级 ] ──► (在各服务器执行 `ml update` 自动拉取并重启)
+[ 5. 生产环境升级 ] ──► (在各服务器执行 `nx update` 自动拉取并重启)
 ```
 
 ---
@@ -171,7 +171,7 @@ dist/
 
 ### 2. 必须包含未压缩 ELF 的关键设计原因
 
-- **`ml update` 极速更新机制**：生产环境中的终端管理脚本 `install.sh` 在执行自动升级时，直接拉取 `aimilivpn_linux_${GO_ARCH}` 原生 ELF。
+- **`nx update` 极速更新机制**：生产环境中的终端管理脚本 `install.sh` 在执行自动升级时，直接拉取 `aimilivpn_linux_${GO_ARCH}` 原生 ELF。
 - **避免依赖与解压失败**：某些精简或容器化生产环境未预装 `gzip` 或权限受限，直接校验 ELF 文件的 `head -c 4` 是否包含 `ELF` 标识并比对 SHA-256，保障 100% 成功替换运行。
 - **双轨兼顾**：同时上传 `.gz` 格式满足手动网络受限用户的轻量下载需求。
 
@@ -224,10 +224,10 @@ dist/
 
 ```bash
 # 快捷升级命令
-ml update
+nx update
 
 # 或进入主菜单选择 "9) 检查并更新核心程序"
-ml
+nx
 ```
 
 **更新过程日志预期**：
@@ -268,7 +268,7 @@ curl -s http://localhost:8964/api/tunnels | jq '.data[] | {id, node: .node.ip, u
 | :--- | :--- | :--- |
 | `无法获取可信 SHA256SUMS.txt` | 节点到 GitHub 网络波动，或者 Release 尚未上传完成 | 等待 Release 流水线就绪，脚本会自动轮询国内高速代理镜像源重试 |
 | `下载文件 SHA-256 校验失败` | 附件被中间网络篡改或上传未完成 | 重新触发 Release 流水线发布，或使用源码就地编译方式更新 |
-| `ml: command not found` | 软链接丢失 | 执行 `ln -sf /opt/aimilivpn/install.sh /usr/bin/ml && chmod +x /usr/bin/ml` |
+| `nx: command not found` | 快捷命令丢失 | 执行 `cat > /usr/bin/nx <<'EOF'\n#!/usr/bin/env bash\nexec bash /opt/aimilivpn/install.sh "$@"\nEOF\nchmod +x /usr/bin/nx` |
 
 ### 2. 服务端版本快速回滚
 

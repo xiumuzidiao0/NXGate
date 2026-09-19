@@ -75,7 +75,7 @@ AimiliVPN 是基于 Go 语言重构的高性能 Linux 出口网关系统。其�
 ┌──────────────────────────────────────▼──────────────────────────────────────┐
 │ 5. 控制台与交互层 (Management UI & CLI)                                     │
 │    - 嵌入式现代 WebUI: 7 级深空 Surface 色阶、Geist 字体、Playwright 4端适配│
-│    - 终端 TUI 控制脚本: ml 快速管理菜单、ml update 极速更新                 │
+│    - 终端 TUI 控制脚本: nx 快速管理菜单、nx update 极速更新                 │
 │    - Telegram 运维机器人: 告警推送与对话控制 (/status, /tunnels, /rotate)    │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -138,16 +138,16 @@ AimiliVPN 是基于 Go 语言重构的高性能 Linux 出口网关系统。其�
 | **Web 管理控制台** | `http://47.238.2.197:8787/enter` | 账号：`xmzd` / 密码：`a18979346882` |
 | **本地自适应代理端口** | `127.0.0.1:7928` | HTTP/HTTPS CONNECT/SOCKS5/UDP |
 | **安装与运行目录** | `/opt/aimilivpn/` | 包含二进制、配置、运行时 tun 证书等 |
-| **终端快捷管理命令** | `ml` (软链接至 `/opt/aimilivpn/install.sh`) | 在服务器终端任意位置执行 |
+| **终端快捷管理命令** | `nx` (软链接至 `/opt/aimilivpn/install.sh`) | 在服务器终端任意位置执行 |
 
 ### 2. 常用运维与管理指令
 
 ```bash
 # 1. 极速更新至最新 Release 发行构建 (自动拉取未压缩 ELF 并比对 SHA-256)
-ml update
+nx update
 
 # 2. 交互式 TUI 管理控制面板 (查看节点、启停服务、修改端口、配置 TG 等)
-ml
+nx
 
 # 3. 检查系统后台服务状态
 systemctl status aimilivpn
@@ -206,7 +206,7 @@ curl -s http://localhost:8964/api/tunnels | jq '.data[] | {id, ip: .node.ip, unl
 5. 自动完成 commit 并打上 Git Tag `v2.5.2`；
 6. 推送至 GitHub 并唤起 GitHub Actions 自动编译与附件上传。
 
-发布完成后，线上任意服务器只需执行 `ml update` 即可完成秒级升级！
+发布完成后，线上任意服务器只需执行 `nx update` 即可完成秒级升级！
 
 ---
 
@@ -228,7 +228,7 @@ aimili-vpngate-go/
 │   ├── CICD_AND_TESTING_GUIDE.md   # CI/CD 发布与测试流程标准化指南
 │   ├── FREESUB_COMPARISON.md       # 与 freesub 项目技术特性深度对比分析
 │   └── PROJECT_HANDOVER.md         # [当前文件] 项目交接与工程维护文档 (系统全景/生产运维/故障排查)
-├── install.sh                 # Linux 一键安装、服务部署与终端管理脚本 (ml)
+├── install.sh                 # Linux 一键安装、服务部署与终端管理脚本 (nx)
 ├── pkg/
 │   ├── config/                # 配置加载、版本定义 (version.go)
 │   ├── nodes/                 # 节点拉取、端口预检 (pool.go)、住宅IP分类 (residential.go)
@@ -255,7 +255,7 @@ aimili-vpngate-go/
 
 ## 七、 常见问题排查 (Troubleshooting)
 
-### 1. `ml update` 下载失败并回退到源码编译
+### 1. `nx update` 下载失败并回退到源码编译
 - **原因**：Release 附件中缺少对应架构未压缩的 ELF 文件，或者 `SHA256SUMS.txt` 校验和未更新。
 - **排查与解决**：
   - 检查 GitHub Release 页面是否包含未压缩的 `aimilivpn_linux_amd64` 等 9 个文件；
