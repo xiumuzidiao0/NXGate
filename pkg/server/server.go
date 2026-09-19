@@ -108,6 +108,11 @@ func (s *Server) Start(ctx context.Context) error {
 	mux.HandleFunc("POST /api/singbox/subscription/sync", s.handleSingBoxSyncSub)
 	mux.HandleFunc("POST /api/singbox/subscription/init", s.handleSingBoxInitSub)
 
+	// Self-Update & Version Checking APIs
+	mux.HandleFunc("GET /api/update/check", s.handleCheckUpdate)
+	mux.HandleFunc("POST /api/update/trigger", s.handleTriggerUpdate)
+	mux.HandleFunc("GET /api/update/status", s.handleGetUpdateStatus)
+
 	// Static UI file server
 	fileServer := http.FileServer(web.GetFileSystem())
 	mux.Handle("/", fileServer)
