@@ -326,10 +326,10 @@
                     <option value="mobile">移动蜂窝网络 IP</option>
                 </select>
                 <select id="sort-filter" class="input-field" aria-label="节点排序方式" data-change-action="renderNodes">
-                    <option value="latency_asc">排序: 按测速延迟 (低 ➔ 高)</option>
-                    <option value="speed_desc">排序: 按节点带宽 (大 ➔ 小)</option>
-                    <option value="score_desc">排序: 按综合评分 (高 ➔ 低)</option>
-                    <option value="ping_asc">排序: 按原始 Ping (快 ➔ 慢)</option>
+                    <option value="latency_asc">排序: 按测速延迟 (从低到高)</option>
+                    <option value="speed_desc">排序: 按节点带宽 (从大到小)</option>
+                    <option value="score_desc">排序: 按综合评分 (从高到低)</option>
+                    <option value="ping_asc">排序: 按原始 Ping (从快到慢)</option>
                 </select>
                 <span id="filtered-count"  class="filtered-count">共加载 0 个节点</span>
             </div>
@@ -376,8 +376,8 @@
             <div class="modal-tabs">
                 <button type="button" class="modal-tab-btn active" id="tab-btn-base" data-action="switchSettingsTab" data-args="[&quot;base&quot;]">基础与网络</button>
                 <button type="button" class="modal-tab-btn" id="tab-btn-tg" data-action="switchSettingsTab" data-args="[&quot;tg&quot;]">Telegram 告警</button>
-                <button type="button" class="modal-tab-btn" id="tab-btn-app" data-action="switchSettingsTab" data-args="[&quot;app&quot;]">📱 移动端连接</button>
-                <button type="button" class="modal-tab-btn" id="tab-btn-update" data-action="switchSettingsTab" data-args="[&quot;update&quot;]">🚀 系统更新 <span id="settings-update-badge" class="badge-new hidden">NEW</span></button>
+                <button type="button" class="modal-tab-btn" id="tab-btn-app" data-action="switchSettingsTab" data-args="[&quot;app&quot;]">移动端连接</button>
+                <button type="button" class="modal-tab-btn" id="tab-btn-update" data-action="switchSettingsTab" data-args="[&quot;update&quot;]">系统更新 <span id="settings-update-badge" class="badge-new hidden">NEW</span></button>
             </div>
 
             <form id="settings-form" data-submit-action="saveSettings">
@@ -437,7 +437,7 @@
                     <div class="card p-4 text-center mt-3" style="background: var(--bg-card-sub); border: 1px dashed var(--border);">
                         <div class="text-base font-semibold mb-2">一键生成移动端扫码导入凭据</div>
                         <div class="text-sm text-muted mb-3">点击下方按钮打开高清二维码与导入专属链接 (URI/JSON)，在手机 App 端使用相机扫描即可秒级录入本服务器。</div>
-                        <button type="button" class="btn btn-sm" data-action="openMobileAppModal">📱 打开扫码导入二维码面板</button>
+                        <button type="button" class="btn btn-sm" data-action="openMobileAppModal">打开扫码导入二维码面板</button>
                     </div>
                 </div>
 
@@ -452,7 +452,7 @@
                                 <span class="text-xs text-muted">当前已安装版本</span>
                                 <strong id="update-cur-ver" class="mono text-base">v2.5.6</strong>
                             </div>
-                            <div class="update-arrow">➔</div>
+                            <div class="update-arrow">&rarr;</div>
                             <div class="update-ver-item">
                                 <span class="text-xs text-muted">远端最新版本</span>
                                 <strong id="update-latest-ver" class="mono text-base text-accent">检查中...</strong>
@@ -609,10 +609,10 @@
 
                     <div class="proto-filter-bar">
                         <button type="button" class="pill-btn active" data-action="filterProtoGrid" data-args="[&quot;all&quot;]">全部 (22)</button>
-                        <button type="button" class="pill-btn" data-action="filterProtoGrid" data-args="[&quot;recommended&quot;]">⭐ 推荐免域名 (5)</button>
-                        <button type="button" class="pill-btn" data-action="filterProtoGrid" data-args="[&quot;popular&quot;]">🌐 经典穿透 (4)</button>
-                        <button type="button" class="pill-btn" data-action="filterProtoGrid" data-args="[&quot;cdn&quot;]">☁️ CDN/域名TLS (9)</button>
-                        <button type="button" class="pill-btn" data-action="filterProtoGrid" data-args="[&quot;raw&quot;]">⚡ 原生传输 (4)</button>
+                        <button type="button" class="pill-btn" data-action="filterProtoGrid" data-args="[&quot;recommended&quot;]">推荐免域名 (5)</button>
+                        <button type="button" class="pill-btn" data-action="filterProtoGrid" data-args="[&quot;popular&quot;]">经典穿透 (4)</button>
+                        <button type="button" class="pill-btn" data-action="filterProtoGrid" data-args="[&quot;cdn&quot;]">CDN/域名TLS (9)</button>
+                        <button type="button" class="pill-btn" data-action="filterProtoGrid" data-args="[&quot;raw&quot;]">原生传输 (4)</button>
                     </div>
 
                     <div class="proto-choice-container">
@@ -883,7 +883,7 @@
                         <span class="text-xs text-muted">当前版本</span>
                         <strong id="modal-update-cur-ver" class="mono text-base">v2.5.6</strong>
                     </div>
-                    <div class="update-arrow">➔</div>
+                    <div class="update-arrow">&rarr;</div>
                     <div class="update-ver-item">
                         <span class="text-xs text-muted">最新版本</span>
                         <strong id="modal-update-latest-ver" class="mono text-base text-accent">检查中...</strong>
@@ -1046,7 +1046,7 @@
                 <label class="form-label">代理密码</label>
                 <div class="flex gap-2">
                     <input id="rule-auth-pass" class="input-field w-full"  type="text" placeholder="设置代理密码">
-                    <button type="button" class="btn btn-outline btn-sm whitespace-nowrap" data-action="generateRandomPortAuth">🎲 随机生成</button>
+                    <button type="button" class="btn btn-outline btn-sm whitespace-nowrap" data-action="generateRandomPortAuth">随机生成</button>
                 </div>
             </div>
         </div>

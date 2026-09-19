@@ -214,11 +214,15 @@ func (s *Server) handleTriggerUpdate(w http.ResponseWriter, r *http.Request) {
 		Version: cleanLatest,
 	})
 
-	// Graceful trigger of systemd service restart
+	// Graceful trigger of systemd or OpenRC service restart
 	go func() {
 		time.Sleep(1200 * time.Millisecond)
 		if runtime.GOOS == "linux" {
-			_ = exec.Command("systemctl", "restart", "aimilivpn").Run()
+			if _, err := exec.LookPath("systemctl"); err == nil {
+				_ = exec.Command("systemctl", "restart", "aimilivpn").Run()
+			} else if _, err := exec.LookPath("rc-service"); err == nil {
+				_ = exec.Command("rc-service", "aimilivpn", "restart").Run()
+			}
 		}
 	}()
 }
@@ -396,8 +400,16 @@ func PerformSelfUpdate(ctx context.Context, targetVer string) error {
 }
 
 func resolveBinaryDestination() string {
+	// 1. If standard production directory /opt/aimilivpn exists, always target it
+	if fi, err := os.Stat("/opt/aimilivpn"); err == nil && fi.IsDir() {
+		return "/opt/aimilivpn/aimilivpn"
+	}
+	// 2. Otherwise use the currently running executable location, resolving any symlinks
 	execPath, err := os.Executable()
-	if err == nil && execPath != "" && strings.Contains(execPath, "aimilivpn") {
+	if err == nil && execPath != "" {
+		if realPath, err := filepath.EvalSymlinks(execPath); err == nil && realPath != "" {
+			return realPath
+		}
 		return execPath
 	}
 	return "/opt/aimilivpn/aimilivpn"
@@ -418,8 +430,14 @@ func fetchExpectedSHA256(ctx context.Context, targetVer, targetFileName string) 
 			for _, line := range strings.Split(content, "\n") {
 				fields := strings.Fields(line)
 				if len(fields) >= 2 {
-					hash := strings.ToLower(fields[0])
-					name := strings.TrimPrefix(fields[1], "*")
+					var hash, name string
+					if len(fields[0]) == 64 {
+						hash = strings.ToLower(fields[0])
+						name = filepath.Base(strings.TrimPrefix(fields[1], "*"))
+					} else if len(fields[1]) == 64 {
+						hash = strings.ToLower(fields[1])
+						name = filepath.Base(strings.TrimPrefix(fields[0], "*"))
+					}
 					if name == targetFileName && len(hash) == 64 {
 						return hash, nil
 					}

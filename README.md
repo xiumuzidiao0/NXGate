@@ -233,7 +233,7 @@ curl -sSL https://raw.githubusercontent.com/xiumuzidiao0/NXGate/main/install.sh 
 
 ### CLI 快捷指令参考
 
-在服务器任意终端位置，使用 `nx`（或兼容别名 `ml`）进行管理：
+在服务器任意终端位置，使用 `nx` 进行管理：
 
 ```bash
 nx               # 唤出终端交互式可视化控制中心

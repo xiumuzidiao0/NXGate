@@ -128,7 +128,12 @@ download_release_binary() {
         fi
 
         local expected_hash
-        expected_hash=$(curl -sSL -f -m 20 "$checksum_url" 2>/dev/null | awk -v file="aimilivpn_linux_${GO_ARCH}" '$2 == file || $2 == "*" file {print $1; exit}' | tr '[:upper:]' '[:lower:]')
+        expected_hash=$(curl -sSL -f -m 20 "$checksum_url" 2>/dev/null | awk -v file="aimilivpn_linux_${GO_ARCH}" '{
+            gsub(/\r/, "");
+            f1=$1; f2=$2; sub(/^\*/, "", f2); sub(/^\.\//, "", f2);
+            if (f2 == file && length(f1) == 64) { print f1; exit }
+            if (f1 == file && length(f2) == 64) { print f2; exit }
+        }' | tr '[:upper:]' '[:lower:]')
         if [[ ! "$expected_hash" =~ ^[0-9a-fA-F]{64}$ ]]; then
             echo -e "${YELLOW}  -> 无法获取可信 SHA256SUMS.txt，跳过该下载源${PLAIN}"
             continue
@@ -454,10 +459,10 @@ build_and_deploy() {
     register_shortcuts
 }
 
-# 7.4 注册全局快捷命令 (nx, ml, aimili)
+# 7.4 注册全局快捷命令 (nx, aimili, nxgate)
 register_shortcuts() {
-    # 彻底清理所有历史残留的可能指向 BIN_PATH 的危险软链接，防止 cp 穿透覆盖内核程序
-    rm -f /usr/bin/nxgate /usr/local/bin/nxgate /usr/bin/aimilivpn /usr/local/bin/aimilivpn
+    # 彻底清理所有历史残留的可能指向 BIN_PATH 的危险软链接与弃用的 ml 兼容命令
+    rm -f /usr/bin/nxgate /usr/local/bin/nxgate /usr/bin/aimilivpn /usr/local/bin/aimilivpn /usr/bin/ml /usr/local/bin/ml
 
     cat > /usr/bin/nx <<'EOF'
 #!/usr/bin/env bash
@@ -469,8 +474,6 @@ fi
 EOF
     chmod +x /usr/bin/nx
     cp -f /usr/bin/nx /usr/local/bin/nx 2>/dev/null || true
-    cp -f /usr/bin/nx /usr/bin/ml 2>/dev/null || true
-    cp -f /usr/bin/nx /usr/local/bin/ml 2>/dev/null || true
     cp -f /usr/bin/nx /usr/bin/aimili 2>/dev/null || true
     cp -f /usr/bin/nx /usr/local/bin/aimili 2>/dev/null || true
     cp -f /usr/bin/nx /usr/bin/nxgate 2>/dev/null || true
@@ -641,7 +644,7 @@ print_install_success() {
     echo -e " ${BOLD}本地自适应代理${PLAIN} : ${GREEN}127.0.0.1:${proxy_port}${PLAIN} (HTTP/HTTPS/SOCKS5 单端口)"
     echo -e " ${BOLD}边缘抗封锁网关${PLAIN} : ${sb_status} (VLESS-REALITY / Hysteria2)"
     echo -e " ${BOLD}当前程序版本${PLAIN}   : ${YELLOW}v${ver}${PLAIN}"
-    echo -e " ${BOLD}终端管理命令${PLAIN}   : 在终端随时输入 ${CYAN}nx${PLAIN} (或 ${CYAN}ml${PLAIN}) 唤出管理控制中心"
+    echo -e " ${BOLD}终端管理命令${PLAIN}   : 在终端随时输入 ${CYAN}nx${PLAIN} 唤出管理控制中心"
     echo -e " ${YELLOW}⚠️ 访问提示${PLAIN}       : 1. 访问时请务必带上后缀路径: ${CYAN}/${path}/${PLAIN} (未带路径将隐藏返回 404)"
     echo -e "                   2. 请确认云厂商控制台安全组已放行 ${CYAN}TCP ${port}${PLAIN} 入站端口"
     echo -e "${GREEN}==================================================================${PLAIN}\n"
