@@ -35,7 +35,9 @@ func (hub *SSEHub) HandleEvents(w http.ResponseWriter, r *http.Request) {
 	defer ticker.Stop()
 
 	// Initial ping
-	_, _ = fmt.Fprintf(w, ": connected\n\n")
+	if _, err := fmt.Fprintf(w, ": connected\n\n"); err != nil {
+		return
+	}
 	flusher.Flush()
 
 	ctx := r.Context()
@@ -50,7 +52,9 @@ func (hub *SSEHub) HandleEvents(w http.ResponseWriter, r *http.Request) {
 			}
 			data, err := json.Marshal(entry)
 			if err == nil {
-				_, _ = fmt.Fprintf(w, "event: log\ndata: %s\n\n", data)
+				if _, err := fmt.Fprintf(w, "event: log\ndata: %s\n\n", data); err != nil {
+					return
+				}
 				flusher.Flush()
 			}
 
@@ -59,7 +63,9 @@ func (hub *SSEHub) HandleEvents(w http.ResponseWriter, r *http.Request) {
 			state := hub.server.buildStatusResponse()
 			data, err := json.Marshal(state)
 			if err == nil {
-				_, _ = fmt.Fprintf(w, "event: status\ndata: %s\n\n", data)
+				if _, err := fmt.Fprintf(w, "event: status\ndata: %s\n\n", data); err != nil {
+					return
+				}
 				flusher.Flush()
 			}
 		}

@@ -41,6 +41,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -65,6 +67,7 @@ fun GlobalServerSwitcherTitle(
     var showSheet by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
+    val haptic = LocalHapticFeedback.current
 
     var dragOffset by remember { mutableFloatStateOf(0f) }
     val dragThreshold = 70f
@@ -73,9 +76,11 @@ fun GlobalServerSwitcherTitle(
         dragOffset += delta
         if (dragOffset > dragThreshold) {
             dragOffset = 0f
+            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
             onPreviousServer()
         } else if (dragOffset < -dragThreshold) {
             dragOffset = 0f
+            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
             onNextServer()
         }
     }
@@ -160,6 +165,7 @@ fun GlobalServerSwitcherTitle(
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(16.dp))
                                 .clickable {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                     onSelectServer(server.id)
                                     scope.launch { sheetState.hide() }.invokeOnCompletion {
                                         showSheet = false
@@ -203,13 +209,14 @@ fun GlobalServerSwitcherTitle(
                                         )
                                         Spacer(Modifier.width(8.dp))
                                         Text(
-                                            text = "${server.latencyMs}ms",
+                                            text = if (server.isOnline && server.latencyMs > 0) "${server.latencyMs}ms" else "待测",
                                             style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.primary
+                                            color = if (server.isOnline) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
                                         )
                                     }
+                                    val exitDesc = if (server.exitIp.isNotEmpty()) "${server.exitIp} (${server.ipType.ifEmpty { "出口" }})" else "待测"
                                     Text(
-                                        text = "${server.host}:${server.port} • 出口: ${server.exitIp} (${server.ipType})",
+                                        text = "${server.host}:${server.port} • 出口: $exitDesc",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = if (isCurrent) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
                                     )

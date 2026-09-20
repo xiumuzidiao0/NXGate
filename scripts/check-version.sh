@@ -41,7 +41,13 @@ sync_version() {
     sed -i -E "s#id=\"app-version-badge\" class=\"badge badge-accent\">v[^<]+<#id=\"app-version-badge\" class=\"badge badge-accent\">v${target_ver}<#g" web/dist/index.html
     echo -e "  [✓] 已更新 web/dist/index.html 徽章 -> v${target_ver}"
 
-    echo -e "\n${GREEN}🎉 全部 4 处核心版本定义已统一同步至 v${target_ver}！${PLAIN}\n"
+    # 5. android/app/build.gradle.kts
+    if [ -f "android/app/build.gradle.kts" ]; then
+        sed -i -E "s/versionName = \".*\"/versionName = \"${target_ver}\"/" android/app/build.gradle.kts
+        echo -e "  [✓] 已更新 android/app/build.gradle.kts -> versionName = \"${target_ver}\""
+    fi
+
+    echo -e "\n${GREEN}🎉 全部 5 处核心版本定义已统一同步至 v${target_ver}！${PLAIN}\n"
 }
 
 check_versions() {

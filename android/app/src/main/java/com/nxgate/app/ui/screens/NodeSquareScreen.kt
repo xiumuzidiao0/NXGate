@@ -68,8 +68,14 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.nxgate.app.NXGateApplication
@@ -293,6 +299,7 @@ fun NodeSquareScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val haptic = LocalHapticFeedback.current
 
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
@@ -393,42 +400,61 @@ fun NodeSquareScreen(
         }
     }
 
-    // Dynamic filtering across all nodes
-    val filteredNodes = remember(allNodes, selectedChipIndex, selectedCountryOption, selectedIpTypeOption, selectedSortOption, searchQuery) {
-        var list = allNodes.filter { node ->
-            val matchesQuery = searchQuery.isEmpty() ||
-                    node.ip.contains(searchQuery, ignoreCase = true) ||
-                    node.countryShort.contains(searchQuery, ignoreCase = true) ||
-                    node.countryLong.contains(searchQuery, ignoreCase = true) ||
-                    node.isp.contains(searchQuery, ignoreCase = true)
+    // Debounced search query & dynamic filtering across all nodes on Dispatchers.Default
+    var debouncedSearchQuery by remember { mutableStateOf(searchQuery) }
+    LaunchedEffect(searchQuery) {
+        if (searchQuery.isEmpty()) {
+            debouncedSearchQuery = ""
+        } else {
+            delay(200)
+            debouncedSearchQuery = searchQuery
+        }
+    }
 
-            val matchesCountry = selectedCountryOption.code.isEmpty() ||
-                    node.countryShort.equals(selectedCountryOption.code, ignoreCase = true)
+    var filteredNodes by remember { mutableStateOf<List<NodeCandidate>>(emptyList()) }
+    LaunchedEffect(allNodes, selectedChipIndex, selectedCountryOption, selectedIpTypeOption, selectedSortOption, debouncedSearchQuery) {
+        withContext(Dispatchers.Default) {
+            val q = debouncedSearchQuery.trim()
+            val countryCode = selectedCountryOption.code
+            val ipKey = selectedIpTypeOption.key
+            val chipIdx = selectedChipIndex
+            val sortKey = selectedSortOption.key
 
-            val matchesIpType = when (selectedIpTypeOption.key) {
-                "residential" -> node.ipType == "residential"
-                "hosting" -> node.ipType == "hosting"
-                else -> true
+            var list = allNodes.filter { node ->
+                val matchesQuery = q.isEmpty() ||
+                        node.ip.contains(q, ignoreCase = true) ||
+                        node.countryShort.contains(q, ignoreCase = true) ||
+                        node.countryLong.contains(q, ignoreCase = true) ||
+                        node.isp.contains(q, ignoreCase = true)
+
+                val matchesCountry = countryCode.isEmpty() ||
+                        node.countryShort.equals(countryCode, ignoreCase = true)
+
+                val matchesIpType = when (ipKey) {
+                    "residential" -> node.ipType == "residential"
+                    "hosting" -> node.ipType == "hosting"
+                    else -> true
+                }
+
+                val matchesChip = when (chipIdx) {
+                    1 -> node.isFavorite
+                    2 -> node.countryShort.equals("JP", ignoreCase = true)
+                    3 -> node.countryShort.equals("US", ignoreCase = true)
+                    4 -> node.ipType == "residential"
+                    5 -> node.openai == "unlocked" && node.claude == "unlocked" && node.gemini == "unlocked"
+                    else -> true
+                }
+                matchesQuery && matchesCountry && matchesIpType && matchesChip
             }
 
-            val matchesChip = when (selectedChipIndex) {
-                1 -> node.isFavorite
-                2 -> node.countryShort.equals("JP", ignoreCase = true)
-                3 -> node.countryShort.equals("US", ignoreCase = true)
-                4 -> node.ipType == "residential"
-                5 -> node.openai == "unlocked" && node.claude == "unlocked" && node.gemini == "unlocked"
-                else -> true
+            list = when (sortKey) {
+                "latency_asc" -> list.sortedBy { if (it.latencyMs > 0) it.latencyMs else 9999 }
+                "speed_desc" -> list.sortedByDescending { it.speedBps }
+                "score_desc" -> list.sortedByDescending { it.score }
+                else -> list
             }
-            matchesQuery && matchesCountry && matchesIpType && matchesChip
+            filteredNodes = list
         }
-
-        list = when (selectedSortOption.key) {
-            "latency_asc" -> list.sortedBy { if (it.latencyMs > 0) it.latencyMs else 9999 }
-            "speed_desc" -> list.sortedByDescending { it.speedBps }
-            "score_desc" -> list.sortedByDescending { it.score }
-            else -> list
-        }
-        list
     }
 
     Scaffold(
@@ -675,6 +701,7 @@ fun NodeSquareScreen(
                                             Toast.makeText(context, "正在请求将 [${node.countryLong.ifEmpty { node.countryShort }} ${node.ip}] 设为系统主出口...", Toast.LENGTH_SHORT).show()
                                             val res = NXGateApplication.instance.apiClient.connectMaster(activeServer, node.id)
                                             if (res.isSuccess) {
+                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                                 activeMasterIp = node.ip
                                                 Toast.makeText(context, "已将 [${node.countryLong.ifEmpty { node.countryShort }} ${node.ip}] 设为主网关出口", Toast.LENGTH_SHORT).show()
                                                 refreshAllNodes()
@@ -688,6 +715,7 @@ fun NodeSquareScreen(
                                 onToggleFavorite = {
                                     if (activeServer != null) {
                                         scope.launch {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                             NXGateApplication.instance.apiClient.toggleFavorite(activeServer, node.id)
                                             allNodes = allNodes.map { if (it.id == node.id) it.copy(isFavorite = !it.isFavorite) else it }
                                             Toast.makeText(context, if (!node.isFavorite) "已收藏 [${node.ip}]" else "已取消收藏", Toast.LENGTH_SHORT).show()
@@ -697,6 +725,7 @@ fun NodeSquareScreen(
                                 onStartTunnel = {
                                     if (activeServer != null) {
                                         scope.launch {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                             NXGateApplication.instance.apiClient.startTunnel(activeServer, node.id)
                                             Toast.makeText(context, "已在 [${activeServer.name}] 为该节点拉起独立并发网卡！", Toast.LENGTH_SHORT).show()
                                         }
@@ -707,6 +736,7 @@ fun NodeSquareScreen(
                                         scope.launch {
                                             val res = NXGateApplication.instance.apiClient.addBlacklist(activeServer, node.id, node.ip, node.countryShort)
                                             if (res.isSuccess) {
+                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                                 allNodes = allNodes.filter { it.id != node.id }
                                                 Toast.makeText(context, "已将节点 [${node.ip}] 移入 24 小时隔离屏蔽库", Toast.LENGTH_SHORT).show()
                                                 val blRes = NXGateApplication.instance.apiClient.fetchBlacklist(activeServer)
@@ -741,6 +771,7 @@ fun NodeSquareScreen(
                                             Toast.makeText(context, "正在请求将 [${node.countryLong.ifEmpty { node.countryShort }} ${node.ip}] 设为系统主出口...", Toast.LENGTH_SHORT).show()
                                             val res = NXGateApplication.instance.apiClient.connectMaster(activeServer, node.id)
                                             if (res.isSuccess) {
+                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                                 activeMasterIp = node.ip
                                                 Toast.makeText(context, "已将 [${node.countryLong.ifEmpty { node.countryShort }} ${node.ip}] 设为主网关出口", Toast.LENGTH_SHORT).show()
                                                 refreshAllNodes()
@@ -754,6 +785,7 @@ fun NodeSquareScreen(
                                 onToggleFavorite = {
                                     if (activeServer != null) {
                                         scope.launch {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                             NXGateApplication.instance.apiClient.toggleFavorite(activeServer, node.id)
                                             allNodes = allNodes.map { if (it.id == node.id) it.copy(isFavorite = !it.isFavorite) else it }
                                             Toast.makeText(context, if (!node.isFavorite) "已收藏 [${node.ip}]" else "已取消收藏", Toast.LENGTH_SHORT).show()
@@ -763,6 +795,7 @@ fun NodeSquareScreen(
                                 onStartTunnel = {
                                     if (activeServer != null) {
                                         scope.launch {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                             NXGateApplication.instance.apiClient.startTunnel(activeServer, node.id)
                                             Toast.makeText(context, "已在 [${activeServer.name}] 为该节点拉起独立并发网卡！", Toast.LENGTH_SHORT).show()
                                         }
@@ -773,6 +806,7 @@ fun NodeSquareScreen(
                                         scope.launch {
                                             val res = NXGateApplication.instance.apiClient.addBlacklist(activeServer, node.id, node.ip, node.countryShort)
                                             if (res.isSuccess) {
+                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                                 allNodes = allNodes.filter { it.id != node.id }
                                                 Toast.makeText(context, "已将节点 [${node.ip}] 移入 24 小时隔离屏蔽库", Toast.LENGTH_SHORT).show()
                                                 val blRes = NXGateApplication.instance.apiClient.fetchBlacklist(activeServer)

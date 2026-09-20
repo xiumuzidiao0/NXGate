@@ -204,14 +204,16 @@ fun ClusterHubScreen(
                                 verticalArrangement = Arrangement.Center
                             ) {
                                 Text(
-                                    text = "${server.name} 在线 ${server.latencyMs}ms",
+                                    text = "${server.name} ${if (server.isOnline && server.latencyMs > 0) "在线 (${server.latencyMs}ms)" else "待测/离线"}",
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Spacer(Modifier.height(8.dp))
+                                val exitText = if (server.exitIp.isNotEmpty()) "${server.exitIp} ${server.ipType}" else "待测/未就绪"
+                                val unlockText = if (server.unlockStatus.isNotEmpty()) server.unlockStatus else "待探测"
                                 Text(
-                                    text = "物理出口：${server.exitIp} ${server.ipType}\n智能解锁：${server.unlockStatus}\n下行 ${server.downSpeedStr}，总计 ${server.totalTrafficStr}，活跃连接 ${server.activeConns}",
+                                    text = "物理出口：$exitText\n智能解锁：$unlockText\n下行 ${server.downSpeedStr}，总计 ${server.totalTrafficStr}，活跃连接 ${server.activeConns}",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurface,
                                     lineHeight = MaterialTheme.typography.bodyMedium.lineHeight * 1.35f

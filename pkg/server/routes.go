@@ -184,6 +184,13 @@ func (s *Server) handleDisconnect(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
+	if s.pool != nil && s.pool.IsRefreshing() {
+		s.writeJSON(w, http.StatusOK, map[string]string{
+			"message": "节点列表刷新任务已在后台执行中，请勿重复操作",
+		})
+		return
+	}
+
 	go func() {
 		_ = s.pool.Refresh(context.Background())
 	}()
@@ -546,7 +553,7 @@ func (s *Server) handleTelegramTest(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusBadRequest, "请先填写并保存 Telegram Bot Token 与 Chat ID")
 		return
 	}
-	err := s.notifier.SendMessage("🔔 <b>测试通知</b>: 这是一条来自 AimiliVPN Web 控制台的 Telegram 连通性测试消息。配置成功！")
+	err := s.notifier.SendMessage("🔔 <b>测试通知</b>: 这是一条来自 NXGate Web 控制台的 Telegram 连通性测试消息。配置成功！")
 	if err != nil {
 		s.writeError(w, http.StatusBadRequest, fmt.Sprintf("发送失败: %v", err))
 		return
@@ -568,25 +575,71 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	tr := stats.GetTrafficTracker().Snapshot()
 	state := s.vpn.Snapshot()
 
-	w.Header().Set("Content-Type", "text/plain; version=0.0.4")
-	_, _ = fmt.Fprintf(w, "# HELP aimili_traffic_upload_bytes_total Total bytes uploaded through proxy\n")
-	_, _ = fmt.Fprintf(w, "# TYPE aimili_traffic_upload_bytes_total counter\n")
-	_, _ = fmt.Fprintf(w, "aimili_traffic_upload_bytes_total %d\n", tr.TotalUploadBytes)
-
-	_, _ = fmt.Fprintf(w, "# HELP aimili_traffic_download_bytes_total Total bytes downloaded through proxy\n")
-	_, _ = fmt.Fprintf(w, "# TYPE aimili_traffic_download_bytes_total counter\n")
-	_, _ = fmt.Fprintf(w, "aimili_traffic_download_bytes_total %d\n", tr.TotalDownloadBytes)
-
-	_, _ = fmt.Fprintf(w, "# HELP aimili_active_connections Current active proxy client connections\n")
-	_, _ = fmt.Fprintf(w, "# TYPE aimili_active_connections gauge\n")
-	_, _ = fmt.Fprintf(w, "aimili_active_connections %d\n", tr.ActiveConnections)
+	var tunnelsOnline int
+	if s.tunnelPool != nil {
+		tunnelsOnline = len(s.tunnelPool.ListTunnels())
+	}
+	var nodeCount, totalNodeCount, blCount int
+	if s.pool != nil {
+		_, _, _, nodeCount, totalNodeCount = s.pool.Status()
+		if s.pool.Blacklist() != nil {
+			blCount = s.pool.Blacklist().Count()
+		}
+	}
 
 	connectedVal := 0
 	if state.TunnelReady {
 		connectedVal = 1
 	}
-	_, _ = fmt.Fprintf(w, "# HELP aimili_vpn_connected Status of VPN tunnel (1 = connected, 0 = disconnected)\n")
-	_, _ = fmt.Fprintf(w, "# TYPE aimili_vpn_connected gauge\n")
+
+	w.Header().Set("Content-Type", "text/plain; version=0.0.4")
+
+	// Modern NXGate Prometheus metrics
+	_, _ = fmt.Fprintf(w, "# HELP nxgate_traffic_upload_bytes_total Total bytes uploaded through proxy\n")
+	_, _ = fmt.Fprintf(w, "# TYPE nxgate_traffic_upload_bytes_total counter\n")
+	_, _ = fmt.Fprintf(w, "nxgate_traffic_upload_bytes_total %d\n", tr.TotalUploadBytes)
+
+	_, _ = fmt.Fprintf(w, "# HELP nxgate_traffic_download_bytes_total Total bytes downloaded through proxy\n")
+	_, _ = fmt.Fprintf(w, "# TYPE nxgate_traffic_download_bytes_total counter\n")
+	_, _ = fmt.Fprintf(w, "nxgate_traffic_download_bytes_total %d\n", tr.TotalDownloadBytes)
+
+	_, _ = fmt.Fprintf(w, "# HELP nxgate_traffic_upload_speed_bps Current upload speed in bytes per second\n")
+	_, _ = fmt.Fprintf(w, "# TYPE nxgate_traffic_upload_speed_bps gauge\n")
+	_, _ = fmt.Fprintf(w, "nxgate_traffic_upload_speed_bps %d\n", tr.UploadSpeedBps)
+
+	_, _ = fmt.Fprintf(w, "# HELP nxgate_traffic_download_speed_bps Current download speed in bytes per second\n")
+	_, _ = fmt.Fprintf(w, "# TYPE nxgate_traffic_download_speed_bps gauge\n")
+	_, _ = fmt.Fprintf(w, "nxgate_traffic_download_speed_bps %d\n", tr.DownloadSpeedBps)
+
+	_, _ = fmt.Fprintf(w, "# HELP nxgate_active_connections Current active proxy client connections\n")
+	_, _ = fmt.Fprintf(w, "# TYPE nxgate_active_connections gauge\n")
+	_, _ = fmt.Fprintf(w, "nxgate_active_connections %d\n", tr.ActiveConnections)
+
+	_, _ = fmt.Fprintf(w, "# HELP nxgate_vpn_connected Status of Primary VPN tunnel (1 = connected, 0 = disconnected)\n")
+	_, _ = fmt.Fprintf(w, "# TYPE nxgate_vpn_connected gauge\n")
+	_, _ = fmt.Fprintf(w, "nxgate_vpn_connected %d\n", connectedVal)
+
+	_, _ = fmt.Fprintf(w, "# HELP nxgate_tunnels_online Total active concurrent egress tunnels\n")
+	_, _ = fmt.Fprintf(w, "# TYPE nxgate_tunnels_online gauge\n")
+	_, _ = fmt.Fprintf(w, "nxgate_tunnels_online %d\n", tunnelsOnline)
+
+	_, _ = fmt.Fprintf(w, "# HELP nxgate_nodes_available Available candidate nodes ready for connection\n")
+	_, _ = fmt.Fprintf(w, "# TYPE nxgate_nodes_available gauge\n")
+	_, _ = fmt.Fprintf(w, "nxgate_nodes_available %d\n", nodeCount)
+
+	_, _ = fmt.Fprintf(w, "# HELP nxgate_nodes_total Total known nodes in historical pool\n")
+	_, _ = fmt.Fprintf(w, "# TYPE nxgate_nodes_total gauge\n")
+	_, _ = fmt.Fprintf(w, "nxgate_nodes_total %d\n", totalNodeCount)
+
+	_, _ = fmt.Fprintf(w, "# HELP nxgate_blacklist_count Number of currently blacklisted nodes\n")
+	_, _ = fmt.Fprintf(w, "# TYPE nxgate_blacklist_count gauge\n")
+	_, _ = fmt.Fprintf(w, "nxgate_blacklist_count %d\n", blCount)
+
+	// Backward-compatible Aimili aliases for existing Prometheus scraping configs
+	_, _ = fmt.Fprintf(w, "\n# Backward-compatible aimili_* aliases\n")
+	_, _ = fmt.Fprintf(w, "aimili_traffic_upload_bytes_total %d\n", tr.TotalUploadBytes)
+	_, _ = fmt.Fprintf(w, "aimili_traffic_download_bytes_total %d\n", tr.TotalDownloadBytes)
+	_, _ = fmt.Fprintf(w, "aimili_active_connections %d\n", tr.ActiveConnections)
 	_, _ = fmt.Fprintf(w, "aimili_vpn_connected %d\n", connectedVal)
 }
 

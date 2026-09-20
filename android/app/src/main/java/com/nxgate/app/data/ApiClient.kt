@@ -11,11 +11,15 @@ import com.nxgate.app.model.MasterGatewayInfo
 import com.nxgate.app.model.NodeCandidate
 import com.nxgate.app.model.PortRuleItem
 import com.nxgate.app.model.ServerProfile
+import com.nxgate.app.model.ServerSseEvent
 import com.nxgate.app.model.ServerStatusData
 import com.nxgate.app.model.SingBoxOverviewData
 import com.nxgate.app.model.SystemLogEntry
 import com.nxgate.app.model.TunnelItem
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.withContext
 import okhttp3.Credentials
 import okhttp3.MediaType.Companion.toMediaType
@@ -23,9 +27,17 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
+import okhttp3.sse.EventSource
+import okhttp3.sse.EventSourceListener
+import okhttp3.sse.EventSources
 import org.json.JSONArray
 import org.json.JSONObject
+import java.security.SecureRandom
+import java.security.cert.X509Certificate
 import java.util.concurrent.TimeUnit
+import javax.net.ssl.SSLContext
+import javax.net.ssl.TrustManager
+import javax.net.ssl.X509TrustManager
 
 class ApiClient {
     private val client = OkHttpClient.Builder()
@@ -33,6 +45,29 @@ class ApiClient {
         .readTimeout(45, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)
         .build()
+
+    private val insecureClient: OkHttpClient by lazy {
+        val trustAllCerts = arrayOf<TrustManager>(
+            object : X509TrustManager {
+                override fun checkClientTrusted(chain: Array<X509Certificate>?, authType: String?) {}
+                override fun checkServerTrusted(chain: Array<X509Certificate>?, authType: String?) {}
+                override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
+            }
+        )
+        val sslContext = SSLContext.getInstance("TLS")
+        sslContext.init(null, trustAllCerts, SecureRandom())
+        OkHttpClient.Builder()
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(45, TimeUnit.SECONDS)
+            .writeTimeout(30, TimeUnit.SECONDS)
+            .sslSocketFactory(sslContext.socketFactory, trustAllCerts[0] as X509TrustManager)
+            .hostnameVerifier { _, _ -> true }
+            .build()
+    }
+
+    private fun getClient(profile: ServerProfile): OkHttpClient {
+        return if (profile.isTls && profile.allowInsecureTls) insecureClient else client
+    }
 
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
@@ -66,12 +101,13 @@ class ApiClient {
     }
 
     private fun executeCall(profile: ServerProfile, path: String, method: String = "GET", bodyJson: String? = null): Response {
+        val httpClient = getClient(profile)
         val req1 = buildRequest(profile, path, method, bodyJson, bypassPath = false)
-        val resp1 = client.newCall(req1).execute()
+        val resp1 = httpClient.newCall(req1).execute()
         if (resp1.code == 404 && profile.path.trim().trim('/').isNotEmpty()) {
             resp1.close()
             val req2 = buildRequest(profile, path, method, bodyJson, bypassPath = true)
-            return client.newCall(req2).execute()
+            return httpClient.newCall(req2).execute()
         }
         return resp1
     }
@@ -677,6 +713,16 @@ class ApiClient {
         }
     }
 
+    suspend fun refreshPool(profile: ServerProfile): Result<Boolean> = withContext(Dispatchers.IO) {
+        try {
+            executeCall(profile, "/api/refresh", "POST", "{}").use { resp ->
+                Result.success(resp.isSuccessful)
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     suspend fun fetchBlacklist(profile: ServerProfile): Result<List<BlacklistRecord>> = withContext(Dispatchers.IO) {
         try {
             executeCall(profile, "/api/blacklist").use { resp ->
@@ -735,6 +781,126 @@ class ApiClient {
         }
     }
 
+    /**
+     * 订阅远端服务端的 /api/events SSE 长连接事件流 (终结 3秒短轮询)
+     */
+    fun subscribeServerEvents(profile: ServerProfile): Flow<ServerSseEvent> = callbackFlow {
+        val req = buildRequest(profile, "/api/events", bypassPath = false)
+        val httpClient = getClient(profile)
+        val factory = EventSources.createFactory(httpClient)
+
+        val listener = object : EventSourceListener() {
+            override fun onOpen(eventSource: EventSource, response: Response) {
+                trySend(ServerSseEvent.Connected)
+            }
+
+            override fun onEvent(eventSource: EventSource, id: String?, type: String?, data: String) {
+                try {
+                    when (type) {
+                        "status" -> {
+                            val json = JSONObject(data)
+                            val vpnObj = json.optJSONObject("vpn")
+                            val activeNode = vpnObj?.optString("active_node_id", "") ?: ""
+                            val status = vpnObj?.optString("status", "disconnected") ?: "disconnected"
+                            val uptimeSec = vpnObj?.optLong("uptime_seconds", 0) ?: 0
+                            val hours = uptimeSec / 3600
+                            val mins = (uptimeSec % 3600) / 60
+                            val uptimeStr = if (hours > 0) "${hours}小时${mins}分" else "${mins}分钟"
+                            val isConnected = status == "connected"
+                            val masterInfo = MasterGatewayInfo(
+                                devName = "主网卡零号 (tun0)",
+                                nodeName = if (activeNode.isNotEmpty()) activeNode else "未连接",
+                                uptimeStr = uptimeStr,
+                                status = if (isConnected) "断流检测通过" else "未连接",
+                                isConnected = isConnected
+                            )
+
+                            val trafficObj = json.optJSONObject("traffic")
+                            val traffic = if (trafficObj != null) {
+                                LiveTrafficInfo(
+                                    downloadSpeedBps = trafficObj.optLong("download_speed_bps", 0),
+                                    uploadSpeedBps = trafficObj.optLong("upload_speed_bps", 0),
+                                    totalDownloadBytes = trafficObj.optLong("total_download_bytes", 0),
+                                    totalUploadBytes = trafficObj.optLong("total_upload_bytes", 0),
+                                    activeConnections = trafficObj.optInt("active_connections", 0)
+                                )
+                            } else {
+                                LiveTrafficInfo()
+                            }
+
+                            val tunnelsArr = json.optJSONArray("tunnels")
+                            val tunnelsList = mutableListOf<TunnelItem>()
+                            if (tunnelsArr != null) {
+                                for (i in 0 until tunnelsArr.length()) {
+                                    val obj = tunnelsArr.getJSONObject(i)
+                                    val id = obj.optString("id", "")
+                                    val devName = obj.optString("dev_name", "tun$i")
+                                    val devIndex = obj.optInt("dev_index", i)
+                                    val tStatus = obj.optString("status", "connected")
+                                    val uptime = obj.optLong("uptime", 0)
+                                    val latency = obj.optInt("latency_ms", 38)
+                                    val nodeObj = obj.optJSONObject("node")
+                                    val ip = nodeObj?.optString("ip", "") ?: ""
+                                    val port = nodeObj?.optInt("port", 443) ?: 443
+                                    val country = nodeObj?.optString("country_long", nodeObj.optString("country_short", "JP")) ?: "JP"
+
+                                    val unlockObj = obj.optJSONObject("unlock")
+                                    val throughputBps = unlockObj?.optLong("throughput_bps", 0) ?: 0
+                                    val throughputPassed = unlockObj?.optBoolean("throughput_passed", true) ?: true
+
+                                    tunnelsList.add(
+                                        TunnelItem(
+                                            id = id,
+                                            devName = devName,
+                                            devIndex = devIndex,
+                                            status = tStatus,
+                                            uptimeSeconds = uptime,
+                                            latencyMs = latency,
+                                            nodeIp = ip,
+                                            nodePort = port,
+                                            country = country,
+                                            throughputBps = throughputBps,
+                                            throughputPassed = throughputPassed,
+                                            openai = unlockObj?.optString("openai", "unknown") ?: "unknown",
+                                            claude = unlockObj?.optString("claude", "unknown") ?: "unknown",
+                                            gemini = unlockObj?.optString("gemini", "unknown") ?: "unknown",
+                                            netflix = unlockObj?.optString("netflix", "unknown") ?: "unknown"
+                                        )
+                                    )
+                                }
+                            }
+                            trySend(ServerSseEvent.StatusUpdate(ServerStatusData(masterInfo, traffic, tunnelsList)))
+                        }
+                        "log" -> {
+                            val obj = JSONObject(data)
+                            val entry = SystemLogEntry(
+                                timestamp = obj.optString("timestamp", ""),
+                                level = obj.optString("level", "INFO"),
+                                module = obj.optString("module", "System"),
+                                message = obj.optString("message", "")
+                            )
+                            trySend(ServerSseEvent.LogEntry(entry))
+                        }
+                        else -> {
+                            trySend(ServerSseEvent.RawEvent(type ?: "", data))
+                        }
+                    }
+                } catch (e: Exception) {
+                    trySend(ServerSseEvent.Error(e))
+                }
+            }
+
+            override fun onFailure(eventSource: EventSource, t: Throwable?, response: Response?) {
+                trySend(ServerSseEvent.Error(t))
+            }
+        }
+
+        val eventSource = factory.newEventSource(req, listener)
+        awaitClose {
+            eventSource.cancel()
+        }
+    }
+
     companion object {
         fun parseAimiliUri(rawUri: String): ServerProfile? {
             try {
@@ -747,6 +913,7 @@ class ApiClient {
                     val pass = uri.getQueryParameter("pass") ?: ""
                     val name = uri.getQueryParameter("name") ?: "NXGate ($host)"
                     val isTls = uri.getQueryParameter("tls") == "1"
+                    val allowInsecureTls = uri.getQueryParameter("insecure") == "1"
 
                     return ServerProfile(
                         id = "server-${System.currentTimeMillis()}",
@@ -756,7 +923,8 @@ class ApiClient {
                         path = path,
                         username = user,
                         password = pass,
-                        isTls = isTls
+                        isTls = isTls,
+                        allowInsecureTls = allowInsecureTls
                     )
                 }
             } catch (e: Exception) {

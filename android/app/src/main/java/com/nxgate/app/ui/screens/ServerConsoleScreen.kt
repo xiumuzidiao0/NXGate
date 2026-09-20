@@ -65,14 +65,16 @@ import com.nxgate.app.NXGateApplication
 import com.nxgate.app.model.LiveTrafficInfo
 import com.nxgate.app.model.MasterGatewayInfo
 import com.nxgate.app.model.ServerProfile
+import com.nxgate.app.model.ServerSseEvent
 import com.nxgate.app.model.SystemLogEntry
+import com.nxgate.app.util.NotificationHelper
 import com.nxgate.app.model.TunnelItem
 import com.nxgate.app.ui.components.ConnectedButtonItem
 import com.nxgate.app.ui.components.ConnectedButtonGroup
 import com.nxgate.app.ui.components.ConnectedButtonStyle
 import com.nxgate.app.ui.components.ConnectedListItem
 import com.nxgate.app.ui.components.GlobalServerSwitcherTitle
-import com.nxgate.app.ui.components.SpeedWaveformCard
+import com.nxgate.app.ui.components.TrafficStatsCard
 import com.nxgate.app.ui.components.UnlockPill
 import com.nxgate.app.ui.components.countryFlag
 import kotlinx.coroutines.delay
@@ -247,9 +249,9 @@ fun ServerConsoleScreen(
     var showLogSheet by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    // Pull real logs when log sheet opens
+    // Pull real logs when log sheet opens if not already streamed
     LaunchedEffect(showLogSheet) {
-        if (showLogSheet && activeServer != null) {
+        if (showLogSheet && activeServer != null && serverLogs.isEmpty()) {
             isLoadingLogs = true
             val logsRes = NXGateApplication.instance.apiClient.fetchLogs(activeServer)
             isLoadingLogs = false
@@ -259,28 +261,67 @@ fun ServerConsoleScreen(
         }
     }
 
-    // Continuously pull real data, live traffic speeds, and tunnels every 3 seconds
+    // 采用 SSE 长连接实时被动监听远端事件流 (彻底告别 3秒高频短轮询，极低电量消耗)
     LaunchedEffect(activeServer?.id) {
+        if (activeServer == null) return@LaunchedEffect
+
+        // 1. 初始化时快速拉取一次全量快照，保证瞬时有数据展示
+        val initialRes = NXGateApplication.instance.apiClient.fetchServerStatus(activeServer)
+        if (initialRes.isSuccess) {
+            val data = initialRes.getOrNull()
+            if (data != null) {
+                masterInfo = data.masterGateway
+                liveTraffic = data.traffic
+                tunnelList = data.tunnels
+                NXGateApplication.instance.serverStore.updateServerTraffic(
+                    activeServer.id,
+                    downSpeedStr = data.traffic.downSpeedMbStr,
+                    upSpeedStr = data.traffic.upSpeedMbStr,
+                    totalTrafficStr = data.traffic.totalTrafficGbStr,
+                    activeConns = data.traffic.activeConnections
+                )
+            }
+        }
+
+        // 2. 持续订阅 /api/events SSE 长连接，被动接收服务端 push 推送
         while (isActive) {
-            if (activeServer != null) {
-                val statusRes = NXGateApplication.instance.apiClient.fetchServerStatus(activeServer)
-                if (statusRes.isSuccess) {
-                    val data = statusRes.getOrNull()
-                    if (data != null) {
-                        masterInfo = data.masterGateway
-                        liveTraffic = data.traffic
-                        tunnelList = data.tunnels
-                        NXGateApplication.instance.serverStore.updateServerTraffic(
-                            activeServer.id,
-                            downSpeedStr = data.traffic.downSpeedMbStr,
-                            upSpeedStr = data.traffic.upSpeedMbStr,
-                            totalTrafficStr = data.traffic.totalTrafficGbStr,
-                            activeConns = data.traffic.activeConnections
-                        )
+            try {
+                NXGateApplication.instance.apiClient.subscribeServerEvents(activeServer).collect { event ->
+                    when (event) {
+                        is ServerSseEvent.StatusUpdate -> {
+                            val data = event.status
+                            masterInfo = data.masterGateway
+                            liveTraffic = data.traffic
+                            tunnelList = data.tunnels
+                            NXGateApplication.instance.serverStore.updateServerTraffic(
+                                activeServer.id,
+                                downSpeedStr = data.traffic.downSpeedMbStr,
+                                upSpeedStr = data.traffic.upSpeedMbStr,
+                                totalTrafficStr = data.traffic.totalTrafficGbStr,
+                                activeConns = data.traffic.activeConnections
+                            )
+                        }
+                        is ServerSseEvent.LogEntry -> {
+                            // 流式追加最新日志到首部 (保持最多 500 条)
+                            serverLogs = (listOf(event.log) + serverLogs).take(500)
+                            // 针对关键异常事件与故障自动转移向系统发出本地告警通知
+                            if (event.log.message.contains("故障自动转移") || event.log.message.contains("自动切换至新主节点")) {
+                                NotificationHelper.sendAlertNotification(
+                                    context,
+                                    "NXGate 故障自动转移通知",
+                                    event.log.message
+                                )
+                            }
+                        }
+                        is ServerSseEvent.Error -> {
+                            delay(4000)
+                        }
+                        else -> {}
                     }
                 }
+            } catch (e: Exception) {
+                delay(4000)
             }
-            delay(3000)
         }
     }
 
@@ -420,12 +461,12 @@ fun ServerConsoleScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        // 左侧列：实时波形 + 系统主网关 (tun0)
+                        // 左侧列：实时网速与流量 + 系统主网关 (tun0)
                         Column(
                             modifier = Modifier.weight(1f),
                             verticalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
-                            SpeedWaveformCard(
+                            TrafficStatsCard(
                                 liveTraffic = liveTraffic
                             )
 
@@ -567,8 +608,8 @@ fun ServerConsoleScreen(
                     }
                 } else {
                     // ==================== 竖屏/手机：单列垂直布局 ====================
-                    // 1. 实时网速波形卡片（高 164dp）（背景 surfaceContainerHigh）
-                    SpeedWaveformCard(
+                    // 1. 实时网速与流量卡片
+                    TrafficStatsCard(
                         liveTraffic = liveTraffic
                     )
 

@@ -1,5 +1,8 @@
 package com.nxgate.app
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.compose.setContent
@@ -33,11 +36,21 @@ class MainActivity : FragmentActivity() {
             }
         }
 
+        // Request Notification permission on Android 13+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 101)
+            }
+        }
+
         val serverStore = NXGateApplication.instance.serverStore
-        if (serverStore.biometricEnabled.value) {
+        if (savedInstanceState == null && serverStore.biometricEnabled.value) {
             serverStore.setAppLocked(true)
             showBiometricPrompt(
-                onSuccess = { serverStore.setAppLocked(false) },
+                onSuccess = {
+                    serverStore.setAppLocked(false)
+                    lastBackgroundTimestamp = 0L
+                },
                 onError = { err ->
                     Toast.makeText(this, err, Toast.LENGTH_SHORT).show()
                 }
@@ -69,7 +82,10 @@ class MainActivity : FragmentActivity() {
                         isLocked = isAppLocked,
                         onUnlockRequested = {
                             showBiometricPrompt(
-                                onSuccess = { serverStore.setAppLocked(false) },
+                                onSuccess = {
+                                    serverStore.setAppLocked(false)
+                                    lastBackgroundTimestamp = 0L
+                                },
                                 onError = { err ->
                                     Toast.makeText(this@MainActivity, err, Toast.LENGTH_SHORT).show()
                                 }
@@ -83,20 +99,27 @@ class MainActivity : FragmentActivity() {
 
     override fun onStop() {
         super.onStop()
-        val serverStore = NXGateApplication.instance.serverStore
-        if (serverStore.biometricEnabled.value) {
-            serverStore.setAppLocked(true)
-        }
+        lastBackgroundTimestamp = System.currentTimeMillis()
     }
 
     override fun onStart() {
         super.onStart()
         val serverStore = NXGateApplication.instance.serverStore
-        if (serverStore.biometricEnabled.value && serverStore.isAppLocked.value) {
-            showBiometricPrompt(
-                onSuccess = { serverStore.setAppLocked(false) },
-                onError = {}
-            )
+        if (serverStore.biometricEnabled.value) {
+            val now = System.currentTimeMillis()
+            // 切出后台超过 60 秒 (60,000ms) 时触发锁屏
+            if (lastBackgroundTimestamp > 0 && (now - lastBackgroundTimestamp) >= 60_000L) {
+                serverStore.setAppLocked(true)
+            }
+            if (serverStore.isAppLocked.value) {
+                showBiometricPrompt(
+                    onSuccess = {
+                        serverStore.setAppLocked(false)
+                        lastBackgroundTimestamp = 0L
+                    },
+                    onError = {}
+                )
+            }
         }
     }
 
@@ -144,5 +167,6 @@ class MainActivity : FragmentActivity() {
     companion object {
         var instance: MainActivity? = null
             private set
+        private var lastBackgroundTimestamp: Long = 0L
     }
 }

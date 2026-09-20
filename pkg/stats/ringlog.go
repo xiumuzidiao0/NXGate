@@ -64,9 +64,11 @@ func (r *RingLog) Log(level LogLevel, module, format string, args ...any) {
 
 	r.mu.Lock()
 	if len(r.entries) >= r.capacity {
-		r.entries = r.entries[1:]
+		copy(r.entries, r.entries[1:])
+		r.entries[r.capacity-1] = entry
+	} else {
+		r.entries = append(r.entries, entry)
 	}
-	r.entries = append(r.entries, entry)
 
 	// Broadcast to active SSE/WebSocket subscribers
 	for ch := range r.subscribers {

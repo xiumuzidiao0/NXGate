@@ -130,7 +130,7 @@ func (s *Server) getAvailableOutbounds() []AvailableOutbound {
 		Port:      defPort,
 		Addr:      defAddr,
 		Type:      "socks5",
-		Label:     fmt.Sprintf("AimiliVPN 默认出口 (PORT %d - SOCKS5 TCP+UDP %s)", defPort, authNote),
+		Label:     fmt.Sprintf("NXGate 默认出口 (PORT %d - SOCKS5 TCP+UDP %s)", defPort, authNote),
 		IsDefault: true,
 	})
 	seenPorts[defPort] = true

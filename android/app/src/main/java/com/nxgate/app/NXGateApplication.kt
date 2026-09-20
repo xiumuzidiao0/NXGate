@@ -3,6 +3,7 @@ package com.nxgate.app
 import android.app.Application
 import com.nxgate.app.data.ApiClient
 import com.nxgate.app.data.ServerStore
+import com.nxgate.app.util.NotificationHelper
 
 class NXGateApplication : Application() {
     lateinit var serverStore: ServerStore
@@ -15,6 +16,7 @@ class NXGateApplication : Application() {
         instance = this
         serverStore = ServerStore(this)
         apiClient = ApiClient()
+        NotificationHelper.initChannels(this)
     }
 
     companion object {

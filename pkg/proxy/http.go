@@ -13,7 +13,7 @@ import (
 
 const (
 	proxyAuthRequiredResponse = "HTTP/1.1 407 Proxy Authentication Required\r\n" +
-		"Proxy-Authenticate: Basic realm=\"AimiliVPN\"\r\n" +
+		"Proxy-Authenticate: Basic realm=\"NXGate\"\r\n" +
 		"Content-Length: 32\r\n" +
 		"Connection: close\r\n\r\n" +
 		"Proxy Authentication Required.\n"
