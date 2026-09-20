@@ -508,6 +508,9 @@ func (m *DynamicGroupManager) EvaluateGroup(ctx context.Context, g *DynamicGroup
 					chosenTunnelIDs = append(chosenTunnelIDs, newTun.ID)
 					usedNodeIDs[n.ID] = true
 					usedNodeIDs[n.IP] = true
+					if m.nodePool != nil {
+						m.nodePool.RecordSuccess(n.ID)
+					}
 					needed--
 				} else {
 					stats.LogWarn("DynamicGroup", "[%s] 候选节点 %s 握手成功但无法出网 (被对端阻断)，释放重试...", g.Name, n.ID)

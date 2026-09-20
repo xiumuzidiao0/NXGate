@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"aimili-vpngate-go/pkg/stats"
 )
 
 type BlacklistEntry struct {
@@ -22,6 +24,7 @@ type BlacklistEntry struct {
 	MarkedAt  time.Time `json:"marked_at"`
 	Until     time.Time `json:"until"`
 	FailCount int       `json:"fail_count"`
+	Level     string    `json:"level,omitempty"` // "degraded" (降权), "quarantine" (隔离观察), "blacklist" (硬拉黑)
 }
 
 type BlacklistManager struct {
@@ -97,20 +100,56 @@ func (bm *BlacklistManager) Mark(node *Node, reason string, baseDuration time.Du
 	failCount := 1
 	if existing, ok := bm.entries[node.ID]; ok {
 		failCount = existing.FailCount + 1
+	} else if node.FailCount > 0 {
+		failCount = node.FailCount + 1
+	}
+	node.FailCount = failCount
+
+	isAuthOrManual := strings.Contains(reason, "身份认证失败") ||
+		strings.Contains(reason, "AUTH_FAILED") ||
+		strings.Contains(reason, "用户手动") ||
+		strings.Contains(reason, "certificate") ||
+		strings.Contains(reason, "expired")
+
+	var level string
+	var duration time.Duration
+
+	if isAuthOrManual || failCount >= 5 {
+		// Level 3: 深度硬拉黑 (Hard Blacklist) - 连续失败 5 次以上或严重证书/认证拒绝
+		level = "blacklist"
+		if baseDuration <= 0 {
+			baseDuration = 30 * time.Minute
+		}
+		shift := failCount - 5
+		if shift < 0 {
+			shift = 0
+		}
+		if shift > 12 {
+			shift = 12
+		}
+		multiplier := 1 << shift
+		duration = baseDuration * time.Duration(multiplier)
+		if duration > 6*time.Hour {
+			duration = 6 * time.Hour
+		}
+		stats.LogWarn("Blacklist", "节点 [%s] 严重/持久故障 (失败 %d 次: %s)，进入深度硬拉黑 (%v)", node.ID, failCount, reason, duration)
+	} else if failCount >= 3 {
+		// Level 2: 隔离观察期 (Quarantine) - 连续失败 3~4 次，临时冷却隔离 10 分钟
+		level = "quarantine"
+		duration = 10 * time.Minute
+		stats.LogWarn("Blacklist", "节点 [%s] 连续失败 %d 次 (%s)，进入 10 分钟临时隔离观察期", node.ID, failCount, reason)
+	} else {
+		// Level 1: 仅降权扣分 (Degraded) - 偶发失败 1~2 次，不阻止访问，排序沉底
+		level = "degraded"
+		duration = 0
+		stats.LogWarn("Blacklist", "节点 [%s] 偶发失败 (%d/3: %s)，触发降权惩罚，暂不隔离", node.ID, failCount, reason)
 	}
 
-	if baseDuration <= 0 {
-		baseDuration = 15 * time.Minute
-	}
-
-	// Mild backoff: 15m -> 30m -> 1h -> max 6h (avoid locking recoverable nodes excessively)
-	multiplier := 1 << (failCount - 1)
-	if multiplier > 24 {
-		multiplier = 24
-	}
-	duration := baseDuration * time.Duration(multiplier)
-	if duration > 6*time.Hour {
-		duration = 6 * time.Hour
+	var until time.Time
+	if duration > 0 {
+		until = now.Add(duration)
+	} else {
+		until = now // immediate expiry, so IsBlacklisted returns false
 	}
 
 	bm.entries[node.ID] = &BlacklistEntry{
@@ -121,10 +160,19 @@ func (bm *BlacklistManager) Mark(node *Node, reason string, baseDuration time.Du
 		Country:   node.CountryShort,
 		Reason:    reason,
 		MarkedAt:  now,
-		Until:     now.Add(duration),
+		Until:     until,
 		FailCount: failCount,
+		Level:     level,
 	}
 
+	bm.saveLocked()
+}
+
+func (bm *BlacklistManager) Reset(nodeID string) {
+	bm.mu.Lock()
+	defer bm.mu.Unlock()
+
+	delete(bm.entries, nodeID)
 	bm.saveLocked()
 }
 
@@ -173,7 +221,8 @@ func (bm *BlacklistManager) MarkManual(id, ip, country, reason string, duration 
 		Reason:    reason,
 		MarkedAt:  now,
 		Until:     now.Add(duration),
-		FailCount: 1,
+		FailCount: 5,
+		Level:     "blacklist",
 	}
 	bm.saveLocked()
 }

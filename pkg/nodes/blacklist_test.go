@@ -22,23 +22,25 @@ func TestBlacklistRevival(t *testing.T) {
 	_, pStr, _ := net.SplitHostPort(ln.Addr().String())
 	livePort, _ := strconv.Atoi(pStr)
 
-	// 2. Mark the live node as blacklisted
+	// 2. Mark the live node as blacklisted (failCount=2, so 3rd failure enters quarantine)
 	liveNode := &Node{
 		ID:           "live-node-1",
 		IP:           "127.0.0.1",
 		Port:         livePort,
 		Proto:        "tcp",
 		CountryShort: "JP",
+		FailCount:    2,
 	}
 	bm.Mark(liveNode, "测试暂时故障", 15*time.Minute)
 
-	// 3. Mark an unreachable dead node
+	// 3. Mark an unreachable dead node (failCount=2, so 3rd failure enters quarantine)
 	deadNode := &Node{
 		ID:           "dead-node-2",
 		IP:           "127.0.0.1",
 		Port:         59998, // assuming closed
 		Proto:        "tcp",
 		CountryShort: "US",
+		FailCount:    2,
 	}
 	bm.Mark(deadNode, "彻底断开", 15*time.Minute)
 
@@ -67,5 +69,59 @@ func TestBlacklistRevival(t *testing.T) {
 	// Verify dead node remains blacklisted
 	if !bm.IsBlacklisted("dead-node-2") {
 		t.Fatalf("expected dead-node-2 to remain blacklisted")
+	}
+}
+
+func TestTieredFailureDegradationAndQuarantine(t *testing.T) {
+	dataDir := t.TempDir()
+	bm := NewBlacklistManager(dataDir)
+
+	testNode := &Node{
+		ID:           "test-node:443",
+		IP:           "1.2.3.4",
+		Port:         443,
+		CountryShort: "JP",
+	}
+
+	// 1. First Failure -> Level 1 Degraded (NOT blocked!)
+	bm.Mark(testNode, "偶发握手超时", 15*time.Minute)
+	if bm.IsBlacklisted(testNode.ID) {
+		t.Fatalf("expected node NOT to be blacklisted on first failure (Level 1 Degraded)")
+	}
+	if bm.Count() != 0 {
+		t.Fatalf("expected active blacklist count to be 0 for degraded node, got %d", bm.Count())
+	}
+
+	// 2. Second Failure -> Level 1 Degraded (Still NOT blocked!)
+	bm.Mark(testNode, "再次超时", 15*time.Minute)
+	if bm.IsBlacklisted(testNode.ID) {
+		t.Fatalf("expected node NOT to be blacklisted on second failure (Level 1 Degraded)")
+	}
+
+	// 3. Third Failure -> Level 2 Quarantine (Blocked for 10 minutes!)
+	bm.Mark(testNode, "第三次失败", 15*time.Minute)
+	if !bm.IsBlacklisted(testNode.ID) {
+		t.Fatalf("expected node to be quarantined on 3rd failure (Level 2 Quarantine)")
+	}
+	if bm.Count() != 1 {
+		t.Fatalf("expected active blacklist count to be 1 for quarantined node, got %d", bm.Count())
+	}
+
+	// 4. Reset on success
+	bm.Reset(testNode.ID)
+	if bm.IsBlacklisted(testNode.ID) {
+		t.Fatalf("expected node to be unblocked after Reset on success")
+	}
+
+	// 5. Severe Auth Failure -> Immediate Level 3 Hard Blacklist!
+	authFailNode := &Node{
+		ID:           "bad-auth:443",
+		IP:           "5.6.7.8",
+		Port:         443,
+		CountryShort: "US",
+	}
+	bm.Mark(authFailNode, "身份认证失败 (AUTH_FAILED)", 15*time.Minute)
+	if !bm.IsBlacklisted(authFailNode.ID) {
+		t.Fatalf("expected immediate blacklist on AUTH_FAILED even on first failure")
 	}
 }

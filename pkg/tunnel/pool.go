@@ -292,8 +292,11 @@ func (p *Pool) startTunnelInternalLocked(node *nodes.Node, devIdx int) (*Tunnel,
 
 				stats.LogInfo("TunnelPool", "隧道 [%s] (%s) 已成功连通并就绪路由！", tunnelID, devName)
 
-				if p.nodePool != nil && p.nodePool.Reputation() != nil && t.Node != nil {
-					p.nodePool.Reputation().RecordSuccess(t.Node.IP, t.Node.ID)
+				if p.nodePool != nil && t.Node != nil {
+					p.nodePool.RecordSuccess(t.Node.ID)
+					if p.nodePool.Reputation() != nil {
+						p.nodePool.Reputation().RecordSuccess(t.Node.IP, t.Node.ID)
+					}
 				}
 				go p.probeUnlock(tunnelID)
 			} else if strings.Contains(line, "AUTH_FAILED") {
