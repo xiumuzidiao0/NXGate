@@ -422,24 +422,41 @@ func (np *NodePool) Refresh(ctx context.Context) error {
 	// Rebuild candidates after port knock to float reachable nodes to the top immediately
 	np.mu.Lock()
 	np.rebuildCandidatesLocked()
+	currentCandidates := make([]*Node, len(np.candidates))
+	copy(currentCandidates, np.candidates)
 	np.mu.Unlock()
 
 	// Phase 2: 后台并发测试核心节点的真实延迟
 	// 分级按需探测：优先测热池前 50 个高优先级节点，其余节点保持轻量就绪态，按需懒加载测速
 	probeLimit := 50
-	if len(reachableNodes) < probeLimit {
-		probeLimit = len(reachableNodes)
+	var highPriorityNodes []*Node
+	for _, n := range currentCandidates {
+		if n.LatencyMs > 0 {
+			highPriorityNodes = append(highPriorityNodes, n)
+			if len(highPriorityNodes) >= probeLimit {
+				break
+			}
+		}
 	}
-	highPriorityNodes := reachableNodes[:probeLimit]
-	go np.ProbeNodes(ctx, highPriorityNodes)
+	if len(highPriorityNodes) > 0 {
+		go np.ProbeNodes(ctx, highPriorityNodes)
+	}
 
 	// Phase 3: Async IP type classification (residential vs hosting) in background
-	// 优先对热池中前 60 个活跃候选节点分析住宅/机房属性
+	// 优先对热池中前 60 个活跃候选节点分析住宅/机房属性，已分析过的节点不重复查询
 	enrichLimit := 60
-	if len(reachableNodes) < enrichLimit {
-		enrichLimit = len(reachableNodes)
+	var toEnrich []*Node
+	for _, n := range currentCandidates {
+		if n.IPType == "" || n.IPType == "unknown" {
+			toEnrich = append(toEnrich, n)
+			if len(toEnrich) >= enrichLimit {
+				break
+			}
+		}
 	}
-	go np.enricher.EnrichNodes(ctx, reachableNodes[:enrichLimit])
+	if len(toEnrich) > 0 {
+		go np.enricher.EnrichNodes(ctx, toEnrich)
+	}
 
 	return nil
 }
