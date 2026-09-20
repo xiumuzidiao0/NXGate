@@ -68,14 +68,6 @@ jobs:
             "dist/nxgate_linux_386.gz"
             "dist/nxgate_linux_arm"
             "dist/nxgate_linux_arm.gz"
-            "dist/aimilivpn_linux_amd64"
-            "dist/aimilivpn_linux_amd64.gz"
-            "dist/aimilivpn_linux_arm64"
-            "dist/aimilivpn_linux_arm64.gz"
-            "dist/aimilivpn_linux_386"
-            "dist/aimilivpn_linux_386.gz"
-            "dist/aimilivpn_linux_arm"
-            "dist/aimilivpn_linux_arm.gz"
             "dist/SHA256SUMS.txt"
           )
           for f in "${EXPECTED_FILES[@]}"; do
@@ -103,13 +95,5 @@ jobs:
             dist/nxgate_linux_386.gz
             dist/nxgate_linux_arm
             dist/nxgate_linux_arm.gz
-            dist/aimilivpn_linux_amd64
-            dist/aimilivpn_linux_amd64.gz
-            dist/aimilivpn_linux_arm64
-            dist/aimilivpn_linux_arm64.gz
-            dist/aimilivpn_linux_386
-            dist/aimilivpn_linux_386.gz
-            dist/aimilivpn_linux_arm
-            dist/aimilivpn_linux_arm.gz
             dist/SHA256SUMS.txt
             nxgate-release.apk

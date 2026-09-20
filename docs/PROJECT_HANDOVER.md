@@ -282,7 +282,7 @@ aimili-vpngate-go/
 ### 1. `nx update` 下载失败并回退到源码编译
 - **原因**：Release 附件中缺少对应架构未压缩的 ELF 文件，或者 `SHA256SUMS.txt` 校验和未更新。
 - **排查与解决**：
-  - 检查 GitHub Release 页面是否包含未压缩的 `aimilivpn_linux_amd64` 等 9 个文件；
+  - 检查 GitHub Release 页面是否包含未压缩的 `nxgate_linux_amd64` 等文件；
   - 确保使用 `./scripts/release.sh` 流程发布，避免手动上传时因网络中断导致附件进入 `state: starter` 不可用状态。
 
 ### 2. 某个出海节点频繁断开或连上后无网速
