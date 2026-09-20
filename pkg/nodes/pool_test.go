@@ -135,3 +135,72 @@ func TestIncrementalNodePoolAndEviction(t *testing.T) {
 		t.Fatalf("expected NodePool to reload saved nodes from disk")
 	}
 }
+
+func TestHotPoolSizeCappingAndPruning(t *testing.T) {
+	dataDir := t.TempDir()
+	cfg := &config.Config{
+		DataDir: dataDir,
+	}
+
+	np := NewNodePool(cfg)
+	now := time.Now()
+
+	// 1. Generate 300 nodes (exceeding MaxHotPoolSize of 250)
+	var batch []*Node
+	for i := 1; i <= 300; i++ {
+		batch = append(batch, &Node{
+			ID:           "10.0.0." + string(rune(i)) + ":443",
+			IP:           "10.0.0." + string(rune(i)),
+			Port:         443,
+			CountryShort: "JP",
+			Score:        int64(i * 10),
+			Speed:        1000000,
+			FirstSeen:    now,
+			LastSeen:     now,
+		})
+	}
+
+	np.mu.Lock()
+	np.MergeFreshNodesLocked(batch, "test-source")
+	candidates := np.candidates
+	totalStored := len(np.nodeStore)
+	np.mu.Unlock()
+
+	// Verify that candidates (hot pool) is strictly capped at MaxHotPoolSize (250)
+	if len(candidates) != MaxHotPoolSize {
+		t.Fatalf("expected hot candidates to be capped at %d, got %d", MaxHotPoolSize, len(candidates))
+	}
+	// Verify that total store contains all 300 nodes in cold storage
+	if totalStored != 300 {
+		t.Fatalf("expected total store to have 300 nodes, got %d", totalStored)
+	}
+
+	// 2. Test MaxStoreNodes capacity pruning
+	// Add 400 more dead nodes to exceed MaxStoreNodes (600)
+	var excessBatch []*Node
+	for i := 301; i <= 700; i++ {
+		excessBatch = append(excessBatch, &Node{
+			ID:           "10.0.1." + string(rune(i)) + ":443",
+			IP:           "10.0.1." + string(rune(i)),
+			Port:         443,
+			CountryShort: "US",
+			Score:        1,
+			Speed:        1000,
+			LatencyMs:    -1, // dead
+			FailCount:    6,
+			FirstSeen:    now.Add(-10 * time.Hour),
+			LastSeen:     now.Add(-5 * time.Hour),
+		})
+	}
+
+	np.mu.Lock()
+	np.MergeFreshNodesLocked(excessBatch, "excess-source")
+	evicted := np.evictStaleNodesLocked(now)
+	np.rebuildCandidatesLocked()
+	newStoreCount := len(np.nodeStore)
+	np.mu.Unlock()
+
+	if newStoreCount > MaxStoreNodes {
+		t.Fatalf("expected store count <= %d after capacity pruning, got %d (evicted: %d)", MaxStoreNodes, newStoreCount, evicted)
+	}
+}

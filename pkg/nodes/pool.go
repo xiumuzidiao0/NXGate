@@ -18,6 +18,14 @@ import (
 	"aimili-vpngate-go/pkg/stats"
 )
 
+const (
+	// MaxHotPoolSize defines the strict upper boundary of active hot candidate nodes.
+	MaxHotPoolSize = 250
+
+	// MaxStoreNodes defines the storage upper bound for historical/cold nodes to prevent indefinite bloat.
+	MaxStoreNodes = 600
+)
+
 // ProbeStrategy defines timeout values for each probe attempt
 type ProbeStrategy struct {
 	TCPTimeout time.Duration
@@ -124,9 +132,10 @@ func (np *NodePool) loadStore() {
 		}
 	}
 
+	np.evictStaleNodesLocked(now)
 	np.rebuildCandidatesLocked()
 	if len(np.candidates) > 0 {
-		np.lastStatus = fmt.Sprintf("已恢复历史节点库 (可用节点: %d/%d)", len(np.candidates), len(np.nodeStore))
+		np.lastStatus = fmt.Sprintf("已恢复历史节点库 (优质热池: %d/%d, 历史总库: %d)", len(np.candidates), MaxHotPoolSize, len(np.nodeStore))
 		np.lastUpdated = now
 		np.lastSource = "本地持久化节点库"
 	}
@@ -169,14 +178,61 @@ func (np *NodePool) evictStaleNodesLocked(now time.Time) int {
 		// 3. Condition A: Unseen in upstream feeds for >= 24h AND unreachable
 		staleByTime := !n.LastSeen.IsZero() && now.Sub(n.LastSeen) >= 24*time.Hour && n.LatencyMs <= 0
 
-		// 4. Condition B: Failed probe >= 8 consecutive times AND unseen in upstream for >= 24h
-		staleByFails := n.FailCount >= 8 && !n.LastSeen.IsZero() && now.Sub(n.LastSeen) >= 24*time.Hour
+		// 4. Condition B: Failed probe >= 5 consecutive times AND unseen in upstream for >= 12h
+		staleByFails := n.FailCount >= 5 && !n.LastSeen.IsZero() && now.Sub(n.LastSeen) >= 12*time.Hour
 
 		if staleByTime || staleByFails {
 			delete(np.nodeStore, id)
 			evicted++
 		}
 	}
+
+	// 5. Soft limit enforcement: if store exceeds MaxStoreNodes (600), prune the worst dead/unreachable nodes
+	if len(np.nodeStore) > MaxStoreNodes {
+		type evictCandidate struct {
+			id       string
+			lastSeen time.Time
+			score    int64
+			fails    int
+			dead     bool
+		}
+		var pruneList []evictCandidate
+		for id, n := range np.nodeStore {
+			if np.favorites.IsFavorite(id) || n.LatencyMs > 0 {
+				continue // protect favorites and reachable nodes
+			}
+			pruneList = append(pruneList, evictCandidate{
+				id:       id,
+				lastSeen: n.LastSeen,
+				score:    n.Score,
+				fails:    n.FailCount,
+				dead:     n.LatencyMs < 0,
+			})
+		}
+		// Sort worst first: dead first, then highest fails, oldest lastSeen, lowest score
+		sort.Slice(pruneList, func(i, j int) bool {
+			if pruneList[i].dead != pruneList[j].dead {
+				return pruneList[i].dead
+			}
+			if pruneList[i].fails != pruneList[j].fails {
+				return pruneList[i].fails > pruneList[j].fails
+			}
+			if !pruneList[i].lastSeen.Equal(pruneList[j].lastSeen) {
+				return pruneList[i].lastSeen.Before(pruneList[j].lastSeen)
+			}
+			return pruneList[i].score < pruneList[j].score
+		})
+
+		excess := len(np.nodeStore) - MaxStoreNodes
+		if excess > len(pruneList) {
+			excess = len(pruneList)
+		}
+		for i := 0; i < excess; i++ {
+			delete(np.nodeStore, pruneList[i].id)
+			evicted++
+		}
+	}
+
 	return evicted
 }
 
@@ -194,13 +250,20 @@ func (np *NodePool) rebuildCandidatesLocked() {
 	}
 
 	// Stable multi-tier sorting:
-	// Tier 0: Reachable nodes (LatencyMs > 0)
-	// Tier 1: Un-probed nodes (LatencyMs == 0)
+	// Priority 0: Favorites always on top
+	// Tier 0: Reachable nodes (LatencyMs > 0), sorted by Score desc, Ping asc
+	// Tier 1: Un-probed / Ready nodes (LatencyMs == 0), sorted by Score desc, Ping asc
 	// Tier 2: Probe-failed nodes (LatencyMs < 0)
-	// Within tier: sort by Score desc, Ping asc
 	sort.Slice(filtered, func(i, j int) bool {
 		a := filtered[i]
 		b := filtered[j]
+
+		// Priority 0: Favorites
+		aFav := np.favorites.IsFavorite(a.ID)
+		bFav := np.favorites.IsFavorite(b.ID)
+		if aFav != bFav {
+			return aFav
+		}
 
 		tier := func(node *Node) int {
 			if node.LatencyMs > 0 {
@@ -223,6 +286,11 @@ func (np *NodePool) rebuildCandidatesLocked() {
 		}
 		return a.Ping < b.Ping
 	})
+
+	// 严格限制热池最大容量为 MaxHotPoolSize (250)
+	if len(filtered) > MaxHotPoolSize {
+		filtered = filtered[:MaxHotPoolSize]
+	}
 
 	np.candidates = filtered
 	np.allRawNodes = all
@@ -269,7 +337,7 @@ func (np *NodePool) MergeFreshNodesLocked(fresh []*Node, source string) (int, in
 
 	np.lastUpdated = now
 	np.lastSource = source
-	np.lastStatus = fmt.Sprintf("就绪 (可用候选 %d, 历史总库 %d)", len(np.candidates), len(np.nodeStore))
+	np.lastStatus = fmt.Sprintf("就绪 (优质热池 %d/%d, 历史总库 %d)", len(np.candidates), MaxHotPoolSize, len(np.nodeStore))
 
 	return newCount, updatedCount, evictedCount
 }
@@ -315,20 +383,36 @@ func (np *NodePool) Refresh(ctx context.Context) error {
 	copy(currentFiltered, np.candidates)
 	np.mu.Unlock()
 
-	stats.LogInfo("Nodes", "节点池增量刷新完成 (新增: %d, 更新: %d, 淘汰失效: %d)，当前全量库: %d 个，优质候选: %d 个 (来自: %s)",
-		newCount, updatedCount, evictedCount, len(np.allRawNodes), len(currentFiltered), result.Source)
+	stats.LogInfo("Nodes", "节点池增量刷新完成 (新增: %d, 更新: %d, 淘汰失效: %d)，当前全量库: %d 个，优质热池: %d/%d 个 (来自: %s)",
+		newCount, updatedCount, evictedCount, len(np.allRawNodes), len(currentFiltered), MaxHotPoolSize, result.Source)
 
 	// Phase 1: Port Knock Pre-Filter (快速淘汰死端口，节省测速时间)
-	stats.LogInfo("Nodes", "🚪 端口预检：快速扫描 %d 个候选节点的 TCP 连通性...", len(currentFiltered))
+	stats.LogInfo("Nodes", "🚪 端口预检：快速扫描热池 %d 个候选节点的 TCP 连通性...", len(currentFiltered))
 	reachableNodes := FilterReachableNodes(currentFiltered, 2500*time.Millisecond)
 	stats.LogInfo("Nodes", "✅ 端口预检完成：%d/%d 节点可达，已过滤 %d 个死端口",
 		len(reachableNodes), len(currentFiltered), len(currentFiltered)-len(reachableNodes))
 
-	// Phase 2: 后台并发测试可达节点的真实延迟
-	go np.ProbeNodes(ctx, reachableNodes)
+	// Rebuild candidates after port knock to float reachable nodes to the top immediately
+	np.mu.Lock()
+	np.rebuildCandidatesLocked()
+	np.mu.Unlock()
+
+	// Phase 2: 后台并发测试核心节点的真实延迟
+	// 分级按需探测：优先测热池前 50 个高优先级节点，其余节点保持轻量就绪态，按需懒加载测速
+	probeLimit := 50
+	if len(reachableNodes) < probeLimit {
+		probeLimit = len(reachableNodes)
+	}
+	highPriorityNodes := reachableNodes[:probeLimit]
+	go np.ProbeNodes(ctx, highPriorityNodes)
 
 	// Phase 3: Async IP type classification (residential vs hosting) in background
-	go np.enricher.EnrichNodes(ctx, reachableNodes)
+	// 优先对热池中前 60 个活跃候选节点分析住宅/机房属性
+	enrichLimit := 60
+	if len(reachableNodes) < enrichLimit {
+		enrichLimit = len(reachableNodes)
+	}
+	go np.enricher.EnrichNodes(ctx, reachableNodes[:enrichLimit])
 
 	return nil
 }
@@ -444,6 +528,23 @@ func (np *NodePool) ProbeSpecificNodes(ctx context.Context, ids []string) []*Nod
 		for _, n := range np.candidates {
 			if idMap[n.ID] || idMap[n.IP] {
 				targets = append(targets, n)
+			}
+		}
+		// Also search cold storage if a requested node is not currently in the hot 250 candidates
+		if len(targets) < len(ids) {
+			for _, n := range np.nodeStore {
+				if idMap[n.ID] || idMap[n.IP] {
+					alreadyAdded := false
+					for _, t := range targets {
+						if t.ID == n.ID {
+							alreadyAdded = true
+							break
+						}
+					}
+					if !alreadyAdded {
+						targets = append(targets, n)
+					}
+				}
 			}
 		}
 	}
@@ -779,9 +880,18 @@ func FilterReachableNodes(nodes []*Node, timeout time.Duration) []*Node {
 
 	results := BatchPortKnock(ctx, nodes, timeout)
 	var reachable []*Node
+	now := time.Now()
 	for _, res := range results {
 		if res.Reachable {
 			reachable = append(reachable, res.Node)
+			if res.Latency > 0 {
+				res.Node.LatencyMs = int(res.Latency.Milliseconds())
+				res.Node.LastChecked = now
+			}
+			res.Node.FailCount = 0
+		} else if strings.ToLower(res.Node.Proto) != "udp" {
+			res.Node.LatencyMs = -1
+			res.Node.FailCount++
 		}
 	}
 	return reachable
