@@ -72,7 +72,8 @@ func (m *Middleware) BasicAuth(next http.Handler) http.Handler {
 			token := r.URL.Query().Get("token")
 			settings := m.cfg.GetSettings()
 			secret := strings.Trim(settings.UIPath, "/")
-			if token != "" && (token == secret || token == settings.UIPassword) {
+			subToken := strings.Trim(m.cfg.GetSubscriptionToken(), "/")
+			if token != "" && ((subToken != "" && token == subToken) || (secret != "" && token == secret) || (settings.UIPassword != "" && token == settings.UIPassword)) {
 				next.ServeHTTP(w, r)
 				return
 			}
@@ -104,22 +105,66 @@ func (m *Middleware) SecretPathGuard(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		settings := m.cfg.GetSettings()
 		secret := strings.Trim(settings.UIPath, "/")
+		subToken := strings.Trim(m.cfg.GetSubscriptionToken(), "/")
+		reqPath := r.URL.Path
+
+		// 1. Direct subscription fetch with valid query token bypasses secret path prefix
+		token := r.URL.Query().Get("token")
+		if strings.HasPrefix(reqPath, "/api/singbox/subscription") && token != "" {
+			if (subToken != "" && token == subToken) || (secret != "" && token == secret) || (settings.UIPassword != "" && token == settings.UIPassword) {
+				ctx := context.WithValue(r.Context(), secretPathVerifiedKey, true)
+				next.ServeHTTP(w, r.WithContext(ctx))
+				return
+			}
+		}
+
+		// 2. Short subscription path: /sub/<token> or /sub/<token>/<format>
+		if strings.HasPrefix(reqPath, "/sub/") {
+			subRemainder := strings.TrimPrefix(reqPath, "/sub/")
+			parts := strings.SplitN(subRemainder, "/", 2)
+			tokenPart := parts[0]
+			if (subToken != "" && tokenPart == subToken) || (secret != "" && tokenPart == secret) || (settings.UIPassword != "" && tokenPart == settings.UIPassword) {
+				subFormat := ""
+				if len(parts) > 1 {
+					subFormat = parts[1]
+				}
+				r2 := new(http.Request)
+				*r2 = *r
+				if subFormat == "clash" {
+					r2.URL.Path = "/api/singbox/subscription/clash"
+				} else if subFormat == "raw" || subFormat == "text" {
+					r2.URL.Path = "/api/singbox/subscription/raw"
+				} else {
+					r2.URL.Path = "/api/singbox/subscription"
+				}
+				ctx := context.WithValue(r2.Context(), secretPathVerifiedKey, true)
+				*r2 = *r2.WithContext(ctx)
+				next.ServeHTTP(w, r2)
+				return
+			}
+		}
+
+		// 3. Subscription under random subToken safe path: /<sub_token>/api/singbox/subscription...
+		if subToken != "" {
+			subPrefix := "/" + subToken + "/"
+			if strings.HasPrefix(reqPath, subPrefix) && strings.HasPrefix(reqPath[len(subPrefix)-1:], "/api/singbox/subscription") {
+				r2 := new(http.Request)
+				*r2 = *r
+				r2.URL.Path = "/" + strings.TrimPrefix(reqPath, subPrefix)
+				ctx := context.WithValue(r2.Context(), secretPathVerifiedKey, true)
+				*r2 = *r2.WithContext(ctx)
+				next.ServeHTTP(w, r2)
+				return
+			}
+		}
+
+		// If no UI secret path configured, pass through (subToken already handled above)
 		if secret == "" {
 			next.ServeHTTP(w, r)
 			return
 		}
 
-		reqPath := r.URL.Path
-
-		// Direct subscription fetch with valid token bypasses secret path prefix
-		token := r.URL.Query().Get("token")
-		if strings.HasPrefix(reqPath, "/api/singbox/subscription") && token != "" && (token == secret || token == settings.UIPassword) {
-			ctx := context.WithValue(r.Context(), secretPathVerifiedKey, true)
-			next.ServeHTTP(w, r.WithContext(ctx))
-			return
-		}
-
-		// Direct /api/ or /metrics access without secret prefix:
+		// 4. Direct /api/ or /metrics access without secret prefix:
 		// Only allow if caller already holds valid authentication credentials.
 		// If unauthenticated, stealthily return 404 to avoid revealing that this API exists to scanners.
 		if strings.HasPrefix(reqPath, "/api/") || reqPath == "/api" || reqPath == "/metrics" {

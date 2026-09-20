@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -27,6 +28,7 @@ type Config struct {
 	UIPath     string
 	UIUsername string
 	UIPassword string
+	SubToken   string // 专属随机安全订阅 Token / 路径
 
 	// Proxy gateway settings
 	ProxyHost           string
@@ -65,6 +67,7 @@ type SettingsDTO struct {
 	UIPath             string   `json:"ui_path"`
 	UIUsername         string   `json:"ui_username"`
 	UIPassword         string   `json:"ui_password,omitempty"`
+	SubToken           string   `json:"sub_token,omitempty"`
 	ProxyPort          int      `json:"proxy_port"`
 	ProxyUser          string   `json:"proxy_user"`
 	ProxyPass          string   `json:"proxy_pass,omitempty"`
@@ -147,6 +150,31 @@ func LoadConfig() *Config {
 	}
 	uiPath = strings.Trim(uiPath, "/")
 
+	subToken := getEnv("SUB_TOKEN", "")
+	if subToken == "" {
+		subTokenFile := filepath.Join(dataDir, "sub_token.txt")
+		// #nosec G304 -- path is rooted in the operator-controlled data directory.
+		if data, err := os.ReadFile(subTokenFile); err == nil && len(strings.TrimSpace(string(data))) > 0 {
+			subToken = strings.TrimSpace(string(data))
+		} else {
+			// Check /etc/sing-box/sub.json if token exists
+			if sbData, err := os.ReadFile("/etc/sing-box/sub.json"); err == nil {
+				var sbSub struct {
+					Token string `json:"token"`
+				}
+				if json.Unmarshal(sbData, &sbSub) == nil && sbSub.Token != "" {
+					subToken = strings.TrimSpace(sbSub.Token)
+				}
+			}
+			if subToken == "" {
+				subToken = randomSecretPath()
+			}
+			_ = os.WriteFile(subTokenFile, []byte(subToken), 0600)
+			_ = os.Chmod(subTokenFile, 0600)
+		}
+	}
+	subToken = strings.Trim(subToken, "/")
+
 	countriesRaw := getEnv("DISCOVERY_COUNTRIES", "")
 	var countries []string
 	if countriesRaw != "" {
@@ -193,6 +221,7 @@ func LoadConfig() *Config {
 		UIPath:     uiPath,
 		UIUsername: getEnv("UI_USERNAME", "admin"),
 		UIPassword: getEnv("UI_PASSWORD", "aimilivpn"),
+		SubToken:   subToken,
 
 		ProxyHost:           getEnv("LOCAL_PROXY_HOST", "127.0.0.1"),
 		ProxyPort:           getEnvInt("LOCAL_PROXY_PORT", 7928, 1, 65535),
@@ -229,6 +258,7 @@ func (c *Config) GetSettings() SettingsDTO {
 		UIPort:             c.UIPort,
 		UIPath:             c.UIPath,
 		UIUsername:         c.UIUsername,
+		SubToken:           c.GetSubscriptionToken(),
 		ProxyPort:          c.ProxyPort,
 		ProxyUser:          c.ProxyUser,
 		ProxyPass:          c.ProxyPass,
@@ -238,6 +268,18 @@ func (c *Config) GetSettings() SettingsDTO {
 		TelegramBotToken:   c.TelegramBotToken,
 		TelegramChatID:     c.TelegramChatID,
 	}
+}
+
+func (c *Config) GetSubscriptionToken() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.SubToken != "" {
+		return c.SubToken
+	}
+	if c.UIPath != "" {
+		return c.UIPath
+	}
+	return ""
 }
 
 func (c *Config) GetProxyCredentials() (string, string) {
@@ -297,6 +339,12 @@ func (c *Config) UpdateSettings(dto SettingsDTO) error {
 	}
 	if strings.TrimSpace(dto.UIPath) != "" {
 		c.UIPath = strings.Trim(strings.TrimSpace(dto.UIPath), "/")
+	}
+	if strings.TrimSpace(dto.SubToken) != "" {
+		c.SubToken = strings.Trim(strings.TrimSpace(dto.SubToken), "/")
+		subTokenFile := filepath.Join(c.DataDir, "sub_token.txt")
+		_ = os.WriteFile(subTokenFile, []byte(c.SubToken), 0600)
+		_ = os.Chmod(subTokenFile, 0600)
 	}
 	if strings.TrimSpace(dto.UIUsername) != "" {
 		c.UIUsername = strings.TrimSpace(dto.UIUsername)
