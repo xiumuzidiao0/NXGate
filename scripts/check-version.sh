@@ -17,7 +17,7 @@ sync_version() {
     target_ver="${target_ver#v}"
 
     if [[ ! "$target_ver" =~ ^[0-9]+\.[0-9]+\.[0-9]+.*$ ]]; then
-        echo -e "${RED}错误: 版本号格式不合法: ${target_ver} (应如 2.5.1)${PLAIN}"
+        echo -e "${RED}错误: 版本号格式不合法: ${target_ver} (应如 2.5.8 或小版本 2.5.7.1)${PLAIN}"
         exit 1
     fi
 
@@ -33,7 +33,7 @@ sync_version() {
 
     # 3. install.sh
     sed -i -E "s/DEFAULT_VERSION=\".*\"/DEFAULT_VERSION=\"${target_ver}\"/" install.sh
-    sed -i -E "s#download/v[0-9]+\.[0-9]+\.[0-9]+#download/v${target_ver}#g" install.sh
+    sed -i -E "s#download/v[0-9]+(\.[0-9]+)+#download/v${target_ver}#g" install.sh
     echo -e "  [✓] 已更新 install.sh DEFAULT_VERSION 与下载 fallback -> v${target_ver}"
 
     # 4. web/dist/index.html
