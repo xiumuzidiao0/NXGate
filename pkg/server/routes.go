@@ -211,6 +211,8 @@ type BlacklistNodeReq struct {
 	Country         string `json:"country,omitempty"`
 	DurationMinutes int    `json:"duration_minutes,omitempty"`
 	Reason          string `json:"reason,omitempty"`
+	Permanent       bool   `json:"permanent,omitempty"`
+	Scope           string `json:"scope,omitempty"` // "node" (默认) 或 "ip" (整机IP屏蔽)
 }
 
 func (s *Server) handleBlacklistRemove(w http.ResponseWriter, r *http.Request) {
@@ -220,7 +222,10 @@ func (s *Server) handleBlacklistRemove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.pool.Blacklist().Remove(req.NodeID)
-	stats.LogInfo("Server", "管理员解除了对节点 [%s] 的屏蔽", req.NodeID)
+	if req.IP != "" {
+		s.pool.Blacklist().Remove(req.IP)
+	}
+	stats.LogInfo("Server", "管理员解除了对节点/IP [%s] 的屏蔽", req.NodeID)
 	s.writeJSON(w, http.StatusOK, map[string]any{
 		"ok":      true,
 		"message": "已解除屏蔽",
@@ -244,19 +249,29 @@ func (s *Server) handleBlacklistAdd(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	dur := time.Duration(req.DurationMinutes) * time.Minute
-	if dur <= 0 {
+	if dur <= 0 && !req.Permanent {
 		dur = 24 * time.Hour
 	}
 	reason := req.Reason
 	if reason == "" {
-		reason = "用户手动屏蔽"
+		if req.Permanent {
+			reason = "用户手动永久屏蔽 (Tombstone)"
+		} else {
+			reason = "用户手动屏蔽"
+		}
 	}
-	s.pool.Blacklist().MarkManual(req.NodeID, req.IP, req.Country, reason, dur)
-	stats.LogInfo("Server", "管理员手动将节点 [%s] (%s) 屏蔽 %v: %s", req.NodeID, req.Country, dur, reason)
+	s.pool.Blacklist().MarkManualWithOptions(req.NodeID, req.IP, req.Country, reason, dur, req.Scope, req.Permanent)
+	targetDesc := req.NodeID
+	if req.Scope == "ip" && req.IP != "" {
+		targetDesc = fmt.Sprintf("整机IP [%s]", req.IP)
+	}
+	stats.LogInfo("Server", "管理员手动将 %s (%s) 屏蔽 (永久=%v, 时长=%v): %s", targetDesc, req.Country, req.Permanent, dur, reason)
 	s.writeJSON(w, http.StatusOK, map[string]any{
-		"ok":      true,
-		"message": "已成功加入屏蔽库",
-		"node_id": req.NodeID,
+		"ok":        true,
+		"message":   "已成功加入屏蔽库",
+		"node_id":   req.NodeID,
+		"permanent": req.Permanent,
+		"scope":     req.Scope,
 	})
 }
 
