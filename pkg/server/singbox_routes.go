@@ -504,6 +504,22 @@ func (s *Server) handleSingBoxDeleteNode(w http.ResponseWriter, r *http.Request)
 	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "msg": "节点删除成功", "target": target})
 }
 
+func (s *Server) buildGenericSubURL(r *http.Request) string {
+	scheme := "http"
+	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
+		scheme = "https"
+	}
+	host := r.Host
+	if host == "" {
+		host = net.JoinHostPort(s.cfg.UIHost, fmt.Sprintf("%d", s.cfg.UIPort))
+	}
+	secret := strings.Trim(s.cfg.UIPath, "/")
+	if secret != "" {
+		return fmt.Sprintf("%s://%s/%s/api/singbox/subscription", scheme, host, secret)
+	}
+	return fmt.Sprintf("%s://%s/api/singbox/subscription", scheme, host)
+}
+
 func (s *Server) buildClashSubURL(r *http.Request) string {
 	scheme := "http"
 	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
@@ -518,6 +534,31 @@ func (s *Server) buildClashSubURL(r *http.Request) string {
 		return fmt.Sprintf("%s://%s/%s/api/singbox/subscription/clash", scheme, host, secret)
 	}
 	return fmt.Sprintf("%s://%s/api/singbox/subscription/clash", scheme, host)
+}
+
+func (s *Server) handleSingBoxRawSub(w http.ResponseWriter, r *http.Request) {
+	if s.singboxClient == nil {
+		s.singboxClient = singbox.NewClient()
+	}
+
+	nodes, err := s.singboxClient.ListNodes(r.Context())
+	if err != nil {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(fmt.Sprintf("# 获取 sing-box 节点列表失败: %v\n", err)))
+		return
+	}
+
+	serverHost := extractHostFromRequest(r.Host)
+	if serverHost == "" || serverHost == "127.0.0.1" || serverHost == "localhost" {
+		serverHost = s.cfg.UIHost
+	}
+
+	urls := GenerateRawSubscription(nodes, serverHost)
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Content-Disposition", "attachment; filename=\"singbox-sub.txt\"")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(strings.Join(urls, "\n")))
 }
 
 func (s *Server) handleSingBoxClashSub(w http.ResponseWriter, r *http.Request) {
@@ -547,6 +588,7 @@ func (s *Server) handleSingBoxClashSub(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleSingBoxGetSub(w http.ResponseWriter, r *http.Request) {
+	// 1. Clash / Mihomo requests
 	if r.URL.Query().Get("format") == "clash" || strings.Contains(r.Header.Get("User-Agent"), "Clash") || strings.Contains(r.Header.Get("User-Agent"), "clash") || strings.Contains(r.Header.Get("User-Agent"), "Mihomo") {
 		s.handleSingBoxClashSub(w, r)
 		return
@@ -556,7 +598,7 @@ func (s *Server) handleSingBoxGetSub(w http.ResponseWriter, r *http.Request) {
 		s.singboxClient = singbox.NewClient()
 	}
 
-	sub, err := s.singboxClient.GetSubscription(r.Context())
+	nodes, err := s.singboxClient.ListNodes(r.Context())
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
@@ -564,58 +606,61 @@ func (s *Server) handleSingBoxGetSub(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if sub == nil {
-		sub = &singbox.SubResponse{
-			OK:      true,
-			Enabled: false,
-		}
+	serverHost := extractHostFromRequest(r.Host)
+	if serverHost == "" || serverHost == "127.0.0.1" || serverHost == "localhost" {
+		serverHost = s.cfg.UIHost
 	}
-	sub.ClashSubURL = s.buildClashSubURL(r)
+
+	format := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("format")))
+	accept := strings.ToLower(r.Header.Get("Accept"))
+	ua := strings.ToLower(r.Header.Get("User-Agent"))
+
+	// 2. Direct Raw URLs request
+	if format == "raw" || format == "text" {
+		urls := GenerateRawSubscription(nodes, serverHost)
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.Header().Set("Content-Disposition", "attachment; filename=\"singbox-sub.txt\"")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(strings.Join(urls, "\n")))
+		return
+	}
+
+	// 3. Universal Base64 subscription (Shadowrocket, v2rayN, Sing-box client, Quantumult X, Surge, etc.)
+	isSubClient := strings.Contains(ua, "shadowrocket") || strings.Contains(ua, "v2ray") ||
+		strings.Contains(ua, "sing-box") || strings.Contains(ua, "quantumult") ||
+		strings.Contains(ua, "surge") || strings.Contains(ua, "loon") || strings.Contains(ua, "stash")
+
+	if format == "base64" || format == "b64" || isSubClient || (!strings.Contains(accept, "application/json") && format != "json") {
+		b64Content := GenerateBase64Subscription(nodes, serverHost)
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.Header().Set("Content-Disposition", "attachment; filename=\"singbox-sub.txt\"")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(b64Content))
+		return
+	}
+
+	// 4. Native JSON subscription overview for Web Console & Management API
+	urls := GenerateRawSubscription(nodes, serverHost)
+	genericURL := s.buildGenericSubURL(r)
+	clashURL := s.buildClashSubURL(r)
 
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(sub)
+	_ = json.NewEncoder(w).Encode(&singbox.SubResponse{
+		OK:          true,
+		Enabled:     true,
+		SubURL:      genericURL,
+		ClashSubURL: clashURL,
+		NodeCount:   len(nodes),
+		Nodes:       urls,
+	})
 }
 
 func (s *Server) handleSingBoxSyncSub(w http.ResponseWriter, r *http.Request) {
-	if s.singboxClient == nil {
-		s.singboxClient = singbox.NewClient()
-	}
-
-	sub, err := s.singboxClient.SyncSubscription(r.Context())
-	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": err.Error()})
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(sub)
+	// Sync subscription is inherently instantaneous and zero-overhead in native Go
+	s.handleSingBoxGetSub(w, r)
 }
 
 func (s *Server) handleSingBoxInitSub(w http.ResponseWriter, r *http.Request) {
-	if s.singboxClient == nil {
-		s.singboxClient = singbox.NewClient()
-	}
-
-	var req struct {
-		Port int `json:"port"`
-	}
-	_ = json.NewDecoder(r.Body).Decode(&req)
-	if req.Port == 0 {
-		if pStr := r.URL.Query().Get("port"); pStr != "" {
-			req.Port, _ = strconv.Atoi(pStr)
-		}
-	}
-
-	sub, err := s.singboxClient.InitSubscription(r.Context(), req.Port)
-	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": err.Error()})
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(sub)
+	// Native subscription is always initialized and ready without third-party web servers
+	s.handleSingBoxGetSub(w, r)
 }

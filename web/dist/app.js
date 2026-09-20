@@ -1762,7 +1762,7 @@
             // 2. 远程订阅状态指示
             if (data && data.subscription && data.subscription.enabled) {
                 subBadge.classList.remove('hidden');
-                subBadge.innerText = `订阅: :${data.subscription.port} (${data.subscription.node_count || 0} 节点)`;
+                subBadge.innerText = `订阅: (${data.subscription.node_count || 0} 节点)`;
             } else {
                 subBadge.classList.add('hidden');
             }
@@ -2120,24 +2120,13 @@
                 return;
             }
             const sub = singBoxOverview.subscription;
-            if (sub && sub.enabled && sub.sub_url) {
-                copyText(sub.sub_url, 'sing-box 全量远程订阅链接');
+            if (sub && sub.sub_url) {
+                copyText(sub.sub_url, 'sing-box 全量通用订阅链接 (Base64/Raw)');
             } else {
-                if (confirm('当前尚未开启远程订阅服务，是否立即初始化开启？')) {
-                    try {
-                        const res = await fetch('/api/singbox/subscription/init', { method: 'POST' });
-                        const ret = await res.json();
-                        if (ret.ok && ret.sub_url) {
-                            showToast('远程订阅服务已成功开启！');
-                            copyText(ret.sub_url, '远程订阅链接');
-                            await fetchSingBoxOverview();
-                        } else {
-                            alert('开启订阅失败: ' + (ret.error || '未知错误'));
-                        }
-                    } catch (err) {
-                        alert('请求失败: ' + err);
-                    }
-                }
+                const origin = window.location.origin;
+                const prefix = window.__apiPrefix || '';
+                const url = `${origin}${prefix}/api/singbox/subscription`;
+                copyText(url, 'sing-box 全量通用订阅链接 (Base64/Raw)');
             }
         }
 
