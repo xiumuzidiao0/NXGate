@@ -66,6 +66,9 @@ class ServerStore(context: Context) {
     private val _biometricEnabled = MutableStateFlow(true)
     val biometricEnabled: StateFlow<Boolean> = _biometricEnabled.asStateFlow()
 
+    private val _biometricTimeoutSeconds = MutableStateFlow(60)
+    val biometricTimeoutSeconds: StateFlow<Int> = _biometricTimeoutSeconds.asStateFlow()
+
     private val _cleartextWarningEnabled = MutableStateFlow(true)
     val cleartextWarningEnabled: StateFlow<Boolean> = _cleartextWarningEnabled.asStateFlow()
 
@@ -112,6 +115,7 @@ class ServerStore(context: Context) {
         _activeServer.value = list.find { it.id == savedActiveId } ?: list.firstOrNull()
 
         _biometricEnabled.value = prefs.getBoolean(KEY_BIOMETRIC, true)
+        _biometricTimeoutSeconds.value = prefs.getInt(KEY_BIOMETRIC_TIMEOUT, 60)
         _cleartextWarningEnabled.value = prefs.getBoolean(KEY_CLEARTEXT_WARN, true)
         _themeMode.value = prefs.getString(KEY_THEME_MODE, "system") ?: "system"
         val defaultPalette = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) "monet" else "teal"
@@ -189,6 +193,11 @@ class ServerStore(context: Context) {
     fun setBiometricEnabled(enabled: Boolean) {
         _biometricEnabled.value = enabled
         prefs.edit().putBoolean(KEY_BIOMETRIC, enabled).apply()
+    }
+
+    fun setBiometricTimeoutSeconds(seconds: Int) {
+        _biometricTimeoutSeconds.value = seconds
+        prefs.edit().putInt(KEY_BIOMETRIC_TIMEOUT, seconds).apply()
     }
 
     fun setCleartextWarningEnabled(enabled: Boolean) {
@@ -360,6 +369,7 @@ class ServerStore(context: Context) {
         private const val KEY_SERVERS = "server_list_json"
         private const val KEY_ACTIVE_SERVER_ID = "active_server_id"
         private const val KEY_BIOMETRIC = "biometric_enabled"
+        private const val KEY_BIOMETRIC_TIMEOUT = "biometric_timeout_seconds"
         private const val KEY_CLEARTEXT_WARN = "cleartext_warn_enabled"
         private const val KEY_THEME_MODE = "theme_mode_str"
         private const val KEY_THEME_PALETTE = "theme_palette_str"

@@ -50,6 +50,11 @@ import com.nxgate.app.model.ServerProfile
 import com.nxgate.app.ui.components.ConnectedButtonItem
 import com.nxgate.app.ui.components.ConnectedButtonGroup
 import com.nxgate.app.ui.components.ConnectedButtonStyle
+import com.nxgate.app.ui.components.SubscriptionDialog
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -66,6 +71,7 @@ fun ClusterHubScreen(
     val clipboardManager = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
     val scrollState = rememberScrollState()
+    var subscriptionServerTarget by remember { mutableStateOf<ServerProfile?>(null) }
 
     val configuration = LocalConfiguration.current
     val isTablet = configuration.screenWidthDp >= 600
@@ -239,15 +245,10 @@ fun ClusterHubScreen(
                                     }
                                 ),
                                 ConnectedButtonItem(
-                                    text = "复制订阅",
+                                    text = "获取订阅",
                                     style = ConnectedButtonStyle.Tonal,
                                     onClick = {
-                                        scope.launch {
-                                            val subRes = NXGateApplication.instance.apiClient.fetchClashSubscription(server)
-                                            val url = subRes.getOrDefault("${server.baseUrl}/api/singbox/subscription/clash")
-                                            clipboardManager.setText(AnnotatedString(url))
-                                            Toast.makeText(context, "已复制 [${server.name}] Clash Meta 分流订阅！", Toast.LENGTH_SHORT).show()
-                                        }
+                                        subscriptionServerTarget = server
                                     }
                                 ),
                                 ConnectedButtonItem(
@@ -263,5 +264,12 @@ fun ClusterHubScreen(
                 Spacer(Modifier.height(80.dp))
             }
         }
+    }
+
+    subscriptionServerTarget?.let { s ->
+        SubscriptionDialog(
+            server = s,
+            onDismissRequest = { subscriptionServerTarget = null }
+        )
     }
 }

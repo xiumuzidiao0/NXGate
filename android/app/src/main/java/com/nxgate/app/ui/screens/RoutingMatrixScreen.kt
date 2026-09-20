@@ -88,8 +88,10 @@ import com.nxgate.app.ui.components.ConnectedButtonGroup
 import com.nxgate.app.ui.components.ConnectedButtonStyle
 import com.nxgate.app.ui.components.ConnectedListItem
 import com.nxgate.app.ui.components.GlobalServerSwitcherTitle
+import com.nxgate.app.ui.components.SubscriptionDialog
 import com.nxgate.app.ui.components.countryChineseName
 import com.nxgate.app.ui.components.countryFlag
+import androidx.compose.material.icons.rounded.CloudDownload
 import kotlinx.coroutines.launch
 
 // Dropdown option data models
@@ -127,6 +129,7 @@ fun RoutingMatrixScreen(
     // Tab state: 0 = 多端口, 1 = 自适应组, 2 = 边缘入站
     var selectedTabIndex by remember { mutableIntStateOf(0) }
     val tabTitles = listOf("多端口", "自适应组", "边缘入站")
+    var showSubscriptionDialog by remember { mutableStateOf(false) }
 
     // Real server states
     var portRules by remember { mutableStateOf<List<PortRuleItem>>(emptyList()) }
@@ -711,15 +714,12 @@ fun RoutingMatrixScreen(
                                                 }
                                             ),
                                             ConnectedButtonItem(
-                                                text = "复制 Clash 订阅",
+                                                text = "获取订阅",
                                                 style = ConnectedButtonStyle.Tonal,
+                                                icon = Icons.Rounded.CloudDownload,
                                                 onClick = {
                                                     if (activeServer != null) {
-                                                        scope.launch {
-                                                            val clashUrl = "${activeServer.baseUrl}/api/singbox/subscription/clash"
-                                                            clipboardManager.setText(AnnotatedString(clashUrl))
-                                                            Toast.makeText(context, "已复制 Clash Meta 完整分流订阅！", Toast.LENGTH_SHORT).show()
-                                                        }
+                                                        showSubscriptionDialog = true
                                                     }
                                                 }
                                             )
@@ -737,6 +737,13 @@ fun RoutingMatrixScreen(
     }
 
     // ======================== MODAL DIALOGS ========================
+
+    if (showSubscriptionDialog && activeServer != null) {
+        SubscriptionDialog(
+            server = activeServer,
+            onDismissRequest = { showSubscriptionDialog = false }
+        )
+    }
 
     // 1. Add / Edit Port Dialog (包含策略下拉框、周期下拉框、鉴权下拉框、自适应端口组多选)
     if (showPortDialog) {

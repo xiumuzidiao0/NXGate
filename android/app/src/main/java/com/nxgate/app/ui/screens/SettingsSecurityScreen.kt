@@ -43,6 +43,7 @@ import androidx.compose.material.icons.rounded.NetworkPing
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.QrCodeScanner
 import androidx.compose.material.icons.rounded.Share
+import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -139,6 +140,8 @@ fun SettingsSecurityScreen(
 
     // Security preferences switch states
     var biometricEnabled by remember { mutableStateOf(NXGateApplication.instance.serverStore.biometricEnabled.value) }
+    val biometricTimeout by NXGateApplication.instance.serverStore.biometricTimeoutSeconds.collectAsState()
+    var showBiometricTimeoutDialog by remember { mutableStateOf(false) }
     var cleartextWarningEnabled by remember { mutableStateOf(NXGateApplication.instance.serverStore.cleartextWarningEnabled.value) }
 
     // Server deletion confirmation target
@@ -580,12 +583,13 @@ fun SettingsSecurityScreen(
                             HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
                             // 安全偏好
+                            val landscapePrefCount = if (biometricEnabled) 3 else 2
                             Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                                 ConnectedListItem(
                                     index = 0,
-                                    total = 2,
+                                    total = landscapePrefCount,
                                     headline = "生物识别安全锁",
-                                    supportingText = "后台超过一分钟或冷启动时需要验证",
+                                    supportingText = if (biometricEnabled) "后台等待 ${formatBiometricTimeoutShort(biometricTimeout)} 或冷启动时需要验证" else "冷启动与切回前台时无需验证",
                                     leadingIcon = Icons.Rounded.Fingerprint,
                                     trailingContent = {
                                         Switch(
@@ -600,9 +604,28 @@ fun SettingsSecurityScreen(
                                     onClick = { onToggleBiometric(!biometricEnabled) }
                                 )
 
+                                if (biometricEnabled) {
+                                    ConnectedListItem(
+                                        index = 1,
+                                        total = landscapePrefCount,
+                                        headline = "后台锁定等待时间",
+                                        supportingText = formatBiometricTimeout(biometricTimeout),
+                                        leadingIcon = Icons.Rounded.Timer,
+                                        trailingContent = {
+                                            Text(
+                                                text = formatBiometricTimeoutShort(biometricTimeout),
+                                                style = MaterialTheme.typography.labelLarge,
+                                                color = MaterialTheme.colorScheme.primary,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        },
+                                        onClick = { showBiometricTimeoutDialog = true }
+                                    )
+                                }
+
                                 ConnectedListItem(
-                                    index = 1,
-                                    total = 2,
+                                    index = if (biometricEnabled) 2 else 1,
+                                    total = landscapePrefCount,
                                     headline = "HTTP 传输风险提醒",
                                     supportingText = "检测到使用 HTTP 未加密连接时显示警告",
                                     leadingIcon = Icons.Rounded.Warning,
@@ -906,13 +929,14 @@ fun SettingsSecurityScreen(
                         }
                     }
 
-                    // 5. 2项安全偏好列表 (不再与 FAB 重合遮挡)
+                    // 5. 安全偏好列表
+                    val portraitPrefCount = if (biometricEnabled) 3 else 2
                     Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                         ConnectedListItem(
                             index = 0,
-                            total = 2,
+                            total = portraitPrefCount,
                             headline = "生物识别安全锁",
-                            supportingText = "后台超过一分钟或冷启动时需要验证",
+                            supportingText = if (biometricEnabled) "后台等待 ${formatBiometricTimeoutShort(biometricTimeout)} 或冷启动时需要验证" else "冷启动与切回前台时无需验证",
                             leadingIcon = Icons.Rounded.Fingerprint,
                             trailingContent = {
                                 Switch(
@@ -934,9 +958,28 @@ fun SettingsSecurityScreen(
                             }
                         )
 
+                        if (biometricEnabled) {
+                            ConnectedListItem(
+                                index = 1,
+                                total = portraitPrefCount,
+                                headline = "后台锁定等待时间",
+                                supportingText = formatBiometricTimeout(biometricTimeout),
+                                leadingIcon = Icons.Rounded.Timer,
+                                trailingContent = {
+                                    Text(
+                                        text = formatBiometricTimeoutShort(biometricTimeout),
+                                        style = MaterialTheme.typography.labelLarge,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                },
+                                onClick = { showBiometricTimeoutDialog = true }
+                            )
+                        }
+
                         ConnectedListItem(
-                            index = 1,
-                            total = 2,
+                            index = if (biometricEnabled) 2 else 1,
+                            total = portraitPrefCount,
                             headline = "明文传输风险提醒",
                             supportingText = "检测到未启用加密连接时显示警告",
                             leadingIcon = Icons.Rounded.Warning,
@@ -1038,6 +1081,87 @@ fun SettingsSecurityScreen(
     }
 
     // Cluster Backup & Restore Modal Dialog
+    if (showBiometricTimeoutDialog) {
+        val timeoutOptions = listOf(0, 15, 30, 60, 120, 300, 600)
+        AlertDialog(
+            onDismissRequest = { showBiometricTimeoutDialog = false },
+            shape = RoundedCornerShape(28.dp),
+            title = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Icon(
+                        Icons.Rounded.Timer,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Text(
+                        text = "后台锁定等待时间",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = "应用切入后台后，等待多久重新打开时触发生物识别验证：",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    timeoutOptions.forEach { sec ->
+                        val isSelected = biometricTimeout == sec
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    NXGateApplication.instance.serverStore.setBiometricTimeoutSeconds(sec)
+                                    Toast.makeText(context, "已设置后台锁定时间: ${formatBiometricTimeout(sec)}", Toast.LENGTH_SHORT).show()
+                                    showBiometricTimeoutDialog = false
+                                }
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = formatBiometricTimeout(sec),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+                                )
+                                if (isSelected) {
+                                    Icon(
+                                        Icons.Rounded.Check,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showBiometricTimeoutDialog = false }) {
+                    Text("取消")
+                }
+            }
+        )
+    }
+
     if (showClusterBackupDialog) {
         AlertDialog(
             onDismissRequest = { showClusterBackupDialog = false },
@@ -1463,4 +1587,31 @@ fun ThemeAppearanceSettingsSection(modifier: Modifier = Modifier) {
         }
     }
 }
+
+private fun formatBiometricTimeout(seconds: Int): String {
+    return when (seconds) {
+        0 -> "立即锁定 (离开即锁)"
+        15 -> "15 秒"
+        30 -> "30 秒"
+        60 -> "1 分钟 (默认推荐)"
+        120 -> "2 分钟"
+        300 -> "5 分钟"
+        600 -> "10 分钟"
+        else -> "${seconds} 秒"
+    }
+}
+
+private fun formatBiometricTimeoutShort(seconds: Int): String {
+    return when (seconds) {
+        0 -> "立即"
+        15 -> "15s"
+        30 -> "30s"
+        60 -> "1m"
+        120 -> "2m"
+        300 -> "5m"
+        600 -> "10m"
+        else -> "${seconds}s"
+    }
+}
+
 

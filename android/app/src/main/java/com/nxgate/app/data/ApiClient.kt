@@ -624,6 +624,33 @@ class ApiClient {
         }
     }
 
+    data class SubscriptionInfo(
+        val genericSubUrl: String,
+        val clashSubUrl: String,
+        val nodeCount: Int = 0
+    )
+
+    suspend fun fetchSubscriptionInfo(profile: ServerProfile): Result<SubscriptionInfo> = withContext(Dispatchers.IO) {
+        val fallbackGeneric = "${profile.baseUrl}/api/singbox/subscription"
+        val fallbackClash = "${profile.baseUrl}/api/singbox/subscription/clash"
+        try {
+            executeCall(profile, "/api/singbox/subscription?format=json").use { response ->
+                if (response.isSuccessful) {
+                    val body = response.body?.string() ?: "{}"
+                    val json = JSONObject(body)
+                    val subUrl = json.optString("sub_url").ifBlank { fallbackGeneric }
+                    val clashUrl = json.optString("clash_sub_url").ifBlank { fallbackClash }
+                    val count = json.optInt("node_count", 0)
+                    Result.success(SubscriptionInfo(subUrl, clashUrl, count))
+                } else {
+                    Result.success(SubscriptionInfo(fallbackGeneric, fallbackClash))
+                }
+            }
+        } catch (e: Exception) {
+            Result.success(SubscriptionInfo(fallbackGeneric, fallbackClash))
+        }
+    }
+
     suspend fun fetchClashSubscription(profile: ServerProfile): Result<String> = withContext(Dispatchers.IO) {
         try {
             executeCall(profile, "/api/singbox/subscription/clash").use { response ->
