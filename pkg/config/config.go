@@ -327,6 +327,8 @@ func (c *Config) UpdateSettings(dto SettingsDTO) error {
 
 	// Persist to config.env
 	targetEnvPaths := []string{
+		"/opt/nxgate/config.env",
+		"/etc/nxgate/config.env",
 		"/opt/aimilivpn/config.env",
 		filepath.Join(c.DataDir, "../config.env"),
 		"config.env",
@@ -335,7 +337,7 @@ func (c *Config) UpdateSettings(dto SettingsDTO) error {
 	for _, p := range targetEnvPaths {
 		dir := filepath.Dir(p)
 		if _, err := os.Stat(dir); err == nil {
-			content := fmt.Sprintf(`# AimiliVPN 运行环境变量配置
+			content := fmt.Sprintf(`# NXGate 运行环境变量配置
 DATA_DIR=%s
 UI_HOST=%s
 UI_PORT=%d

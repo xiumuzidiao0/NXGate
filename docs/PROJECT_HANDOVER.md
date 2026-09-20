@@ -1,7 +1,7 @@
-# AimiliVPN (Go 高性能版) 项目交接与工程维护文档
+# NXGate (自适应多出口智能路由网关) 项目交接与工程维护文档
 
-**编写日期**：2026-09-16  
-**当前版本**：`v2.5.1`  
+**编写日期**：2026-09-20  
+**当前版本**：`v2.5.7`  
 **代码仓库**：`https://github.com/xiumuzidiao0/NXGate`  
 **维护状态**：CI/CD 自动化全绿、线上运行正常、全功能经过端到端验证  
 
@@ -16,7 +16,10 @@
   - [2. 节点端口快速预检机制 (Port Knock)](#2-节点端口快速预检机制-port-knock)
   - [3. 带宽断流检测机制 (Throughput Check)](#3-带宽断流检测机制-throughput-check)
   - [4. 三大 AI 解锁严格物理校验 (OpenAI + Claude + Gemini)](#4-三大-ai-解锁严格物理校验-openai--claude--gemini)
-  - [5. 现代化深空 UI/UX 架构与组件设计](#5-现代化深空-uiux-架构与组件设计)
+  - [5. 代理中继 sync.Pool 缓冲区复用与 RingLog 原地切片回收](#5-代理中继-syncpool-缓冲区复用与-ringlog-原地切片回收)
+  - [6. 节点多源拉取竞速早退与 SingleFlight 防抖机制](#6-节点多源拉取竞速早退与-singleflight-防抖机制)
+  - [7. Android 原生客户端 (NXGate App) 三阶段全量集成](#7-android-原生客户端-nxgate-app-三阶段全量集成)
+  - [8. 现代化深空 UI/UX 架构与组件设计](#8-现代化深空-uiux-架构与组件设计)
 - [四、 线上服务器环境与运维管理手册](#四-线上服务器环境与运维管理手册)
   - [1. 生产服务器环境资产](#1-生产服务器环境资产)
   - [2. 常用运维与管理指令](#2-常用运维与管理指令)
@@ -31,7 +34,7 @@
 
 ## 一、 项目概况与核心使命
 
-AimiliVPN 是基于 Go 语言重构的高性能 Linux 出口网关系统。其核心使命是：
+NXGate 是基于 Go 语言重构的高性能 Linux 出口网关系统。其核心使命是：
 1. **聚合与清洗海量 VPNGate 志愿者节点资源**，自动识别并优先调度日本、美国等全球**原生住宅家宽（Residential Broadband）IP**；
 2. **构建多出口并发虚拟网卡池（`tun0` ~ `tunN`）**，利用 Linux 内核策略路由与 `SO_BINDTODEVICE` 实现严格的流量隔离与独立出网；
 3. **提供统一本地代理网关（HTTP / HTTPS CONNECT / SOCKS5 / SOCKS5 UDP）**，支持多端口独立分流与自适应动态池轮换；
@@ -117,7 +120,28 @@ AimiliVPN 是基于 Go 语言重构的高性能 Linux 出口网关系统。其�
     - Gemini: `https://gemini.google.com/app`
   - 当自适应组或节点筛选配置为 `unlock: "ai"` 时，强制要求**三大 AI 必须全部成功解锁**方可通过准入。
 
-### 5. 现代化深空 UI/UX 架构与组件设计
+### 5. 代理中继 sync.Pool 缓冲区复用与 RingLog 原地切片回收
+- **实现位置**：`pkg/proxy/relay.go` & `pkg/stats/ringlog.go`
+- **业务痛点**：高并发代理中继时，双向连接每次均分配 64KB 切片，引发频繁的 GC 停顿；环形日志达到容量后频繁缩容和 append 导致切片重新分配。
+- **关键设计**：
+  - `proxy.relay` 引入 `sync.Pool` 对象池复用 32KB 缓冲区，减少 80%+ GC 压力；
+  - `stats.RingLog` 采用原地 `copy(r.entries, r.entries[1:])`，容量达到上限后实现零堆分配。
+
+### 6. 节点多源拉取竞速早退与 SingleFlight 防抖机制
+- **实现位置**：`pkg/nodes/fetcher.go` & `pkg/nodes/pool.go`
+- **业务痛点**：8 个数据源并发拉取时，个别网络阻断的源卡死 12 秒导致整批拉取变慢；用户在前端连续点击刷新会引发高频并发重复拉取。
+- **关键设计**：
+  - `Fetcher` 引入早退宽限机制：只要 2 个高速源成功即开启 1.5s 宽限期，超时自动取消卡顿源并合并返回，拉取耗时从 12s 缩短至约 1.5s；
+  - `NodePool.Refresh` 加入 `atomic.Bool` CAS 状态锁，阻断重复并发请求。
+
+### 7. Android 原生客户端 (NXGate App) 三阶段全量集成
+- **实现位置**：`android/app/src/main/java/com/nxgate/app/`
+- **关键设计**：
+  - **阶段一**：60s 切后台免锁缓冲、全场景触感反馈（HapticFeedback）、节点长列表 200ms 防抖后台过滤、自签名 TLS 宽松连接开关；
+  - **阶段二**：服务端 `/api/events` SSE 长连接替代 3 秒短轮询、KeyStore AES-256 GCM 硬件加密存储与旧数据无感迁移、集群配置全量 JSON 导出/导入/系统分享；
+  - **阶段三**：Android 下拉快捷设置磁贴（`NXGateTileService`）动态感应网关状态与一键换线、本地断流与 Failover 故障转移横幅推送通知（`NotificationCompat`）。
+
+### 8. 现代化深空 UI/UX 架构与组件设计
 - **实现位置**：`web/dist/styles.css` & `web/dist/index.html` & `web/dist/app.js`
 - **关键设计**：
   - **色彩体系**：构建 7 级深空 Surface 色阶（`--surface-0` ~ `--surface-6`），主色调升级为科技青蓝（`#4dcadc`）配合微妙光晕；

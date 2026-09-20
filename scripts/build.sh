@@ -13,19 +13,23 @@ TARGETS=(
     "linux/arm"
 )
 
-echo "=== 开始编译 AimiliVPN 多架构发行二进制文件 ==="
+echo "=== 开始编译 NXGate 多架构发行二进制文件 ==="
 
 for TARGET in "${TARGETS[@]}"; do
     OS="${TARGET%/*}"
     ARCH="${TARGET#*/}"
-    OUTPUT="dist/aimilivpn_${OS}_${ARCH}"
+    OUTPUT="dist/nxgate_${OS}_${ARCH}"
     echo "-> 正在编译 ${TARGET} ..."
     CGO_ENABLED=0 GOOS="$OS" GOARCH="$ARCH" go build -ldflags="-s -w" -o "$OUTPUT" ./cmd/aimilivpn
     gzip -kf "$OUTPUT"
+
+    # 生成向后兼容的 aimilivpn_* 别名副本
+    cp -f "$OUTPUT" "dist/aimilivpn_${OS}_${ARCH}"
+    cp -f "${OUTPUT}.gz" "dist/aimilivpn_${OS}_${ARCH}.gz"
 done
 
 echo "-> 正在生成 SHA256 校验和清单..."
-(cd dist && sha256sum aimilivpn_* > SHA256SUMS.txt)
+(cd dist && sha256sum nxgate_* aimilivpn_* > SHA256SUMS.txt)
 
 echo "=== 编译完成，产物位于 dist/ 目录 ==="
 ls -lh dist/

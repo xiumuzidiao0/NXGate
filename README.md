@@ -214,8 +214,12 @@ NXGate 实现了一套单端口双栈协议嗅探与中继引擎：
 - **Material 3 原生 Android 配套客户端 (`com.nxgate.app`)**：
   - 全流程 Material 3 规范与 Android 12+ 莫奈壁纸动态取色；
   - 手机端原生贴底 `NavigationBar`，平板横屏自适应左侧 `NavigationRail`；
-  - CameraX + ZXing 离线安全扫码添加服务器；
-  - Android 生物识别硬件锁（BiometricPrompt 指纹/面容/凭据）。
+  - CameraX + ZXing 离线安全扫码添加服务器与集群配置一键 JSON 导入/导出/系统分享；
+  - Android 生物识别硬件锁（BiometricPrompt 指纹/面容/凭据，支持 60s 切后台免锁缓冲）；
+  - 全场景触感反馈（HapticFeedback）与节点长列表 200ms 防抖后台过滤；
+  - 服务端 `/api/events` SSE 实时流式通信（低功耗、毫秒级日志与状态推流）；
+  - Android 原生下拉快捷设置磁贴（`TileService`，通知栏一眼看状态并支持一键换线）；
+  - 本地断流与 Failover 故障转移横幅推送通知（`NotificationCompat`）。
 
 ---
 
@@ -242,27 +246,27 @@ nx update        # 检查并拉取最新 Release 版本执行热更新与自愈
 nx restart       # 平滑重启网关服务
 nx start         # 启动网关服务
 nx stop          # 停止网关服务
-nx logs          # 查看实时运行日志 (journalctl -u aimilivpn -f)
+nx logs          # 查看实时运行日志 (journalctl -u nxgate -f 或 aimilivpn)
 ```
 
 ### Systemd 服务生命周期
 
 ```bash
 # 检查守护进程运行状态
-systemctl status aimilivpn
+systemctl status nxgate  # 或 systemctl status aimilivpn
 
 # 重启网关核心服务
-systemctl restart aimilivpn
+systemctl restart nxgate # 或 systemctl restart aimilivpn
 
 # 查看开机启动项
-systemctl is-enabled aimilivpn
+systemctl is-enabled nxgate
 ```
 
 ---
 
 ## 配置参数规范
 
-配置文件路径位于 `/opt/aimilivpn/config.env`（环境变量覆盖优先级高于文件）：
+配置文件路径位于 `/opt/nxgate/config.env`（兼容 `/opt/aimilivpn/config.env`，环境变量覆盖优先级高于文件）：
 
 | 环境变量名 | 默认值 | 允许范围 / 格式 | 功能说明 |
 | :--- | :--- | :--- | :--- |
@@ -295,10 +299,10 @@ git clone https://github.com/xiumuzidiao0/NXGate.git
 cd NXGate
 
 # 2. 编译当前平台二进制文件
-CGO_ENABLED=0 go build -ldflags="-s -w" -o bin/aimilivpn ./cmd/aimilivpn
+CGO_ENABLED=0 go build -ldflags="-s -w" -o bin/nxgate ./cmd/aimilivpn
 
 # 3. 运行网关服务 (需 root 权限以管理虚拟网卡)
-sudo ./bin/aimilivpn
+sudo ./bin/nxgate
 ```
 
 ### 全架构静态交叉编译
@@ -311,10 +315,10 @@ chmod +x scripts/build.sh
 ```
 
 输出文件位于 `dist/` 目录：
-- `aimilivpn_linux_amd64` (x86_64 服务器通用)
-- `aimilivpn_linux_arm64` (aarch64 树莓派 / 鲲鹏 / 飞腾 / 甲骨文 ARM)
-- `aimilivpn_linux_386` (32位 x86)
-- `aimilivpn_linux_arm` (32位 ARMv7)
+- `nxgate_linux_amd64` (x86_64 服务器通用，附带 `aimilivpn_*` 别名)
+- `nxgate_linux_arm64` (aarch64 树莓派 / 鲲鹏 / 飞腾 / 甲骨文 ARM)
+- `nxgate_linux_386` (32位 x86)
+- `nxgate_linux_arm` (32位 ARMv7)
 - `SHA256SUMS.txt` (全产物哈希校验清单)
 
 ### 自动化质量准入审计
