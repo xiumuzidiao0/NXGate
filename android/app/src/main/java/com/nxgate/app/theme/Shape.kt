@@ -5,13 +5,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Shapes
 import androidx.compose.ui.unit.dp
 
-val AimiliShapes = Shapes(
+val NXGateShapes = Shapes(
     extraSmall = RoundedCornerShape(4.dp),
     small = RoundedCornerShape(8.dp),
     medium = RoundedCornerShape(16.dp),
     large = RoundedCornerShape(20.dp), // M3 Expressive Cards: 20dp
     extraLarge = RoundedCornerShape(28.dp) // M3 Expressive Dialogs & Sheets: 28dp
 )
+
+val AimiliShapes = NXGateShapes
 
 // Capsule shape for Buttons
 val CapsuleShape = CircleShape

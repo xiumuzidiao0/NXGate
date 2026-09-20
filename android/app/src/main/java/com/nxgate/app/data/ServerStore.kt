@@ -20,27 +20,31 @@ class ServerStore(context: Context) {
                 .build()
             val encPrefs = EncryptedSharedPreferences.create(
                 context,
-                "aimili_server_secure_prefs",
+                "nxgate_server_secure_prefs",
                 masterKey,
                 EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
                 EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
             )
-            // 自动从旧版明文存储无缝平滑迁移
+            // 自动从旧版存储无缝平滑迁移
+            val oldAimiliSecure = context.getSharedPreferences("aimili_server_secure_prefs", Context.MODE_PRIVATE)
             val oldPrefs = context.getSharedPreferences("aimili_server_prefs", Context.MODE_PRIVATE)
-            if (!encPrefs.contains(KEY_SERVERS) && oldPrefs.contains(KEY_SERVERS)) {
-                val oldJson = oldPrefs.getString(KEY_SERVERS, null)
-                val oldActive = oldPrefs.getString(KEY_ACTIVE_SERVER_ID, null)
-                val oldBio = oldPrefs.getBoolean(KEY_BIOMETRIC, true)
-                val oldClear = oldPrefs.getBoolean(KEY_CLEARTEXT_WARN, true)
-                val oldMode = oldPrefs.getString(KEY_THEME_MODE, "system")
-                val oldPalette = oldPrefs.getString(KEY_THEME_PALETTE, "teal")
-                val oldAccent = oldPrefs.getString(KEY_THEME_ACCENT, "teal")
-                val oldBase = oldPrefs.getString(KEY_THEME_BASE, "neutral")
+            val sourcePrefs = if (oldAimiliSecure.contains(KEY_SERVERS)) oldAimiliSecure else oldPrefs
+            if (!encPrefs.contains(KEY_SERVERS) && sourcePrefs.contains(KEY_SERVERS)) {
+                val oldJson = sourcePrefs.getString(KEY_SERVERS, null)
+                val oldActive = sourcePrefs.getString(KEY_ACTIVE_SERVER_ID, null)
+                val oldBio = sourcePrefs.getBoolean(KEY_BIOMETRIC, true)
+                val oldBioTimeout = sourcePrefs.getInt(KEY_BIOMETRIC_TIMEOUT, 60)
+                val oldClear = sourcePrefs.getBoolean(KEY_CLEARTEXT_WARN, true)
+                val oldMode = sourcePrefs.getString(KEY_THEME_MODE, "system")
+                val oldPalette = sourcePrefs.getString(KEY_THEME_PALETTE, "teal")
+                val oldAccent = sourcePrefs.getString(KEY_THEME_ACCENT, "teal")
+                val oldBase = sourcePrefs.getString(KEY_THEME_BASE, "neutral")
 
                 encPrefs.edit().apply {
                     putString(KEY_SERVERS, oldJson)
                     putString(KEY_ACTIVE_SERVER_ID, oldActive)
                     putBoolean(KEY_BIOMETRIC, oldBio)
+                    putInt(KEY_BIOMETRIC_TIMEOUT, oldBioTimeout)
                     putBoolean(KEY_CLEARTEXT_WARN, oldClear)
                     putString(KEY_THEME_MODE, oldMode)
                     putString(KEY_THEME_PALETTE, oldPalette)
@@ -48,12 +52,11 @@ class ServerStore(context: Context) {
                     putString(KEY_THEME_BASE, oldBase)
                     apply()
                 }
-                oldPrefs.edit().clear().apply()
             }
             encPrefs
         } catch (e: Exception) {
             e.printStackTrace()
-            context.getSharedPreferences("aimili_server_prefs", Context.MODE_PRIVATE)
+            context.getSharedPreferences("nxgate_server_prefs", Context.MODE_PRIVATE)
         }
     }
 

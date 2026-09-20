@@ -55,8 +55,8 @@ fun NXGateTheme(
 
     MaterialTheme(
         colorScheme = colorScheme,
-        typography = AimiliTypography,
-        shapes = AimiliShapes,
+        typography = NXGateTypography,
+        shapes = NXGateShapes,
         content = content
     )
 }

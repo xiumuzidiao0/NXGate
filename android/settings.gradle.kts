@@ -18,5 +18,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "AimiliVPN"
+rootProject.name = "NXGate"
 include(":app")

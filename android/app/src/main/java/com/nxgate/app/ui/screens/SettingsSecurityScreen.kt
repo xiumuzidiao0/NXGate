@@ -869,7 +869,7 @@ fun SettingsSecurityScreen(
                                 val targetId = editingServerId ?: UUID.randomUUID().toString()
                                 val newServer = ServerProfile(
                                     id = targetId,
-                                    name = inputName.trim().ifEmpty { "AimiliVPN 网关" },
+                                    name = inputName.trim().ifEmpty { "NXGate 网关" },
                                     host = inputHost.trim().ifEmpty { "127.0.0.1" },
                                     port = inputPort.toIntOrNull() ?: 8787,
                                     path = inputPath.trim().trim('/'),

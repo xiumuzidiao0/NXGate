@@ -1,5 +1,5 @@
 {
-  "name": "aimilivpn-webui-tests",
+  "name": "nxgate-webui-tests",
   "private": true,
   "scripts": {
     "test:ui": "node tests/ui-smoke.mjs"

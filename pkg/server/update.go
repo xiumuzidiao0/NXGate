@@ -219,9 +219,13 @@ func (s *Server) handleTriggerUpdate(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(1200 * time.Millisecond)
 		if runtime.GOOS == "linux" {
 			if _, err := exec.LookPath("systemctl"); err == nil {
-				_ = exec.Command("systemctl", "restart", "aimilivpn").Run()
+				if exec.Command("systemctl", "restart", "nxgate").Run() != nil {
+					_ = exec.Command("systemctl", "restart", "aimilivpn").Run()
+				}
 			} else if _, err := exec.LookPath("rc-service"); err == nil {
-				_ = exec.Command("rc-service", "aimilivpn", "restart").Run()
+				if exec.Command("rc-service", "nxgate", "restart").Run() != nil {
+					_ = exec.Command("rc-service", "aimilivpn", "restart").Run()
+				}
 			}
 		}
 	}()
@@ -378,8 +382,13 @@ func PerformSelfUpdate(ctx context.Context, targetVer string) error {
 	}
 	_ = os.Chmod(targetBin, 0755)
 
-	// 7. Update auxiliary files if /opt/aimilivpn exists
-	installDir := "/opt/aimilivpn"
+	// 7. Update auxiliary files if /opt/nxgate or /opt/aimilivpn exists
+	installDir := "/opt/nxgate"
+	if fi, err := os.Stat("/opt/nxgate"); err != nil || !fi.IsDir() {
+		if fi2, err2 := os.Stat("/opt/aimilivpn"); err2 == nil && fi2.IsDir() {
+			installDir = "/opt/aimilivpn"
+		}
+	}
 	if fi, err := os.Stat(installDir); err == nil && fi.IsDir() {
 		_ = os.WriteFile(filepath.Join(installDir, "VERSION"), []byte(targetVer+"\n"), 0644)
 

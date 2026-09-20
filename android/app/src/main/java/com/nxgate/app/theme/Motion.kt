@@ -9,7 +9,7 @@ import androidx.compose.ui.unit.IntOffset
  * Material 3 Expressive motion specifications.
  * Transitions and state changes have a spring effect with slight bounce/overshoot.
  */
-object AimiliMotion {
+object NXGateMotion {
     val expressiveFloat: FiniteAnimationSpec<Float> = spring(
         dampingRatio = 0.82f,
         stiffness = Spring.StiffnessMedium
@@ -41,3 +41,5 @@ object AimiliMotion {
         stiffness = 320f
     )
 }
+
+typealias AimiliMotion = NXGateMotion

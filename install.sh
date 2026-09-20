@@ -2,7 +2,7 @@
 set -e
 
 # ==============================================================================
-# AimiliVPN (Go 高性能版) 一键安装与终端管理脚本
+# NXGate (Go 高性能多出口网关) 一键安装与终端管理脚本
 # 支持系统: Ubuntu / Debian / CentOS / RHEL / AlmaLinux / Rocky / Fedora / Alpine
 # ==============================================================================
 
@@ -24,12 +24,15 @@ is_elf_binary() {
     [ -f "$f" ] && [ -s "$f" ] && head -c 4 "$f" 2>/dev/null | grep -q 'ELF'
 }
 
-INSTALL_DIR="/opt/aimilivpn"
-BIN_PATH="${INSTALL_DIR}/aimilivpn"
+INSTALL_DIR="/opt/nxgate"
+if [ -d "/opt/aimilivpn" ] && [ ! -d "/opt/nxgate" ]; then
+    mv /opt/aimilivpn /opt/nxgate 2>/dev/null || INSTALL_DIR="/opt/aimilivpn"
+fi
+BIN_PATH="${INSTALL_DIR}/nxgate"
 CONFIG_FILE="${INSTALL_DIR}/config.env"
-SERVICE_FILE="/etc/systemd/system/aimilivpn.service"
+SERVICE_FILE="/etc/systemd/system/nxgate.service"
 GITHUB_REPO="https://github.com/xiumuzidiao0/NXGate.git"
-DEFAULT_VERSION="2.5.7.9"
+DEFAULT_VERSION="2.5.8"
 REQUIRED_GO_VERSION="1.25.13"
 
 get_app_version() {
@@ -270,7 +273,7 @@ rand_str() {
 
 rand_pass() {
     local len="${1:-12}"
-    head -c 32 /dev/urandom | tr -dc 'A-Za-z0-9' | head -c "$len" || echo "aimilivpn123"
+    head -c 32 /dev/urandom | tr -dc 'A-Za-z0-9' | head -c "$len" || echo "nxgate123"
 }
 
 # 兼容管道执行与终端直接执行的用户输入函数
@@ -320,7 +323,7 @@ configure_install_params() {
     fi
 
     echo -e "\n${BLUE}==================================================================${PLAIN}"
-    echo -e "${BLUE}             AimiliVPN 初始部署参数自定义配置                     ${PLAIN}"
+    echo -e "${BLUE}              NXGate 初始部署参数自定义配置                       ${PLAIN}"
     echo -e "${BLUE}  (直接按回车可全部采用括号内的推荐默认值或安全随机值)             ${PLAIN}"
     echo -e "${BLUE}==================================================================${PLAIN}"
 
@@ -370,7 +373,7 @@ configure_install_params() {
     echo -e "${GREEN}-------------------------------------------------------${PLAIN}"
 
     cat > "${CONFIG_FILE}" <<EOF
-# AimiliVPN 运行环境变量配置
+# NXGate 运行环境变量配置
 DATA_DIR=${INSTALL_DIR}/data
 UI_HOST=::
 UI_PORT=${custom_web_port}
@@ -389,7 +392,7 @@ EOF
 
 # 7. 编译并部署二进制文件
 build_and_deploy() {
-    echo -e "\n${YELLOW}[2/4] 正在准备 AimiliVPN 可执行程序...${PLAIN}"
+    echo -e "\n${YELLOW}[2/4] 正在准备 NXGate 可执行程序...${PLAIN}"
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     local dl_ok=0
 
@@ -400,14 +403,14 @@ build_and_deploy() {
 
     # 2. 若无法下载发行包，自动降级至就地编译
     if [ "$dl_ok" = "0" ]; then
-        if [ -f "${SCRIPT_DIR}/bin/aimilivpn" ]; then
+        if [ -f "${SCRIPT_DIR}/bin/nxgate" ]; then
             echo -e "  -> 发现本地已预编译二进制文件，直接安装部署..."
-            cp -f "${SCRIPT_DIR}/bin/aimilivpn" "${BIN_PATH}"
-        elif [ -f "${SCRIPT_DIR}/cmd/aimilivpn/main.go" ]; then
+            cp -f "${SCRIPT_DIR}/bin/nxgate" "${BIN_PATH}"
+        elif [ -f "${SCRIPT_DIR}/cmd/nxgate/main.go" ]; then
             echo -e "  -> 正在从本地源码就地编译目标程序 (约需 10-30 秒)..."
             ensure_go
             cd "${SCRIPT_DIR}"
-            CGO_ENABLED=0 go build -ldflags="-s -w" -o "${BIN_PATH}" ./cmd/aimilivpn
+            CGO_ENABLED=0 go build -ldflags="-s -w" -o "${BIN_PATH}" ./cmd/nxgate
         else
             echo -e "  -> 正在从 GitHub 官方仓库拉取最新源码并构建..."
             ensure_go
@@ -415,7 +418,7 @@ build_and_deploy() {
             git clone --depth 1 "${GITHUB_REPO}" "${TMP_DIR}"
             cd "${TMP_DIR}"
             echo -e "  -> 正在就地编译二进制程序 (低配 VPS 首次编译约需 20~40 秒，请耐心稍候)..."
-            CGO_ENABLED=0 go build -ldflags="-s -w" -o "${BIN_PATH}" ./cmd/aimilivpn
+            CGO_ENABLED=0 go build -ldflags="-s -w" -o "${BIN_PATH}" ./cmd/nxgate
             rm -rf "${TMP_DIR}"
         fi
     fi
@@ -450,7 +453,7 @@ build_and_deploy() {
         done
     fi
 
-    # 确保完整的管理脚本安装到 /opt/aimilivpn/install.sh
+    # 确保完整的管理脚本安装到 ${INSTALL_DIR}/install.sh
     if [ -f "${BASH_SOURCE[0]}" ] && [ -s "${BASH_SOURCE[0]}" ]; then
         cp -f "${BASH_SOURCE[0]}" "${INSTALL_DIR}/install.sh"
     else
@@ -462,25 +465,24 @@ build_and_deploy() {
     register_shortcuts
 }
 
-# 7.4 注册全局快捷命令 (nx, aimili, nxgate)
+# 7.4 注册全局快捷命令 (nx, nxgate, aimili)
 register_shortcuts() {
-    # 彻底清理所有历史残留的可能指向 BIN_PATH 的危险软链接与弃用的 ml 兼容命令
-    rm -f /usr/bin/nxgate /usr/local/bin/nxgate /usr/bin/aimilivpn /usr/local/bin/aimilivpn /usr/bin/ml /usr/local/bin/ml
+    rm -f /usr/bin/nxgate /usr/local/bin/nxgate /usr/bin/aimilivpn /usr/local/bin/aimilivpn /usr/bin/ml /usr/local/bin/ml /usr/bin/nx /usr/local/bin/nx
 
-    cat > /usr/bin/nx <<'EOF'
+    cat > /usr/bin/nx <<EOF
 #!/usr/bin/env bash
-if [ -n "$1" ]; then
-    exec bash /opt/aimilivpn/install.sh "$@"
+if [ -n "\$1" ]; then
+    exec bash ${INSTALL_DIR}/install.sh "\$@"
 else
-    exec bash /opt/aimilivpn/install.sh menu
+    exec bash ${INSTALL_DIR}/install.sh menu
 fi
 EOF
     chmod +x /usr/bin/nx
     cp -f /usr/bin/nx /usr/local/bin/nx 2>/dev/null || true
-    cp -f /usr/bin/nx /usr/bin/aimili 2>/dev/null || true
-    cp -f /usr/bin/nx /usr/local/bin/aimili 2>/dev/null || true
     cp -f /usr/bin/nx /usr/bin/nxgate 2>/dev/null || true
     cp -f /usr/bin/nx /usr/local/bin/nxgate 2>/dev/null || true
+    cp -f /usr/bin/nx /usr/bin/aimili 2>/dev/null || true
+    cp -f /usr/bin/nx /usr/local/bin/aimili 2>/dev/null || true
 }
 
 # 7.4.1 全方位确保 SSH 端口在所有防火墙与策略路由中永远畅通放行 (绝对杜绝断连)
@@ -572,7 +574,7 @@ install_service() {
     echo -e "\n${YELLOW}[3/4] 正在配置系统守护进程服务...${PLAIN}"
     cat > "${SERVICE_FILE}" <<EOF
 [Unit]
-Description=AimiliVPN Go Gateway Service
+Description=NXGate Go Gateway Service
 After=network.target network-online.target
 Wants=network-online.target
 
@@ -590,9 +592,14 @@ LimitNOFILE=65535
 WantedBy=multi-user.target
 EOF
 
+    # 停止并清理旧版 aimilivpn 服务 (若存在)
+    systemctl stop aimilivpn.service 2>/dev/null || true
+    systemctl disable aimilivpn.service 2>/dev/null || true
+    rm -f /etc/systemd/system/aimilivpn.service 2>/dev/null || true
+
     systemctl daemon-reload
-    systemctl enable aimilivpn.service
-    systemctl restart aimilivpn.service
+    systemctl enable nxgate.service
+    systemctl restart nxgate.service
 
     local web_port=$(get_config_val "UI_PORT")
     configure_firewall "${web_port}"
@@ -658,7 +665,7 @@ print_install_success() {
 # ==============================================================================
 
 show_service_status() {
-    if systemctl is-active --quiet aimilivpn 2>/dev/null; then
+    if systemctl is-active --quiet nxgate 2>/dev/null || systemctl is-active --quiet aimilivpn 2>/dev/null; then
         echo -e "${GREEN}● 运行中 (Active)${PLAIN}"
     else
         echo -e "${RED}● 已停止 (Inactive)${PLAIN}"
@@ -688,26 +695,26 @@ menu_status() {
 }
 
 menu_start() {
-    systemctl start aimilivpn
+    systemctl start nxgate 2>/dev/null || systemctl start aimilivpn 2>/dev/null || true
     echo -e "${GREEN}已发送启动指令。${PLAIN}"
     sleep 1
 }
 
 menu_stop() {
-    systemctl stop aimilivpn
+    systemctl stop nxgate 2>/dev/null || systemctl stop aimilivpn 2>/dev/null || true
     echo -e "${YELLOW}已发送停止指令。${PLAIN}"
     sleep 1
 }
 
 menu_restart() {
-    systemctl restart aimilivpn
+    systemctl restart nxgate 2>/dev/null || systemctl restart aimilivpn 2>/dev/null || true
     echo -e "${GREEN}已发送重启指令。${PLAIN}"
     sleep 1
 }
 
 menu_logs() {
     echo -e "${CYAN}正在查看实时运行日志 (按 Ctrl+C 退出)...${PLAIN}"
-    journalctl -u aimilivpn -f -n 50
+    journalctl -u nxgate -u aimilivpn -f -n 50
 }
 
 menu_modify_credentials() {
@@ -734,14 +741,14 @@ menu_modify_credentials() {
                 read -p "请输入新管理密码 (不能为空, 回车保持不变): " new_p
                 [ -n "$new_u" ] && set_config_val "UI_USERNAME" "$new_u"
                 [ -n "$new_p" ] && set_config_val "UI_PASSWORD" "$new_p"
-                systemctl restart aimilivpn
+                systemctl restart nxgate 2>/dev/null || systemctl restart aimilivpn 2>/dev/null || true
                 echo -e "${GREEN}账号密码已更新并重启服务！${PLAIN}"
                 sleep 1.5
                 ;;
             2)
                 local rand_p=$(rand_pass 12)
                 set_config_val "UI_PASSWORD" "$rand_p"
-                systemctl restart aimilivpn
+                systemctl restart nxgate 2>/dev/null || systemctl restart aimilivpn 2>/dev/null || true
                 echo -e "${GREEN}密码已成功重置为: ${YELLOW}${rand_p}${PLAIN}"
                 read -p "按回车键继续..."
                 ;;
@@ -878,7 +885,7 @@ menu_update() {
         chmod +x "${INSTALL_DIR}/install.sh" 2>/dev/null || true
         register_shortcuts
         ensure_ssh_firewall_and_routing_safety
-        systemctl restart aimilivpn
+        systemctl restart nxgate 2>/dev/null || systemctl restart aimilivpn 2>/dev/null || true
         local new_ver=$(get_app_version)
         echo -e "\n${GREEN}🎉 NXGate 已成功极速更新至最新构建 (v${new_ver}) 并重启！${PLAIN}"
         echo -e " ${BOLD}快捷指令已注册${PLAIN}: 在终端随时输入 ${CYAN}nx${PLAIN} 唤出管理控制中心"
@@ -893,7 +900,7 @@ menu_update() {
         ensure_go
         if command -v go >/dev/null 2>&1; then
             echo -e "  -> 正在编译二进制程序 (通常需要 20-30 秒)..."
-            if CGO_ENABLED=0 go build -ldflags="-s -w" -o "${BIN_PATH}" ./cmd/aimilivpn; then
+            if CGO_ENABLED=0 go build -ldflags="-s -w" -o "${BIN_PATH}" ./cmd/nxgate; then
                 chmod +x "${BIN_PATH}"
                 cp -f "${TMP_DIR}/install.sh" "${INSTALL_DIR}/install.sh" 2>/dev/null || true
                 chmod +x "${INSTALL_DIR}/install.sh" 2>/dev/null || true
@@ -902,7 +909,7 @@ menu_update() {
                 cp -f "${TMP_DIR}/mirror/vpngate.csv" "${INSTALL_DIR}/mirror/" 2>/dev/null || true
                 register_shortcuts
                 ensure_ssh_firewall_and_routing_safety
-                systemctl restart aimilivpn
+                systemctl restart nxgate 2>/dev/null || systemctl restart aimilivpn 2>/dev/null || true
                 echo -e "\n${GREEN}🎉 源码就地编译更新完成并已重启服务！(v$(get_app_version))${PLAIN}"
                 echo -e " ${BOLD}快捷指令已注册${PLAIN}: 在终端随时输入 ${CYAN}nx${PLAIN} 唤出管理控制中心"
             else
@@ -919,16 +926,18 @@ menu_update() {
 }
 
 menu_uninstall() {
-    echo -e "\n${RED}警告: 即将完全卸载 AimiliVPN 服务及其配置文件！${PLAIN}"
+    echo -e "\n${RED}警告: 即将完全卸载 NXGate 服务及其配置文件！${PLAIN}"
     read -p "确认卸载吗？(y/N): " confirm
     if [ "$confirm" = "y" ] || [ "$confirm" = "Y" ]; then
+        systemctl stop nxgate 2>/dev/null || true
+        systemctl disable nxgate 2>/dev/null || true
         systemctl stop aimilivpn 2>/dev/null || true
         systemctl disable aimilivpn 2>/dev/null || true
-        rm -f "${SERVICE_FILE}"
+        rm -f "${SERVICE_FILE}" /etc/systemd/system/aimilivpn.service
         systemctl daemon-reload
-        rm -f /usr/local/bin/aimilivpn /usr/bin/aimilivpn /usr/local/bin/ml /usr/bin/ml /usr/bin/aimili
-        rm -rf "${INSTALL_DIR}"
-        echo -e "${GREEN}AimiliVPN 已完全卸载干净。${PLAIN}"
+        rm -f /usr/local/bin/nxgate /usr/bin/nxgate /usr/local/bin/nx /usr/bin/nx /usr/local/bin/aimilivpn /usr/bin/aimilivpn /usr/local/bin/ml /usr/bin/ml /usr/bin/aimili
+        rm -rf "${INSTALL_DIR}" /opt/aimilivpn 2>/dev/null || true
+        echo -e "${GREEN}NXGate 已完全卸载干净。${PLAIN}"
         exit 0
     else
         echo -e "已取消卸载。"
@@ -998,8 +1007,8 @@ setup_singbox_integration() {
     [ -z "$proxy_port" ] && proxy_port="7928"
 
     if ! type -P sing-box &>/dev/null && [ ! -x "/usr/local/bin/sing-box" ]; then
-        echo -e "AimiliVPN 支持联动 sing-box 实现【公网高抗封锁入站 + 全球住宅家宽出站】。"
-        echo -e "安装后，客户端可使用 VLESS-REALITY / Hysteria2 安全直连，且流量自动经由 AimiliVPN 住宅 IP 分流出海。"
+        echo -e "NXGate 支持联动 sing-box 实现【公网高抗封锁入站 + 全球住宅家宽出站】。"
+        echo -e "安装后，客户端可使用 VLESS-REALITY / Hysteria2 安全直连，且流量自动经由 NXGate 住宅 IP 分流出海。"
         local install_choice="y"
         prompt_input "是否同时安装部署 sing-box 边缘抗封锁网关？[Y/n] (推荐安装): " "y" install_choice
         if [ "${install_choice,,}" = "y" ] || [ "${install_choice,,}" = "yes" ]; then
@@ -1009,7 +1018,7 @@ setup_singbox_integration() {
                 if [ "${create_node,,}" = "y" ] || [ "${create_node,,}" = "yes" ]; then
                     local sb_bin=$(type -P sing-box || echo "/usr/local/bin/sing-box")
                     $sb_bin api add reality auto auto auto "127.0.0.1:${proxy_port}" 2>/dev/null || true
-                    echo -e "${GREEN}✓ VLESS-REALITY 入站已自动创建并绑定到 AimiliVPN 出口 (${proxy_port})！${PLAIN}"
+                    echo -e "${GREEN}✓ VLESS-REALITY 入站已自动创建并绑定到 NXGate 出口 (${proxy_port})！${PLAIN}"
                 fi
             fi
         fi
@@ -1040,7 +1049,7 @@ menu_singbox() {
             echo -e "  ${BOLD}功能说明${PLAIN}:"
             echo -e "  sing-box 能够提供 VLESS-REALITY（借用海外权威名站 TLS 指纹）、"
             echo -e "  Hysteria2（UDP 极速狂飙）等顶级抗封锁协议，让客户端安全直连 VPS，"
-            echo -e "  并将流量链式分流给 AimiliVPN 维护的全球住宅家宽 IP 出口矩阵。"
+            echo -e "  并将流量链式分流给 NXGate 维护的全球住宅家宽 IP 出口矩阵。"
             echo -e "${BLUE}------------------------------------------------------------------${PLAIN}"
             echo -e "  ${GREEN}[1]${PLAIN} 立即一键安装部署 sing-box 边缘网关"
             echo -e "  ${YELLOW}[0]${PLAIN} 返回上级主菜单"
@@ -1068,9 +1077,9 @@ menu_singbox() {
 
         echo -e "  ${BOLD}服务运行状态${PLAIN} : ${status_str}"
         echo -e "  ${BOLD}活跃入站节点${PLAIN} : ${CYAN}${n_count}${PLAIN} 个配置"
-        echo -e "  ${BOLD}AimiliVPN出口${PLAIN}: ${GREEN}127.0.0.1:${proxy_port}${PLAIN}"
+        echo -e "  ${BOLD}NXGate出口${PLAIN}  : ${GREEN}127.0.0.1:${proxy_port}${PLAIN}"
         echo -e "${BLUE}------------------------------------------------------------------${PLAIN}"
-        echo -e "  ${GREEN}[1]${PLAIN} 一键将所有 sing-box 入站接入 AimiliVPN 住宅出口 (${proxy_port})"
+        echo -e "  ${GREEN}[1]${PLAIN} 一键将所有 sing-box 入站接入 NXGate 住宅出口 (${proxy_port})"
         echo -e "  ${GREEN}[2]${PLAIN} 一键将所有 sing-box 入站恢复直连 (direct)"
         echo -e "  ${GREEN}[3]${PLAIN} 查看入站节点列表与客户端分享链接 (vless://, hy2://)"
         echo -e "  ${GREEN}[4]${PLAIN} 快速新建抗封锁入站节点 (REALITY / Hysteria2)"
@@ -1087,7 +1096,7 @@ menu_singbox() {
             1)
                 echo -e "\n${YELLOW}正在将全部 sing-box 入站出口切换至 127.0.0.1:${proxy_port} ...${PLAIN}"
                 $sb_cmd api outbound all "127.0.0.1:${proxy_port}"
-                echo -e "${GREEN}✓ 全部入站节点流量已成功链式绑定至 AimiliVPN 住宅代理出口！${PLAIN}"
+                echo -e "${GREEN}✓ 全部入站节点流量已成功链式绑定至 NXGate 住宅代理出口！${PLAIN}"
                 read -p "按回车键继续..."
                 ;;
             2)
@@ -1116,7 +1125,7 @@ menu_singbox() {
                 read -p "请输入监听端口 [直接回车 auto 自动分配]: " p_port
                 [ -z "$p_port" ] && p_port="auto"
 
-                read -p "是否直接链式接入 AimiliVPN 本地代理出口 (127.0.0.1:${proxy_port})？[Y/n]: " p_chain
+                read -p "是否直接链式接入 NXGate 本地代理出口 (127.0.0.1:${proxy_port})？[Y/n]: " p_chain
                 local p_outbound="127.0.0.1:${proxy_port}"
                 if [ "${p_chain,,}" = "n" ] || [ "${p_chain,,}" = "no" ]; then
                     p_outbound="direct"
@@ -1227,7 +1236,7 @@ if [ -f "${BIN_PATH}" ] && ! is_elf_binary "${BIN_PATH}"; then
     rm -f "${BIN_PATH}"
     download_release_binary "${BIN_PATH}" || true
     chmod +x "${BIN_PATH}" 2>/dev/null || true
-    systemctl restart aimilivpn 2>/dev/null || true
+    systemctl restart nxgate 2>/dev/null || systemctl restart aimilivpn 2>/dev/null || true
 fi
 
 # 如果已部署过服务但缺少新版快捷命令，自动平滑补齐 nx 与 nxgate
@@ -1244,18 +1253,18 @@ case "$1" in
         exit 0
         ;;
     start)
-        systemctl start aimilivpn
-        echo -e "${GREEN}AimiliVPN 服务已启动${PLAIN}"
+        systemctl start nxgate 2>/dev/null || systemctl start aimilivpn 2>/dev/null || true
+        echo -e "${GREEN}NXGate 服务已启动${PLAIN}"
         exit 0
         ;;
     stop)
-        systemctl stop aimilivpn
-        echo -e "${YELLOW}AimiliVPN 服务已停止${PLAIN}"
+        systemctl stop nxgate 2>/dev/null || systemctl stop aimilivpn 2>/dev/null || true
+        echo -e "${YELLOW}NXGate 服务已停止${PLAIN}"
         exit 0
         ;;
     restart)
-        systemctl restart aimilivpn
-        echo -e "${GREEN}AimiliVPN 服务已重启${PLAIN}"
+        systemctl restart nxgate 2>/dev/null || systemctl restart aimilivpn 2>/dev/null || true
+        echo -e "${GREEN}NXGate 服务已重启${PLAIN}"
         exit 0
         ;;
     status)

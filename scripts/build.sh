@@ -20,7 +20,7 @@ for TARGET in "${TARGETS[@]}"; do
     ARCH="${TARGET#*/}"
     OUTPUT="dist/nxgate_${OS}_${ARCH}"
     echo "-> 正在编译 ${TARGET} ..."
-    CGO_ENABLED=0 GOOS="$OS" GOARCH="$ARCH" go build -ldflags="-s -w" -o "$OUTPUT" ./cmd/aimilivpn
+    CGO_ENABLED=0 GOOS="$OS" GOARCH="$ARCH" go build -ldflags="-s -w" -o "$OUTPUT" ./cmd/nxgate
     gzip -kf "$OUTPUT"
 done
 

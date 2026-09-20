@@ -720,7 +720,7 @@ func (s *Server) handleAppInfo(w http.ResponseWriter, r *http.Request) {
 }
 
 type ServerProfile struct {
-	Type      string `json:"type"`       // "aimili_server"
+	Type      string `json:"type"`       // "nxgate_server"
 	Version   int    `json:"version"`    // 1
 	Name      string `json:"name"`       // display name
 	Host      string `json:"host"`       // host IP or domain

@@ -7,9 +7,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
 // Roboto Flex font family with standard and emphasized weights
-val AimiliFontFamily = FontFamily.SansSerif
+val NXGateFontFamily = FontFamily.SansSerif
+val AimiliFontFamily = NXGateFontFamily
 
-val AimiliTypography = Typography(
+val NXGateTypography = Typography(
     headlineLarge = TextStyle(
         fontFamily = AimiliFontFamily,
         fontWeight = FontWeight.ExtraBold, // Emphasized
@@ -95,3 +96,5 @@ val AimiliTypography = Typography(
         letterSpacing = 0.5.sp
     )
 )
+
+val AimiliTypography = NXGateTypography
