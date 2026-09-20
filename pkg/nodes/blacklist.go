@@ -15,16 +15,18 @@ import (
 )
 
 type BlacklistEntry struct {
-	ID        string    `json:"id"`
-	IP        string    `json:"ip"`
-	Port      int       `json:"port,omitempty"`
-	Protocol  string    `json:"protocol,omitempty"`
-	Country   string    `json:"country"`
-	Reason    string    `json:"reason"`
-	MarkedAt  time.Time `json:"marked_at"`
-	Until     time.Time `json:"until"`
-	FailCount int       `json:"fail_count"`
-	Level     string    `json:"level,omitempty"` // "degraded" (降权), "quarantine" (隔离观察), "blacklist" (硬拉黑)
+	ID          string    `json:"id"`
+	IP          string    `json:"ip"`
+	Port        int       `json:"port,omitempty"`
+	Protocol    string    `json:"protocol,omitempty"`
+	Country     string    `json:"country"`
+	Reason      string    `json:"reason"`
+	MarkedAt    time.Time `json:"marked_at"`
+	Until       time.Time `json:"until"`
+	FailCount   int       `json:"fail_count"`
+	Level       string    `json:"level,omitempty"`        // "degraded" (降权), "quarantine" (隔离观察), "blacklist" (硬拉黑)
+	IsPermanent bool      `json:"is_permanent,omitempty"` // 是否为永久屏蔽 (Tombstone)
+	Scope       string    `json:"scope,omitempty"`        // "node" (单节点) 或 "ip" (整机IP屏蔽)
 }
 
 type BlacklistManager struct {
@@ -59,7 +61,7 @@ func (bm *BlacklistManager) load() {
 	now := time.Now()
 	cleaned := make(map[string]*BlacklistEntry)
 	for k, v := range raw {
-		if v != nil && v.Until.After(now) {
+		if v != nil && (v.IsPermanent || v.Until.After(now)) {
 			cleaned[k] = v
 		}
 	}
@@ -79,14 +81,57 @@ func (bm *BlacklistManager) saveLocked() {
 }
 
 func (bm *BlacklistManager) IsBlacklisted(nodeID string) bool {
+	return bm.IsNodeBlocked(nodeID, "")
+}
+
+func (bm *BlacklistManager) IsNodeBlocked(nodeID, ip string) bool {
 	bm.mu.RLock()
 	defer bm.mu.RUnlock()
 
-	entry, ok := bm.entries[nodeID]
-	if !ok {
-		return false
+	now := time.Now()
+
+	// 1. Direct Node ID match
+	if entry, ok := bm.entries[nodeID]; ok {
+		if entry.IsPermanent || entry.Until.After(now) {
+			return true
+		}
 	}
-	return entry.Until.After(time.Now())
+
+	// 2. IP-level match (handles entire IP blocking regardless of port)
+	targetIP := ip
+	if targetIP == "" && strings.Contains(nodeID, ":") {
+		if h, _, err := net.SplitHostPort(nodeID); err == nil {
+			targetIP = h
+		}
+	}
+
+	if targetIP != "" {
+		if entry, ok := bm.entries[targetIP]; ok {
+			if entry.IsPermanent || entry.Until.After(now) {
+				return true
+			}
+		}
+		for _, entry := range bm.entries {
+			if entry.Scope == "ip" && entry.IP == targetIP {
+				if entry.IsPermanent || entry.Until.After(now) {
+					return true
+				}
+			}
+		}
+	}
+
+	return false
+}
+
+func (bm *BlacklistManager) GetEntry(key string) *BlacklistEntry {
+	bm.mu.RLock()
+	defer bm.mu.RUnlock()
+
+	if entry, ok := bm.entries[key]; ok {
+		cp := *entry
+		return &cp
+	}
+	return nil
 }
 
 func (bm *BlacklistManager) Mark(node *Node, reason string, baseDuration time.Duration) {
@@ -193,36 +238,75 @@ func (bm *BlacklistManager) Clear() {
 }
 
 func (bm *BlacklistManager) MarkManual(id, ip, country, reason string, duration time.Duration) {
+	bm.MarkManualWithOptions(id, ip, country, reason, duration, "node", false)
+}
+
+func (bm *BlacklistManager) MarkManualWithOptions(id, ip, country, reason string, duration time.Duration, scope string, permanent bool) {
 	bm.mu.Lock()
 	defer bm.mu.Unlock()
 
 	now := time.Now()
-	if duration <= 0 {
-		duration = 24 * time.Hour
-	}
 	if reason == "" {
-		reason = "用户手动屏蔽"
+		if permanent {
+			reason = "用户手动永久屏蔽 (Tombstone)"
+		} else {
+			reason = "用户手动屏蔽"
+		}
 	}
 
 	cleanIP := ip
 	port := 0
-	if strings.Contains(ip, ":") {
-		if h, pStr, err := net.SplitHostPort(ip); err == nil {
+	if strings.Contains(id, ":") {
+		if h, pStr, err := net.SplitHostPort(id); err == nil {
+			if cleanIP == "" {
+				cleanIP = h
+			}
+			port, _ = strconv.Atoi(pStr)
+		}
+	} else if cleanIP == "" {
+		cleanIP = id
+	} else if strings.Contains(cleanIP, ":") {
+		if h, pStr, err := net.SplitHostPort(cleanIP); err == nil {
 			cleanIP = h
 			port, _ = strconv.Atoi(pStr)
 		}
 	}
 
-	bm.entries[id] = &BlacklistEntry{
-		ID:        id,
-		IP:        cleanIP,
-		Port:      port,
-		Country:   country,
-		Reason:    reason,
-		MarkedAt:  now,
-		Until:     now.Add(duration),
-		FailCount: 5,
-		Level:     "blacklist",
+	if scope == "" {
+		if port > 0 && id != cleanIP {
+			scope = "node"
+		} else {
+			scope = "ip"
+		}
+	}
+
+	var until time.Time
+	if permanent {
+		until = now.Add(100 * 365 * 24 * time.Hour) // 100 years
+	} else {
+		if duration <= 0 {
+			duration = 24 * time.Hour
+		}
+		until = now.Add(duration)
+	}
+
+	key := id
+	if scope == "ip" && cleanIP != "" {
+		key = cleanIP
+	}
+
+	bm.entries[key] = &BlacklistEntry{
+		ID:          key,
+		IP:          cleanIP,
+		Port:        port,
+		Country:     country,
+		Reason:      reason,
+		MarkedAt:    now,
+		Until:       until,
+		FailCount:   5,
+		Level:       "blacklist",
+		IsPermanent: permanent,
+		Scope:       scope,
 	}
 	bm.saveLocked()
 }
@@ -233,7 +317,7 @@ func (bm *BlacklistManager) ProbeAndRevive(ctx context.Context, fallbackPortFind
 	now := time.Now()
 	var candidates []*BlacklistEntry
 	for _, entry := range bm.entries {
-		if entry != nil && entry.Until.After(now) {
+		if entry != nil && !entry.IsPermanent && entry.Until.After(now) {
 			cp := *entry
 			candidates = append(candidates, &cp)
 		}
@@ -300,7 +384,7 @@ func (bm *BlacklistManager) Count() int {
 	now := time.Now()
 	count := 0
 	for _, v := range bm.entries {
-		if v.Until.After(now) {
+		if v.IsPermanent || v.Until.After(now) {
 			count++
 		}
 	}
@@ -314,7 +398,7 @@ func (bm *BlacklistManager) List() []*BlacklistEntry {
 	now := time.Now()
 	var list []*BlacklistEntry
 	for _, v := range bm.entries {
-		if v.Until.After(now) {
+		if v.IsPermanent || v.Until.After(now) {
 			list = append(list, v)
 		}
 	}

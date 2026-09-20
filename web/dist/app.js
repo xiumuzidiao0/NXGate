@@ -1081,7 +1081,9 @@
                         const untilTime = new Date(item.until).getTime();
                         const diffSec = Math.max(0, Math.floor((untilTime - now) / 1000));
                         let leftStr = '即将解封';
-                        if (diffSec > 3600) {
+                        if (item.is_permanent) {
+                            leftStr = '<span class="text-danger font-medium">永久屏蔽 (Tombstone)</span>';
+                        } else if (diffSec > 3600) {
                             leftStr = `${Math.floor(diffSec / 3600)}小时${Math.floor((diffSec % 3600) / 60)}分后解封`;
                         } else if (diffSec > 0) {
                             leftStr = `${Math.floor(diffSec / 60)}分${diffSec % 60}秒后解封`;
@@ -1089,6 +1091,7 @@
 
                         const cCode = item.country || '';
                         const flag = cCode ? getCountryFlagSVG(cCode) : '';
+                        const scopeBadge = item.scope === 'ip' ? `<span class="badge badge-accent badge-mini">整机IP屏蔽</span>` : '';
                         const failBadge = item.fail_count > 1 ? `<span class="badge unlock-blocked badge-mini">失败 ${item.fail_count} 次</span>` : '';
 
                         return `
@@ -1097,7 +1100,7 @@
                                     <span class="flag-box">${flag}</span>
                                     <div>
                                         <div class="blacklist-id">
-                                            ${escapeHtml(item.id || item.ip)}
+                                            ${escapeHtml(item.id || item.ip)} ${scopeBadge}
                                         </div>
                                         <div class="blacklist-meta">
                                             <span>原因: <strong class="blacklist-reason">${escapeHtml(item.reason || '故障断线')}</strong></span>
@@ -1108,7 +1111,7 @@
                                     </div>
                                 </div>
                                 <div>
-                                    <button class="btn btn-outline btn-xs" data-action="removeNodeFromBlacklist" data-args="${jsonAttr([item.id])}">
+                                    <button class="btn btn-outline btn-xs" data-action="removeNodeFromBlacklist" data-args="${jsonAttr([item.id, item.ip])}">
                                         解除屏蔽
                                     </button>
                                 </div>
@@ -1119,19 +1122,19 @@
             `;
         }
 
-        async function removeNodeFromBlacklist(nodeId) {
+        async function removeNodeFromBlacklist(nodeId, ip) {
             try {
                 const res = await fetch('/api/blacklist/remove', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ node_id: nodeId })
+                    body: JSON.stringify({ node_id: nodeId, ip: ip })
                 });
                 const ret = await res.json();
                 if (!res.ok) {
                     alert('解除失败: ' + (ret.error || '未知错误'));
                     return;
                 }
-                showToast(`节点 [${nodeId}] 已成功移出屏蔽库`);
+                showToast(`已成功解除屏蔽 [${nodeId}]`);
                 await fetchBlacklist();
                 fetchStatus();
                 fetchNodes();
@@ -1191,7 +1194,23 @@
         }
 
         async function addNodeToBlacklist(nodeId, ip, country) {
-            if (!confirm(`确定手动屏蔽节点 [${nodeId}] 吗？\n该节点将在 24 小时内不再被连接或调度。`)) return;
+            const mode = prompt(`请选择对节点 [${nodeId}] 的屏蔽方式：\n\n1 = 临时屏蔽 24 小时\n2 = 永久屏蔽此节点 (Tombstone 永不收录)\n3 = 永久屏蔽整机 IP (${ip} 所有端口)\n\n请输入 1, 2 或 3:`, "1");
+            if (!mode) return;
+
+            let dur = 1440;
+            let permanent = false;
+            let scope = 'node';
+            let reason = '用户手动屏蔽';
+
+            if (mode === '2') {
+                permanent = true;
+                reason = '用户永久屏蔽节点 (Tombstone)';
+            } else if (mode === '3') {
+                permanent = true;
+                scope = 'ip';
+                reason = `用户永久屏蔽整机IP (${ip})`;
+            }
+
             try {
                 const res = await fetch('/api/blacklist/add', {
                     method: 'POST',
@@ -1200,8 +1219,10 @@
                         node_id: nodeId,
                         ip: ip,
                         country: country,
-                        duration_minutes: 1440,
-                        reason: '用户手动屏蔽'
+                        duration_minutes: dur,
+                        permanent: permanent,
+                        scope: scope,
+                        reason: reason
                     })
                 });
                 const ret = await res.json();
@@ -1209,7 +1230,8 @@
                     alert('屏蔽失败: ' + (ret.error || '未知错误'));
                     return;
                 }
-                showToast(`已将节点 [${nodeId}] 屏蔽 24 小时`);
+                const msg = permanent ? (scope === 'ip' ? `已永久屏蔽整机 IP [${ip}]` : `已永久屏蔽节点 [${nodeId}]`) : `已将节点 [${nodeId}] 屏蔽 24 小时`;
+                showToast(msg);
                 fetchStatus();
                 fetchNodes();
             } catch (err) {

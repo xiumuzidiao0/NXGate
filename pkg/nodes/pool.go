@@ -243,7 +243,7 @@ func (np *NodePool) rebuildCandidatesLocked() {
 
 	for _, n := range np.nodeStore {
 		all = append(all, n)
-		if np.blacklist.IsBlacklisted(n.ID) {
+		if np.blacklist != nil && np.blacklist.IsNodeBlocked(n.ID, n.IP) {
 			continue
 		}
 		filtered = append(filtered, n)
@@ -320,6 +320,16 @@ func (np *NodePool) MergeFreshNodesLocked(fresh []*Node, source string) (int, in
 	updatedCount := 0
 
 	for _, n := range fresh {
+		// Permanently blacklisted (Tombstone): completely drop, never add to store or memory!
+		if np.blacklist != nil && np.blacklist.IsNodeBlocked(n.ID, n.IP) {
+			if entry := np.blacklist.GetEntry(n.ID); entry != nil && entry.IsPermanent {
+				continue
+			}
+			if entry := np.blacklist.GetEntry(n.IP); entry != nil && entry.IsPermanent {
+				continue
+			}
+		}
+
 		if existing, exists := np.nodeStore[n.ID]; exists {
 			// Update real-time network metrics from official source
 			existing.Score = n.Score

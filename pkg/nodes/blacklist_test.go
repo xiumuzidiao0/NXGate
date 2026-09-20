@@ -125,3 +125,50 @@ func TestTieredFailureDegradationAndQuarantine(t *testing.T) {
 		t.Fatalf("expected immediate blacklist on AUTH_FAILED even on first failure")
 	}
 }
+
+func TestIPLevelAndPermanentBlacklist(t *testing.T) {
+	dataDir := t.TempDir()
+	bm := NewBlacklistManager(dataDir)
+
+	// 1. Test IP-level blocking
+	bm.MarkManualWithOptions("198.51.100.1", "198.51.100.1", "JP", "恶意机房IP整机屏蔽", 24*time.Hour, "ip", false)
+
+	// Verify all ports on this IP are blocked
+	if !bm.IsNodeBlocked("198.51.100.1:443", "198.51.100.1") {
+		t.Fatalf("expected 198.51.100.1:443 to be blocked by IP-level block")
+	}
+	if !bm.IsNodeBlocked("198.51.100.1:1194", "198.51.100.1") {
+		t.Fatalf("expected 198.51.100.1:1194 to be blocked by IP-level block")
+	}
+	if !bm.IsBlacklisted("198.51.100.1:8080") {
+		t.Fatalf("expected 198.51.100.1:8080 to be blocked via IsBlacklisted IP extraction")
+	}
+
+	// Verify another IP is NOT blocked
+	if bm.IsNodeBlocked("198.51.100.2:443", "198.51.100.2") {
+		t.Fatalf("expected 198.51.100.2:443 NOT to be blocked")
+	}
+
+	// 2. Test Permanent Tombstone blocking
+	bm.MarkManualWithOptions("tombstone-node:443", "198.51.100.99", "US", "用户永久屏蔽", 0, "node", true)
+	entry := bm.GetEntry("tombstone-node:443")
+	if entry == nil || !entry.IsPermanent {
+		t.Fatalf("expected entry to be marked permanent, got %+v", entry)
+	}
+	if !bm.IsBlacklisted("tombstone-node:443") {
+		t.Fatalf("expected permanent entry to be blacklisted")
+	}
+
+	// Verify ProbeAndRevive will NOT revive permanent entry even if it's in the list
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	revived, err := bm.ProbeAndRevive(ctx, nil)
+	if err != nil {
+		t.Fatalf("unexpected error during revive: %v", err)
+	}
+	for _, r := range revived {
+		if r.ID == "tombstone-node:443" {
+			t.Fatalf("permanent node must NEVER be revived")
+		}
+	}
+}
