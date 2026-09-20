@@ -107,8 +107,8 @@ class MainActivity : FragmentActivity() {
         val serverStore = NXGateApplication.instance.serverStore
         if (serverStore.biometricEnabled.value) {
             val now = System.currentTimeMillis()
-            // 切出后台超过 60 秒 (60,000ms) 时触发锁屏
-            if (lastBackgroundTimestamp > 0 && (now - lastBackgroundTimestamp) >= 60_000L) {
+            val timeoutMillis = serverStore.biometricTimeoutSeconds.value * 1000L
+            if (lastBackgroundTimestamp > 0 && (now - lastBackgroundTimestamp) >= timeoutMillis) {
                 serverStore.setAppLocked(true)
             }
             if (serverStore.isAppLocked.value) {

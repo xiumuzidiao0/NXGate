@@ -29,7 +29,7 @@ BIN_PATH="${INSTALL_DIR}/aimilivpn"
 CONFIG_FILE="${INSTALL_DIR}/config.env"
 SERVICE_FILE="/etc/systemd/system/aimilivpn.service"
 GITHUB_REPO="https://github.com/xiumuzidiao0/NXGate.git"
-DEFAULT_VERSION="2.5.7.7"
+DEFAULT_VERSION="2.5.7.8"
 REQUIRED_GO_VERSION="1.25.13"
 
 get_app_version() {
@@ -113,15 +113,15 @@ download_release_binary() {
         "https://github.com/xiumuzidiao0/NXGate/releases/latest/download/nxgate_linux_${GO_ARCH}"
         "https://ghproxy.net/https://github.com/xiumuzidiao0/NXGate/releases/latest/download/nxgate_linux_${GO_ARCH}"
         "https://mirror.ghproxy.com/https://github.com/xiumuzidiao0/NXGate/releases/latest/download/nxgate_linux_${GO_ARCH}"
-        "https://github.com/xiumuzidiao0/NXGate/releases/download/v2.5.7.7/nxgate_linux_${GO_ARCH}"
-        "https://ghproxy.net/https://github.com/xiumuzidiao0/NXGate/releases/download/v2.5.7.7/nxgate_linux_${GO_ARCH}"
-        "https://mirror.ghproxy.com/https://github.com/xiumuzidiao0/NXGate/releases/download/v2.5.7.7/nxgate_linux_${GO_ARCH}"
+        "https://github.com/xiumuzidiao0/NXGate/releases/download/v2.5.7.8/nxgate_linux_${GO_ARCH}"
+        "https://ghproxy.net/https://github.com/xiumuzidiao0/NXGate/releases/download/v2.5.7.8/nxgate_linux_${GO_ARCH}"
+        "https://mirror.ghproxy.com/https://github.com/xiumuzidiao0/NXGate/releases/download/v2.5.7.8/nxgate_linux_${GO_ARCH}"
         "https://github.com/xiumuzidiao0/NXGate/releases/latest/download/aimilivpn_linux_${GO_ARCH}"
         "https://ghproxy.net/https://github.com/xiumuzidiao0/NXGate/releases/latest/download/aimilivpn_linux_${GO_ARCH}"
         "https://mirror.ghproxy.com/https://github.com/xiumuzidiao0/NXGate/releases/latest/download/aimilivpn_linux_${GO_ARCH}"
-        "https://github.com/xiumuzidiao0/NXGate/releases/download/v2.5.7.7/aimilivpn_linux_${GO_ARCH}"
-        "https://ghproxy.net/https://github.com/xiumuzidiao0/NXGate/releases/download/v2.5.7.7/aimilivpn_linux_${GO_ARCH}"
-        "https://mirror.ghproxy.com/https://github.com/xiumuzidiao0/NXGate/releases/download/v2.5.7.7/aimilivpn_linux_${GO_ARCH}"
+        "https://github.com/xiumuzidiao0/NXGate/releases/download/v2.5.7.8/aimilivpn_linux_${GO_ARCH}"
+        "https://ghproxy.net/https://github.com/xiumuzidiao0/NXGate/releases/download/v2.5.7.8/aimilivpn_linux_${GO_ARCH}"
+        "https://mirror.ghproxy.com/https://github.com/xiumuzidiao0/NXGate/releases/download/v2.5.7.8/aimilivpn_linux_${GO_ARCH}"
     )
 
     for u in "${urls[@]}"; do
