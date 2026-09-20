@@ -25,17 +25,22 @@ PLAIN='\033[0m'
 BOLD='\033[1m'
 
 if [ -z "$1" ]; then
-    CURRENT_VER=$(cat VERSION 2>/dev/null || echo "2.5.1")
+    CURRENT_VER=$(cat VERSION 2>/dev/null || echo "2.5.7")
     echo -e "${YELLOW}当前版本: v${CURRENT_VER}${PLAIN}"
-    echo -e "用法: ${GREEN}$0 <新版本号>${PLAIN}"
-    echo -e "示例: ${BLUE}$0 2.5.2${PLAIN}\n"
+    echo -e "用法: ${GREEN}$0 <新版本号>${PLAIN}\n"
+    echo -e "${BOLD}版本号命名与演进指引:${PLAIN}"
+    echo -e "  • ${BLUE}常规特性 / 补丁版本${PLAIN} : 例如 ${GREEN}2.5.8${PLAIN}、${GREEN}2.6.0${PLAIN} (常规功能迭代或较多改动)"
+    echo -e "  • ${BLUE}微小修复 / 紧急 Hotfix${PLAIN}: 例如 ${GREEN}2.5.7.1${PLAIN}、${GREEN}2.5.7.2${PLAIN} (小优化、配置微调或依赖更新)"
+    echo -e "    ${YELLOW}💡 核心设计: Web 控制台与 'nx update' 依赖版本号递增来检测并提示升级。"
+    echo -e "       若仅是小改动但需让用户端 WebUI 能够感知并显示更新提示，推荐使用 4 位子版本号 (如 2.5.7.1)。${PLAIN}\n"
+    echo -e "示例: ${BLUE}$0 2.5.7.1${PLAIN} 或 ${BLUE}$0 2.5.8${PLAIN}\n"
     exit 1
 fi
 
 TARGET_VER="${1#v}"
 
 if [[ ! "$TARGET_VER" =~ ^[0-9]+\.[0-9]+\.[0-9]+.*$ ]]; then
-    echo -e "${RED}错误: 版本号格式不合法: ${TARGET_VER} (格式应如: 2.5.2)${PLAIN}"
+    echo -e "${RED}错误: 版本号格式不合法: ${TARGET_VER} (格式应如: 2.5.8 或子版本 2.5.7.1)${PLAIN}"
     exit 1
 fi
 
@@ -72,7 +77,7 @@ echo -e "${GREEN}  [✓] 全套自动化测试通过！${PLAIN}"
 
 # 5. 提交版本变更与打标签
 echo -e "\n${YELLOW}[4/5] 提交版本变更并创建 Git Tag (v${TARGET_VER})...${PLAIN}"
-git add VERSION pkg/config/version.go install.sh web/dist/index.html
+git add VERSION pkg/config/version.go install.sh web/dist/index.html android/app/build.gradle.kts
 if ! git diff --cached --quiet; then
     git commit -m "chore(release): bump version to v${TARGET_VER}
 
