@@ -1,7 +1,8 @@
-# AimiliVPN 移动端远程管控 App (Android) 产品设计与架构规划规范
+# NXGate 移动端远程管控 App (Android) 产品设计与架构规范
 
-**文档版本**：`v1.0.0`  
-**配套网关版本**：`aimili-vpngate-go v2.5.5+`  
+**文档版本**：`v2.5.7`  
+**配套网关版本**：`NXGate v2.5.7+`  
+**包名定义**：`com.nxgate.app`  
 **文档目标**：为基于 Kotlin + Jetpack Compose 开发的原生 Android 远程集群控制 App 提供完备的 UI/UX 规范、交互设计、信息架构与 API 契约。
 
 ---
@@ -358,53 +359,46 @@ App 所有网络请求必须带上以下 Header 之一完成鉴权：
 
 ## 五、 Android 技术选型与推荐工程目录
 
-### 1. 技术栈建议
+### 1. 技术栈实践 (Production Implementation)
 - **语言**：Kotlin 2.0+ (100%)
-- **UI 框架**：Jetpack Compose (Material 3) + Navigation Compose
-- **异步与数据流**：Kotlin Coroutines + `StateFlow` / `SharedFlow`
-- **网络通信**：OkHttp 4.12+ (内置 EventSource) + Retrofit 2.11 + Kotlinx Serialization JSON
-- **本地安全存储**：Room Database + SQLCipher (加密数据库，存储服务器配置)
-- **扫码能力**：CameraX + Google ML Kit Barcode Scanning (零额外体积，离线毫秒级识别)
-- **图表绘制**：Compose Canvas 自绘流式波形 (或 Vico Charts)
+- **UI 框架**：Jetpack Compose (Material 3) + Navigation Compose + Edge-to-Edge
+- **异步与数据流**：Kotlin Coroutines + `StateFlow`
+- **网络与推流通信**：OkHttp 4.12+ (内置 EventSource `okhttp-sse` 实现 `/api/events` 长连接)
+- **本地安全存储**：Android KeyStore 硬件保护的 `EncryptedSharedPreferences` (`androidx.security:security-crypto:1.1.0-alpha06`, `AES256_SIV` + `AES256_GCM`)，支持旧版本明文无感自动迁移
+- **系统级深度集成**：
+  - **下拉快捷设置磁贴 (`NXGateTileService`)**：原生 Android `TileService`，通知栏动态展示网关在线状态与延迟，一键后台换线；
+  - **本地断流与故障转移推送通知 (`NotificationHelper`)**：Android 13+ `POST_NOTIFICATIONS` 运行时权限与双渠道通知（`nxgate_alerts` / `nxgate_status`）；
+  - **生物识别加固**：BiometricPrompt（指纹/面容/凭据），加入 60 秒切后台免重复弹锁宽限期，屏幕旋转不重复打扰；
+  - **交互触感反馈**：全场景接入系统级 `LocalHapticFeedback`；
+  - **节点广场性能优化**：200ms 搜索输入防抖，千量级长列表过滤计算移入 `Dispatchers.Default` 避免掉帧；
+  - **集群配置管理**：全量网关配置标准 JSON 导出、剪贴板复制、系统分享与合并导入。
 
-### 2. 推荐工程目录树
+### 2. 实际工程目录树 (`com.nxgate.app`)
 ```text
-com.aimilivpn.manager/
+android/app/src/main/java/com/nxgate/app/
+├── MainActivity.kt                 # 入口 Activity、生物识别生命周期控制与动态权限申请
+├── NXGateApplication.kt            # 全局 Application 实例与通知渠道初始化
 ├── data/
-│   ├── local/
-│   │   ├── AppDatabase.kt          # Room 加密数据库
-│   │   ├── ServerDao.kt            # 服务器 Profile 增删改查
-│   │   └── entity/ServerEntity.kt  # 服务器本地存储实体
-│   ├── remote/
-│   │   ├── AimiliApi.kt            # Retrofit RESTful 接口定义
-│   │   ├── SseClient.kt            # OkHttp EventSource 实时事件监听器
-│   │   └── dto/                    # 对应后端的 DTO 数据模型
-│   │       ├── AppInfoDTO.kt
-│   │       ├── StatusDTO.kt
-│   │       ├── NodeDTO.kt
-│   │       ├── TunnelDTO.kt
-│   │       └── PortRuleDTO.kt
-│   └── repository/
-│       ├── ServerRepository.kt     # 管理服务器列表，持有 activeServer: StateFlow
-│       └── NetworkRepository.kt    # 处理当前激活服务器的数据交互与错误拦截
-├── di/
-│   └── AppModule.kt                # Hilt / Koin 依赖注入配置
+│   ├── ApiClient.kt                # OkHttp 客户端、RESTful API 契约与 SSE 实时推流
+│   └── ServerStore.kt              # EncryptedSharedPreferences 硬件级加密存储与集群导入导出
+├── model/
+│   └── Models.kt                   # 领域模型 (ServerProfile, SystemStatus, SseEvent, TrafficStats 等)
+├── service/
+│   └── NXGateTileService.kt        # Android Quick Settings 快捷设置磁贴服务
 ├── ui/
-│   ├── theme/                      # 深空色阶 Surface-0..6、Geist 字体排版
 │   ├── components/
-│   │   ├── GlobalServerSwitcher.kt # 核心: 顶栏吸顶服务器切换胶囊与 BottomSheet
-│   │   ├── WaveformChart.kt        # Canvas 实时上下行网速平滑波形图
-│   │   ├── UnlockBadge.kt          # AI 解锁胶囊组件 (OpenAI/Claude/Gemini)
-│   │   ├── ResidentialTag.kt       # 原生住宅家宽/机房置信度标签
-│   │   └── StatusIndicator.kt      # 呼吸感连通指示灯
-│   ├── hub/                        # Tab 1: 集群概览页面
-│   ├── console/                    # Tab 2: 单机监控与虚拟网卡矩阵
-│   ├── routing/                    # Tab 3: 多端口分流与动态自适应组
-│   ├── nodes/                      # Tab 4: 节点广场与屏蔽库管理
-│   └── settings/                   # 独立界面: 服务器 Profile 管理与生物安全锁
-└── utils/
-    ├── QrCodeParser.kt             # 解析 aimili:// 专属链接协议
-    └── BiometricHelper.kt          # 指纹/人脸识别安全加锁辅助类
+│   │   ├── GlobalServerSwitcher.kt # 顶栏吸顶服务器切换器 BottomSheet
+│   │   └── WaveformChart.kt        # 实时上下行网速、累计流量卡片与触感交互
+│   ├── navigation/
+│   │   └── MainAppScaffold.kt      # Material 3 响应式底部导航栏与平板侧栏
+│   ├── screens/
+│   │   ├── ClusterHubScreen.kt     # Tab 1: 集群全景概览与扫码导入
+│   │   ├── ServerConsoleScreen.kt  # Tab 2: 单机实时控制台、虚拟网卡与 SSE 日志流
+│   │   ├── NodeSquareScreen.kt     # Tab 3: 节点广场、200ms 防抖搜索与测速
+│   │   └── SettingsSecurityScreen.kt # Tab 4: 安全配置、集群 JSON 导入导出与测速
+│   └── theme/                      # 深空色阶、ThemeMode 与 Monét 动态取色
+└── util/
+    └── NotificationHelper.kt       # 本地故障转移与状态通报通知管理器
 ```
 
 ---

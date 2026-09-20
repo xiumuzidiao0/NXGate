@@ -1,6 +1,6 @@
-# AimiliVPN CI/CD 发布与测试流程标准化规范文档
+# NXGate CI/CD 发布与测试流程标准化规范文档
 
-本文档定义了 AimiliVPN（Go 高性能网关版）的代码质量准入、多端自动化测试、版本一致性同步、多架构交叉编译打包、GitHub Release 发布以及线上服务器热更新的标准操作流程（SOP）。
+本文档定义了 NXGate（自适应多出口智能路由网关）的代码质量准入、多端自动化测试、版本一致性同步、多架构交叉编译打包、GitHub Release 发布以及线上服务器热更新的标准操作流程（SOP）。
 
 ---
 
@@ -158,20 +158,22 @@ go test -v ./web/...
 
 ```text
 dist/
-├── aimilivpn_linux_amd64       # 64 位 x86 Linux 原生未压缩 ELF 可执行文件
-├── aimilivpn_linux_amd64.gz    # 64 位 x86 Gzip 压缩包
-├── aimilivpn_linux_arm64       # 64 位 ARM (aarch64) 原生未压缩 ELF 可执行文件
-├── aimilivpn_linux_arm64.gz    # 64 位 ARM Gzip 压缩包
-├── aimilivpn_linux_386         # 32 位 x86 Linux 原生未压缩 ELF 可执行文件
-├── aimilivpn_linux_386.gz      # 32 位 x86 Gzip 压缩包
-├── aimilivpn_linux_arm         # 32 位 ARM Linux 原生未压缩 ELF 可执行文件
-├── aimilivpn_linux_arm.gz      # 32 位 ARM Gzip 压缩包
-└── SHA256SUMS.txt              # 包含以上全部 8 个二进制文件的哈希校验清单
+├── nxgate_linux_amd64          # 64 位 x86 Linux 原生未压缩 ELF 可执行文件 (主发布)
+├── nxgate_linux_amd64.gz       # 64 位 x86 Gzip 压缩包
+├── nxgate_linux_arm64          # 64 位 ARM (aarch64) 原生未压缩 ELF 可执行文件
+├── nxgate_linux_arm64.gz       # 64 位 ARM Gzip 压缩包
+├── nxgate_linux_386            # 32 位 x86 Linux 原生未压缩 ELF 可执行文件
+├── nxgate_linux_386.gz         # 32 位 x86 Gzip 压缩包
+├── nxgate_linux_arm            # 32 位 ARM Linux 原生未压缩 ELF 可执行文件
+├── nxgate_linux_arm.gz         # 32 位 ARM Gzip 压缩包
+├── aimilivpn_linux_*           # 向后兼容旧版一键更新脚本的别名产物与 Gzip 包
+├── SHA256SUMS.txt              # 包含全部二进制文件的哈希校验清单
+└── nxgate-release.apk          # Android 原生远程管控配套客户端签名 Release 包
 ```
 
 ### 2. 必须包含未压缩 ELF 的关键设计原因
 
-- **`nx update` 极速更新机制**：生产环境中的终端管理脚本 `install.sh` 在执行自动升级时，直接拉取 `aimilivpn_linux_${GO_ARCH}` 原生 ELF。
+- **`nx update` 极速更新机制**：生产环境中的终端管理脚本 `install.sh` 在执行自动升级时，优先拉取 `nxgate_linux_${GO_ARCH}`（向后兼容回退 `aimilivpn_linux_${GO_ARCH}`）原生 ELF。
 - **避免依赖与解压失败**：某些精简或容器化生产环境未预装 `gzip` 或权限受限，直接校验 ELF 文件的 `head -c 4` 是否包含 `ELF` 标识并比对 SHA-256，保障 100% 成功替换运行。
 - **双轨兼顾**：同时上传 `.gz` 格式满足手动网络受限用户的轻量下载需求。
 

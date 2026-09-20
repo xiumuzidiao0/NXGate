@@ -110,6 +110,12 @@ download_release_binary() {
     detect_arch
 
     local urls=(
+        "https://github.com/xiumuzidiao0/NXGate/releases/latest/download/nxgate_linux_${GO_ARCH}"
+        "https://ghproxy.net/https://github.com/xiumuzidiao0/NXGate/releases/latest/download/nxgate_linux_${GO_ARCH}"
+        "https://mirror.ghproxy.com/https://github.com/xiumuzidiao0/NXGate/releases/latest/download/nxgate_linux_${GO_ARCH}"
+        "https://github.com/xiumuzidiao0/NXGate/releases/download/v2.5.7/nxgate_linux_${GO_ARCH}"
+        "https://ghproxy.net/https://github.com/xiumuzidiao0/NXGate/releases/download/v2.5.7/nxgate_linux_${GO_ARCH}"
+        "https://mirror.ghproxy.com/https://github.com/xiumuzidiao0/NXGate/releases/download/v2.5.7/nxgate_linux_${GO_ARCH}"
         "https://github.com/xiumuzidiao0/NXGate/releases/latest/download/aimilivpn_linux_${GO_ARCH}"
         "https://ghproxy.net/https://github.com/xiumuzidiao0/NXGate/releases/latest/download/aimilivpn_linux_${GO_ARCH}"
         "https://mirror.ghproxy.com/https://github.com/xiumuzidiao0/NXGate/releases/latest/download/aimilivpn_linux_${GO_ARCH}"
@@ -120,6 +126,9 @@ download_release_binary() {
 
     for u in "${urls[@]}"; do
         echo -e "  -> 尝试从源拉取预编译程序: ${u} ..."
+        local target_bin_name
+        target_bin_name=$(basename "$u")
+
         local checksum_url
         if [[ "$u" == *"/latest/"* ]]; then
             checksum_url="https://github.com/xiumuzidiao0/NXGate/releases/latest/download/SHA256SUMS.txt"
@@ -128,7 +137,7 @@ download_release_binary() {
         fi
 
         local expected_hash
-        expected_hash=$(curl -sSL -f -m 20 "$checksum_url" 2>/dev/null | awk -v file="aimilivpn_linux_${GO_ARCH}" '{
+        expected_hash=$(curl -sSL -f -m 20 "$checksum_url" 2>/dev/null | awk -v file="$target_bin_name" '{
             gsub(/\r/, "");
             f1=$1; f2=$2; sub(/^\*/, "", f2); sub(/^\.\//, "", f2);
             if (f2 == file && length(f1) == 64) { print f1; exit }

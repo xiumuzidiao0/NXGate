@@ -331,13 +331,18 @@ func PerformSelfUpdate(ctx context.Context, targetVer string) error {
 		arch = "amd64"
 	}
 
-	fileName := fmt.Sprintf("aimilivpn_linux_%s", arch)
+	fileName := fmt.Sprintf("nxgate_linux_%s", arch)
 
-	// 1. Fetch expected SHA256
+	// 1. Fetch expected SHA256 (prioritize nxgate_*, fallback to aimilivpn_*)
 	setUpdateStatus(true, "正在拉取 SHA256 校验和清单...", targetVer, "")
 	expectedHash, err := fetchExpectedSHA256(ctx, targetVer, fileName)
 	if err != nil {
-		return fmt.Errorf("获取 SHA256 校验清单失败: %w", err)
+		fallbackName := fmt.Sprintf("aimilivpn_linux_%s", arch)
+		expectedHash, err = fetchExpectedSHA256(ctx, targetVer, fallbackName)
+		if err != nil {
+			return fmt.Errorf("获取 SHA256 校验清单失败: %w", err)
+		}
+		fileName = fallbackName
 	}
 
 	// 2. Download binary to tmp file
@@ -400,11 +405,15 @@ func PerformSelfUpdate(ctx context.Context, targetVer string) error {
 }
 
 func resolveBinaryDestination() string {
-	// 1. If standard production directory /opt/aimilivpn exists, always target it
+	// 1. If standard production directory /opt/nxgate exists, target it
+	if fi, err := os.Stat("/opt/nxgate"); err == nil && fi.IsDir() {
+		return "/opt/nxgate/nxgate"
+	}
+	// 2. If legacy production directory /opt/aimilivpn exists, target it
 	if fi, err := os.Stat("/opt/aimilivpn"); err == nil && fi.IsDir() {
 		return "/opt/aimilivpn/aimilivpn"
 	}
-	// 2. Otherwise use the currently running executable location, resolving any symlinks
+	// 3. Otherwise use the currently running executable location, resolving any symlinks
 	execPath, err := os.Executable()
 	if err == nil && execPath != "" {
 		if realPath, err := filepath.EvalSymlinks(execPath); err == nil && realPath != "" {
@@ -412,7 +421,7 @@ func resolveBinaryDestination() string {
 		}
 		return execPath
 	}
-	return "/opt/aimilivpn/aimilivpn"
+	return "/opt/nxgate/nxgate"
 }
 
 func fetchExpectedSHA256(ctx context.Context, targetVer, targetFileName string) (string, error) {
