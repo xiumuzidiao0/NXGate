@@ -267,12 +267,15 @@ func (np *NodePool) rebuildCandidatesLocked() {
 
 		tier := func(node *Node) int {
 			if node.LatencyMs > 0 {
-				return 0
+				if node.FailCount == 0 {
+					return 0 // Tier 0: 完全健康优质节点 (无失败历史)
+				}
+				return 1 // Tier 1: 可达但有偶发失败记录的降权节点
 			}
 			if node.LatencyMs == 0 {
-				return 1
+				return 2 // Tier 2: 端口已通但未测完整延迟的就绪节点
 			}
-			return 2
+			return 3 // Tier 3: 探测失败/死端口节点
 		}
 
 		tierA := tier(a)
@@ -294,6 +297,20 @@ func (np *NodePool) rebuildCandidatesLocked() {
 
 	np.candidates = filtered
 	np.allRawNodes = all
+}
+
+func (np *NodePool) RecordSuccess(nodeID string) {
+	np.mu.Lock()
+	defer np.mu.Unlock()
+
+	if n, ok := np.nodeStore[nodeID]; ok {
+		n.FailCount = 0
+		n.LastChecked = time.Now()
+	}
+	if np.blacklist != nil {
+		np.blacklist.Reset(nodeID)
+	}
+	np.rebuildCandidatesLocked()
 }
 
 // MergeFreshNodesLocked merges freshly fetched nodes into the incremental store without wiping historical valid nodes.
