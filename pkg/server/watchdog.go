@@ -103,7 +103,7 @@ func (w *SingBoxWatchdog) check(ctx context.Context) {
 			stats.LogInfo("Watchdog", "✅ sing-box 入站核心已被后台守护程序成功自愈拉起！")
 
 			if w.server.notifier != nil && w.server.notifier.IsConfigured() {
-				msg := fmt.Sprintf("⚠️ <b>AimiliVPN 警报与自愈</b>\n\n检测到 <b>sing-box</b> 入站服务异常中断，后台自愈守护程序已自动执行安全重启并恢复就绪！\n时间: %s", time.Now().Format("2006-01-02 15:04:05"))
+				msg := fmt.Sprintf("⚠️ <b>NXGate 警报与自愈</b>\n\n检测到 <b>sing-box</b> 入站服务异常中断，后台自愈守护程序已自动执行安全重启并恢复就绪！\n时间: %s", time.Now().Format("2006-01-02 15:04:05"))
 				_ = w.server.notifier.SendMessage(msg)
 			}
 		}

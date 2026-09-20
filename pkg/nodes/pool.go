@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"aimili-vpngate-go/pkg/config"
@@ -57,7 +58,8 @@ type NodePool struct {
 	reputation *ReputationManager
 	storePath  string
 
-	mu          sync.RWMutex
+	isRefreshing atomic.Bool
+	mu           sync.RWMutex
 	nodeStore   map[string]*Node // 全量持久化增量节点库 (主键: node.ID)
 	candidates  []*Node          // 当前有效、过滤并已排序的优质候选节点列表
 	allRawNodes []*Node          // 当前库中全部已知节点清单
@@ -272,7 +274,17 @@ func (np *NodePool) MergeFreshNodesLocked(fresh []*Node, source string) (int, in
 	return newCount, updatedCount, evictedCount
 }
 
+func (np *NodePool) IsRefreshing() bool {
+	return np.isRefreshing.Load()
+}
+
 func (np *NodePool) Refresh(ctx context.Context) error {
+	if !np.isRefreshing.CompareAndSwap(false, true) {
+		stats.LogInfo("Nodes", "节点池刷新任务已在后台运行中，跳过重复请求")
+		return nil
+	}
+	defer np.isRefreshing.Store(false)
+
 	np.mu.Lock()
 	np.lastStatus = "正在拉取节点列表"
 	np.mu.Unlock()

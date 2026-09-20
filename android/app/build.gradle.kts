@@ -12,8 +12,8 @@ android {
         applicationId = "com.nxgate.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "2.5.6"
+        versionCode = 2
+        versionName = "2.5.7"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -77,6 +77,9 @@ dependencies {
 
     // Biometric authentication
     implementation("androidx.biometric:biometric:1.2.0-alpha05")
+
+    // Hardware-backed encrypted storage
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
 
     // CameraX and QR scanning
     implementation("androidx.camera:camera-core:1.4.1")

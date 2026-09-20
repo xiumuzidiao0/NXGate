@@ -101,6 +101,12 @@ func (f *Fetcher) FetchNodes(ctx context.Context) (*FetchResult, error) {
 	var mu sync.Mutex
 	var successes []sourceData
 
+	fetchCtx, cancelAll := context.WithCancel(ctx)
+	defer cancelAll()
+
+	var triggerEarlyExitOnce sync.Once
+	doneCh := make(chan struct{})
+
 	var wg sync.WaitGroup
 	for _, src := range sources {
 		if src.url == "" {
@@ -109,19 +115,43 @@ func (f *Fetcher) FetchNodes(ctx context.Context) (*FetchResult, error) {
 		wg.Add(1)
 		go func(name, u string) {
 			defer wg.Done()
-			fetchCtx, cancel := context.WithTimeout(ctx, 12*time.Second)
-			defer cancel()
+			reqCtx, reqCancel := context.WithTimeout(fetchCtx, 12*time.Second)
+			defer reqCancel()
 
-			data, err := f.fetchURL(fetchCtx, u)
+			data, err := f.fetchURL(reqCtx, u)
 			if err == nil && len(data) > 0 {
 				mu.Lock()
 				successes = append(successes, sourceData{name: name, data: data})
+				count := len(successes)
 				mu.Unlock()
 				stats.LogInfo("Nodes", "成功从 [%s] 拉取到节点数据 (%d 字节)", name, len(data))
+
+				// 一旦有至少 2 个高速镜像拉取成功，开启 1.5 秒早退宽限期，避免等待死链接卡满 12 秒
+				if count >= 2 {
+					triggerEarlyExitOnce.Do(func() {
+						go func() {
+							select {
+							case <-time.After(1500 * time.Millisecond):
+								cancelAll()
+							case <-doneCh:
+							}
+						}()
+					})
+				}
 			}
 		}(src.name, src.url)
 	}
-	wg.Wait()
+
+	go func() {
+		wg.Wait()
+		close(doneCh)
+	}()
+
+	<-doneCh
+
+	if err := ctx.Err(); err != nil && len(successes) == 0 {
+		return nil, err
+	}
 
 	if len(successes) > 0 {
 		var combined bytes.Buffer

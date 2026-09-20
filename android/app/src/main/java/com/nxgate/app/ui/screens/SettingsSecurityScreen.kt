@@ -1,5 +1,9 @@
 package com.nxgate.app.ui.screens
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
 import android.content.res.Configuration
 import android.widget.Toast
 import androidx.biometric.BiometricManager
@@ -26,13 +30,19 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.CloudSync
 import androidx.compose.material.icons.rounded.ColorLens
+import androidx.compose.material.icons.rounded.ContentCopy
+import androidx.compose.material.icons.rounded.ContentPaste
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Dns
+import androidx.compose.material.icons.rounded.FileDownload
+import androidx.compose.material.icons.rounded.FileUpload
 import androidx.compose.material.icons.rounded.Fingerprint
 import androidx.compose.material.icons.rounded.NetworkPing
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.QrCodeScanner
+import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -67,8 +77,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -99,6 +111,7 @@ fun SettingsSecurityScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
     val scrollState = rememberScrollState()
 
@@ -121,6 +134,7 @@ fun SettingsSecurityScreen(
 
     // Protocol chip: "HTTP", "HTTPS" (selected)
     var selectedProtocolChipIndex by remember { mutableIntStateOf(if (initialServer?.isTls == true) 1 else 0) }
+    var allowInsecureTls by remember { mutableStateOf(initialServer?.allowInsecureTls == true) }
     val protocolChips = listOf("HTTP", "HTTPS")
 
     // Security preferences switch states
@@ -134,6 +148,12 @@ fun SettingsSecurityScreen(
     // QR Code Manual Scan Dialog
     var showScanSimDialog by remember { mutableStateOf(false) }
     var scannedUriInput by remember { mutableStateOf("") }
+
+    // Cluster Backup & Restore Dialog
+    var showClusterBackupDialog by remember { mutableStateOf(false) }
+    var clusterBackupTab by remember { mutableIntStateOf(0) }
+    var importJsonInput by remember { mutableStateOf("") }
+    var exportIncludePassword by remember { mutableStateOf(true) }
 
     val onToggleBiometric: (Boolean) -> Unit = { targetChecked ->
         if (targetChecked) {
@@ -210,6 +230,17 @@ fun SettingsSecurityScreen(
                 },
                 actions = {
                     IconButton(
+                        onClick = { showClusterBackupDialog = true },
+                        modifier = Modifier.size(48.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.CloudSync,
+                            contentDescription = "集群备份与还原",
+                            tint = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                    IconButton(
                         onClick = { showScanSimDialog = true },
                         modifier = Modifier.size(48.dp)
                     ) {
@@ -236,6 +267,7 @@ fun SettingsSecurityScreen(
                     inputPath = "enter"
                     inputUser = "admin"
                     inputPass = ""
+                    allowInsecureTls = false
                     Toast.makeText(context, "已切换为新增模式，可在右/下方表单填写或扫码导入！", Toast.LENGTH_SHORT).show()
                 },
                 shape = RoundedCornerShape(16.dp),
@@ -315,9 +347,12 @@ fun SettingsSecurityScreen(
                                                         scope.launch {
                                                             val res = NXGateApplication.instance.apiClient.testConnection(server)
                                                             if (res.isSuccess) {
-                                                                NXGateApplication.instance.serverStore.updateServer(res.getOrNull() ?: server)
-                                                                Toast.makeText(context, "[${server.name}] 测活通过！延迟: ${server.latencyMs}ms", Toast.LENGTH_SHORT).show()
+                                                                val updated = res.getOrNull() ?: server
+                                                                NXGateApplication.instance.serverStore.updateServer(updated)
+                                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                                Toast.makeText(context, "[${updated.name}] 测活通过！延迟: ${updated.latencyMs}ms", Toast.LENGTH_SHORT).show()
                                                             } else {
+                                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                                                 Toast.makeText(context, "[${server.name}] 测活失败: ${res.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
                                                             }
                                                         }
@@ -340,6 +375,7 @@ fun SettingsSecurityScreen(
                                                 inputUser = server.username
                                                 inputPass = server.password
                                                 selectedProtocolChipIndex = if (server.isTls) 1 else 0
+                                                allowInsecureTls = server.allowInsecureTls
                                                 Toast.makeText(context, "已载入 [${server.name}] 至右侧表单", Toast.LENGTH_SHORT).show()
                                             }
                                         )
@@ -420,6 +456,40 @@ fun SettingsSecurityScreen(
                                 onSelected = { selectedProtocolChipIndex = it }
                             )
 
+                            if (selectedProtocolChipIndex == 1) {
+                                Surface(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = MaterialTheme.colorScheme.surfaceContainerHigh
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 14.dp, vertical = 8.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = "跳过自签证书与域名校验",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                            Text(
+                                                text = "允许 IP 直连私有自签证书或内网 HTTPS 网关",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        Switch(
+                                            checked = allowInsecureTls,
+                                            onCheckedChange = { allowInsecureTls = it }
+                                        )
+                                    }
+                                }
+                            }
+
                             if (selectedProtocolChipIndex == 0 && cleartextWarningEnabled) {
                                 Surface(
                                     shape = RoundedCornerShape(12.dp),
@@ -459,20 +529,33 @@ fun SettingsSecurityScreen(
                                         path = inputPath.trim().trim('/'),
                                         username = inputUser.trim(),
                                         password = inputPass.trim(),
-                                        isTls = selectedProtocolChipIndex == 1
+                                        isTls = selectedProtocolChipIndex == 1,
+                                        allowInsecureTls = if (selectedProtocolChipIndex == 1) allowInsecureTls else false
                                     )
                                     scope.launch {
                                         val res = NXGateApplication.instance.apiClient.testConnection(newServer)
                                         isTestingConnection = false
-                                        val profileToSave = res.getOrNull() ?: newServer
-
-                                        if (editingServerId != null && servers.any { it.id == editingServerId }) {
-                                            NXGateApplication.instance.serverStore.updateServer(profileToSave)
-                                            Toast.makeText(context, "[${profileToSave.name}] 配置已更新并安全保存", Toast.LENGTH_SHORT).show()
+                                        if (res.isSuccess) {
+                                            val profileToSave = res.getOrNull() ?: newServer
+                                            if (editingServerId != null && servers.any { it.id == editingServerId }) {
+                                                NXGateApplication.instance.serverStore.updateServer(profileToSave)
+                                                Toast.makeText(context, "[${profileToSave.name}] 测活通过 (${profileToSave.latencyMs}ms)，配置已更新", Toast.LENGTH_SHORT).show()
+                                            } else {
+                                                NXGateApplication.instance.serverStore.addServer(profileToSave)
+                                                editingServerId = profileToSave.id
+                                                Toast.makeText(context, "[${profileToSave.name}] 连通测试通过 (${profileToSave.latencyMs}ms)，新网关已添加", Toast.LENGTH_SHORT).show()
+                                            }
                                         } else {
-                                            NXGateApplication.instance.serverStore.addServer(profileToSave)
-                                            editingServerId = profileToSave.id
-                                            Toast.makeText(context, "新服务器 [${profileToSave.name}] 已成功添加", Toast.LENGTH_SHORT).show()
+                                            val offlineServer = newServer.copy(isOnline = false, latencyMs = 0)
+                                            val errMsg = res.exceptionOrNull()?.message ?: "连接超时"
+                                            if (editingServerId != null && servers.any { it.id == editingServerId }) {
+                                                NXGateApplication.instance.serverStore.updateServer(offlineServer)
+                                                Toast.makeText(context, "警告: 连通失败 ($errMsg)，已离线保存配置", Toast.LENGTH_LONG).show()
+                                            } else {
+                                                NXGateApplication.instance.serverStore.addServer(offlineServer)
+                                                editingServerId = offlineServer.id
+                                                Toast.makeText(context, "警告: 连通失败 ($errMsg)，已离线添加网关", Toast.LENGTH_LONG).show()
+                                            }
                                         }
                                     }
                                 },
@@ -581,9 +664,12 @@ fun SettingsSecurityScreen(
                                                 scope.launch {
                                                     val res = NXGateApplication.instance.apiClient.testConnection(server)
                                                     if (res.isSuccess) {
-                                                        NXGateApplication.instance.serverStore.updateServer(res.getOrNull() ?: server)
-                                                        Toast.makeText(context, "[${server.name}] 测活通过！延迟: ${server.latencyMs}ms", Toast.LENGTH_SHORT).show()
+                                                        val updated = res.getOrNull() ?: server
+                                                        NXGateApplication.instance.serverStore.updateServer(updated)
+                                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                        Toast.makeText(context, "[${updated.name}] 测活通过！延迟: ${updated.latencyMs}ms", Toast.LENGTH_SHORT).show()
                                                     } else {
+                                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                                         Toast.makeText(context, "[${server.name}] 测活失败: ${res.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
                                                     }
                                                 }
@@ -606,6 +692,7 @@ fun SettingsSecurityScreen(
                                         inputUser = server.username
                                         inputPass = server.password
                                         selectedProtocolChipIndex = if (server.isTls) 1 else 0
+                                        allowInsecureTls = server.allowInsecureTls
                                         Toast.makeText(context, "已载入 [${server.name}] 参数至下方表单，可直接修改或保存", Toast.LENGTH_SHORT).show()
                                     }
                                 )
@@ -687,6 +774,40 @@ fun SettingsSecurityScreen(
                         onSelected = { selectedProtocolChipIndex = it }
                     )
 
+                    if (selectedProtocolChipIndex == 1) {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "跳过自签证书与域名校验",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = "允许 IP 直连私有自签证书或内网 HTTPS 网关",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Switch(
+                                    checked = allowInsecureTls,
+                                    onCheckedChange = { allowInsecureTls = it }
+                                )
+                            }
+                        }
+                    }
+
                     if (selectedProtocolChipIndex == 0 && cleartextWarningEnabled) {
                         Surface(
                             shape = RoundedCornerShape(12.dp),
@@ -731,20 +852,33 @@ fun SettingsSecurityScreen(
                                     path = inputPath.trim().trim('/'),
                                     username = inputUser.trim(),
                                     password = inputPass.trim(),
-                                    isTls = selectedProtocolChipIndex == 1
+                                    isTls = selectedProtocolChipIndex == 1,
+                                    allowInsecureTls = if (selectedProtocolChipIndex == 1) allowInsecureTls else false
                                 )
                                 scope.launch {
                                     val res = NXGateApplication.instance.apiClient.testConnection(newServer)
                                     isTestingConnection = false
-                                    val profileToSave = res.getOrNull() ?: newServer
-
-                                    if (editingServerId != null && servers.any { it.id == editingServerId }) {
-                                        NXGateApplication.instance.serverStore.updateServer(profileToSave)
-                                        Toast.makeText(context, "[${profileToSave.name}] 配置已更新并安全保存", Toast.LENGTH_SHORT).show()
+                                    if (res.isSuccess) {
+                                        val profileToSave = res.getOrNull() ?: newServer
+                                        if (editingServerId != null && servers.any { it.id == editingServerId }) {
+                                            NXGateApplication.instance.serverStore.updateServer(profileToSave)
+                                            Toast.makeText(context, "[${profileToSave.name}] 测活通过 (${profileToSave.latencyMs}ms)，配置已更新", Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            NXGateApplication.instance.serverStore.addServer(profileToSave)
+                                            editingServerId = profileToSave.id
+                                            Toast.makeText(context, "[${profileToSave.name}] 连通测试通过 (${profileToSave.latencyMs}ms)，新网关已添加", Toast.LENGTH_SHORT).show()
+                                        }
                                     } else {
-                                        NXGateApplication.instance.serverStore.addServer(profileToSave)
-                                        editingServerId = profileToSave.id
-                                        Toast.makeText(context, "新服务器 [${profileToSave.name}] 已成功添加", Toast.LENGTH_SHORT).show()
+                                        val offlineServer = newServer.copy(isOnline = false, latencyMs = 0)
+                                        val errMsg = res.exceptionOrNull()?.message ?: "连接超时"
+                                        if (editingServerId != null && servers.any { it.id == editingServerId }) {
+                                            NXGateApplication.instance.serverStore.updateServer(offlineServer)
+                                            Toast.makeText(context, "警告: 连通失败 ($errMsg)，已离线保存配置", Toast.LENGTH_LONG).show()
+                                        } else {
+                                            NXGateApplication.instance.serverStore.addServer(offlineServer)
+                                            editingServerId = offlineServer.id
+                                            Toast.makeText(context, "警告: 连通失败 ($errMsg)，已离线添加网关", Toast.LENGTH_LONG).show()
+                                        }
                                     }
                                 }
                             },
@@ -855,6 +989,7 @@ fun SettingsSecurityScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         NXGateApplication.instance.serverStore.deleteServer(server.id)
                         if (editingServerId == server.id) {
                             editingServerId = null
@@ -886,10 +1021,185 @@ fun SettingsSecurityScreen(
                 inputUser = parsed.username
                 inputPass = parsed.password
                 selectedProtocolChipIndex = if (parsed.isTls) 1 else 0
+                allowInsecureTls = parsed.allowInsecureTls
                 editingServerId = parsed.id
-                NXGateApplication.instance.serverStore.addServer(parsed)
-                showScanSimDialog = false
-                Toast.makeText(context, "已成功扫码识别并自动导入 [${parsed.name}]", Toast.LENGTH_SHORT).show()
+                scope.launch {
+                    val res = NXGateApplication.instance.apiClient.testConnection(parsed)
+                    val profileToSave = res.getOrNull() ?: parsed.copy(isOnline = false, latencyMs = 0)
+                    NXGateApplication.instance.serverStore.addServer(profileToSave)
+                    if (res.isSuccess) {
+                        Toast.makeText(context, "已成功扫码录入并测活网关 [${profileToSave.name}] (${profileToSave.latencyMs}ms)", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(context, "已扫码录入网关 [${profileToSave.name}]，但连通测试未通过: ${res.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+        )
+    }
+
+    // Cluster Backup & Restore Modal Dialog
+    if (showClusterBackupDialog) {
+        AlertDialog(
+            onDismissRequest = { showClusterBackupDialog = false },
+            shape = RoundedCornerShape(28.dp),
+            containerColor = MaterialTheme.colorScheme.surfaceContainer,
+            title = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.CloudSync,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Text("集群备份与还原", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    // Tab 切换: 导出备份 / 导入还原
+                    ConnectedChipGroup(
+                        chips = listOf("导出集群备份", "导入集群配置"),
+                        selectedIndex = clusterBackupTab,
+                        onSelected = { clusterBackupTab = it }
+                    )
+
+                    if (clusterBackupTab == 0) {
+                        // ================= 导出模块 =================
+                        Text(
+                            text = "当前已纳管 ${servers.size} 台网关服务器配置，点击下方按钮将生成全量标准 JSON 备份。",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("备份中包含连接密码", style = MaterialTheme.typography.bodyMedium)
+                            Switch(
+                                checked = exportIncludePassword,
+                                onCheckedChange = { exportIncludePassword = it }
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Button(
+                                onClick = {
+                                    val json = NXGateApplication.instance.serverStore.exportClusterJson(includePasswords = exportIncludePassword)
+                                    val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                    cm.setPrimaryClip(ClipData.newPlainText("NXGate Cluster Backup", json))
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    Toast.makeText(context, "全量集群备份 JSON 已成功复制到剪贴板！", Toast.LENGTH_SHORT).show()
+                                },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Icon(Icons.Rounded.ContentCopy, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("复制 JSON")
+                            }
+
+                            Button(
+                                onClick = {
+                                    val json = NXGateApplication.instance.serverStore.exportClusterJson(includePasswords = exportIncludePassword)
+                                    val sendIntent = Intent().apply {
+                                        action = Intent.ACTION_SEND
+                                        putExtra(Intent.EXTRA_TEXT, json)
+                                        type = "text/plain"
+                                    }
+                                    val shareIntent = Intent.createChooser(sendIntent, "分享或导出 NXGate 集群备份")
+                                    context.startActivity(shareIntent)
+                                },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.secondary
+                                )
+                            ) {
+                                Icon(Icons.Rounded.Share, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("系统分享")
+                            }
+                        }
+                    } else {
+                        // ================= 导入模块 =================
+                        Text(
+                            text = "请粘贴 NXGate 备份 JSON 文本，系统将自动识别并合并导入至当前网关列表：",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        OutlinedTextField(
+                            value = importJsonInput,
+                            onValueChange = { importJsonInput = it },
+                            placeholder = { Text("粘贴备份 JSON 文本，包含 { \"servers\": [...] } 或 [...]") },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(120.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            maxLines = 6
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            TextButton(
+                                onClick = {
+                                    val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                    val clipText = cm.primaryClip?.getItemAt(0)?.text?.toString() ?: ""
+                                    if (clipText.isNotEmpty()) {
+                                        importJsonInput = clipText
+                                        Toast.makeText(context, "已从剪贴板粘贴文本", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        Toast.makeText(context, "剪贴板为空", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            ) {
+                                Icon(Icons.Rounded.ContentPaste, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("从剪贴板粘贴")
+                            }
+
+                            Button(
+                                onClick = {
+                                    if (importJsonInput.isBlank()) {
+                                        Toast.makeText(context, "请先输入或粘贴备份内容", Toast.LENGTH_SHORT).show()
+                                        return@Button
+                                    }
+                                    val res = NXGateApplication.instance.serverStore.importClusterJson(importJsonInput)
+                                    if (res.isSuccess) {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        val count = res.getOrDefault(0)
+                                        Toast.makeText(context, "成功导入并合并 $count 台网关节点！", Toast.LENGTH_SHORT).show()
+                                        showClusterBackupDialog = false
+                                        importJsonInput = ""
+                                    } else {
+                                        Toast.makeText(context, "导入失败: ${res.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
+                                    }
+                                },
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Icon(Icons.Rounded.FileUpload, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("确认导入")
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showClusterBackupDialog = false }) {
+                    Text("关闭")
+                }
             }
         )
     }

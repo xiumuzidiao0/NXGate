@@ -9,15 +9,16 @@ data class ServerProfile(
     val username: String,
     val password: String,
     val isTls: Boolean = false,
-    val latencyMs: Int = 38,
-    val isOnline: Boolean = true,
-    val exitIp: String = "114.119.18.2",
-    val ipType: String = "原生家宽",
-    val ispName: String = "中华电信骨干",
-    val unlockStatus: String = "全通过",
-    val downSpeedStr: String = "8.4 Mb/s",
-    val totalTrafficStr: String = "12.1 Gb",
-    val activeConns: Int = 38,
+    val allowInsecureTls: Boolean = false,
+    val latencyMs: Int = 0,
+    val isOnline: Boolean = false,
+    val exitIp: String = "",
+    val ipType: String = "",
+    val ispName: String = "",
+    val unlockStatus: String = "",
+    val downSpeedStr: String = "0.0 Mb/s",
+    val totalTrafficStr: String = "0.0 Mb",
+    val activeConns: Int = 0,
     val orderIndex: Int = 0
 ) {
     val baseUrl: String
@@ -121,6 +122,29 @@ data class LiveTrafficInfo(
             val gb = (totalBytes * 8.0) / 1_000_000_000.0
             return if (gb >= 1.0) "%.2f Gb".format(gb) else "%.1f Mb".format((totalBytes * 8.0) / 1_000_000.0)
         }
+
+    val totalDownloadStr: String
+        get() = formatBytes(totalDownloadBytes)
+
+    val totalUploadStr: String
+        get() = formatBytes(totalUploadBytes)
+
+    val totalCombinedStr: String
+        get() = formatBytes(totalDownloadBytes + totalUploadBytes)
+
+    companion object {
+        fun formatBytes(bytes: Long): String {
+            if (bytes <= 0) return "0.0 B"
+            val b = bytes.toDouble()
+            return when {
+                b >= 1024.0 * 1024.0 * 1024.0 * 1024.0 -> "%.2f TB".format(b / (1024.0 * 1024.0 * 1024.0 * 1024.0))
+                b >= 1024.0 * 1024.0 * 1024.0 -> "%.2f GB".format(b / (1024.0 * 1024.0 * 1024.0))
+                b >= 1024.0 * 1024.0 -> "%.2f MB".format(b / (1024.0 * 1024.0))
+                b >= 1024.0 -> "%.1f KB".format(b / 1024.0)
+                else -> "$bytes B"
+            }
+        }
+    }
 }
 
 data class ServerStatusData(
@@ -353,4 +377,12 @@ data class SystemLogEntry(
             val timePart = if (t.isNotEmpty()) "[$t] " else ""
             return "$timePart[$level] [$module] $message"
         }
+}
+
+sealed class ServerSseEvent {
+    data class StatusUpdate(val status: ServerStatusData) : ServerSseEvent()
+    data class LogEntry(val log: SystemLogEntry) : ServerSseEvent()
+    data class RawEvent(val type: String, val data: String) : ServerSseEvent()
+    data object Connected : ServerSseEvent()
+    data class Error(val error: Throwable?) : ServerSseEvent()
 }

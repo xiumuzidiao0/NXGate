@@ -55,6 +55,13 @@ func clearDeadline(conn net.Conn) {
 	_ = conn.SetDeadline(time.Time{})
 }
 
+var relayBufferPool = sync.Pool{
+	New: func() any {
+		b := make([]byte, 32*1024)
+		return &b
+	},
+}
+
 func relay(client, upstream net.Conn) {
 	tracker := stats.GetTrafficTracker()
 	var wg sync.WaitGroup
@@ -73,8 +80,9 @@ func relay(client, upstream net.Conn) {
 				}
 			},
 		}
-		buf := make([]byte, 64*1024)
-		_, _ = io.CopyBuffer(client, cr, buf)
+		bufPtr := relayBufferPool.Get().(*[]byte)
+		defer relayBufferPool.Put(bufPtr)
+		_, _ = io.CopyBuffer(client, cr, *bufPtr)
 	}()
 
 	// Client -> Upstream (Upload)
@@ -90,8 +98,9 @@ func relay(client, upstream net.Conn) {
 				}
 			},
 		}
-		buf := make([]byte, 64*1024)
-		_, _ = io.CopyBuffer(upstream, cr, buf)
+		bufPtr := relayBufferPool.Get().(*[]byte)
+		defer relayBufferPool.Put(bufPtr)
+		_, _ = io.CopyBuffer(upstream, cr, *bufPtr)
 	}()
 
 	wg.Wait()

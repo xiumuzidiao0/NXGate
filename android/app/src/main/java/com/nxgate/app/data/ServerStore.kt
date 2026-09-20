@@ -2,6 +2,8 @@ package com.nxgate.app.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
 import com.nxgate.app.model.ServerProfile
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -11,7 +13,49 @@ import org.json.JSONObject
 import java.util.UUID
 
 class ServerStore(context: Context) {
-    private val prefs: SharedPreferences = context.getSharedPreferences("aimili_server_prefs", Context.MODE_PRIVATE)
+    private val prefs: SharedPreferences = run {
+        try {
+            val masterKey = MasterKey.Builder(context)
+                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                .build()
+            val encPrefs = EncryptedSharedPreferences.create(
+                context,
+                "aimili_server_secure_prefs",
+                masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            )
+            // 自动从旧版明文存储无缝平滑迁移
+            val oldPrefs = context.getSharedPreferences("aimili_server_prefs", Context.MODE_PRIVATE)
+            if (!encPrefs.contains(KEY_SERVERS) && oldPrefs.contains(KEY_SERVERS)) {
+                val oldJson = oldPrefs.getString(KEY_SERVERS, null)
+                val oldActive = oldPrefs.getString(KEY_ACTIVE_SERVER_ID, null)
+                val oldBio = oldPrefs.getBoolean(KEY_BIOMETRIC, true)
+                val oldClear = oldPrefs.getBoolean(KEY_CLEARTEXT_WARN, true)
+                val oldMode = oldPrefs.getString(KEY_THEME_MODE, "system")
+                val oldPalette = oldPrefs.getString(KEY_THEME_PALETTE, "teal")
+                val oldAccent = oldPrefs.getString(KEY_THEME_ACCENT, "teal")
+                val oldBase = oldPrefs.getString(KEY_THEME_BASE, "neutral")
+
+                encPrefs.edit().apply {
+                    putString(KEY_SERVERS, oldJson)
+                    putString(KEY_ACTIVE_SERVER_ID, oldActive)
+                    putBoolean(KEY_BIOMETRIC, oldBio)
+                    putBoolean(KEY_CLEARTEXT_WARN, oldClear)
+                    putString(KEY_THEME_MODE, oldMode)
+                    putString(KEY_THEME_PALETTE, oldPalette)
+                    putString(KEY_THEME_ACCENT, oldAccent)
+                    putString(KEY_THEME_BASE, oldBase)
+                    apply()
+                }
+                oldPrefs.edit().clear().apply()
+            }
+            encPrefs
+        } catch (e: Exception) {
+            e.printStackTrace()
+            context.getSharedPreferences("aimili_server_prefs", Context.MODE_PRIVATE)
+        }
+    }
 
     private val _servers = MutableStateFlow<List<ServerProfile>>(emptyList())
     val servers: StateFlow<List<ServerProfile>> = _servers.asStateFlow()
@@ -188,6 +232,67 @@ class ServerStore(context: Context) {
         }
     }
 
+    /**
+     * 导出全量网关集群配置为标准 JSON 字符串
+     */
+    fun exportClusterJson(includePasswords: Boolean = true): String {
+        val array = JSONArray()
+        _servers.value.forEach { server ->
+            val obj = serializeServer(server)
+            if (!includePasswords) {
+                obj.put("password", "")
+            }
+            array.put(obj)
+        }
+        val wrapper = JSONObject().apply {
+            put("version", 1)
+            put("app", "nxgate")
+            put("exported_at", System.currentTimeMillis())
+            put("servers_count", array.length())
+            put("servers", array)
+        }
+        return wrapper.toString(2)
+    }
+
+    /**
+     * 从 JSON 文本批量导入网关配置（重复网关根据 host:port 自动覆盖更新）
+     */
+    fun importClusterJson(jsonStr: String): Result<Int> {
+        return try {
+            val trimmed = jsonStr.trim()
+            val serversArr = if (trimmed.startsWith("{")) {
+                val root = JSONObject(trimmed)
+                if (root.has("servers")) root.getJSONArray("servers") else return Result.failure(Exception("缺少 servers 节点"))
+            } else if (trimmed.startsWith("[")) {
+                JSONArray(trimmed)
+            } else {
+                return Result.failure(Exception("无法识别的备份 JSON 格式"))
+            }
+
+            var imported = 0
+            val currentList = _servers.value.toMutableList()
+            for (i in 0 until serversArr.length()) {
+                val obj = serversArr.getJSONObject(i)
+                val newProfile = deserializeServer(obj)
+                val existingIndex = currentList.indexOfFirst { it.host == newProfile.host && it.port == newProfile.port }
+                if (existingIndex >= 0) {
+                    currentList[existingIndex] = newProfile
+                } else {
+                    currentList.add(newProfile)
+                }
+                imported++
+            }
+            _servers.value = currentList
+            saveList(currentList)
+            if (_activeServer.value == null) {
+                _activeServer.value = currentList.firstOrNull()
+            }
+            Result.success(imported)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     private fun saveList(list: List<ServerProfile>) {
         val array = JSONArray()
         list.forEach { array.put(serializeServer(it)) }
@@ -204,6 +309,7 @@ class ServerStore(context: Context) {
             put("username", p.username)
             put("password", p.password)
             put("isTls", p.isTls)
+            put("allowInsecureTls", p.allowInsecureTls)
             put("latencyMs", p.latencyMs)
             put("isOnline", p.isOnline)
             put("exitIp", p.exitIp)
@@ -218,11 +324,11 @@ class ServerStore(context: Context) {
     }
 
     private fun deserializeServer(obj: JSONObject): ServerProfile {
-        var downSpeed = obj.optString("downSpeedStr", "8.4 Mb/s")
+        var downSpeed = obj.optString("downSpeedStr", "0.0 Mb/s")
         if (downSpeed.contains("兆每秒")) {
             downSpeed = downSpeed.replace("兆每秒", "Mb/s").trim()
         }
-        var totalTraffic = obj.optString("totalTrafficStr", "12.1 Gb")
+        var totalTraffic = obj.optString("totalTrafficStr", "0.0 Mb")
         if (totalTraffic.contains("吉字节")) {
             totalTraffic = totalTraffic.replace("吉字节", "Gb").trim()
         }
@@ -236,15 +342,16 @@ class ServerStore(context: Context) {
             username = obj.optString("username", "admin"),
             password = obj.optString("password", ""),
             isTls = obj.optBoolean("isTls", false),
-            latencyMs = obj.optInt("latencyMs", 38),
-            isOnline = obj.optBoolean("isOnline", true),
-            exitIp = obj.optString("exitIp", "114.119.18.2"),
-            ipType = obj.optString("ipType", "原生家宽"),
-            ispName = obj.optString("ispName", "中华电信骨干"),
-            unlockStatus = obj.optString("unlockStatus", "全通过"),
+            allowInsecureTls = obj.optBoolean("allowInsecureTls", false),
+            latencyMs = obj.optInt("latencyMs", 0),
+            isOnline = obj.optBoolean("isOnline", false),
+            exitIp = obj.optString("exitIp", ""),
+            ipType = obj.optString("ipType", ""),
+            ispName = obj.optString("ispName", ""),
+            unlockStatus = obj.optString("unlockStatus", ""),
             downSpeedStr = downSpeed,
             totalTrafficStr = totalTraffic,
-            activeConns = obj.optInt("activeConns", 38),
+            activeConns = obj.optInt("activeConns", 0),
             orderIndex = obj.optInt("orderIndex", 0)
         )
     }

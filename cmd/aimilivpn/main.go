@@ -78,7 +78,7 @@ func main() {
 			tr := stats.GetTrafficTracker().Snapshot()
 			state := vpnMgr.Snapshot()
 			tuns := tunnelPool.ListTunnels()
-			return fmt.Sprintf("📊 <b>AimiliVPN 实时状态</b>\n\n"+
+			return fmt.Sprintf("📊 <b>NXGate 实时状态</b>\n\n"+
 				"<b>版本:</b> v%s\n"+
 				"<b>主隧道状态:</b> %s (%s)\n"+
 				"<b>并发在线出口:</b> %d 个\n"+
@@ -124,12 +124,12 @@ func main() {
 			return "⚡ 已在后台触发全量动态自适应组重评与轮换！"
 
 		case "/ping":
-			return "🏓 Pong! AimiliVPN 代理守护进程正常运行中。"
+			return "🏓 Pong! NXGate 代理守护进程正常运行中。"
 
 		case "/start", "/help":
 			fallthrough
 		default:
-			return "🤖 <b>AimiliVPN 交互控制指令菜单</b>\n\n" +
+			return "🤖 <b>NXGate 交互控制指令菜单</b>\n\n" +
 				"<code>/status</code> - 查看网关运行状态与流量\n" +
 				"<code>/tunnels</code> - 查看当前在线隧道列表\n" +
 				"<code>/rotate</code> - 立即触发自适应池节点轮换\n" +
@@ -173,14 +173,21 @@ func main() {
 		}
 	}()
 
-	// Print startup summary banner
+	// Print startup summary banner (terminal output includes credentials for host operator)
 	adminURL := fmt.Sprintf("http://%s:%d/%s", cfg.UIHost, cfg.UIPort, strings.Trim(cfg.UIPath, "/"))
 	if cfg.UIHost == "::" || cfg.UIHost == "0.0.0.0" {
 		adminURL = fmt.Sprintf("http://<VPS-IP>:%d/%s", cfg.UIPort, strings.Trim(cfg.UIPath, "/"))
 	}
-	stats.LogInfo("Main", "-------------------------------------------------------------")
+	fmt.Printf("\n-------------------------------------------------------------\n")
+	fmt.Printf("NXGate Web 控制台 : %s\n", adminURL)
+	fmt.Printf("管理账号 / 密码   : %s / %s\n", cfg.UIUsername, cfg.UIPassword)
+	fmt.Printf("本地代理网关     : %s:%d (支持 SOCKS5 / HTTP / HTTPS CONNECT)\n", cfg.ProxyHost, cfg.ProxyPort)
+	fmt.Printf("Prometheus 指标  : http://<VPS-IP>:%d/metrics\n", cfg.UIPort)
+	fmt.Printf("-------------------------------------------------------------\n\n")
+
+	// Log masked version into RingLog for telemetry and SSE safety
 	stats.LogInfo("Main", "Web 管理控制台 : %s", adminURL)
-	stats.LogInfo("Main", "管理账号 / 密码 : %s / %s", cfg.UIUsername, cfg.UIPassword)
+	stats.LogInfo("Main", "管理账号 : %s (密码已就绪，已安全脱敏)", cfg.UIUsername)
 	stats.LogInfo("Main", "本地代理网关   : %s:%d (支持 SOCKS5 / HTTP / HTTPS CONNECT)", cfg.ProxyHost, cfg.ProxyPort)
 	stats.LogInfo("Main", "Prometheus 指标: http://<VPS-IP>:%d/metrics", cfg.UIPort)
 	stats.LogInfo("Main", "-------------------------------------------------------------")
@@ -200,5 +207,5 @@ func main() {
 
 	// Wait brief moment for processes and sockets to release
 	time.Sleep(500 * time.Millisecond)
-	stats.LogInfo("Main", "AimiliVPN 服务已成功安全停止。")
+	stats.LogInfo("Main", "NXGate 服务已成功安全停止。")
 }

@@ -27,7 +27,7 @@ func NewTelegramNotifier(cfg *config.Config) *TelegramNotifier {
 	return &TelegramNotifier{
 		cfg: cfg,
 		client: &http.Client{
-			Timeout: 20 * time.Second,
+			Timeout: 35 * time.Second,
 		},
 	}
 }
@@ -80,7 +80,7 @@ func (t *TelegramNotifier) SendMessage(text string) error {
 }
 
 func (t *TelegramNotifier) NotifyStartup(ver string, port int, path string) {
-	msg := fmt.Sprintf("🚀 <b>AimiliVPN 代理网关已就绪</b>\n\n"+
+	msg := fmt.Sprintf("🚀 <b>NXGate 代理网关已就绪</b>\n\n"+
 		"<b>版本:</b> v%s\n"+
 		"<b>本地代理端口:</b> <code>%d</code> (HTTP/SOCKS5)\n"+
 		"<b>安全管理入口:</b> <code>/%s</code>\n"+
