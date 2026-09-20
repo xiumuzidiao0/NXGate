@@ -2,6 +2,9 @@ package nodes
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/tls"
+	"encoding/binary"
 	"encoding/json"
 	"net"
 	"os"
@@ -352,10 +355,8 @@ func (bm *BlacklistManager) ProbeAndRevive(ctx context.Context, fallbackPortFind
 				port = 443
 			}
 
-			addr := net.JoinHostPort(entry.IP, strconv.Itoa(port))
-			conn, err := net.DialTimeout("tcp", addr, 3500*time.Millisecond)
-			if err == nil {
-				_ = conn.Close()
+			// Shadow protocol verification: verify genuine OpenVPN handshake or TLS response
+			if VerifyShadowProtocolResponsiveness(entry.IP, port, entry.Protocol, 3*time.Second) {
 				revMu.Lock()
 				revived = append(revived, entry)
 				revMu.Unlock()
@@ -403,4 +404,114 @@ func (bm *BlacklistManager) List() []*BlacklistEntry {
 		}
 	}
 	return list
+}
+
+// VerifyShadowProtocolResponsiveness probes an endpoint to verify whether it genuinely speaks
+// OpenVPN protocol (TCP/UDP) or SSL/TLS, preventing fake TCP port resurrects.
+func VerifyShadowProtocolResponsiveness(ip string, port int, proto string, timeout time.Duration) bool {
+	if port <= 0 {
+		port = 443
+	}
+	if timeout <= 0 {
+		timeout = 2500 * time.Millisecond
+	}
+
+	isUDP := strings.ToLower(proto) == "udp"
+	addr := net.JoinHostPort(ip, strconv.Itoa(port))
+
+	if isUDP {
+		return probeOpenVPNUDP(addr, timeout)
+	}
+	return probeOpenVPNTCPOrTLS(ip, port, timeout)
+}
+
+func probeOpenVPNUDP(addr string, timeout time.Duration) bool {
+	conn, err := net.DialTimeout("udp", addr, timeout)
+	if err != nil {
+		return false
+	}
+	defer conn.Close()
+
+	_ = conn.SetDeadline(time.Now().Add(timeout))
+
+	// OpenVPN UDP Hard Reset Client V2 packet (14 bytes)
+	req := make([]byte, 14)
+	req[0] = 0x38 // opcode 7 (P_CONTROL_HARD_RESET_CLIENT_V2) << 3 | key_id 0
+	_, _ = rand.Read(req[1:9])
+	// req[9] = 0x00 (message packet-id array length = 0)
+	// req[10..13] = 0x00 (packet ID = 0)
+
+	if _, err := conn.Write(req); err != nil {
+		return false
+	}
+
+	buf := make([]byte, 256)
+	n, err := conn.Read(buf)
+	if err != nil || n < 1 {
+		return false
+	}
+
+	opcode := buf[0] >> 3
+	// Server returns P_CONTROL_HARD_RESET_SERVER_V2 (8), P_ACK_V1 (5), P_CONTROL_HARD_RESET_SERVER_V1 (2), or P_CONTROL_SOFT_RESET_V1 (3)
+	return opcode == 8 || opcode == 5 || opcode == 2 || opcode == 3
+}
+
+func probeOpenVPNTCPOrTLS(ip string, port int, timeout time.Duration) bool {
+	addr := net.JoinHostPort(ip, strconv.Itoa(port))
+	conn, err := net.DialTimeout("tcp", addr, timeout)
+	if err != nil {
+		return false
+	}
+
+	_ = conn.SetDeadline(time.Now().Add(timeout))
+
+	// OpenVPN TCP packet (16 bytes: 2 bytes length + 14 bytes payload)
+	req := make([]byte, 16)
+	binary.BigEndian.PutUint16(req[0:2], 14)
+	req[2] = 0x38 // opcode 7 (P_CONTROL_HARD_RESET_CLIENT_V2) << 3 | key_id 0
+	_, _ = rand.Read(req[3:11])
+	// req[11] = 0x00
+	// req[12..15] = 0x00
+
+	if _, err := conn.Write(req); err != nil {
+		_ = conn.Close()
+		return false
+	}
+
+	buf := make([]byte, 256)
+	n, err := conn.Read(buf)
+	_ = conn.Close()
+
+	if err == nil && n >= 3 {
+		opcode := buf[2] >> 3
+		if opcode == 8 || opcode == 5 || opcode == 2 || opcode == 3 {
+			return true // Confirmed genuine OpenVPN TCP server
+		}
+		// Check if it's TLS record: ContentType 22 (0x16 Handshake) or 21 (0x15 Alert)
+		if buf[0] == 0x16 || buf[0] == 0x15 {
+			return true
+		}
+	}
+
+	// Secondary check: verify whether it's an SSL/TLS wrapped OpenVPN endpoint
+	return probeTLSHandshake(ip, port, timeout)
+}
+
+func probeTLSHandshake(ip string, port int, timeout time.Duration) bool {
+	addr := net.JoinHostPort(ip, strconv.Itoa(port))
+	d := &net.Dialer{Timeout: timeout}
+	tlsConfig := &tls.Config{
+		InsecureSkipVerify: true,
+		ServerName:         ip,
+	}
+	conn, err := tls.DialWithDialer(d, "tcp", addr, tlsConfig)
+	if err == nil {
+		_ = conn.Close()
+		return true
+	}
+	// As long as the remote endpoint actively replied with a TLS alert/handshake error, it proves an active TLS daemon
+	if strings.Contains(err.Error(), "certificate") || strings.Contains(err.Error(), "handshake") || strings.Contains(err.Error(), "tls:") {
+		return true
+	}
+	return false
 }

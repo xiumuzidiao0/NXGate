@@ -2,6 +2,7 @@ package nodes
 
 import (
 	"context"
+	"encoding/binary"
 	"net"
 	"strconv"
 	"testing"
@@ -12,7 +13,7 @@ func TestBlacklistRevival(t *testing.T) {
 	dataDir := t.TempDir()
 	bm := NewBlacklistManager(dataDir)
 
-	// 1. Start a local dummy TCP listener to simulate a revived node
+	// 1. Start a local dummy TCP listener simulating a genuine OpenVPN server responding to handshake
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("failed to listen: %v", err)
@@ -21,6 +22,26 @@ func TestBlacklistRevival(t *testing.T) {
 
 	_, pStr, _ := net.SplitHostPort(ln.Addr().String())
 	livePort, _ := strconv.Atoi(pStr)
+
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			go func(c net.Conn) {
+				defer c.Close()
+				buf := make([]byte, 64)
+				n, _ := c.Read(buf)
+				if n >= 3 {
+					resp := make([]byte, 16)
+					binary.BigEndian.PutUint16(resp[0:2], 14)
+					resp[2] = 0x40 // Opcode 8 (P_CONTROL_HARD_RESET_SERVER_V2)
+					_, _ = c.Write(resp)
+				}
+			}(conn)
+		}
+	}()
 
 	// 2. Mark the live node as blacklisted (failCount=2, so 3rd failure enters quarantine)
 	liveNode := &Node{
@@ -170,5 +191,98 @@ func TestIPLevelAndPermanentBlacklist(t *testing.T) {
 		if r.ID == "tombstone-node:443" {
 			t.Fatalf("permanent node must NEVER be revived")
 		}
+	}
+}
+
+func TestShadowProtocolProbing(t *testing.T) {
+	// 1. TCP OpenVPN Responsive Server -> Should verify true
+	tcpLn, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to listen tcp: %v", err)
+	}
+	defer tcpLn.Close()
+
+	_, tcpPortStr, _ := net.SplitHostPort(tcpLn.Addr().String())
+	tcpPort, _ := strconv.Atoi(tcpPortStr)
+
+	go func() {
+		for {
+			conn, err := tcpLn.Accept()
+			if err != nil {
+				return
+			}
+			go func(c net.Conn) {
+				defer c.Close()
+				buf := make([]byte, 64)
+				n, _ := c.Read(buf)
+				if n >= 3 {
+					resp := make([]byte, 16)
+					binary.BigEndian.PutUint16(resp[0:2], 14)
+					resp[2] = 0x40 // Opcode 8
+					_, _ = c.Write(resp)
+				}
+			}(conn)
+		}
+	}()
+
+	if !VerifyShadowProtocolResponsiveness("127.0.0.1", tcpPort, "tcp", 2*time.Second) {
+		t.Fatalf("expected responsive OpenVPN TCP listener to be verified as true")
+	}
+
+	// 2. TCP Fake Server (accepts but closes immediately with zero response) -> Should verify false!
+	fakeLn, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to listen fake tcp: %v", err)
+	}
+	defer fakeLn.Close()
+
+	_, fakePortStr, _ := net.SplitHostPort(fakeLn.Addr().String())
+	fakePort, _ := strconv.Atoi(fakePortStr)
+
+	go func() {
+		for {
+			conn, err := fakeLn.Accept()
+			if err != nil {
+				return
+			}
+			conn.Close() // immediately close without replying
+		}
+	}()
+
+	if VerifyShadowProtocolResponsiveness("127.0.0.1", fakePort, "tcp", 1*time.Second) {
+		t.Fatalf("expected fake silent TCP listener to be rejected (false)")
+	}
+
+	// 3. UDP OpenVPN Responsive Server -> Should verify true
+	udpAddr, err := net.ResolveUDPAddr("udp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to resolve udp: %v", err)
+	}
+	udpConn, err := net.ListenUDP("udp", udpAddr)
+	if err != nil {
+		t.Fatalf("failed to listen udp: %v", err)
+	}
+	defer udpConn.Close()
+
+	_, udpPortStr, _ := net.SplitHostPort(udpConn.LocalAddr().String())
+	udpPort, _ := strconv.Atoi(udpPortStr)
+
+	go func() {
+		buf := make([]byte, 256)
+		for {
+			n, rAddr, err := udpConn.ReadFrom(buf)
+			if err != nil {
+				return
+			}
+			if n >= 1 {
+				resp := make([]byte, 14)
+				resp[0] = 0x40 // Opcode 8
+				_, _ = udpConn.WriteTo(resp, rAddr)
+			}
+		}
+	}()
+
+	if !VerifyShadowProtocolResponsiveness("127.0.0.1", udpPort, "udp", 2*time.Second) {
+		t.Fatalf("expected responsive OpenVPN UDP listener to be verified as true")
 	}
 }
