@@ -109,7 +109,7 @@ func getEnvInt(key string, defaultVal, minVal, maxVal int) int {
 func randomSecretPath() string {
 	b := make([]byte, 6)
 	if _, err := rand.Read(b); err != nil {
-		return "aimili"
+		return "nxgate"
 	}
 	return hex.EncodeToString(b)
 }

@@ -2,14 +2,14 @@ FROM golang:1.25.13-alpine AS builder
 
 WORKDIR /src
 COPY . .
-RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /bin/aimilivpn ./cmd/aimilivpn
+RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /bin/nxgate ./cmd/nxgate
 
 FROM alpine:3.20
 
 RUN apk add --no-cache openvpn ca-certificates tzdata iptables
 
 WORKDIR /app
-COPY --from=builder /bin/aimilivpn /app/aimilivpn
+COPY --from=builder /bin/nxgate /app/nxgate
 
 ENV DATA_DIR=/app/data \
     UI_HOST=:: \
@@ -19,4 +19,4 @@ ENV DATA_DIR=/app/data \
 
 EXPOSE 8787 7928
 
-ENTRYPOINT ["/app/aimilivpn"]
+ENTRYPOINT ["/app/nxgate"]

@@ -36,7 +36,7 @@ func (f *Fetcher) fetchURL(ctx context.Context, url string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", "AimiliVPN-Go/2.0")
+	req.Header.Set("User-Agent", "NXGate/2.0")
 
 	resp, err := f.client.Do(req)
 	if err != nil {

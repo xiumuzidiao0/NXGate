@@ -158,7 +158,7 @@ async function mockAPI(route) {
   } else if (path.endsWith("/api/settings")) {
     body = {
       ui_port: 8787,
-      ui_path: "aimili",
+      ui_path: "nxgate",
       ui_username: "admin",
       proxy_port: 7928,
       auto_rotate_minutes: 15,
@@ -173,9 +173,9 @@ async function mockAPI(route) {
     body = {
       ok: true,
       profile: {
-        type: "aimili_server",
+        type: "nxgate_server",
         version: 1,
-        name: "AimiliVPN (127.0.0.1)",
+        name: "NXGate (127.0.0.1)",
         host: "127.0.0.1",
         port: 8787,
         path: "enter",
@@ -183,12 +183,12 @@ async function mockAPI(route) {
         password: "password",
         tls: false
       },
-      connect_uri: "aimili://server?host=127.0.0.1&port=8787&path=enter&user=admin&pass=password&name=AimiliVPN&tls=0"
+      connect_uri: "nxgate://server?host=127.0.0.1&port=8787&path=enter&user=admin&pass=password&name=NXGate&tls=0"
     };
   } else if (path.endsWith("/api/app/info")) {
     body = {
       ok: true,
-      app: "aimili-vpngate-go",
+      app: "nxgate",
       version: "2.5.4",
       status: "connected",
       tunnels_count: 1

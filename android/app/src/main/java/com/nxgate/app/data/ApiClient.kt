@@ -929,7 +929,7 @@ class ApiClient {
     }
 
     companion object {
-        fun parseAimiliUri(rawUri: String): ServerProfile? {
+        fun parseNXGateUri(rawUri: String): ServerProfile? {
             try {
                 val uri = Uri.parse(rawUri)
                 if ((uri.scheme == "nxgate" || uri.scheme == "aimili") && uri.host == "server") {
@@ -959,5 +959,7 @@ class ApiClient {
             }
             return null
         }
+
+        fun parseAimiliUri(rawUri: String): ServerProfile? = parseNXGateUri(rawUri)
     }
 }

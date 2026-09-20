@@ -46,7 +46,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import com.nxgate.app.NXGateApplication
 import com.nxgate.app.model.ClusterSummary
-import com.nxgate.app.theme.AimiliMotion
+import com.nxgate.app.theme.NXGateMotion
 import com.nxgate.app.ui.screens.ClusterHubScreen
 import com.nxgate.app.ui.screens.NodeSquareScreen
 import com.nxgate.app.ui.screens.RoutingMatrixScreen
@@ -216,15 +216,15 @@ fun MainAppScaffold() {
                     transitionSpec = {
                         if (targetState.first != initialState.first) {
                             if (targetState.first) {
-                                slideInHorizontally(animationSpec = AimiliMotion.expressiveOffset) { it } togetherWith
-                                        slideOutHorizontally(animationSpec = AimiliMotion.expressiveOffset) { -it / 3 }
+                                slideInHorizontally(animationSpec = NXGateMotion.expressiveOffset) { it } togetherWith
+                                        slideOutHorizontally(animationSpec = NXGateMotion.expressiveOffset) { -it / 3 }
                             } else {
-                                slideInHorizontally(animationSpec = AimiliMotion.expressiveOffset) { -it / 3 } togetherWith
-                                        slideOutHorizontally(animationSpec = AimiliMotion.expressiveOffset) { it }
+                                slideInHorizontally(animationSpec = NXGateMotion.expressiveOffset) { -it / 3 } togetherWith
+                                        slideOutHorizontally(animationSpec = NXGateMotion.expressiveOffset) { it }
                             }
                         } else {
-                            fadeIn(animationSpec = AimiliMotion.expressiveFloat) togetherWith
-                                    fadeOut(animationSpec = AimiliMotion.expressiveFloat)
+                            fadeIn(animationSpec = NXGateMotion.expressiveFloat) togetherWith
+                                    fadeOut(animationSpec = NXGateMotion.expressiveFloat)
                         }
                     },
                     label = "ScreenTransition"

@@ -620,7 +620,7 @@
                 if (!res.ok) return;
                 const data = await res.json();
                 document.getElementById('cfg-web-port').value = data.ui_port || 8787;
-                document.getElementById('cfg-web-path').value = data.ui_path || 'aimili';
+                document.getElementById('cfg-web-path').value = data.ui_path || 'nxgate';
                 document.getElementById('cfg-username').value = data.ui_username || 'admin';
                 document.getElementById('cfg-password').value = '';
                 document.getElementById('cfg-proxy-port').value = data.proxy_port || 7928;
@@ -1704,7 +1704,7 @@
             if (!sb) return;
             const isCollapsed = sb.classList.toggle('collapsed');
             try {
-                localStorage.setItem('aimili_sidebar_collapsed', isCollapsed ? '1' : '0');
+                localStorage.setItem('nxgate_sidebar_collapsed', isCollapsed ? '1' : '0');
             } catch(e){}
             updateSidebarUI(isCollapsed);
         }
@@ -1719,7 +1719,7 @@
 
         function initSidebarState() {
             try {
-                if (localStorage.getItem('aimili_sidebar_collapsed') === '1') {
+                if (localStorage.getItem('nxgate_sidebar_collapsed') === '1' || localStorage.getItem('aimili_sidebar_collapsed') === '1') {
                     const sb = document.getElementById('app-sidebar');
                     if (sb) {
                         sb.classList.add('collapsed');

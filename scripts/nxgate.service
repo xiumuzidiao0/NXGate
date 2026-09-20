@@ -1,17 +1,18 @@
 [Unit]
-Description=AimiliVPN Go Gateway Service
+Description=NXGate Multi-Egress Gateway Service
 After=network.target network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/opt/aimilivpn
-EnvironmentFile=-/opt/aimilivpn/config.env
-ExecStart=/opt/aimilivpn/aimilivpn
+WorkingDirectory=/opt/nxgate
+EnvironmentFile=-/opt/nxgate/config.env
+ExecStart=/opt/nxgate/nxgate
 Restart=always
 RestartSec=5
 LimitNOFILE=65535
+LimitNPROC=65535
 
 [Install]
 WantedBy=multi-user.target

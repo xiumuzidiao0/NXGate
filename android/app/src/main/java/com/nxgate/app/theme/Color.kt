@@ -15,7 +15,7 @@ data class AppThemePalette(
 val AVAILABLE_PALETTES = listOf(
     AppThemePalette("monet", "壁纸莫奈动态取色", "从系统壁纸提取动态色彩 (Android 12+)", Color(0xFF6750A4)),
     AppThemePalette("miuix", "小米澎湃 (HyperOS · MIUIX)", "移植自 flutter_miuix 的经典超凡蓝与层级卡片", Color(0xFF3482FF)),
-    AppThemePalette("teal", "默认青翠 (Teal)", "Aimili 标志性青碧护眼色系 (默认)", Color(0xFF00696E)),
+    AppThemePalette("teal", "默认青翠 (Teal)", "NXGate 标志性青碧护眼色系 (默认)", Color(0xFF00696E)),
     AppThemePalette("ocean", "极客苍蓝 (Ocean)", "沉稳专业深海科技纯蓝色系", Color(0xFF0061A4)),
     AppThemePalette("emerald", "原野翡翠 (Emerald)", "自然原野翡翠绿色系", Color(0xFF1B6D36)),
     AppThemePalette("purple", "暮光紫罗 (Amethyst)", "优雅高贵紫罗兰色系", Color(0xFF7A4B95)),
@@ -76,7 +76,7 @@ val TealDarkInverseSurface = Color(0xFFDCE4E4)
 val TealDarkInverseOnSurface = Color(0xFF2B3232)
 val TealDarkInversePrimary = Color(0xFF00696E)
 
-val AimiliLightColorScheme: ColorScheme = lightColorScheme(
+val NXGateLightColorScheme: ColorScheme = lightColorScheme(
     primary = TealLightPrimary,
     onPrimary = TealLightOnPrimary,
     primaryContainer = TealLightPrimaryContainer,
@@ -107,7 +107,7 @@ val AimiliLightColorScheme: ColorScheme = lightColorScheme(
     onErrorContainer = Color(0xFF410002)
 )
 
-val AimiliDarkColorScheme: ColorScheme = darkColorScheme(
+val NXGateDarkColorScheme: ColorScheme = darkColorScheme(
     primary = TealDarkPrimary,
     onPrimary = TealDarkOnPrimary,
     primaryContainer = TealDarkPrimaryContainer,

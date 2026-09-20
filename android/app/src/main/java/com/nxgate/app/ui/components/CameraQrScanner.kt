@@ -222,7 +222,7 @@ fun CameraQrScannerDialog(
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Text(
-                            text = "请粘贴来自 Web 控制台顶栏「手机 App 绑定」生成的 aimili:// 链接：",
+                            text = "请粘贴来自 Web 控制台顶栏「手机 App 绑定」生成的 nxgate:// 链接：",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -230,8 +230,8 @@ fun CameraQrScannerDialog(
                         OutlinedTextField(
                             value = manualInput,
                             onValueChange = { manualInput = it },
-                            label = { Text("aimili://server 导入链接") },
-                            placeholder = { Text("aimili://server?host=...&port=8787...") },
+                            label = { Text("nxgate://server 导入链接") },
+                            placeholder = { Text("nxgate://server?host=...&port=8787...") },
                             singleLine = false,
                             maxLines = 4,
                             shape = RoundedCornerShape(14.dp),
@@ -270,7 +270,7 @@ fun CameraQrScannerDialog(
                                     if (parsed != null) {
                                         onServerScanned(parsed)
                                     } else {
-                                        Toast.makeText(context, "无效的 aimili://server 导入协议", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, "无效的 nxgate://server 导入协议", Toast.LENGTH_SHORT).show()
                                     }
                                 },
                                 modifier = Modifier.weight(1f),
