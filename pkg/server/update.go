@@ -333,16 +333,11 @@ func PerformSelfUpdate(ctx context.Context, targetVer string) error {
 
 	fileName := fmt.Sprintf("nxgate_linux_%s", arch)
 
-	// 1. Fetch expected SHA256 (prioritize nxgate_*, fallback to aimilivpn_*)
+	// 1. Fetch expected SHA256 for nxgate_*
 	setUpdateStatus(true, "正在拉取 SHA256 校验和清单...", targetVer, "")
 	expectedHash, err := fetchExpectedSHA256(ctx, targetVer, fileName)
 	if err != nil {
-		fallbackName := fmt.Sprintf("aimilivpn_linux_%s", arch)
-		expectedHash, err = fetchExpectedSHA256(ctx, targetVer, fallbackName)
-		if err != nil {
-			return fmt.Errorf("获取 SHA256 校验清单失败: %w", err)
-		}
-		fileName = fallbackName
+		return fmt.Errorf("获取 SHA256 校验清单失败: %w", err)
 	}
 
 	// 2. Download binary to tmp file

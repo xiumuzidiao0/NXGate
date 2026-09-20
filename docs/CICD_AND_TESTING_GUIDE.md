@@ -175,29 +175,28 @@ dist/
 ├── nxgate_linux_386.gz         # 32 位 x86 Gzip 压缩包
 ├── nxgate_linux_arm            # 32 位 ARM Linux 原生未压缩 ELF 可执行文件
 ├── nxgate_linux_arm.gz         # 32 位 ARM Gzip 压缩包
-├── aimilivpn_linux_*           # 向后兼容旧版一键更新脚本的别名产物与 Gzip 包
-├── SHA256SUMS.txt              # 包含全部二进制文件的哈希校验清单
+├── SHA256SUMS.txt              # 包含全部 nxgate 二进制文件的哈希校验清单
 └── nxgate-release.apk          # Android 原生远程管控配套客户端签名 Release 包
 ```
 
 ### 2. 必须包含未压缩 ELF 的关键设计原因
 
-- **`nx update` 极速更新机制**：生产环境中的终端管理脚本 `install.sh` 在执行自动升级时，优先拉取 `nxgate_linux_${GO_ARCH}`（向后兼容回退 `aimilivpn_linux_${GO_ARCH}`）原生 ELF。
+- **`nx update` 极速更新机制**：生产环境中的终端管理脚本 `install.sh` 在执行自动升级时，直接拉取 `nxgate_linux_${GO_ARCH}` 原生 ELF。
 - **避免依赖与解压失败**：某些精简或容器化生产环境未预装 `gzip` 或权限受限，直接校验 ELF 文件的 `head -c 4` 是否包含 `ELF` 标识并比对 SHA-256，保障 100% 成功替换运行。
 - **双轨兼顾**：同时上传 `.gz` 格式满足手动网络受限用户的轻量下载需求。
 
 ### 3. SHA256 校验和标准清单
 
-`SHA256SUMS.txt` 必须在 `dist/` 根目录由原生 `sha256sum aimilivpn_*` 生成，格式示例如下：
+`SHA256SUMS.txt` 必须在 `dist/` 根目录由原生 `sha256sum nxgate_*` 生成，格式示例如下：
 ```text
-<hash64>  aimilivpn_linux_386
-<hash64>  aimilivpn_linux_386.gz
-<hash64>  aimilivpn_linux_amd64
-<hash64>  aimilivpn_linux_amd64.gz
-<hash64>  aimilivpn_linux_arm
-<hash64>  aimilivpn_linux_arm.gz
-<hash64>  aimilivpn_linux_arm64
-<hash64>  aimilivpn_linux_arm64.gz
+<hash64>  nxgate_linux_386
+<hash64>  nxgate_linux_386.gz
+<hash64>  nxgate_linux_amd64
+<hash64>  nxgate_linux_amd64.gz
+<hash64>  nxgate_linux_arm
+<hash64>  nxgate_linux_arm.gz
+<hash64>  nxgate_linux_arm64
+<hash64>  nxgate_linux_arm64.gz
 ```
 
 ---
