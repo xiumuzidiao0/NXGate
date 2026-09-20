@@ -225,10 +225,15 @@ func (s *Server) handleSingBoxOverview(w http.ResponseWriter, r *http.Request) {
 	if resp.Subscription == nil {
 		resp.Subscription = &singbox.SubResponse{
 			OK:      true,
-			Enabled: false,
+			Enabled: true,
 		}
 	}
+	// Always ensure subscription URLs point to our native WebUI server endpoints with safe path
+	resp.Subscription.SubURL = s.buildGenericSubURL(r)
 	resp.Subscription.ClashSubURL = s.buildClashSubURL(r)
+	resp.Subscription.Token = s.getSubscriptionToken()
+	resp.Subscription.Port = s.cfg.UIPort
+	resp.Subscription.Enabled = true
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(resp)
@@ -504,18 +509,34 @@ func (s *Server) handleSingBoxDeleteNode(w http.ResponseWriter, r *http.Request)
 	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "msg": "节点删除成功", "target": target})
 }
 
+func (s *Server) getSubscriptionToken() string {
+	token := s.cfg.GetSubscriptionToken()
+	if token != "" {
+		return token
+	}
+	secret := strings.Trim(s.cfg.UIPath, "/")
+	if secret != "" {
+		return secret
+	}
+	return ""
+}
+
 func (s *Server) buildGenericSubURL(r *http.Request) string {
 	scheme := "http"
 	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
 		scheme = "https"
 	}
 	host := r.Host
-	if host == "" {
-		host = net.JoinHostPort(s.cfg.UIHost, fmt.Sprintf("%d", s.cfg.UIPort))
+	if host == "" || strings.HasPrefix(host, "0.0.0.0") || strings.HasPrefix(host, "[::]") {
+		uiHost := s.cfg.UIHost
+		if uiHost == "" || uiHost == "::" || uiHost == "0.0.0.0" {
+			uiHost = "127.0.0.1"
+		}
+		host = net.JoinHostPort(uiHost, fmt.Sprintf("%d", s.cfg.UIPort))
 	}
-	secret := strings.Trim(s.cfg.UIPath, "/")
-	if secret != "" {
-		return fmt.Sprintf("%s://%s/%s/api/singbox/subscription", scheme, host, secret)
+	token := s.getSubscriptionToken()
+	if token != "" {
+		return fmt.Sprintf("%s://%s/%s/api/singbox/subscription", scheme, host, token)
 	}
 	return fmt.Sprintf("%s://%s/api/singbox/subscription", scheme, host)
 }
@@ -526,12 +547,16 @@ func (s *Server) buildClashSubURL(r *http.Request) string {
 		scheme = "https"
 	}
 	host := r.Host
-	if host == "" {
-		host = net.JoinHostPort(s.cfg.UIHost, fmt.Sprintf("%d", s.cfg.UIPort))
+	if host == "" || strings.HasPrefix(host, "0.0.0.0") || strings.HasPrefix(host, "[::]") {
+		uiHost := s.cfg.UIHost
+		if uiHost == "" || uiHost == "::" || uiHost == "0.0.0.0" {
+			uiHost = "127.0.0.1"
+		}
+		host = net.JoinHostPort(uiHost, fmt.Sprintf("%d", s.cfg.UIPort))
 	}
-	secret := strings.Trim(s.cfg.UIPath, "/")
-	if secret != "" {
-		return fmt.Sprintf("%s://%s/%s/api/singbox/subscription/clash", scheme, host, secret)
+	token := s.getSubscriptionToken()
+	if token != "" {
+		return fmt.Sprintf("%s://%s/%s/api/singbox/subscription/clash", scheme, host, token)
 	}
 	return fmt.Sprintf("%s://%s/api/singbox/subscription/clash", scheme, host)
 }
@@ -650,6 +675,8 @@ func (s *Server) handleSingBoxGetSub(w http.ResponseWriter, r *http.Request) {
 		Enabled:     true,
 		SubURL:      genericURL,
 		ClashSubURL: clashURL,
+		Token:       s.getSubscriptionToken(),
+		Port:        s.cfg.UIPort,
 		NodeCount:   len(nodes),
 		Nodes:       urls,
 	})

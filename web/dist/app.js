@@ -2136,25 +2136,36 @@
             }
         }
 
+        function sanitizeSubURL(url) {
+            if (!url) return '';
+            const curHost = window.location.host;
+            if (window.location.hostname !== '127.0.0.1' && window.location.hostname !== 'localhost') {
+                url = url.replace(/:\/\/(127\.0\.0\.1|localhost)(:\d+)?\//, `://${curHost}/`);
+            }
+            return url;
+        }
+
+        function getGenericSubURL() {
+            if (singBoxOverview && singBoxOverview.subscription && singBoxOverview.subscription.sub_url) {
+                return sanitizeSubURL(singBoxOverview.subscription.sub_url);
+            }
+            const origin = window.location.origin;
+            const prefix = window.__apiPrefix || '';
+            return `${origin}${prefix}/api/singbox/subscription`;
+        }
+
         async function copySingBoxSubURL() {
             if (!singBoxOverview || !singBoxOverview.installed) {
                 alert('sing-box 未安装，无法获取远程订阅');
                 return;
             }
-            const sub = singBoxOverview.subscription;
-            if (sub && sub.sub_url) {
-                copyText(sub.sub_url, 'sing-box 全量通用订阅链接 (Base64/Raw)');
-            } else {
-                const origin = window.location.origin;
-                const prefix = window.__apiPrefix || '';
-                const url = `${origin}${prefix}/api/singbox/subscription`;
-                copyText(url, 'sing-box 全量通用订阅链接 (Base64/Raw)');
-            }
+            const url = getGenericSubURL();
+            copyText(url, 'sing-box 全量通用订阅链接 (Base64/Raw)');
         }
 
         function getClashSubURL() {
             if (singBoxOverview && singBoxOverview.subscription && singBoxOverview.subscription.clash_sub_url) {
-                return singBoxOverview.subscription.clash_sub_url;
+                return sanitizeSubURL(singBoxOverview.subscription.clash_sub_url);
             }
             const origin = window.location.origin;
             const prefix = window.__apiPrefix || '';

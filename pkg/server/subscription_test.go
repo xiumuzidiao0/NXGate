@@ -122,3 +122,73 @@ func TestHandleSingBoxSubscriptionEndpoints(t *testing.T) {
 		t.Fatalf("expected valid JSON response with sub_url, got %s", body)
 	}
 }
+
+func TestUniversalSubscriptionWithSafeRandomToken(t *testing.T) {
+	cfg := &config.Config{
+		UIHost:     "198.51.100.5",
+		UIPort:     9999,
+		UIPath:     "mysecret",
+		UIUsername: "admin",
+		UIPassword: "password123",
+		SubToken:   "randtoken7890abc",
+	}
+
+	s := &Server{
+		cfg:           cfg,
+		singboxClient: singbox.NewClient(),
+	}
+
+	// 1. Verify URL generation includes WebUI port and random safe token
+	req := httptest.NewRequest("GET", "http://myvps.com:9999/mysecret/api/singbox/overview", nil)
+	genericURL := s.buildGenericSubURL(req)
+	clashURL := s.buildClashSubURL(req)
+
+	if !strings.Contains(genericURL, ":9999/randtoken7890abc/api/singbox/subscription") {
+		t.Fatalf("expected generic subscription URL on WebUI port 9999 with safe token, got: %s", genericURL)
+	}
+	if !strings.Contains(clashURL, ":9999/randtoken7890abc/api/singbox/subscription/clash") {
+		t.Fatalf("expected Clash subscription URL on WebUI port 9999 with safe token, got: %s", clashURL)
+	}
+
+	// 2. Setup full middleware stack to test external client fetching
+	mw := NewMiddleware(cfg)
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/singbox/subscription", s.handleSingBoxGetSub)
+	mux.HandleFunc("GET /api/singbox/subscription/clash", s.handleSingBoxClashSub)
+
+	handler := mw.SecretPathGuard(mw.BasicAuth(mux))
+
+	// 2a. Universal subscription via safe token path: /randtoken7890abc/api/singbox/subscription
+	reqSub := httptest.NewRequest("GET", "/randtoken7890abc/api/singbox/subscription", nil)
+	reqSub.Header.Set("User-Agent", "Shadowrocket/2.2.0")
+	wSub := httptest.NewRecorder()
+	handler.ServeHTTP(wSub, reqSub)
+	if wSub.Code != http.StatusOK {
+		t.Fatalf("expected 200 for universal subscription via safe token path, got %d, body: %s", wSub.Code, wSub.Body.String())
+	}
+
+	// 2b. Shorthand subscription path: /sub/randtoken7890abc
+	reqShort := httptest.NewRequest("GET", "/sub/randtoken7890abc", nil)
+	reqShort.Header.Set("User-Agent", "v2rayN/6.0")
+	wShort := httptest.NewRecorder()
+	handler.ServeHTTP(wShort, reqShort)
+	if wShort.Code != http.StatusOK {
+		t.Fatalf("expected 200 for shorthand subscription /sub/<token>, got %d", wShort.Code)
+	}
+
+	// 2c. Shorthand Clash path: /sub/randtoken7890abc/clash
+	reqShortClash := httptest.NewRequest("GET", "/sub/randtoken7890abc/clash", nil)
+	wShortClash := httptest.NewRecorder()
+	handler.ServeHTTP(wShortClash, reqShortClash)
+	if wShortClash.Code != http.StatusOK || !strings.Contains(wShortClash.Header().Get("Content-Type"), "yaml") {
+		t.Fatalf("expected 200 YAML for /sub/<token>/clash, got %d", wShortClash.Code)
+	}
+
+	// 2d. Invalid token -> MUST be rejected (404 stealth)
+	reqBad := httptest.NewRequest("GET", "/invalidtoken/api/singbox/subscription", nil)
+	wBad := httptest.NewRecorder()
+	handler.ServeHTTP(wBad, reqBad)
+	if wBad.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 for invalid token probe, got %d", wBad.Code)
+	}
+}
