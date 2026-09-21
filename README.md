@@ -202,8 +202,15 @@ NXGate 实现了一套单端口双栈协议嗅探与中继引擎：
   深度纳管 sing-box 内核，支持 VLESS-REALITY（借用亚马逊/苹果权威 TLS 指纹）、Hysteria2（极速 UDP 拥塞控制）、TUIC v5、Shadowsocks 2022、AnyTLS 等抗审查入站协议，并链式分流至 NXGate 住宅出口。
 - **7×24h 自愈看门狗 (Watchdog)**：
   独立协程以 30 秒为周期监控进程健康度，遇宿主机 OOM 或意外崩溃自动执行冷启动自愈。
-- **纯 Go 零依赖 Clash Meta / Mihomo YAML 订阅生成**：
-  标准生成 `🚀 节点选择`、`♻️ 自动选择 (URL-Test)`、`⚡ 故障转移 (Fallback)` 与分流规则链，支持安全路径免密下发。
+- **纯 Go 原生全协议订阅生成与 age 端到端安全加密**：
+  - **原生 WebUI 端口集成**：通用订阅 (Base64/Raw) 与 Clash 订阅 (YAML) 统一由 WebUI 端口高效内存流分发，免除第三方 Caddy/Python 依赖及未放行端口风险；
+  - **安全随机 Token 防护**：通过专属 `SubToken` 隔离未授权探测，扫描器探测直接隐形 404，支持 `/<token>/api/singbox/subscription` 与 `/sub/<token>` 短链拉取；
+  - **age 端到端前向安全加密 (RFC 5234 / RFC 7405)**：支持现代 `X25519` 与 `MLKEM768-X25519` (X-Wing 混合后量子抗量子计算) 两种原生公钥规范。开启后下发标准 ASCII Armored age 加密文本，彻底杜绝订阅在中间链路中被嗅探或缓存泄露。
+- **四阶段动态自适应节点池与智能屏蔽库**：
+  - **热池容量上限与修剪**：限制热池最大 250 优质节点，全局冷库 600 容量压制，防止内存无限累积膨胀；
+  - **三级故障降权模型**：偶发超时只降权（Tier 1），连续 3 次临时隔离观察（Tier 2，10分钟），连续 5 次或认证失败深度硬拉黑（Tier 3，指数退避）；
+  - **整机 IP 级屏蔽与永久墓碑规则**：支持单节点/整机 IP 屏蔽，永久墓碑节点在镜像合并阶段直接拦截丢弃；
+  - **影子协议特征探活与假复活终结**：对隔离节点定期发送真实的 OpenVPN Hard Reset（Opcode 7）握手帧，严格校验服务端的真实 Opcode 8/TLS 回包，彻底消除端口死循环假复活。
 
 ---
 
@@ -215,7 +222,8 @@ NXGate 实现了一套单端口双栈协议嗅探与中继引擎：
   - 全流程 Material 3 规范与 Android 12+ 莫奈壁纸动态取色；
   - 手机端原生贴底 `NavigationBar`，平板横屏自适应左侧 `NavigationRail`；
   - CameraX + ZXing 离线安全扫码添加服务器与集群配置一键 JSON 导入/导出/系统分享；
-  - Android 生物识别硬件锁（BiometricPrompt 指纹/面容/凭据，支持 60s 切后台免锁缓冲）；
+  - Android 生物识别硬件锁（BiometricPrompt 指纹/面容/凭据，支持自定义 0 秒立即锁定至 10 分钟切后台缓冲）；
+  - 双订阅一键获取与系统分享组件（同时支持通用全量 Base64 订阅与 Clash Meta 专属 YAML 订阅）；
   - 全场景触感反馈（HapticFeedback）与节点长列表 200ms 防抖后台过滤；
   - 服务端 `/api/events` SSE 实时流式通信（低功耗、毫秒级日志与状态推流）；
   - Android 原生下拉快捷设置磁贴（`TileService`，通知栏一眼看状态并支持一键换线）；
@@ -253,10 +261,10 @@ nx logs          # 查看实时运行日志 (journalctl -u nxgate -f 或 aimiliv
 
 ```bash
 # 检查守护进程运行状态
-systemctl status nxgate  # 或 systemctl status aimilivpn
+systemctl status nxgate
 
 # 重启网关核心服务
-systemctl restart nxgate # 或 systemctl restart aimilivpn
+systemctl restart nxgate
 
 # 查看开机启动项
 systemctl is-enabled nxgate
@@ -275,6 +283,9 @@ systemctl is-enabled nxgate
 | `UI_PATH` | `enter` | 纯字母数字字符串 | 控制台访问安全路径前缀（防扫描，如 `/enter/`） |
 | `UI_USERNAME` | `admin` | 字符串 | Web 管理后台登录账号 |
 | `UI_PASSWORD` | *(随机生成)* | 字符串 | Web 管理后台登录强密码 |
+| `SUB_TOKEN` | *(随机生成)* | 16位安全字符串 | 专属免密拉取订阅的随机安全令牌 |
+| `AGE_ENCRYPT_ENABLED` | `false` | `true/false` | 是否开启 age 订阅端到端安全加密 (默认关闭) |
+| `AGE_PUBLIC_KEY` | *(空)* | `age1...` / `age1pq...` | 用于加密下发订阅的 age Recipient 公钥 |
 | `LOCAL_PROXY_HOST`| `127.0.0.1` | 字符串 (IP) | 本地默认代理监听地址 |
 | `LOCAL_PROXY_PORT`| `7928` | `1-65535` | 本地默认代理监听端口 (HTTP/SOCKS5 单端口自适应) |
 | `LOCAL_PROXY_MAX_CONNECTIONS` | `512` | `16-4096` | 单代理端口最大允许并发连接数 |
@@ -283,7 +294,7 @@ systemctl is-enabled nxgate
 | `TARGET_VALID_NODES` | `5` | `1-50` | 内存池最小维持的经过端口预检的优质候选节点数 |
 | `MAX_SCAN_ROWS` | `1000` | `10-5000` | 单次从镜像 CSV 中解析的最大行数 |
 | `DISCOVERY_COUNTRIES` | *(空)* | 逗号分隔 ISO 代码 (如 `JP,US`) | 节点发现首选国家过滤白名单（留空为全球） |
-| `DATA_DIR` | `/opt/aimilivpn/data`| 绝对路径 | 运行时证书、路由配置与日志存储目录 |
+| `DATA_DIR` | `/opt/nxgate/data`| 绝对路径 | 运行时证书、路由配置与日志存储目录 |
 
 ---
 
@@ -299,7 +310,7 @@ git clone https://github.com/xiumuzidiao0/NXGate.git
 cd NXGate
 
 # 2. 编译当前平台二进制文件
-CGO_ENABLED=0 go build -ldflags="-s -w" -o bin/nxgate ./cmd/aimilivpn
+CGO_ENABLED=0 go build -ldflags="-s -w" -o bin/nxgate ./cmd/nxgate
 
 # 3. 运行网关服务 (需 root 权限以管理虚拟网卡)
 sudo ./bin/nxgate
@@ -315,7 +326,7 @@ chmod +x scripts/build.sh
 ```
 
 输出文件位于 `dist/` 目录：
-- `nxgate_linux_amd64` (x86_64 服务器通用，附带 `aimilivpn_*` 别名)
+- `nxgate_linux_amd64` (x86_64 服务器通用未压缩 ELF 与 Gzip 包)
 - `nxgate_linux_arm64` (aarch64 树莓派 / 鲲鹏 / 飞腾 / 甲骨文 ARM)
 - `nxgate_linux_386` (32位 x86)
 - `nxgate_linux_arm` (32位 ARMv7)
