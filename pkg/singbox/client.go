@@ -90,9 +90,11 @@ type SubResponse struct {
 	Port         int      `json:"port,omitempty"`
 	Token        string   `json:"token,omitempty"`
 	Filename     string   `json:"filename,omitempty"`
-	NodeCount    int      `json:"node_count"`
-	Nodes        []string `json:"nodes"`
-	CaddyRunning bool     `json:"caddy_running"`
+	NodeCount         int      `json:"node_count"`
+	Nodes             []string `json:"nodes"`
+	AgeEncryptEnabled bool     `json:"age_encrypt_enabled,omitempty"`
+	AgePublicKey      string   `json:"age_public_key,omitempty"`
+	CaddyRunning      bool     `json:"caddy_running"`
 	Msg          string   `json:"msg,omitempty"`
 	Error        string   `json:"error,omitempty"`
 }

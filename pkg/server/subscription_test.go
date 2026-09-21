@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"encoding/base64"
 	"net/http"
 	"net/http/httptest"
@@ -190,5 +191,109 @@ func TestUniversalSubscriptionWithSafeRandomToken(t *testing.T) {
 	handler.ServeHTTP(wBad, reqBad)
 	if wBad.Code != http.StatusNotFound {
 		t.Fatalf("expected 404 for invalid token probe, got %d", wBad.Code)
+	}
+}
+
+func TestAgeSubscriptionToggleAndEncryption(t *testing.T) {
+	secX, pubX, _, err := GenerateAgeKeyPair("x25519")
+	if err != nil {
+		t.Fatalf("failed to generate x25519 key: %v", err)
+	}
+
+	cfg := &config.Config{
+		UIHost:            "198.51.100.5",
+		UIPort:            8787,
+		UIPath:            "enter",
+		AgeEncryptEnabled: false,
+		AgePublicKey:      pubX,
+	}
+
+	s := &Server{
+		cfg:           cfg,
+		singboxClient: singbox.NewClient(),
+	}
+
+	// 1. When AgeEncryptEnabled is FALSE -> returns unencrypted normal subscriptions
+	reqClashOff := httptest.NewRequest("GET", "/enter/api/singbox/subscription?format=clash", nil)
+	wClashOff := httptest.NewRecorder()
+	s.handleSingBoxGetSub(wClashOff, reqClashOff)
+	if wClashOff.Code != http.StatusOK {
+		t.Fatalf("expected 200 for clash subscription, got %d", wClashOff.Code)
+	}
+	bodyClashOff := wClashOff.Body.String()
+	if strings.Contains(bodyClashOff, "BEGIN AGE ENCRYPTED FILE") {
+		t.Fatalf("expected unencrypted content when age is disabled, got encrypted")
+	}
+
+	reqRawOff := httptest.NewRequest("GET", "/enter/api/singbox/subscription?format=raw", nil)
+	wRawOff := httptest.NewRecorder()
+	s.handleSingBoxGetSub(wRawOff, reqRawOff)
+	bodyRawOff := wRawOff.Body.String()
+	if strings.Contains(bodyRawOff, "BEGIN AGE ENCRYPTED FILE") {
+		t.Fatalf("expected unencrypted raw content when age is disabled, got encrypted")
+	}
+
+	// 2. When AgeEncryptEnabled is TRUE -> returns armored age encrypted file
+	cfg.AgeEncryptEnabled = true
+
+	// 2a. Clash format encrypted
+	reqClashOn := httptest.NewRequest("GET", "/enter/api/singbox/subscription?format=clash", nil)
+	wClashOn := httptest.NewRecorder()
+	s.handleSingBoxGetSub(wClashOn, reqClashOn)
+	if wClashOn.Code != http.StatusOK {
+		t.Fatalf("expected 200 for encrypted clash, got %d", wClashOn.Code)
+	}
+	bodyClashOn := wClashOn.Body.Bytes()
+	if !bytes.HasPrefix(bodyClashOn, []byte("-----BEGIN AGE ENCRYPTED FILE-----")) {
+		t.Fatalf("expected armor header for encrypted clash subscription, got:\n%s", string(bodyClashOn))
+	}
+
+	// Decrypt and verify recovered clash content
+	decClash, err := DecryptWithAge(bodyClashOn, secX)
+	if err != nil {
+		t.Fatalf("failed to decrypt clash subscription: %v", err)
+	}
+	if string(decClash) != bodyClashOff {
+		t.Fatalf("decrypted clash content mismatch with original unencrypted content")
+	}
+
+	// 2b. Raw format encrypted
+	reqRawOn := httptest.NewRequest("GET", "/enter/api/singbox/subscription?format=raw", nil)
+	wRawOn := httptest.NewRecorder()
+	s.handleSingBoxGetSub(wRawOn, reqRawOn)
+	bodyRawOn := wRawOn.Body.Bytes()
+	if !bytes.HasPrefix(bodyRawOn, []byte("-----BEGIN AGE ENCRYPTED FILE-----")) {
+		t.Fatalf("expected armor header for encrypted raw subscription, got:\n%s", string(bodyRawOn))
+	}
+
+	decRaw, err := DecryptWithAge(bodyRawOn, secX)
+	if err != nil {
+		t.Fatalf("failed to decrypt raw subscription: %v", err)
+	}
+	if string(decRaw) != bodyRawOff {
+		t.Fatalf("decrypted raw content mismatch with original unencrypted content")
+	}
+
+	// 3. Dynamic recipient parameter (e.g. MLKEM768-X25519) on-the-fly
+	cfg.AgeEncryptEnabled = false // global switch off
+	secPQ, pubPQ, _, err := GenerateAgeKeyPair("mlkem768-x25519")
+	if err != nil {
+		t.Fatalf("failed to generate hybrid key: %v", err)
+	}
+
+	reqPQ := httptest.NewRequest("GET", "/enter/api/singbox/subscription?format=clash&age_recipient="+pubPQ, nil)
+	wPQ := httptest.NewRecorder()
+	s.handleSingBoxGetSub(wPQ, reqPQ)
+	bodyPQ := wPQ.Body.Bytes()
+	if !bytes.HasPrefix(bodyPQ, []byte("-----BEGIN AGE ENCRYPTED FILE-----")) {
+		t.Fatalf("expected hybrid armor header when age_recipient query param is passed")
+	}
+
+	decPQ, err := DecryptWithAge(bodyPQ, secPQ)
+	if err != nil {
+		t.Fatalf("failed to decrypt hybrid encrypted subscription: %v", err)
+	}
+	if string(decPQ) != bodyClashOff {
+		t.Fatalf("decrypted hybrid content mismatch with original clash content")
 	}
 }
