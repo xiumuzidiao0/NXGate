@@ -2130,6 +2130,215 @@ button {
             100% { left: 100%; width: 30%; }
         }
 
+        /* ==================== age Key Helper Modal ==================== */
+        .age-helper-card {
+            background: #111319;
+            border: 1px solid #1f232d;
+            border-radius: 20px;
+            padding: 28px 30px 24px 30px;
+            max-width: 560px;
+            width: 92%;
+            box-shadow: 0 24px 48px rgba(0, 0, 0, 0.7);
+            color: #e2e8f0;
+        }
+        .age-helper-title {
+            font-size: 1.35rem;
+            font-weight: 700;
+            color: #ffffff;
+            text-align: center;
+            margin: 0 0 18px 0;
+            letter-spacing: -0.01em;
+        }
+        .age-switch-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 14px;
+            margin-bottom: 18px;
+            background: #161822;
+            border: 1px solid #232734;
+            border-radius: 12px;
+        }
+        .age-switch-title {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: #f8fafc;
+        }
+        .age-switch-desc {
+            font-size: 0.75rem;
+            color: #7b8396;
+            margin-top: 2px;
+        }
+        .age-toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 44px;
+            height: 24px;
+            flex-shrink: 0;
+            cursor: pointer;
+            margin: 0;
+        }
+        .age-toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+            position: absolute;
+        }
+        .age-toggle-slider {
+            position: absolute;
+            inset: 0;
+            background-color: #2b303d;
+            border-radius: 24px;
+            transition: background-color 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .age-toggle-slider::before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: #ffffff;
+            border-radius: 50%;
+            transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.35);
+        }
+        .age-toggle-switch input:checked + .age-toggle-slider {
+            background-color: #2563eb;
+        }
+        .age-toggle-switch input:checked + .age-toggle-slider::before {
+            transform: translateX(20px);
+        }
+        .age-section-label {
+            font-size: 0.9rem;
+            color: #8c93a4;
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+        .age-pill-row {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 18px;
+        }
+        .age-pill {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 6px 18px;
+            border-radius: 9999px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            user-select: none;
+            transition: all 0.15s ease;
+            background: #1b1e27;
+            color: #727a8c;
+            border: 1.5px solid transparent;
+        }
+        .age-pill:hover {
+            background: #222632;
+            color: #cbd5e1;
+        }
+        .age-pill.active {
+            background: #121c32;
+            border-color: #2563eb;
+            color: #60a5fa;
+        }
+        .age-field-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+        .age-btn-blue {
+            background: #2563eb;
+            color: #ffffff;
+            border: none;
+            border-radius: 6px;
+            padding: 5px 12px;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.15s ease;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .age-btn-blue:hover {
+            background: #1d4ed8;
+        }
+        .age-btn-grey {
+            background: #21242e;
+            color: #c4c9d6;
+            border: none;
+            border-radius: 6px;
+            padding: 5px 12px;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.15s ease, color 0.15s ease;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .age-btn-grey:hover {
+            background: #2a2e3b;
+            color: #ffffff;
+        }
+        .age-textarea {
+            width: 100%;
+            height: 84px;
+            min-height: 84px;
+            background: #14161f;
+            border: 1px solid #232733;
+            border-radius: 10px;
+            padding: 12px 14px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            font-size: 13px;
+            line-height: 1.6;
+            letter-spacing: -0.01em;
+            color: #e2e8f0;
+            resize: none !important;
+            outline: none;
+            word-break: break-all;
+            box-sizing: border-box;
+            transition: border-color 0.15s ease;
+        }
+        .age-textarea:focus {
+            border-color: #3b82f6;
+        }
+        .age-textarea::placeholder {
+            color: #555b6c;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            font-size: 12px;
+        }
+        .age-disclaimer {
+            font-size: 0.78rem;
+            color: #6e7586;
+            line-height: 1.6;
+            margin: 18px 0 22px 0;
+            text-align: left;
+        }
+        .age-close-btn {
+            min-width: 150px;
+            height: 42px;
+            border-radius: 9999px;
+            background: #2563eb;
+            color: #ffffff;
+            font-size: 14px;
+            font-weight: 500;
+            border: none;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: background-color 0.15s ease;
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
+        }
+        .age-close-btn:hover {
+            background: #1d4ed8;
+        }
+
         @media (prefers-reduced-motion: reduce) {
             html {
                 scroll-behavior: auto;
