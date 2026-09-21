@@ -161,8 +161,8 @@ NXGate 是基于 Go 语言重构的高性能 Linux 出口网关系统。其核�
 | **SSH 远程登录** | `ssh root@47.238.2.197` (端口 22) | 密码：`Aa18979346882` |
 | **Web 管理控制台** | `http://47.238.2.197:8787/enter` | 账号：`xmzd` / 密码：`a18979346882` |
 | **本地自适应代理端口** | `127.0.0.1:7928` | HTTP/HTTPS CONNECT/SOCKS5/UDP |
-| **安装与运行目录** | `/opt/aimilivpn/` | 包含二进制、配置、运行时 tun 证书等 |
-| **终端快捷管理命令** | `nx` (软链接至 `/opt/aimilivpn/install.sh`) | 在服务器终端任意位置执行 |
+| **安装与运行目录** | `/opt/nxgate/` | 包含二进制、配置、运行时 tun 证书等 |
+| **终端快捷管理命令** | `nx` (执行 `/opt/nxgate/install.sh`) | 在服务器终端任意位置执行 |
 
 ### 2. 常用运维与管理指令
 
@@ -174,17 +174,17 @@ nx update
 nx
 
 # 3. 检查系统后台服务状态
-systemctl status aimilivpn
+systemctl status nxgate
 
 # 4. 实时查看网关服务运行日志 (查看自动换流、测速与 AI 解锁情况)
-journalctl -u aimilivpn -f
+journalctl -u nxgate -f
 
 # 5. 重启网关服务
-systemctl restart aimilivpn
+systemctl restart nxgate
 
 # 6. 验证当前生效的程序版本
-/opt/aimilivpn/aimilivpn --version
-cat /opt/aimilivpn/VERSION
+/opt/nxgate/nxgate --version
+cat /opt/nxgate/VERSION
 
 # 7. 查看当前活跃隧道与各隧道实测解锁状态
 curl -s http://localhost:8964/api/tunnels | jq '.data[] | {id, ip: .node.ip, unlock}'
@@ -237,7 +237,7 @@ curl -s http://localhost:8964/api/tunnels | jq '.data[] | {id, ip: .node.ip, unl
 ## 六、 目录结构与核心源码索引
 
 ```text
-aimili-vpngate-go/
+nxgate/
 ├── .github/workflows/
 │   ├── ci.yml                 # GitHub Actions CI 测试与构建验证
 │   └── release.yml            # GitHub Actions 自动化 Release 发布流水线
@@ -245,20 +245,24 @@ aimili-vpngate-go/
 │   ├── commit-msg             # Conventional Commits 提交信息强制校验钩子
 │   └── pre-push               # 推送前本地自动测试守门钩子
 ├── cmd/
-│   └── aimilivpn/             # 网关主程序入口 (main.go)
+│   ├── mirror/                # 镜像源维护工具
+│   └── nxgate/                # 网关主程序入口 (main.go)
 ├── config.env.example         # 环境变量配置标准示例模板
 ├── dist/                      # 交叉编译产物输出目录 (git 忽略)
 ├── docs/
-│   ├── CICD_AND_TESTING_GUIDE.md   # CI/CD 发布与测试流程标准化指南
-│   ├── FREESUB_COMPARISON.md       # 与 freesub 项目技术特性深度对比分析
-│   └── PROJECT_HANDOVER.md         # [当前文件] 项目交接与工程维护文档 (系统全景/生产运维/故障排查)
+│   ├── AGE_SPECIFICATION.md   # age 端到端前向安全加密格式规范标准
+│   ├── ANDROID_APP_DESIGN.md  # Android Material 3 移动控制台架构设计
+│   ├── CICD_AND_TESTING_GUIDE.md # CI/CD 发布与测试流程标准化指南
+│   ├── FREESUB_COMPARISON.md  # 与 freesub 项目技术特性深度对比分析
+│   └── PROJECT_HANDOVER.md    # [当前文件] 项目交接与工程维护文档 (系统全景/生产运维/故障排查)
 ├── install.sh                 # Linux 一键安装、服务部署与终端管理脚本 (nx)
+├── nxgate-release.apk         # Android 签名 Release 安装包
 ├── pkg/
 │   ├── config/                # 配置加载、版本定义 (version.go)
-│   ├── nodes/                 # 节点拉取、端口预检 (pool.go)、住宅IP分类 (residential.go)
+│   ├── nodes/                 # 节点拉取、端口预检 (pool.go)、住宅IP分类 (residential.go)、黑名单
 │   ├── notify/                # Telegram 告警推送与交互机器人
 │   ├── proxy/                 # HTTP/SOCKS5 嗅探代理、SOCKS5 UDP Associate 转发
-│   ├── server/                # Web 控制台 HTTP 路由、Clash/singbox 订阅生成
+│   ├── server/                # Web 控制台 HTTP 路由、Clash/singbox 订阅生成与 age 加密
 │   ├── singbox/               # 边缘抗封锁协议客户端 API 与 22 种原生协议元数据
 │   ├── stats/                 # 实时上下行流量统计与速度滑动窗口跟踪器
 │   └── tunnel/                # Linux 隧道池管理、带宽断流检测 (throughput.go)、AI解锁
@@ -266,6 +270,7 @@ aimili-vpngate-go/
 │   ├── audit.sh               # 静态分析与 govulncheck 依赖安全漏洞扫描
 │   ├── build.sh               # 4 大架构交叉编译打包脚本
 │   ├── check-version.sh       # 版本一致性核验与一键同步工具
+│   ├── nxgate.service         # systemd 服务单元配置文件
 │   └── release.sh             # 一键自动化发布助手脚本
 ├── web/
 │   ├── dist/                  # 前端静态发布产物 (index.html, styles.css, app.js, 字体)

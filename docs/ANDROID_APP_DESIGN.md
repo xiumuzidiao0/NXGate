@@ -90,7 +90,7 @@
 #### UI 布局结构
 ```
 ┌─────────────────────────────────────────────────────────┐
-│ AimiliVPN Cluster                     [ 📷 扫码导入 ] [ ⚙️ ] │
+│ NXGate Cluster                        [ 📷 扫码导入 ] [ ⚙️ ] │
 ├─────────────────────────────────────────────────────────┤
 │ 📊 集群全局汇总横幅 (Gradient Card)                      │
 │   • 纳管主机: 3 台在线 / 0 离线                          │
@@ -105,7 +105,7 @@
 │ │ 下行速率: 8.4 MB/s (总计 12.1 GB)  活跃连接: 38       │ │
 │ │ 运行时长: 4天18小时   并发隧道: 3 条                  │ │
 │ │ ─────────────────────────────────────────────────── │ │
-│ │   [ ⚡ 一键换线 ]        [ 📋 复制订阅 ]       [ 控制台 ➜ ] │ │
+│ │   [ ⚡ 一键换线 ]        [ 📥 获取订阅 ]       [ 控制台 ➜ ] │ │
 │ └─────────────────────────────────────────────────────┘ │
 │ ┌─────────────────────────────────────────────────────┐ │
 │ │ 🇺🇸 硅谷 AI 专属池 (104.28.x.x)           [ ● 在线 142ms]│ │
@@ -117,14 +117,15 @@
 ```
 
 #### 关键功能交互
-1. **扫码导入 (`📷`)**：直接调用相机扫描 Web 控制台的“手机 App 绑定”二维码，解析 `aimili://server?...`，自动完成账号密码录入与首次连通性握手验证。
+1. **扫码导入 (`📷`)**：直接调用相机扫描 Web 控制台的“手机 App 绑定”二维码，解析 `nxgate://server?...`，自动完成账号密码录入与首次连通性握手验证。
 2. **卡片内「⚡ 一键换线」**：
    - 触发震动反馈（Haptic Click），按钮变为加载动画；
    - 调用 `POST /api/tunnel-groups/evaluate`；
    - 成功后弹出顶部微通知：`已为 [东京住宅网关] 换上最新最优节点 (延迟 32ms)`，卡片物理出口 IP 自动更新。
-3. **卡片内「📋 复制订阅」**：
-   - 一键获取远端 Clash Meta / Mihomo 订阅 URL 写入剪贴板；
-   - 弹出 SnackBar 提示：“Clash 订阅已复制，可直接粘贴至 Clash Verge / Flclash 使用”。
+3. **卡片内「📥 获取订阅」 (`SubscriptionDialog`)**：
+   - 弹出双订阅选择面板，同时提供**通用全量订阅 (Base64/Raw)**与 **Clash Meta / Mihomo 分流订阅 (YAML)**；
+   - 支持一键复制与 Android 原生系统分享（`Intent.ACTION_SEND`）；
+   - 若服务器启用了 age 端到端加密，面板顶部自动点亮 `[🔐 已开启 age 端到端安全加密保护]` 状态徽章。
 4. **单击卡片主体**：直接无缝切换至 **Tab 2 (单机监控)**，并自动将该 VPS 设为当前活跃服务器。
 
 ---
@@ -293,13 +294,14 @@
 
 ## 四、 通信契约与二维码导入标准 (Protocol Specification)
 
-### 1. 二维码与 URI 导入规范 (`aimili://server`)
+### 1. 二维码与 URI 导入规范 (`nxgate://server`)
 
 App 相机扫描 Web 控制台弹窗二维码，解析到的标准统一协议格式：
 
 ```text
-aimili://server?host=<HOST>&port=<PORT>&path=<PATH>&user=<USERNAME>&pass=<PASSWORD>&name=<ALIAS>&tls=<0|1>
+nxgate://server?host=<HOST>&port=<PORT>&path=<PATH>&user=<USERNAME>&pass=<PASSWORD>&name=<ALIAS>&tls=<0|1>
 ```
+*(同时向下兼容解析历史 `aimili://server` 格式)*
 
 #### 字段定义表
 | 参数名 | 类型 | 说明 | 示例 |
@@ -309,13 +311,13 @@ aimili://server?host=<HOST>&port=<PORT>&path=<PATH>&user=<USERNAME>&pass=<PASSWO
 | `path` | String | 后台安全访问路径 (Secret Path) | `enter` |
 | `user` | String | Web 管理员账号 | `xmzd` |
 | `pass` | String | Web 管理员明文密码 (URL 编码) | `a18979346882` |
-| `name` | String | 显示给用户的节点备注别名 (URL 编码) | `AimiliVPN+(47.238.2.197)` |
+| `name` | String | 显示给用户的节点备注别名 (URL 编码) | `NXGate+(47.238.2.197)` |
 | `tls` | Int | 是否通过 TLS (HTTPS) 协议通信 (0=HTTP, 1=HTTPS) | `0` |
 
 ### 2. 标准 JSON 导入格式 (用于剪贴板备份与导入)
 ```json
 {
-  "type": "aimili_server",
+  "type": "nxgate_server",
   "version": 1,
   "name": "东京住宅网关",
   "host": "47.238.2.197",
@@ -327,8 +329,9 @@ aimili://server?host=<HOST>&port=<PORT>&path=<PATH>&user=<USERNAME>&pass=<PASSWO
   "tls": false
 }
 ```
+*(系统导入时向下兼容历史 `aimili_server` 类型对象)*
 
-### 3. API 鉴权与端点映射矩阵 (v2.5.5)
+### 3. API 鉴权与端点映射矩阵 (v2.5.9)
 
 App 所有网络请求必须带上以下 Header 之一完成鉴权：
 - **方案 A (推荐)**：`Authorization: Basic <Base64(username:password)>`

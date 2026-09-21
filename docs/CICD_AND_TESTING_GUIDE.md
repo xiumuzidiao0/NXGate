@@ -243,10 +243,10 @@ nx
 **更新过程日志预期**：
 ```text
 正在检测并拉取最新发行版本 (amd64)...
-  -> 尝试从源拉取预编译程序: https://github.com/xiumuzidiao0/NXGate/releases/latest/download/aimilivpn_linux_amd64 ...
+  -> 尝试从源拉取预编译程序: https://github.com/xiumuzidiao0/NXGate/releases/latest/download/nxgate_linux_amd64 ...
   -> 二进制预编译包下载成功并通过 SHA-256 校验 (amd64)！
 
-🎉 NXGate 已成功极速更新至最新构建 (v2.5.5) 并重启！
+🎉 NXGate 已成功极速更新至最新构建 (v2.5.9) 并重启！
 ```
 
 ### 2. 服务端关键指标验证项
@@ -255,14 +255,14 @@ nx
 
 ```bash
 # 1. 验证版本号
-/opt/aimilivpn/aimilivpn --version
-cat /opt/aimilivpn/VERSION
+/opt/nxgate/nxgate --version
+cat /opt/nxgate/VERSION
 
 # 2. 检查 systemd 服务运行状态
-systemctl status aimilivpn
+systemctl status nxgate
 
 # 3. 查看实时运行日志与节点探测
-journalctl -u aimilivpn -n 30 --no-pager
+journalctl -u nxgate -n 30 --no-pager
 
 # 4. 检查当前活跃出网隧道
 curl -s http://localhost:8964/api/tunnels | jq '.data[] | {id, node: .node.ip, unlock}'
@@ -278,7 +278,7 @@ curl -s http://localhost:8964/api/tunnels | jq '.data[] | {id, node: .node.ip, u
 | :--- | :--- | :--- |
 | `无法获取可信 SHA256SUMS.txt` | 节点到 GitHub 网络波动，或者 Release 尚未上传完成 | 等待 Release 流水线就绪，脚本会自动轮询国内高速代理镜像源重试 |
 | `下载文件 SHA-256 校验失败` | 附件被中间网络篡改或上传未完成 | 重新触发 Release 流水线发布，或使用源码就地编译方式更新 |
-| `nx: command not found` | 快捷命令丢失 | 执行 `cat > /usr/bin/nx <<'EOF'\n#!/usr/bin/env bash\nexec bash /opt/aimilivpn/install.sh "$@"\nEOF\nchmod +x /usr/bin/nx` |
+| `nx: command not found` | 快捷命令丢失 | 执行 `cat > /usr/bin/nx <<'EOF'\n#!/usr/bin/env bash\nexec bash /opt/nxgate/install.sh "$@"\nEOF\nchmod +x /usr/bin/nx` |
 
 ### 2. 服务端版本快速回滚
 
@@ -286,17 +286,17 @@ curl -s http://localhost:8964/api/tunnels | jq '.data[] | {id, node: .node.ip, u
 
 ```bash
 # 1. 停止运行中的服务
-systemctl stop aimilivpn
+systemctl stop nxgate
 
 # 2. 查找历史备份文件
-ls -lh /usr/local/bin/aimilivpn* /opt/aimilivpn/aimilivpn*
+ls -lh /usr/local/bin/nxgate* /opt/nxgate/nxgate*
 
 # 3. 恢复上一版本二进制
-cp -f /opt/aimilivpn/aimilivpn.backup /opt/aimilivpn/aimilivpn
-chmod +x /opt/aimilivpn/aimilivpn
+cp -f /opt/nxgate/nxgate.backup /opt/nxgate/nxgate
+chmod +x /opt/nxgate/nxgate
 
 # 4. 重启服务
-systemctl start aimilivpn
+systemctl start nxgate
 ```
 
 ---
@@ -332,5 +332,5 @@ systemctl start aimilivpn
 
 ---
 
-**文档版本**：`1.1.0`  
-**适用范围**：`aimili-vpngate-go v2.5.1+`
+**文档版本**：`2.0.0`  
+**适用范围**：`NXGate v2.5.9+`
