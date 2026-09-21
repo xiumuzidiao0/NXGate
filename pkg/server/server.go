@@ -108,6 +108,8 @@ func (s *Server) Start(ctx context.Context) error {
 	mux.HandleFunc("GET /api/singbox/subscription/clash", s.handleSingBoxClashSub)
 	mux.HandleFunc("POST /api/singbox/subscription/sync", s.handleSingBoxSyncSub)
 	mux.HandleFunc("POST /api/singbox/subscription/init", s.handleSingBoxInitSub)
+	mux.HandleFunc("POST /api/singbox/subscription/age/generate", s.handleAgeGenerate)
+	mux.HandleFunc("POST /api/singbox/subscription/age/derive", s.handleAgeDerive)
 
 	// Self-Update & Version Checking APIs
 	mux.HandleFunc("GET /api/update/check", s.handleCheckUpdate)

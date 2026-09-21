@@ -30,6 +30,10 @@ type Config struct {
 	UIPassword string
 	SubToken   string // 专属随机安全订阅 Token / 路径
 
+	// age 订阅安全加密
+	AgeEncryptEnabled bool
+	AgePublicKey      string
+
 	// Proxy gateway settings
 	ProxyHost           string
 	ProxyPort           int
@@ -68,6 +72,8 @@ type SettingsDTO struct {
 	UIUsername         string   `json:"ui_username"`
 	UIPassword         string   `json:"ui_password,omitempty"`
 	SubToken           string   `json:"sub_token,omitempty"`
+	AgeEncryptEnabled  bool     `json:"age_encrypt_enabled"`
+	AgePublicKey       string   `json:"age_public_key"`
 	ProxyPort          int      `json:"proxy_port"`
 	ProxyUser          string   `json:"proxy_user"`
 	ProxyPass          string   `json:"proxy_pass,omitempty"`
@@ -175,6 +181,16 @@ func LoadConfig() *Config {
 	}
 	subToken = strings.Trim(subToken, "/")
 
+	ageEncryptEnabled := getEnv("AGE_ENCRYPT_ENABLED", "false") == "true" || getEnv("AGE_ENCRYPT_ENABLED", "0") == "1"
+	agePublicKey := getEnv("AGE_PUBLIC_KEY", "")
+	if agePublicKey == "" {
+		ageKeyFile := filepath.Join(dataDir, "age_public_key.txt")
+		// #nosec G304 -- path is rooted in the operator-controlled data directory.
+		if data, err := os.ReadFile(ageKeyFile); err == nil {
+			agePublicKey = strings.TrimSpace(string(data))
+		}
+	}
+
 	countriesRaw := getEnv("DISCOVERY_COUNTRIES", "")
 	var countries []string
 	if countriesRaw != "" {
@@ -222,6 +238,8 @@ func LoadConfig() *Config {
 		UIUsername: getEnv("UI_USERNAME", "admin"),
 		UIPassword: getEnv("UI_PASSWORD", "aimilivpn"),
 		SubToken:   subToken,
+		AgeEncryptEnabled: ageEncryptEnabled,
+		AgePublicKey:      agePublicKey,
 
 		ProxyHost:           getEnv("LOCAL_PROXY_HOST", "127.0.0.1"),
 		ProxyPort:           getEnvInt("LOCAL_PROXY_PORT", 7928, 1, 65535),
@@ -259,6 +277,8 @@ func (c *Config) GetSettings() SettingsDTO {
 		UIPath:             c.UIPath,
 		UIUsername:         c.UIUsername,
 		SubToken:           c.GetSubscriptionToken(),
+		AgeEncryptEnabled:  c.AgeEncryptEnabled,
+		AgePublicKey:       c.AgePublicKey,
 		ProxyPort:          c.ProxyPort,
 		ProxyUser:          c.ProxyUser,
 		ProxyPass:          c.ProxyPass,
@@ -369,6 +389,13 @@ func (c *Config) UpdateSettings(dto SettingsDTO) error {
 	}
 	c.TelegramBotToken = strings.TrimSpace(dto.TelegramBotToken)
 	c.TelegramChatID = strings.TrimSpace(dto.TelegramChatID)
+	c.AgeEncryptEnabled = dto.AgeEncryptEnabled
+	c.AgePublicKey = strings.TrimSpace(dto.AgePublicKey)
+	if c.AgePublicKey != "" {
+		ageKeyFile := filepath.Join(c.DataDir, "age_public_key.txt")
+		_ = os.WriteFile(ageKeyFile, []byte(c.AgePublicKey), 0600)
+		_ = os.Chmod(ageKeyFile, 0600)
+	}
 	if dto.ProxyPass != "" {
 		c.ProxyPass = strings.TrimSpace(dto.ProxyPass)
 	}
@@ -405,6 +432,8 @@ AUTO_ROTATE_IP_TYPE=%s
 DISCOVERY_COUNTRIES=%s
 TELEGRAM_BOT_TOKEN=%s
 TELEGRAM_CHAT_ID=%s
+AGE_ENCRYPT_ENABLED=%t
+AGE_PUBLIC_KEY=%s
 `,
 				c.DataDir,
 				c.UIHost,
@@ -425,6 +454,8 @@ TELEGRAM_CHAT_ID=%s
 				strings.Join(c.DiscoveryCountries, ","),
 				c.TelegramBotToken,
 				c.TelegramChatID,
+				c.AgeEncryptEnabled,
+				c.AgePublicKey,
 			)
 			if err := os.WriteFile(p, []byte(content), 0600); err != nil {
 				return fmt.Errorf("写入配置文件 %s 失败: %w", p, err)

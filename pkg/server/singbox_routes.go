@@ -233,6 +233,8 @@ func (s *Server) handleSingBoxOverview(w http.ResponseWriter, r *http.Request) {
 	resp.Subscription.ClashSubURL = s.buildClashSubURL(r)
 	resp.Subscription.Token = s.getSubscriptionToken()
 	resp.Subscription.Port = s.cfg.UIPort
+	resp.Subscription.AgeEncryptEnabled = s.cfg.AgeEncryptEnabled
+	resp.Subscription.AgePublicKey = s.cfg.AgePublicKey
 	resp.Subscription.Enabled = true
 
 	w.Header().Set("Content-Type", "application/json")
@@ -521,6 +523,16 @@ func (s *Server) getSubscriptionToken() string {
 	return ""
 }
 
+func (s *Server) getAgeRecipient(r *http.Request) string {
+	if q := strings.TrimSpace(r.URL.Query().Get("age_recipient")); q != "" {
+		return q
+	}
+	if s.cfg.AgeEncryptEnabled && strings.TrimSpace(s.cfg.AgePublicKey) != "" {
+		return strings.TrimSpace(s.cfg.AgePublicKey)
+	}
+	return ""
+}
+
 func (s *Server) buildGenericSubURL(r *http.Request) string {
 	scheme := "http"
 	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
@@ -580,10 +592,22 @@ func (s *Server) handleSingBoxRawSub(w http.ResponseWriter, r *http.Request) {
 	}
 
 	urls := GenerateRawSubscription(nodes, serverHost)
+	rawText := strings.Join(urls, "\n")
+
+	if recipient := s.getAgeRecipient(r); recipient != "" {
+		if enc, err := EncryptWithAge([]byte(rawText), recipient); err == nil {
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			w.Header().Set("Content-Disposition", "attachment; filename=\"singbox-sub.age\"")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(enc)
+			return
+		}
+	}
+
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.Header().Set("Content-Disposition", "attachment; filename=\"singbox-sub.txt\"")
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write([]byte(strings.Join(urls, "\n")))
+	_, _ = w.Write([]byte(rawText))
 }
 
 func (s *Server) handleSingBoxClashSub(w http.ResponseWriter, r *http.Request) {
@@ -605,6 +629,16 @@ func (s *Server) handleSingBoxClashSub(w http.ResponseWriter, r *http.Request) {
 	}
 
 	yamlContent := GenerateClashYAML(nodes, serverHost)
+
+	if recipient := s.getAgeRecipient(r); recipient != "" {
+		if enc, err := EncryptWithAge([]byte(yamlContent), recipient); err == nil {
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			w.Header().Set("Content-Disposition", "attachment; filename=\"singbox-clash.yaml.age\"")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(enc)
+			return
+		}
+	}
 
 	w.Header().Set("Content-Type", "text/yaml; charset=utf-8")
 	w.Header().Set("Content-Disposition", "attachment; filename=\"singbox-clash.yaml\"")
@@ -643,10 +677,20 @@ func (s *Server) handleSingBoxGetSub(w http.ResponseWriter, r *http.Request) {
 	// 2. Direct Raw URLs request
 	if format == "raw" || format == "text" {
 		urls := GenerateRawSubscription(nodes, serverHost)
+		rawText := strings.Join(urls, "\n")
+		if recipient := s.getAgeRecipient(r); recipient != "" {
+			if enc, err := EncryptWithAge([]byte(rawText), recipient); err == nil {
+				w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+				w.Header().Set("Content-Disposition", "attachment; filename=\"singbox-sub.age\"")
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write(enc)
+				return
+			}
+		}
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.Header().Set("Content-Disposition", "attachment; filename=\"singbox-sub.txt\"")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(strings.Join(urls, "\n")))
+		_, _ = w.Write([]byte(rawText))
 		return
 	}
 
@@ -657,6 +701,15 @@ func (s *Server) handleSingBoxGetSub(w http.ResponseWriter, r *http.Request) {
 
 	if format == "base64" || format == "b64" || isSubClient || (!strings.Contains(accept, "application/json") && format != "json") {
 		b64Content := GenerateBase64Subscription(nodes, serverHost)
+		if recipient := s.getAgeRecipient(r); recipient != "" {
+			if enc, err := EncryptWithAge([]byte(b64Content), recipient); err == nil {
+				w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+				w.Header().Set("Content-Disposition", "attachment; filename=\"singbox-sub.b64.age\"")
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write(enc)
+				return
+			}
+		}
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.Header().Set("Content-Disposition", "attachment; filename=\"singbox-sub.txt\"")
 		w.WriteHeader(http.StatusOK)
@@ -671,14 +724,16 @@ func (s *Server) handleSingBoxGetSub(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(&singbox.SubResponse{
-		OK:          true,
-		Enabled:     true,
-		SubURL:      genericURL,
-		ClashSubURL: clashURL,
-		Token:       s.getSubscriptionToken(),
-		Port:        s.cfg.UIPort,
-		NodeCount:   len(nodes),
-		Nodes:       urls,
+		OK:                true,
+		Enabled:           true,
+		SubURL:            genericURL,
+		ClashSubURL:       clashURL,
+		Token:             s.getSubscriptionToken(),
+		Port:              s.cfg.UIPort,
+		AgeEncryptEnabled: s.cfg.AgeEncryptEnabled,
+		AgePublicKey:      s.cfg.AgePublicKey,
+		NodeCount:         len(nodes),
+		Nodes:             urls,
 	})
 }
 

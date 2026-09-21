@@ -19,6 +19,7 @@ import androidx.compose.material.icons.automirrored.rounded.AltRoute
 import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Link
+import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -57,6 +58,8 @@ fun SubscriptionDialog(
     var genericUrl by remember { mutableStateOf("${server.baseUrl}/api/singbox/subscription") }
     var clashUrl by remember { mutableStateOf("${server.baseUrl}/api/singbox/subscription/clash") }
     var nodeCount by remember { mutableIntStateOf(0) }
+    var isAgeEnabled by remember { mutableStateOf(false) }
+    var agePublicKey by remember { mutableStateOf("") }
 
     LaunchedEffect(server) {
         isLoading = true
@@ -65,6 +68,8 @@ fun SubscriptionDialog(
             genericUrl = info.genericSubUrl
             clashUrl = info.clashSubUrl
             nodeCount = info.nodeCount
+            isAgeEnabled = info.ageEncryptEnabled
+            agePublicKey = info.agePublicKey
         }
         isLoading = false
     }
@@ -116,6 +121,33 @@ fun SubscriptionDialog(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
+                if (isAgeEnabled) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                Icons.Rounded.Lock,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Text(
+                                text = "已开启 age 端到端安全加密保护",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                    }
+                }
+
                 if (isLoading) {
                     Box(
                         modifier = Modifier
@@ -134,7 +166,8 @@ fun SubscriptionDialog(
                             .fillMaxWidth()
                             .clickable {
                                 clipboardManager.setText(AnnotatedString(genericUrl))
-                                Toast.makeText(context, "已复制通用全量订阅链接 (Base64/Raw)！", Toast.LENGTH_SHORT).show()
+                                val tip = if (isAgeEnabled) "已复制已通过 age 加密的通用订阅 (Base64/Raw)！" else "已复制通用全量订阅链接 (Base64/Raw)！"
+                                Toast.makeText(context, tip, Toast.LENGTH_SHORT).show()
                                 onDismissRequest()
                             }
                     ) {
@@ -208,7 +241,8 @@ fun SubscriptionDialog(
                             .fillMaxWidth()
                             .clickable {
                                 clipboardManager.setText(AnnotatedString(clashUrl))
-                                Toast.makeText(context, "已复制 Clash Meta / Mihomo 分流订阅！", Toast.LENGTH_SHORT).show()
+                                val tip = if (isAgeEnabled) "已复制已通过 age 加密的 Clash Meta 订阅！" else "已复制 Clash Meta / Mihomo 分流订阅！"
+                                Toast.makeText(context, tip, Toast.LENGTH_SHORT).show()
                                 onDismissRequest()
                             }
                     ) {

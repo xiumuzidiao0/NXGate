@@ -23,7 +23,7 @@
                 </div>
                 <div class="brand-text">
                     <div class="brand-title">NXGate</div>
-                    <div class="brand-sub">边缘多出口网关 <span class="version-trigger" data-action="openUpdateModal" title="点击检查系统更新"><span id="sidebar-version-badge" class="badge-ver">v2.5.8</span></span></div>
+                    <div class="brand-sub">边缘多出口网关 <span class="version-trigger" data-action="openUpdateModal" title="点击检查系统更新"><span id="sidebar-version-badge" class="badge-ver">v2.5.8.1</span></span></div>
                 </div>
             </div>
 
@@ -79,7 +79,7 @@
                     </button>
                     <h1 id="page-title">运行概览</h1>
                     <span id="conn-badge" class="badge disconnected"><span class="status-dot"></span> 检查中</span>
-                    <span class="version-trigger" data-action="openUpdateModal" title="点击检查系统更新"><span id="app-version-badge" class="badge badge-accent">v2.5.8</span><span id="header-update-dot" class="badge-dot-pulse hidden" title="发现新版本"></span></span>
+                    <span class="version-trigger" data-action="openUpdateModal" title="点击检查系统更新"><span id="app-version-badge" class="badge badge-accent">v2.5.8.1</span><span id="header-update-dot" class="badge-dot-pulse hidden" title="发现新版本"></span></span>
                 </div>
 
                 <div class="header-actions">
@@ -253,6 +253,10 @@
                         <svg aria-hidden="true" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 7h10"/><path d="M7 12h10"/><path d="M7 17h6"/></svg>
                         复制 Clash 订阅
                     </button>
+                    <button id="btn-age-helper" class="btn btn-outline btn-sm" data-action="openAgeKeyHelper" title="配置 age 订阅端到端加密与密钥助手">
+                        <svg aria-hidden="true" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                        <span id="age-btn-text">age 加密</span>
+                    </button>
                     <button id="btn-download-clash" class="btn btn-outline btn-sm"  data-action="downloadClashConfig" title="直接下载 singbox-clash.yaml 配置文件">
                         <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                         下载 YAML
@@ -408,6 +412,13 @@
                     <div class="form-group">
                         <label class="form-label">默认本地代理端口 [1-65535]</label>
                         <input id="cfg-proxy-port" class="input-field w-full mono"  type="number" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">age 订阅安全加密公钥 (选填，开启后加密订阅)</label>
+                        <div class="input-addon">
+                            <input id="cfg-age-pubkey" class="input-field mono text-xs" type="text" placeholder="留空关闭加密，或填入 age1... / age1pq...">
+                            <button type="button" class="btn btn-outline" data-action="openAgeKeyHelper">密钥助手</button>
+                        </div>
                     </div>
                 </div>
 
@@ -862,6 +873,72 @@
                 <button type="button" class="btn btn-outline" data-action="copyFromElement" data-args="[&quot;app-connect-json&quot;]">复制 JSON</button>
                 <button type="button" class="btn btn-outline" data-action="testMobileApiConnectivity">测试 API 连通性</button>
                 <button type="button" class="btn" data-action="closeMobileAppModal">完成</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 6. age Key Helper (订阅安全加密与密钥助手) 模态弹窗 -->
+    <div id="age-key-helper-modal" class="modal-overlay">
+        <div class="modal-card modal-md" style="max-width: 520px; border-radius: 20px; padding: 24px;">
+            <div class="card-header mb-4" style="justify-content: center; position: relative;">
+                <h3 style="font-size: 1.25rem; font-weight: 700; margin: 0; text-align: center;">age key helper</h3>
+                <button type="button" class="btn btn-outline btn-icon" data-action="closeAgeKeyHelper" aria-label="关闭" style="position: absolute; right: 0; top: -4px;">×</button>
+            </div>
+
+            <!-- 开关控制 -->
+            <div class="row items-center justify-between mb-4 p-3" style="background: var(--surface-3, rgba(255,255,255,0.04)); border-radius: 12px; border: 1px solid var(--border-default, rgba(255,255,255,0.08));">
+                <div>
+                    <div class="font-semibold text-sm">启用 age 订阅加密</div>
+                    <div class="text-xs text-muted">开启后，下发的通用订阅与 Clash 订阅将使用 age 公钥加密保护</div>
+                </div>
+                <label class="switch">
+                    <input type="checkbox" id="age-encrypt-enabled" data-change-action="onAgeToggleChanged">
+                    <span class="slider round"></span>
+                </label>
+            </div>
+
+            <!-- 类型切换 (X25519 vs MLKEM768-X25519) -->
+            <div class="mb-4">
+                <div class="form-label mb-2" style="font-size: 0.85rem; color: var(--text-muted, #888);">类型</div>
+                <div class="row gap-2">
+                    <button type="button" class="chip active" id="age-type-x25519" data-action="switchAgeType" data-args="[&quot;x25519&quot;]">X25519</button>
+                    <button type="button" class="chip" id="age-type-pq" data-action="switchAgeType" data-args="[&quot;mlkem768-x25519&quot;]">MLKEM768-X25519</button>
+                </div>
+            </div>
+
+            <!-- age 解密私钥 -->
+            <div class="form-group mb-4">
+                <div class="row items-center justify-between mb-2">
+                    <label class="form-label mb-0" for="age-secret-key-input" style="font-size: 0.85rem; color: var(--text-muted, #888);">age 解密私钥</label>
+                    <div class="row gap-2">
+                        <button type="button" class="btn btn-sm" style="background: #2563eb; color: #fff; font-size: 0.78rem; padding: 4px 10px;" data-action="generateAgeKey">一键生成</button>
+                        <button type="button" class="btn btn-outline btn-sm" style="font-size: 0.78rem; padding: 4px 10px;" data-action="copyAgeSecretKey">复制</button>
+                    </div>
+                </div>
+                <textarea id="age-secret-key-input" class="input-field w-full mono text-xs" rows="3" placeholder="可粘贴 AGE-SECRET-KEY-1... 或 AGE-SECRET-KEY-PQ-1... 用于推导 age 加密公钥" style="resize: vertical; font-size: 11px;"></textarea>
+            </div>
+
+            <!-- age 加密公钥 -->
+            <div class="form-group mb-4">
+                <div class="row items-center justify-between mb-2">
+                    <label class="form-label mb-0" for="age-public-key-input" style="font-size: 0.85rem; color: var(--text-muted, #888);">age 加密公钥</label>
+                    <div class="row gap-2">
+                        <button type="button" class="btn btn-outline btn-sm" style="font-size: 0.78rem; padding: 4px 10px;" data-action="deriveAgePublicKey">从私钥生成</button>
+                        <button type="button" class="btn btn-outline btn-sm" style="font-size: 0.78rem; padding: 4px 10px;" data-action="copyAgePublicKey">复制</button>
+                        <button type="button" class="btn btn-sm" style="background: #2563eb; color: #fff; font-size: 0.78rem; padding: 4px 10px;" data-action="applyAgePublicKey">一键填入</button>
+                    </div>
+                </div>
+                <textarea id="age-public-key-input" class="input-field w-full mono text-xs" rows="3" placeholder="请输入 age 加密公钥" style="resize: vertical; font-size: 11px;"></textarea>
+            </div>
+
+            <!-- 提示说明 -->
+            <div class="text-xs text-muted mb-5" style="line-height: 1.6; font-size: 0.78rem;">
+                只支持 age 原生 X25519 和 MLKEM768-X25519 key。生成的 age 解密私钥只在此弹窗显示，请妥善保存；age 加密公钥可写入配置字段用于加密最终输出。
+            </div>
+
+            <!-- 关闭按钮 -->
+            <div class="text-center">
+                <button type="button" class="btn" style="min-width: 140px; border-radius: 9999px; background: #2563eb; color: #fff; font-weight: 500;" data-action="closeAgeKeyHelper">关闭</button>
             </div>
         </div>
     </div>

@@ -626,6 +626,8 @@
                 document.getElementById('cfg-proxy-port').value = data.proxy_port || 7928;
                 document.getElementById('cfg-tg-token').value = data.telegram_bot_token || '';
                 document.getElementById('cfg-tg-chatid').value = data.telegram_chat_id || '';
+                const agePubEl = document.getElementById('cfg-age-pubkey');
+                if (agePubEl) agePubEl.value = data.age_public_key || '';
                 switchSettingsTab('base');
             } catch (err) {
                 console.warn('获取系统配置失败:', err);
@@ -673,6 +675,7 @@
 
             const tgToken = document.getElementById('cfg-tg-token').value.trim();
             const tgChatID = document.getElementById('cfg-tg-chatid').value.trim();
+            const agePub = (document.getElementById('cfg-age-pubkey')?.value || '').trim();
 
             const payload = {
                 ui_port: webPort,
@@ -680,7 +683,9 @@
                 ui_username: user,
                 proxy_port: proxyPort,
                 telegram_bot_token: tgToken,
-                telegram_chat_id: tgChatID
+                telegram_chat_id: tgChatID,
+                age_public_key: agePub,
+                age_encrypt_enabled: !!agePub
             };
             if (pass) payload.ui_password = pass;
 
@@ -1789,6 +1794,21 @@
                 subBadge.classList.add('hidden');
             }
 
+            // 2.5 age 加密状态指示
+            const ageBtnText = document.getElementById('age-btn-text');
+            const ageBtn = document.getElementById('btn-age-helper');
+            const isAgeOn = data && data.subscription && data.subscription.age_encrypt_enabled && data.subscription.age_public_key;
+            if (ageBtnText) {
+                ageBtnText.innerText = isAgeOn ? 'age 加密 (开启)' : 'age 加密';
+            }
+            if (ageBtn) {
+                if (isAgeOn) {
+                    ageBtn.classList.add('btn-accent-outline');
+                } else {
+                    ageBtn.classList.remove('btn-accent-outline');
+                }
+            }
+
             const sbNavBadge = document.getElementById('nav-sb-badge');
             if (sbNavBadge) {
                 const count = (data && data.nodes) ? data.nodes.length : 0;
@@ -2160,7 +2180,8 @@
                 return;
             }
             const url = getGenericSubURL();
-            copyText(url, 'sing-box 全量通用订阅链接 (Base64/Raw)');
+            const isAge = singBoxOverview.subscription && singBoxOverview.subscription.age_encrypt_enabled && singBoxOverview.subscription.age_public_key;
+            copyText(url, isAge ? 'age 端到端加密的通用订阅链接 (Base64/Raw)' : 'sing-box 全量通用订阅链接 (Base64/Raw)');
         }
 
         function getClashSubURL() {
@@ -2178,7 +2199,8 @@
                 return;
             }
             const url = getClashSubURL();
-            copyText(url, 'Clash Meta / Mihomo 专属订阅链接');
+            const isAge = singBoxOverview.subscription && singBoxOverview.subscription.age_encrypt_enabled && singBoxOverview.subscription.age_public_key;
+            copyText(url, isAge ? 'age 端到端加密的 Clash Meta 专属订阅链接' : 'Clash Meta / Mihomo 专属订阅链接');
         }
 
         function downloadClashConfig() {
@@ -2218,6 +2240,176 @@
             const qrImg = document.getElementById('sb-qr-img');
             qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(url)}`;
             document.getElementById('singbox-qr-modal').classList.add('open');
+        }
+
+        let currentAgeType = 'x25519';
+
+        async function openAgeKeyHelper() {
+            try {
+                const res = await fetch('/api/settings');
+                if (res.ok) {
+                    const data = await res.json();
+                    const toggleEl = document.getElementById('age-encrypt-enabled');
+                    const pubInput = document.getElementById('age-public-key-input');
+                    if (toggleEl) toggleEl.checked = !!data.age_encrypt_enabled;
+                    if (pubInput) pubInput.value = data.age_public_key || '';
+                    if (data.age_public_key && data.age_public_key.startsWith('age1pq')) {
+                        switchAgeType('mlkem768-x25519');
+                    } else {
+                        switchAgeType('x25519');
+                    }
+                }
+            } catch (e) {
+                console.warn('获取 age 配置失败:', e);
+            }
+            document.getElementById('age-key-helper-modal').classList.add('open');
+        }
+
+        function closeAgeKeyHelper() {
+            document.getElementById('age-key-helper-modal').classList.remove('open');
+        }
+
+        function switchAgeType(type) {
+            currentAgeType = type;
+            const xBtn = document.getElementById('age-type-x25519');
+            const pqBtn = document.getElementById('age-type-pq');
+            if (type === 'x25519') {
+                if (xBtn) xBtn.classList.add('active');
+                if (pqBtn) pqBtn.classList.remove('active');
+            } else {
+                if (pqBtn) pqBtn.classList.add('active');
+                if (xBtn) xBtn.classList.remove('active');
+            }
+        }
+
+        async function generateAgeKey() {
+            try {
+                const res = await fetch(`/api/singbox/subscription/age/generate?type=${encodeURIComponent(currentAgeType)}`, {
+                    method: 'POST'
+                });
+                const data = await res.json();
+                if (!res.ok || !data.ok) {
+                    alert('生成密钥失败: ' + (data.error || '未知错误'));
+                    return;
+                }
+                document.getElementById('age-secret-key-input').value = data.secret_key;
+                document.getElementById('age-public-key-input').value = data.public_key;
+                showToast(`已成功生成全新 ${data.type} 密钥对！解密私钥请妥善保存。`);
+            } catch (err) {
+                alert('网络请求失败: ' + err);
+            }
+        }
+
+        function copyAgeSecretKey() {
+            const sec = document.getElementById('age-secret-key-input').value.trim();
+            if (!sec) {
+                alert('请先输入或生成 age 解密私钥');
+                return;
+            }
+            copyText(sec, 'age 解密私钥');
+        }
+
+        async function deriveAgePublicKey() {
+            const sec = document.getElementById('age-secret-key-input').value.trim();
+            if (!sec) {
+                alert('请先在私钥框中粘贴或生成 age 解密私钥');
+                return;
+            }
+            try {
+                const res = await fetch('/api/singbox/subscription/age/derive', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ secret_key: sec })
+                });
+                const data = await res.json();
+                if (!res.ok || !data.ok) {
+                    alert('从私钥推导公钥失败: ' + (data.error || '未知错误'));
+                    return;
+                }
+                document.getElementById('age-public-key-input').value = data.public_key;
+                if (data.type === 'MLKEM768-X25519') {
+                    switchAgeType('mlkem768-x25519');
+                } else {
+                    switchAgeType('x25519');
+                }
+                showToast(`已成功推导出 ${data.type} 加密公钥！`);
+            } catch (err) {
+                alert('网络请求失败: ' + err);
+            }
+        }
+
+        function copyAgePublicKey() {
+            const pub = document.getElementById('age-public-key-input').value.trim();
+            if (!pub) {
+                alert('请先输入或生成 age 加密公钥');
+                return;
+            }
+            copyText(pub, 'age 加密公钥');
+        }
+
+        async function applyAgePublicKey() {
+            const pub = document.getElementById('age-public-key-input').value.trim();
+            if (!pub) {
+                alert('请先生成或输入 age 加密公钥');
+                return;
+            }
+            const toggleEl = document.getElementById('age-encrypt-enabled');
+            if (toggleEl) toggleEl.checked = true;
+            try {
+                const res = await fetch('/api/settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        age_encrypt_enabled: true,
+                        age_public_key: pub
+                    })
+                });
+                if (!res.ok) {
+                    const err = await res.json();
+                    alert('保存失败: ' + (err.error || '未知错误'));
+                    return;
+                }
+                const cfgPub = document.getElementById('cfg-age-pubkey');
+                if (cfgPub) cfgPub.value = pub;
+                showToast('已一键填入公钥并开启 age 订阅端到端加密！');
+                await fetchSingBoxOverview();
+            } catch (err) {
+                alert('网络请求失败: ' + err);
+            }
+        }
+
+        async function onAgeToggleChanged() {
+            const toggleEl = document.getElementById('age-encrypt-enabled');
+            const isEnabled = toggleEl.checked;
+            const pub = document.getElementById('age-public-key-input').value.trim();
+
+            if (isEnabled && !pub) {
+                alert('请先在下方输入或一键生成 age 加密公钥，再开启加密功能！');
+                toggleEl.checked = false;
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        age_encrypt_enabled: isEnabled,
+                        age_public_key: pub
+                    })
+                });
+                if (!res.ok) {
+                    const err = await res.json();
+                    alert('保存开关失败: ' + (err.error || '未知错误'));
+                    toggleEl.checked = !isEnabled;
+                    return;
+                }
+                showToast(`age 订阅端到端加密已${isEnabled ? '开启' : '关闭'}`);
+                await fetchSingBoxOverview();
+            } catch (err) {
+                alert('网络请求失败: ' + err);
+                toggleEl.checked = !isEnabled;
+            }
         }
 
         function closeSingBoxQRModal() {
@@ -2633,7 +2825,16 @@
             closeUpdateModal,
             checkForUpdates,
             triggerSystemUpdate,
-            triggerForceUpdate
+            triggerForceUpdate,
+            openAgeKeyHelper,
+            closeAgeKeyHelper,
+            switchAgeType,
+            generateAgeKey,
+            copyAgeSecretKey,
+            deriveAgePublicKey,
+            copyAgePublicKey,
+            applyAgePublicKey,
+            onAgeToggleChanged
         };
 
         function runDataAction(element, dataKey, event) {

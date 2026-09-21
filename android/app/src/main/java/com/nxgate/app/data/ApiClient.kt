@@ -627,7 +627,9 @@ class ApiClient {
     data class SubscriptionInfo(
         val genericSubUrl: String,
         val clashSubUrl: String,
-        val nodeCount: Int = 0
+        val nodeCount: Int = 0,
+        val ageEncryptEnabled: Boolean = false,
+        val agePublicKey: String = ""
     )
 
     suspend fun fetchSubscriptionInfo(profile: ServerProfile): Result<SubscriptionInfo> = withContext(Dispatchers.IO) {
@@ -641,7 +643,9 @@ class ApiClient {
                     val subUrl = json.optString("sub_url").ifBlank { fallbackGeneric }
                     val clashUrl = json.optString("clash_sub_url").ifBlank { fallbackClash }
                     val count = json.optInt("node_count", 0)
-                    Result.success(SubscriptionInfo(subUrl, clashUrl, count))
+                    val ageOn = json.optBoolean("age_encrypt_enabled", false)
+                    val agePub = json.optString("age_public_key", "")
+                    Result.success(SubscriptionInfo(subUrl, clashUrl, count, ageOn, agePub))
                 } else {
                     Result.success(SubscriptionInfo(fallbackGeneric, fallbackClash))
                 }
