@@ -4,7 +4,13 @@
     android:minHeight="90dp"
     android:targetCellWidth="3"
     android:targetCellHeight="2"
+    android:minResizeWidth="160dp"
+    android:minResizeHeight="70dp"
+    android:maxResizeWidth="512dp"
+    android:maxResizeHeight="384dp"
     android:updatePeriodMillis="1800000"
     android:initialLayout="@layout/widget_nxgate"
+    android:previewLayout="@layout/widget_nxgate"
+    android:description="@string/widget_description"
     android:resizeMode="horizontal|vertical"
     android:widgetCategory="home_screen" />

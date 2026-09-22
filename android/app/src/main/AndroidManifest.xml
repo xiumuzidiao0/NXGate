@@ -58,7 +58,7 @@
         <receiver
             android:name=".service.NXGateWidgetProvider"
             android:exported="true"
-            android:label="NXGate 网关状态">
+            android:label="@string/widget_name">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
                 <action android:name="com.nxgate.app.ACTION_WIDGET_ROTATE" />
