@@ -30,6 +30,7 @@
             android:id="@+id/widget_status_dot"
             android:layout_width="8dp"
             android:layout_height="8dp"
+            android:contentDescription="在线状态指示"
             android:src="@drawable/widget_dot_online" />
 
         <TextView
@@ -42,15 +43,13 @@
             android:textSize="12sp" />
     </LinearLayout>
 
-    <View
-        android:layout_width="match_parent"
-        android:layout_height="8dp" />
-
     <!-- Middle: Physical Exit & Live Speed -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="8dp"
         android:gravity="center_vertical"
         android:orientation="vertical">
 
@@ -71,7 +70,7 @@
             android:layout_marginTop="4dp"
             android:ellipsize="end"
             android:maxLines="1"
-            android:text="下行: 0.0 MB/s · 上行: 0.0 MB/s"
+            android:text="下行: 0.0 Mb/s · 总计: 0.0 Mb"
             android:textColor="#94A3B8"
             android:textSize="12sp" />
     </LinearLayout>
@@ -88,6 +87,8 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:background="@drawable/widget_btn_bg"
+            android:clickable="true"
+            android:focusable="true"
             android:paddingStart="12dp"
             android:paddingTop="6dp"
             android:paddingEnd="12dp"
@@ -97,15 +98,14 @@
             android:textSize="12sp"
             android:textStyle="bold" />
 
-        <View
-            android:layout_width="8dp"
-            android:layout_height="1dp" />
-
         <TextView
             android:id="@+id/widget_btn_refresh"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
             android:background="@drawable/widget_btn_bg"
+            android:clickable="true"
+            android:focusable="true"
             android:paddingStart="12dp"
             android:paddingTop="6dp"
             android:paddingEnd="12dp"
@@ -115,7 +115,7 @@
             android:textSize="12sp"
             android:textStyle="bold" />
 
-        <View
+        <FrameLayout
             android:layout_width="0dp"
             android:layout_height="1dp"
             android:layout_weight="1" />
@@ -124,6 +124,8 @@
             android:id="@+id/widget_btn_open"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:clickable="true"
+            android:focusable="true"
             android:paddingStart="8dp"
             android:paddingTop="6dp"
             android:paddingEnd="8dp"

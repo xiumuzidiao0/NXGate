@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">NXGate</string>
+    <string name="widget_name">NXGate 网关状态</string>
+    <string name="widget_description">实时查看当前出海网关出口、网速与一键换线</string>
 </resources>
