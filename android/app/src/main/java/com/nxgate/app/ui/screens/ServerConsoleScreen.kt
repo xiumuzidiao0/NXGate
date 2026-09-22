@@ -27,6 +27,7 @@ import androidx.compose.material.icons.rounded.Dns
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Speed
+import androidx.compose.material.icons.rounded.Sync
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -261,6 +262,8 @@ fun ServerConsoleScreen(
         }
     }
 
+    var isReconnecting by remember { mutableStateOf(false) }
+
     // 采用 SSE 长连接实时被动监听远端事件流 (彻底告别 3秒高频短轮询，极低电量消耗)
     LaunchedEffect(activeServer?.id) {
         if (activeServer == null) return@LaunchedEffect
@@ -283,12 +286,19 @@ fun ServerConsoleScreen(
             }
         }
 
+        var reconnectDelayMs = 1000L
         // 2. 持续订阅 /api/events SSE 长连接，被动接收服务端 push 推送
         while (isActive) {
             try {
                 NXGateApplication.instance.apiClient.subscribeServerEvents(activeServer).collect { event ->
                     when (event) {
+                        is ServerSseEvent.Connected -> {
+                            isReconnecting = false
+                            reconnectDelayMs = 1000L
+                        }
                         is ServerSseEvent.StatusUpdate -> {
+                            isReconnecting = false
+                            reconnectDelayMs = 1000L
                             val data = event.status
                             masterInfo = data.masterGateway
                             liveTraffic = data.traffic
@@ -314,13 +324,17 @@ fun ServerConsoleScreen(
                             }
                         }
                         is ServerSseEvent.Error -> {
-                            delay(4000)
+                            isReconnecting = true
+                            delay(reconnectDelayMs)
+                            reconnectDelayMs = (reconnectDelayMs * 2).coerceAtMost(16000L)
                         }
                         else -> {}
                     }
                 }
             } catch (e: Exception) {
-                delay(4000)
+                isReconnecting = true
+                delay(reconnectDelayMs)
+                reconnectDelayMs = (reconnectDelayMs * 2).coerceAtMost(16000L)
             }
         }
     }
@@ -389,6 +403,33 @@ fun ServerConsoleScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Spacer(Modifier.height(4.dp))
+
+                if (isReconnecting) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Sync,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                text = "正在尝试恢复与网关的实时事件推送...",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
 
                 // 明文传输风险警示横幅 (当未启用 TLS 且开启明文提醒时展示)
                 if (cleartextWarningEnabled && activeServer?.isTls == false && !dismissCleartextBanner) {
