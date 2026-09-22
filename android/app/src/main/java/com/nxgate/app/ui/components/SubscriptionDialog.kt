@@ -1,6 +1,7 @@
 package com.nxgate.app.ui.components
 
 import android.content.Intent
+import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -16,6 +17,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.AltRoute
+import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Link
@@ -208,6 +210,39 @@ fun SubscriptionDialog(
                             }
                             IconButton(
                                 onClick = {
+                                    val encodedUrl = Uri.encode(genericUrl)
+                                    val profileName = Uri.encode("NXGate-${server.name}")
+                                    val singBoxUri = "sing-box://import-remote-profile?url=$encodedUrl#$profileName"
+                                    val v2rayUri = "v2rayng://install-sub?url=$encodedUrl&name=$profileName"
+                                    var launched = false
+                                    for (targetUri in listOf(singBoxUri, v2rayUri)) {
+                                        try {
+                                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(targetUri)).apply {
+                                                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                                            }
+                                            context.startActivity(intent)
+                                            launched = true
+                                            Toast.makeText(context, "已唤起客户端导入订阅", Toast.LENGTH_SHORT).show()
+                                            onDismissRequest()
+                                            break
+                                        } catch (_: Exception) {}
+                                    }
+                                    if (!launched) {
+                                        clipboardManager.setText(AnnotatedString(genericUrl))
+                                        Toast.makeText(context, "未检测到已安装的通用代理客户端，已复制链接", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(
+                                    Icons.AutoMirrored.Rounded.OpenInNew,
+                                    contentDescription = "导入客户端",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                            IconButton(
+                                onClick = {
                                     val sendIntent = Intent().apply {
                                         action = Intent.ACTION_SEND
                                         putExtra(Intent.EXTRA_TEXT, genericUrl)
@@ -279,6 +314,32 @@ fun SubscriptionDialog(
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     fontSize = 11.sp
+                                )
+                            }
+                            IconButton(
+                                onClick = {
+                                    val encodedUrl = Uri.encode(clashUrl)
+                                    val profileName = Uri.encode("NXGate-${server.name}")
+                                    val clashUri = "clash://install-config?url=$encodedUrl&name=$profileName"
+                                    try {
+                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(clashUri)).apply {
+                                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                                        }
+                                        context.startActivity(intent)
+                                        Toast.makeText(context, "已唤起 Clash 客户端导入配置", Toast.LENGTH_SHORT).show()
+                                        onDismissRequest()
+                                    } catch (e: Exception) {
+                                        clipboardManager.setText(AnnotatedString(clashUrl))
+                                        Toast.makeText(context, "未检测到已安装的 Clash 客户端，已复制链接", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(
+                                    Icons.AutoMirrored.Rounded.OpenInNew,
+                                    contentDescription = "导入 Clash",
+                                    tint = MaterialTheme.colorScheme.secondary,
+                                    modifier = Modifier.size(18.dp)
                                 )
                             }
                             IconButton(

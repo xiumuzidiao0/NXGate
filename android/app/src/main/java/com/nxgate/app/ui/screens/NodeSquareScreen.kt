@@ -22,6 +22,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Sort
@@ -157,23 +158,54 @@ fun FullNodeCard(
                     }
                 }
 
-                val (latencyBg, latencyTextColor) = when {
-                    node.latencyMs in 1..80 -> MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) to MaterialTheme.colorScheme.primary
-                    node.latencyMs in 81..180 -> MaterialTheme.colorScheme.tertiary.copy(alpha = 0.15f) to MaterialTheme.colorScheme.tertiary
-                    node.latencyMs > 180 -> MaterialTheme.colorScheme.error.copy(alpha = 0.15f) to MaterialTheme.colorScheme.error
-                    else -> MaterialTheme.colorScheme.surfaceContainerHigh to MaterialTheme.colorScheme.onSurface
+                val (latencyBg, latencyTextColor, latencyTierText) = when {
+                    node.latencyMs in 1..60 -> Triple(
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                        MaterialTheme.colorScheme.primary,
+                        "极速"
+                    )
+                    node.latencyMs in 61..130 -> Triple(
+                        MaterialTheme.colorScheme.secondary.copy(alpha = 0.15f),
+                        MaterialTheme.colorScheme.secondary,
+                        "良好"
+                    )
+                    node.latencyMs in 131..220 -> Triple(
+                        MaterialTheme.colorScheme.tertiary.copy(alpha = 0.15f),
+                        MaterialTheme.colorScheme.tertiary,
+                        "一般"
+                    )
+                    node.latencyMs > 220 -> Triple(
+                        MaterialTheme.colorScheme.error.copy(alpha = 0.15f),
+                        MaterialTheme.colorScheme.error,
+                        "偏高"
+                    )
+                    else -> Triple(
+                        MaterialTheme.colorScheme.surfaceContainerHigh,
+                        MaterialTheme.colorScheme.onSurfaceVariant,
+                        "待测"
+                    )
                 }
                 Surface(
                     shape = RoundedCornerShape(8.dp),
                     color = latencyBg
                 ) {
-                    Text(
-                        text = if (node.latencyMs > 0) "${node.latencyMs} ms" else "待测",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = latencyTextColor,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                    )
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = latencyTextColor,
+                            modifier = Modifier.size(6.dp)
+                        ) {}
+                        Text(
+                            text = if (node.latencyMs > 0) "${node.latencyMs} ms · $latencyTierText" else "待测",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = latencyTextColor
+                        )
+                    }
                 }
             }
 
@@ -350,9 +382,10 @@ fun NodeSquareScreen(
     // Sort dropdown options (matching Web)
     val sortOptions = remember {
         listOf(
-            SortFilterOption("latency_asc", "按测速延迟 (从低到高)"),
-            SortFilterOption("speed_desc", "按节点带宽 (从大到小)"),
-            SortFilterOption("score_desc", "按综合评分 (从高到低)")
+            SortFilterOption("default", "默认推荐 (综合排序)"),
+            SortFilterOption("latency_asc", "延迟优先 (从低到高)"),
+            SortFilterOption("speed_desc", "带宽优先 (从大到小)"),
+            SortFilterOption("score_desc", "稳定度优先 (评分最高)")
         )
     }
     var selectedSortOption by remember { mutableStateOf(sortOptions.first()) }

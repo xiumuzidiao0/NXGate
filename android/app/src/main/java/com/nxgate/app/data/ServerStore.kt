@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import com.nxgate.app.model.ServerProfile
+import com.nxgate.app.service.NXGateWidgetProvider
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -12,7 +13,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
 
-class ServerStore(context: Context) {
+class ServerStore(private val context: Context) {
     private val prefs: SharedPreferences = run {
         try {
             val masterKey = MasterKey.Builder(context)
@@ -131,6 +132,7 @@ class ServerStore(context: Context) {
         val target = _servers.value.find { it.id == id } ?: return
         _activeServer.value = target
         prefs.edit().putString(KEY_ACTIVE_SERVER_ID, id).apply()
+        NXGateWidgetProvider.updateAllWidgets(context)
     }
 
     fun selectPreviousServer() {
@@ -156,6 +158,8 @@ class ServerStore(context: Context) {
         saveList(current)
         if (_activeServer.value == null) {
             setActiveServer(profile.id)
+        } else {
+            NXGateWidgetProvider.updateAllWidgets(context)
         }
     }
 
@@ -169,6 +173,7 @@ class ServerStore(context: Context) {
             if (_activeServer.value?.id == profile.id) {
                 _activeServer.value = profile
             }
+            NXGateWidgetProvider.updateAllWidgets(context)
         }
     }
 
@@ -181,6 +186,7 @@ class ServerStore(context: Context) {
             _activeServer.value = current.firstOrNull()
             prefs.edit().putString(KEY_ACTIVE_SERVER_ID, _activeServer.value?.id).apply()
         }
+        NXGateWidgetProvider.updateAllWidgets(context)
     }
 
     fun reorderServers(fromIndex: Int, toIndex: Int) {

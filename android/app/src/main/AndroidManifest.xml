@@ -53,6 +53,21 @@
                 <action android:name="android.service.quicksettings.action.QS_TILE" />
             </intent-filter>
         </service>
+
+        <!-- Home Screen App Widget -->
+        <receiver
+            android:name=".service.NXGateWidgetProvider"
+            android:exported="true"
+            android:label="NXGate 网关状态">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.nxgate.app.ACTION_WIDGET_ROTATE" />
+                <action android:name="com.nxgate.app.ACTION_WIDGET_REFRESH" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/nxgate_widget_info" />
+        </receiver>
     </application>
 
 </manifest>

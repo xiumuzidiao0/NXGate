@@ -370,6 +370,10 @@ App 所有网络请求必须带上以下 Header 之一完成鉴权：
 - **本地安全存储**：Android KeyStore 硬件保护的 `EncryptedSharedPreferences` (`androidx.security:security-crypto:1.1.0-alpha06`, `AES256_SIV` + `AES256_GCM`)，支持旧版本明文无感自动迁移
 - **系统级深度集成**：
   - **下拉快捷设置磁贴 (`NXGateTileService`)**：原生 Android `TileService`，通知栏动态展示网关在线状态与延迟，一键后台换线；
+  - **桌面小部件 (`NXGateWidgetProvider`)**：原生 Android AppWidget 桌面微件，常驻显示当前活跃服务器、物理出口 IP、实时上下行网速，并支持在桌面一键换线与刷新；
+  - **外部代理客户端一键直连导入 (Deep Link)**：在订阅面板中支持通过 `clash://`、`sing-box://`、`v2rayng://` 原生 URI 协议一键唤起外部代理客户端静默导入，未安装时自动安全回退复制；
+  - **韧性 SSE 与微状态胶囊**：长连接断开时带抖动指数退避自动重试（1s..16s），并在顶层呈现优雅的无表情包状态指示微胶囊；
+  - **节点广场热力色阶与多维排序**：极速/良好/一般/偏高 4 级色阶状态点，支持延迟优先、带宽优先、稳定度优先多维排序；
   - **本地断流与故障转移推送通知 (`NotificationHelper`)**：Android 13+ `POST_NOTIFICATIONS` 运行时权限与双渠道通知（`nxgate_alerts` / `nxgate_status`）；
   - **生物识别加固**：BiometricPrompt（指纹/面容/凭据），加入 60 秒切后台免重复弹锁宽限期，屏幕旋转不重复打扰；
   - **交互触感反馈**：全场景接入系统级 `LocalHapticFeedback`；
@@ -387,7 +391,8 @@ android/app/src/main/java/com/nxgate/app/
 ├── model/
 │   └── Models.kt                   # 领域模型 (ServerProfile, SystemStatus, SseEvent, TrafficStats 等)
 ├── service/
-│   └── NXGateTileService.kt        # Android Quick Settings 快捷设置磁贴服务
+│   ├── NXGateTileService.kt        # Android Quick Settings 快捷设置磁贴服务
+│   └── NXGateWidgetProvider.kt     # Android 桌面小部件 (AppWidget) 提供程序
 ├── ui/
 │   ├── components/
 │   │   ├── GlobalServerSwitcher.kt # 顶栏吸顶服务器切换器 BottomSheet
