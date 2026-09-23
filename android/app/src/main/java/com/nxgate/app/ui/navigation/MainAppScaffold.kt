@@ -23,6 +23,7 @@ import androidx.compose.material.icons.rounded.AltRoute
 import androidx.compose.material.icons.rounded.Dashboard
 import androidx.compose.material.icons.rounded.Public
 import androidx.compose.material.icons.rounded.ShowChart
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -51,6 +52,7 @@ import com.nxgate.app.ui.screens.ClusterHubScreen
 import com.nxgate.app.ui.screens.NodeSquareScreen
 import com.nxgate.app.ui.screens.RoutingMatrixScreen
 import com.nxgate.app.ui.screens.ServerConsoleScreen
+import com.nxgate.app.ui.screens.ServerSystemScreen
 import com.nxgate.app.ui.screens.SettingsSecurityScreen
 
 enum class AppNavDestination(
@@ -60,7 +62,8 @@ enum class AppNavDestination(
     Dashboard("概览", Icons.Rounded.Dashboard),
     Monitoring("监控", Icons.Rounded.ShowChart),
     Routing("调度", Icons.Rounded.AltRoute),
-    Nodes("节点", Icons.Rounded.Public)
+    Nodes("节点", Icons.Rounded.Public),
+    System("系统", Icons.Rounded.Tune)
 }
 
 @Composable
@@ -102,6 +105,7 @@ fun MainAppScaffold() {
                 AppNavDestination.Monitoring -> currentDestination = AppNavDestination.Dashboard
                 AppNavDestination.Routing -> currentDestination = AppNavDestination.Monitoring
                 AppNavDestination.Nodes -> currentDestination = AppNavDestination.Routing
+                AppNavDestination.System -> currentDestination = AppNavDestination.Nodes
                 AppNavDestination.Dashboard -> {}
             }
         } else if (dragOffset < -dragThreshold) {
@@ -111,7 +115,8 @@ fun MainAppScaffold() {
                 AppNavDestination.Dashboard -> currentDestination = AppNavDestination.Monitoring
                 AppNavDestination.Monitoring -> currentDestination = AppNavDestination.Routing
                 AppNavDestination.Routing -> currentDestination = AppNavDestination.Nodes
-                AppNavDestination.Nodes -> {}
+                AppNavDestination.Nodes -> currentDestination = AppNavDestination.System
+                AppNavDestination.System -> {}
             }
         }
     }
@@ -268,6 +273,15 @@ fun MainAppScaffold() {
                             }
                             AppNavDestination.Nodes -> {
                                 NodeSquareScreen(
+                                    activeServer = activeServer,
+                                    allServers = servers,
+                                    onSelectServer = { serverStore.setActiveServer(it) },
+                                    onPreviousServer = { serverStore.selectPreviousServer() },
+                                    onNextServer = { serverStore.selectNextServer() }
+                                )
+                            }
+                            AppNavDestination.System -> {
+                                ServerSystemScreen(
                                     activeServer = activeServer,
                                     allServers = servers,
                                     onSelectServer = { serverStore.setActiveServer(it) },

@@ -16,7 +16,8 @@
   - [2. Tab 2: 单机监控与虚拟网卡矩阵 (Server Console & Tunnels)](#2-tab-2-单机监控与虚拟网卡矩阵-server-console--tunnels)
   - [3. Tab 3: 调度中心与边缘入站 (Routing Matrix & Ingress)](#3-tab-3-调度中心与边缘入站-routing-matrix--ingress)
   - [4. Tab 4: 节点广场与网络健康 (Node Square & Quarantine)](#4-tab-4-节点广场与网络健康-node-square--quarantine)
-  - [5. 独立模块: 服务器配置与安全中心 (Profiles & Security)](#5-独立模块-服务器配置与安全中心-profiles--security)
+  - [5. Tab 5: 系统运维与网关管理 (Server System & Maintenance)](#5-tab-5-系统运维与网关管理-server-system--maintenance)
+  - [6. 独立模块: 服务器配置与安全中心 (Profiles & Security)](#6-独立模块-服务器配置与安全中心-profiles--security)
 - [四、 通信契约与二维码导入标准 (Protocol Specification)](#四-通信契约与二维码导入标准-protocol-specification)
 - [五、 Android 技术选型与推荐工程目录](#五-android-技术选型与推荐工程目录)
 
@@ -52,7 +53,7 @@
 
 ### 2. 架构设计：`GlobalServerSwitcher` 顶栏挂载
 
-在 **Tab 2 (监控)**、**Tab 3 (调度)**、**Tab 4 (节点)** 的顶部 `TopAppBar` 均强制吸顶嵌入 **服务器选择器胶囊**：
+在 **Tab 2 (监控)**、**Tab 3 (调度)**、**Tab 4 (节点)**、**Tab 5 (系统)** 的顶部 `TopAppBar` 均强制吸顶嵌入 **服务器选择器胶囊**：
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -265,7 +266,37 @@
 
 ---
 
-### 5. 独立模块: 服务器配置与安全中心 (Profiles & Security)
+### 5. Tab 5: 系统运维与网关管理 (Server System & Maintenance)
+
+> **核心使命**：服务端核心全生命周期管理，集成**版本检测与在 App 内一键热升级**、**age 端到端前向安全加密策略配置与密钥生成**、**免密 SubToken 令牌隔离**、**Telegram 告警通道测试**与**网关自愈工具箱**。
+
+#### UI 布局与功能模块
+1. **服务端版本与自愈更新 (`ServerUpdateCard`)**：
+   - 实时读取远端网关运行版本（如 `v2.5.9`）与目标架构；
+   - 点击「检查更新」：调用 `GET /api/update/check` 探测 GitHub Releases 最新发行包；
+   - 发现新版本时展示版本号、发布日期与日志详情；
+   - 点击「升级服务器」：调用 `POST /api/update/trigger`，启动带进度的轮询状态监听（`GET /api/update/status`），在界面实时展示下载、SHA-256 校验与 systemd 服务平滑重启自愈阶段；
+2. **age 端到端前向安全加密 (`AgeSecurityCard`)**：
+   - 开关控制：开启/停用 age 订阅安全加密；
+   - Recipient 公钥输入与展示（支持 `age1...` 及后量子 `age1pq...` 规范）；
+   - 内置「生成新密钥对」工具：支持 `X25519` 与 `MLKEM768-X25519` 混合抗量子算法，生成后一键复制私钥并一键应用公钥；
+   - 内置「从私钥推导公钥」工具：输入已有私钥自动推导对应公钥并填入；
+   - 点击保存持久化至服务端的 `/api/settings`；
+3. **免密订阅令牌管理 (`SubTokenCard`)**：
+   - 展示当前 16 位安全令牌，防范直接扫描管理后台路径；
+   - 支持一键生成随机新令牌并保存；
+4. **Telegram 告警通道集成 (`TelegramCard`)**：
+   - 配置 Bot Token 与 Chat ID；
+   - 支持「测试推送」，调用 `POST /api/telegram/test` 发送测试通报消息；
+5. **网关运维与自愈工具箱 (`MaintenanceToolkit`)**：
+   - 「刷新节点源」：调用 `POST /api/refresh` 即时触发全量镜像拉取；
+   - 「影子协议探活」：调用 `POST /api/blacklist/resurrect` 深度探测被阻断的节点；
+   - 「清空硬屏蔽」：一键重置清空黑名单；
+   - 「实时日志」：打开 ModalBottomSheet 弹窗实时查阅服务端运行日志。
+
+---
+
+### 6. 独立模块: 服务器配置与安全中心 (Profiles & Security)
 
 > **打开方式**：点击首页右上角 `⚙️` 齿轮图标进入。
 
@@ -402,8 +433,10 @@ android/app/src/main/java/com/nxgate/app/
 │   ├── screens/
 │   │   ├── ClusterHubScreen.kt     # Tab 1: 集群全景概览与扫码导入
 │   │   ├── ServerConsoleScreen.kt  # Tab 2: 单机实时控制台、虚拟网卡与 SSE 日志流
-│   │   ├── NodeSquareScreen.kt     # Tab 3: 节点广场、200ms 防抖搜索与测速
-│   │   └── SettingsSecurityScreen.kt # Tab 4: 安全配置、集群 JSON 导入导出与测速
+│   │   ├── RoutingMatrixScreen.kt  # Tab 3: 多端口分流矩阵与边缘入站
+│   │   ├── NodeSquareScreen.kt     # Tab 4: 节点广场、200ms 防抖搜索与测速
+│   │   ├── ServerSystemScreen.kt   # Tab 5: 服务端版本更新、age加密配置与运维工具箱
+│   │   └── SettingsSecurityScreen.kt # 独立模块: App安全配置与集群JSON导入导出
 │   └── theme/                      # 深空色阶、ThemeMode 与 Monét 动态取色
 └── util/
     └── NotificationHelper.kt       # 本地故障转移与状态通报通知管理器

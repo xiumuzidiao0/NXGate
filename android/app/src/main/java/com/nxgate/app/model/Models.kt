@@ -386,3 +386,48 @@ sealed class ServerSseEvent {
     data object Connected : ServerSseEvent()
     data class Error(val error: Throwable?) : ServerSseEvent()
 }
+
+data class ServerUpdateCheck(
+    val ok: Boolean = false,
+    val currentVersion: String = "",
+    val latestVersion: String = "",
+    val hasUpdate: Boolean = false,
+    val releaseName: String = "",
+    val releaseNotes: String = "",
+    val releaseUrl: String = "",
+    val publishedAt: String = "",
+    val error: String = ""
+)
+
+data class ServerUpdateStatus(
+    val inProgress: Boolean = false,
+    val step: String = "",
+    val version: String = "",
+    val error: String = ""
+)
+
+data class ServerSettingsDTO(
+    val uiPort: Int = 8787,
+    val uiPath: String = "enter",
+    val uiUsername: String = "admin",
+    val uiPassword: String = "",
+    val subToken: String = "",
+    val ageEncryptEnabled: Boolean = false,
+    val agePublicKey: String = "",
+    val proxyPort: Int = 7928,
+    val proxyUser: String = "",
+    val proxyPass: String = "",
+    val autoRotateMinutes: Int = 0,
+    val autoRotateIPType: String = "",
+    val discoveryCountries: List<String> = emptyList(),
+    val telegramBotToken: String = "",
+    val telegramChatID: String = ""
+)
+
+data class AgeKeyGenerationResult(
+    val ok: Boolean = false,
+    val type: String = "x25519",
+    val secretKey: String = "",
+    val publicKey: String = "",
+    val error: String = ""
+)
