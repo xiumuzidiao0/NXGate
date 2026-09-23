@@ -2,6 +2,7 @@ package com.nxgate.app.data
 
 import android.net.Uri
 import android.util.Log
+import com.nxgate.app.model.AgeKeyGenerationResult
 import com.nxgate.app.model.AvailableOutbound
 import com.nxgate.app.model.BlacklistRecord
 import com.nxgate.app.model.DynamicGroupCard
@@ -11,8 +12,11 @@ import com.nxgate.app.model.MasterGatewayInfo
 import com.nxgate.app.model.NodeCandidate
 import com.nxgate.app.model.PortRuleItem
 import com.nxgate.app.model.ServerProfile
+import com.nxgate.app.model.ServerSettingsDTO
 import com.nxgate.app.model.ServerSseEvent
 import com.nxgate.app.model.ServerStatusData
+import com.nxgate.app.model.ServerUpdateCheck
+import com.nxgate.app.model.ServerUpdateStatus
 import com.nxgate.app.model.SingBoxOverviewData
 import com.nxgate.app.model.SystemLogEntry
 import com.nxgate.app.model.TunnelItem
@@ -806,6 +810,206 @@ class ApiClient {
         try {
             executeCall(profile, "/api/blacklist/resurrect", "POST", "{}").use { resp ->
                 Result.success(resp.isSuccessful)
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun clearBlacklist(profile: ServerProfile): Result<Boolean> = withContext(Dispatchers.IO) {
+        try {
+            executeCall(profile, "/api/blacklist/clear", "POST", "{}").use { resp ->
+                Result.success(resp.isSuccessful)
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun checkServerUpdate(profile: ServerProfile): Result<ServerUpdateCheck> = withContext(Dispatchers.IO) {
+        try {
+            executeCall(profile, "/api/update/check").use { resp ->
+                if (!resp.isSuccessful) return@withContext Result.failure(Exception("HTTP ${resp.code}: ${resp.message}"))
+                val obj = JSONObject(resp.body?.string() ?: "{}")
+                val check = ServerUpdateCheck(
+                    ok = obj.optBoolean("ok", false),
+                    currentVersion = obj.optString("current_version", ""),
+                    latestVersion = obj.optString("latest_version", ""),
+                    hasUpdate = obj.optBoolean("has_update", false),
+                    releaseName = obj.optString("release_name", ""),
+                    releaseNotes = obj.optString("release_notes", ""),
+                    releaseUrl = obj.optString("release_url", ""),
+                    publishedAt = obj.optString("published_at", ""),
+                    error = obj.optString("error", "")
+                )
+                Result.success(check)
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun triggerServerUpdate(profile: ServerProfile, force: Boolean = false): Result<String> = withContext(Dispatchers.IO) {
+        try {
+            val body = JSONObject().put("force", force).toString()
+            executeCall(profile, "/api/update/trigger", "POST", body).use { resp ->
+                val bodyStr = resp.body?.string() ?: "{}"
+                val obj = JSONObject(bodyStr)
+                if (resp.isSuccessful && obj.optBoolean("ok", true)) {
+                    Result.success(obj.optString("message", "更新任务已启动"))
+                } else {
+                    Result.failure(Exception(obj.optString("error", "更新触发失败 (HTTP ${resp.code})")))
+                }
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun fetchServerUpdateStatus(profile: ServerProfile): Result<ServerUpdateStatus> = withContext(Dispatchers.IO) {
+        try {
+            executeCall(profile, "/api/update/status").use { resp ->
+                if (!resp.isSuccessful) return@withContext Result.failure(Exception("HTTP ${resp.code}: ${resp.message}"))
+                val obj = JSONObject(resp.body?.string() ?: "{}")
+                val status = ServerUpdateStatus(
+                    inProgress = obj.optBoolean("in_progress", false),
+                    step = obj.optString("step", "就绪"),
+                    version = obj.optString("version", ""),
+                    error = obj.optString("error", "")
+                )
+                Result.success(status)
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun fetchServerSettings(profile: ServerProfile): Result<ServerSettingsDTO> = withContext(Dispatchers.IO) {
+        try {
+            executeCall(profile, "/api/settings").use { resp ->
+                if (!resp.isSuccessful) return@withContext Result.failure(Exception("HTTP ${resp.code}: ${resp.message}"))
+                val obj = JSONObject(resp.body?.string() ?: "{}")
+                val countriesArr = obj.optJSONArray("discovery_countries")
+                val countries = mutableListOf<String>()
+                if (countriesArr != null) {
+                    for (i in 0 until countriesArr.length()) {
+                        countries.add(countriesArr.optString(i))
+                    }
+                }
+                val settings = ServerSettingsDTO(
+                    uiPort = obj.optInt("ui_port", 8787),
+                    uiPath = obj.optString("ui_path", "enter"),
+                    uiUsername = obj.optString("ui_username", "admin"),
+                    uiPassword = obj.optString("ui_password", ""),
+                    subToken = obj.optString("sub_token", ""),
+                    ageEncryptEnabled = obj.optBoolean("age_encrypt_enabled", false),
+                    agePublicKey = obj.optString("age_public_key", ""),
+                    proxyPort = obj.optInt("proxy_port", 7928),
+                    proxyUser = obj.optString("proxy_user", ""),
+                    proxyPass = obj.optString("proxy_pass", ""),
+                    autoRotateMinutes = obj.optInt("auto_rotate_minutes", 0),
+                    autoRotateIPType = obj.optString("auto_rotate_ip_type", ""),
+                    discoveryCountries = countries,
+                    telegramBotToken = obj.optString("telegram_bot_token", ""),
+                    telegramChatID = obj.optString("telegram_chat_id", "")
+                )
+                Result.success(settings)
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun saveServerSettings(profile: ServerProfile, settings: ServerSettingsDTO): Result<String> = withContext(Dispatchers.IO) {
+        try {
+            val json = JSONObject().apply {
+                put("ui_port", settings.uiPort)
+                put("ui_path", settings.uiPath)
+                put("ui_username", settings.uiUsername)
+                if (settings.uiPassword.isNotBlank()) put("ui_password", settings.uiPassword)
+                if (settings.subToken.isNotBlank()) put("sub_token", settings.subToken)
+                put("age_encrypt_enabled", settings.ageEncryptEnabled)
+                put("age_public_key", settings.agePublicKey)
+                put("proxy_port", settings.proxyPort)
+                put("proxy_user", settings.proxyUser)
+                if (settings.proxyPass.isNotBlank()) put("proxy_pass", settings.proxyPass)
+                put("auto_rotate_minutes", settings.autoRotateMinutes)
+                put("auto_rotate_ip_type", settings.autoRotateIPType)
+                put("discovery_countries", JSONArray(settings.discoveryCountries))
+                put("telegram_bot_token", settings.telegramBotToken)
+                put("telegram_chat_id", settings.telegramChatID)
+            }
+            executeCall(profile, "/api/settings", "POST", json.toString()).use { resp ->
+                val bodyStr = resp.body?.string() ?: "{}"
+                val obj = JSONObject(bodyStr)
+                if (resp.isSuccessful) {
+                    Result.success(obj.optString("message", "设置保存成功"))
+                } else {
+                    Result.failure(Exception(obj.optString("error", "设置保存失败 (HTTP ${resp.code})")))
+                }
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun generateAgeKey(profile: ServerProfile, type: String = "x25519"): Result<AgeKeyGenerationResult> = withContext(Dispatchers.IO) {
+        try {
+            executeCall(profile, "/api/singbox/subscription/age/generate?type=$type", "POST", "{}").use { resp ->
+                val bodyStr = resp.body?.string() ?: "{}"
+                val obj = JSONObject(bodyStr)
+                val res = AgeKeyGenerationResult(
+                    ok = obj.optBoolean("ok", resp.isSuccessful),
+                    type = obj.optString("type", type),
+                    secretKey = obj.optString("secret_key", ""),
+                    publicKey = obj.optString("public_key", ""),
+                    error = obj.optString("error", "")
+                )
+                if (resp.isSuccessful && res.ok) {
+                    Result.success(res)
+                } else {
+                    Result.failure(Exception(res.error.ifEmpty { "生成密钥对失败 (HTTP ${resp.code})" }))
+                }
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun deriveAgeKey(profile: ServerProfile, secretKey: String): Result<AgeKeyGenerationResult> = withContext(Dispatchers.IO) {
+        try {
+            val body = JSONObject().put("secret_key", secretKey.trim()).toString()
+            executeCall(profile, "/api/singbox/subscription/age/derive", "POST", body).use { resp ->
+                val bodyStr = resp.body?.string() ?: "{}"
+                val obj = JSONObject(bodyStr)
+                val res = AgeKeyGenerationResult(
+                    ok = obj.optBoolean("ok", resp.isSuccessful),
+                    type = obj.optString("type", ""),
+                    secretKey = secretKey.trim(),
+                    publicKey = obj.optString("public_key", ""),
+                    error = obj.optString("error", "")
+                )
+                if (resp.isSuccessful && res.ok) {
+                    Result.success(res)
+                } else {
+                    Result.failure(Exception(res.error.ifEmpty { "公钥推导失败" }))
+                }
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun testTelegram(profile: ServerProfile): Result<String> = withContext(Dispatchers.IO) {
+        try {
+            executeCall(profile, "/api/telegram/test", "POST", "{}").use { resp ->
+                val bodyStr = resp.body?.string() ?: "{}"
+                val obj = JSONObject(bodyStr)
+                if (resp.isSuccessful) {
+                    Result.success(obj.optString("message", "测试消息发送成功"))
+                } else {
+                    Result.failure(Exception(obj.optString("error", "发送测试失败 (HTTP ${resp.code})")))
+                }
             }
         } catch (e: Exception) {
             Result.failure(e)
