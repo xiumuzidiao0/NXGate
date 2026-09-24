@@ -38,11 +38,11 @@
 
         const I18N = {
             zh: {
-                'brand.sub': '边缘多出口网关',
+                'brand.sub': '多出口智能网关',
                 'nav.dashboard': '运行概览',
-                'nav.singbox': '边缘入站',
-                'nav.matrix': '多端口分流',
-                'nav.nodes': '节点广场',
+                'nav.singbox': 'sing-box 节点',
+                'nav.matrix': '端口分流',
+                'nav.nodes': '节点列表',
                 'nav.settings': '系统设置',
                 'nav.local_exit': '本地出口',
                 'nav.collapse': '收起侧栏',
@@ -55,9 +55,9 @@
                 'header.connecting': '正在连接中...',
                 'header.disconnected': '未连接',
                 'title.dashboard': '运行概览',
-                'title.singbox': '边缘抗封锁入站 (sing-box)',
-                'title.matrix': '多端口代理与自适应分流矩阵',
-                'title.nodes': '优质 VPN 节点列表',
+                'title.singbox': 'sing-box 节点管理',
+                'title.matrix': '端口分流与出口组',
+                'title.nodes': 'VPN 节点列表',
                 'title.settings': '系统与安全参数设置',
                 'stat.down_speed': '实时下载速率',
                 'stat.up_speed': '实时上传速率',
@@ -67,35 +67,35 @@
                 'stat.proxy_port': '默认端口: ',
                 'stat.candidates': '出海候选节点',
                 'stat.active_tunnels': '已拉起隧道网卡',
-                'dash.primary_status': '主隧道连接状态',
-                'dash.tunnels_matrix': '物理隧道多网卡矩阵',
+                'dash.primary_status': '主出口状态',
+                'dash.tunnels_matrix': '活跃隧道出口',
                 'dash.traffic_waveform': '实时网络吞吐波形',
                 'dash.tx': '上行 (TX)',
                 'dash.rx': '下行 (RX)',
-                'dash.dev_zero': '设备：主网卡零号，策略表一百',
-                'dash.no_tunnels': '当前未拉起独立并发网卡，所有多端口与边缘协议均汇聚至系统主网关 tun0 出海。',
-                'sb.title': '边缘协议入站矩阵 (sing-box)',
-                'sb.sub': '纳管边缘 sing-box 原生 22 种抗封锁协议入站，并将流量无缝链式调度至住宅出海隧道。',
-                'sb.add_btn': '添加边缘协议入站',
+                'dash.dev_zero': '设备: tun0 · 路由表: 100',
+                'dash.no_tunnels': '当前未拉起独立并发网卡，所有端口分流与 sing-box 节点均汇聚至主出口 tun0 出海。',
+                'sb.title': 'sing-box 节点管理',
+                'sb.sub': '配置 sing-box 原生 22 种入站协议，支持直连或经由网关出口分流出海。',
+                'sb.add_btn': '添加节点',
                 'sb.clash_sub': 'Clash 订阅',
                 'sb.generic_sub': '通用订阅',
                 'sb.age_helper': '端到端 age 加密',
-                'matrix.ports_tab': '多端口代理规则',
-                'matrix.groups_tab': '自适应动态隧道组',
+                'matrix.ports_tab': '端口分流规则',
+                'matrix.groups_tab': '动态出口组',
                 'matrix.add_port': '添加端口规则',
-                'matrix.add_group': '添加自适应组',
+                'matrix.add_group': '添加出口组',
                 'matrix.evaluate': '立即评估换线',
-                'nodes.title': '节点广场与探活过滤',
-                'nodes.refresh_feed': '刷新节点镜像',
+                'nodes.title': '节点列表与测速检测',
+                'nodes.refresh_feed': '刷新节点',
                 'nodes.resurrect': '探活复活',
-                'nodes.blacklist_btn': '已屏蔽库',
+                'nodes.blacklist_btn': '黑名单管理',
                 'nodes.search_ph': '搜索 IP、国家、省份、城市或运营商...',
                 'nodes.filter_all': '全部节点',
                 'nodes.filter_fav': '我的收藏',
                 'nodes.filter_jp': '日本节点',
                 'nodes.filter_us': '美国节点',
                 'nodes.filter_res': '原生住宅宽带',
-                'nodes.filter_ai': '三大AI全通',
+                'nodes.filter_ai': 'AI 全解锁',
                 'nodes.country_all': '全部国家/地区',
                 'nodes.iptype_all': '全部网络类型',
                 'nodes.iptype_res': '原生住宅宽带 (家宽)',
@@ -112,11 +112,11 @@
                 'set.save_btn': '保存全部设置'
             },
             en: {
-                'brand.sub': 'Multi-Egress Edge Gateway',
+                'brand.sub': 'Multi-Egress Gateway',
                 'nav.dashboard': 'Dashboard',
-                'nav.singbox': 'Edge Ingress',
-                'nav.matrix': 'Port Matrix',
-                'nav.nodes': 'Node Square',
+                'nav.singbox': 'sing-box Nodes',
+                'nav.matrix': 'Port Routing',
+                'nav.nodes': 'Node List',
                 'nav.settings': 'Settings',
                 'nav.local_exit': 'Local Exit',
                 'nav.collapse': 'Collapse Sidebar',
@@ -129,9 +129,9 @@
                 'header.connecting': 'Connecting...',
                 'header.disconnected': 'Disconnected',
                 'title.dashboard': 'Dashboard Overview',
-                'title.singbox': 'Edge Anti-Censorship Ingress (sing-box)',
-                'title.matrix': 'Multi-Port Proxy & Routing Matrix',
-                'title.nodes': 'VPN Node Square',
+                'title.singbox': 'sing-box Node Management',
+                'title.matrix': 'Port Routing & Exit Groups',
+                'title.nodes': 'VPN Node List',
                 'title.settings': 'System & Security Settings',
                 'stat.down_speed': 'Download Speed',
                 'stat.up_speed': 'Upload Speed',
@@ -141,35 +141,35 @@
                 'stat.proxy_port': 'Default Port: ',
                 'stat.candidates': 'Egress Candidates',
                 'stat.active_tunnels': 'Active Tunnels',
-                'dash.primary_status': 'Primary Tunnel Status',
-                'dash.tunnels_matrix': 'Tunnel Interface Matrix',
+                'dash.primary_status': 'Primary Exit Status',
+                'dash.tunnels_matrix': 'Active Tunnel Exits',
                 'dash.traffic_waveform': 'Real-time Traffic Waveform',
                 'dash.tx': 'Upload (TX)',
                 'dash.rx': 'Download (RX)',
                 'dash.dev_zero': 'Device: Primary tun0, Table 100',
-                'dash.no_tunnels': 'No independent concurrent interfaces started. All multi-port and edge inbounds are aggregated to primary tun0.',
-                'sb.title': 'Edge Inbound Protocols (sing-box)',
-                'sb.sub': 'Manage sing-box native 22 anti-censorship protocols and chain traffic into residential exit tunnels.',
-                'sb.add_btn': 'Add Inbound Protocol',
+                'dash.no_tunnels': 'No independent interfaces started. All traffic routes through primary exit tun0.',
+                'sb.title': 'sing-box Node Management',
+                'sb.sub': 'Configure 22 native sing-box protocols with direct or gateway egress.',
+                'sb.add_btn': 'Add Node',
                 'sb.clash_sub': 'Clash Sub',
                 'sb.generic_sub': 'Universal Sub',
                 'sb.age_helper': 'age Encryption',
                 'matrix.ports_tab': 'Port Routing Rules',
-                'matrix.groups_tab': 'Adaptive Dynamic Groups',
+                'matrix.groups_tab': 'Dynamic Exit Groups',
                 'matrix.add_port': 'Add Port Rule',
-                'matrix.add_group': 'Add Dynamic Group',
+                'matrix.add_group': 'Add Exit Group',
                 'matrix.evaluate': 'Evaluate & Rotate',
-                'nodes.title': 'Node Square & Health Probing',
-                'nodes.refresh_feed': 'Refresh Mirror',
+                'nodes.title': 'Node List & Health Probing',
+                'nodes.refresh_feed': 'Refresh Nodes',
                 'nodes.resurrect': 'Probe & Resurrect',
-                'nodes.blacklist_btn': 'Blacklisted Nodes',
+                'nodes.blacklist_btn': 'Blacklist Management',
                 'nodes.search_ph': 'Search IP, country, region, city, ISP...',
                 'nodes.filter_all': 'All Nodes',
                 'nodes.filter_fav': 'Favorites',
                 'nodes.filter_jp': 'Japan',
                 'nodes.filter_us': 'United States',
                 'nodes.filter_res': 'Residential',
-                'nodes.filter_ai': 'Triple AI',
+                'nodes.filter_ai': 'AI Unlocked',
                 'nodes.country_all': 'All Countries / Regions',
                 'nodes.iptype_all': 'All Network Types',
                 'nodes.iptype_res': 'Residential Broadband',
@@ -1077,7 +1077,7 @@
             const container = document.getElementById('dynamic-groups-container');
             if (!container) return;
             if (!currentDynamicGroups || currentDynamicGroups.length === 0) {
-                container.innerHTML = '<div class="list-empty">暂无自适应隧道池，点击右上角「+ 新建自适应组」即可自动化按指标维持出口</div>';
+                container.innerHTML = '<div class="list-empty">暂无动态出口组，点击右上角「+ 新建出口组」即可按规则自动维持出口</div>';
                 return;
             }
 
@@ -1132,7 +1132,7 @@
 
         function showAddDynamicGroupForm() {
             editingGroupId = null;
-            document.getElementById('dynamic-group-edit-title').innerText = '新建动态自适应隧道组';
+            document.getElementById('dynamic-group-edit-title').innerText = '新建动态出口组';
             document.getElementById('dg-name').value = '';
             document.getElementById('dg-country').value = 'JP';
             document.getElementById('dg-iptype').value = 'residential';
@@ -1150,10 +1150,10 @@
             editingGroupId = id;
             const isSys = g.is_system || g.id === 'system-primary';
             if (isSys) {
-                document.getElementById('dynamic-group-edit-title').innerText = '配置系统主连接自适应策略 (tun0)';
+                document.getElementById('dynamic-group-edit-title').innerText = '配置主出口自动轮换策略 (tun0)';
                 document.getElementById('dg-count-container').classList.add('hidden');
             } else {
-                document.getElementById('dynamic-group-edit-title').innerText = `编辑自适应组: ${g.name}`;
+                document.getElementById('dynamic-group-edit-title').innerText = `编辑出口组: ${g.name}`;
                 document.getElementById('dg-count-container').classList.remove('hidden');
             }
             document.getElementById('dg-name').value = g.name;
@@ -1170,7 +1170,7 @@
 
         async function saveDynamicGroup() {
             const name = document.getElementById('dg-name').value.trim();
-            if (!name) { alert('请输入自适应组名称'); return; }
+            if (!name) { alert('请输入出口组名称'); return; }
             const country = document.getElementById('dg-country').value;
             const ipType = document.getElementById('dg-iptype').value;
             const unlockFilter = document.getElementById('dg-unlock').value;
@@ -1200,7 +1200,7 @@
                 const ret = await res.json();
                 if (!res.ok) { alert('保存失败: ' + (ret.error || '未知错误')); return; }
                 hideDynamicGroupForm();
-                appendLog({ level: 'INFO', module: 'Action', message: `动态自适应组 [${name}] 已成功保存并启动评估！` });
+                appendLog({ level: 'INFO', module: 'Action', message: `动态出口组 [${name}] 已成功保存！` });
                 await fetchDynamicGroups();
                 updateSystemPrimaryRotateBanner();
                 fetchStatus();
@@ -1210,7 +1210,7 @@
         }
 
         async function deleteDynamicGroup(id) {
-            if (!confirm('确认删除该动态自适应组吗？其维护的隧道将被安全释放。')) return;
+            if (!confirm('确认删除该动态出口组吗？其维护的隧道将被安全释放。')) return;
             try {
                 const res = await fetch(`/api/tunnel-groups?id=${id}`, { method: 'DELETE' });
                 const ret = await res.json();
@@ -1223,7 +1223,7 @@
         }
 
         async function evaluateDynamicGroups() {
-            appendLog({ level: 'INFO', module: 'Action', message: '正在触发所有自适应组重新探活并轮换...' });
+            appendLog({ level: 'INFO', module: 'Action', message: '正在触发出口组重新评估轮换...' });
             try {
                 await fetch('/api/tunnel-groups/evaluate', { method: 'POST' });
                 setTimeout(async () => {
@@ -1570,7 +1570,7 @@
                                 <div class="port-card-val">${policyBadge}</div>
                             </div>
                             <div class="port-card-col">
-                                <span class="port-card-label">绑定出口 / 动态自适应池</span>
+                                <span class="port-card-label">绑定出口 / 动态出口组</span>
                                 <div class="port-card-val">${boundHtml}</div>
                             </div>
                             <div class="port-card-col">
@@ -1685,14 +1685,14 @@
             `;
 
             if (currentDynamicGroups && currentDynamicGroups.length > 0) {
-                html += '<div class="check-section-label text-accent">动态自适应组出口 (自动维持Top N并定期轮换):</div>';
+                html += '<div class="check-section-label text-accent">动态出口组 (按规则自动维持并定期轮换):</div>';
                 currentDynamicGroups.forEach(g => {
                     const isChecked = !isAllChecked && selGrpMap[g.id];
                     let metricText = g.sort_by === 'speed' ? '最大带宽' : (g.sort_by === 'score' ? '最高评分' : '最低延迟');
                     html += `
                         <label  class="check-row">
                             <input type="checkbox" class="chk-dynamic-group" value="${escapeHtml(g.id)}" ${isChecked ? 'checked' : ''} data-change-action="onSpecificTunnelCheckChanged">
-                            <span class="badge badge-system">自适应组</span>
+                            <span class="badge badge-system">出口组</span>
                             <strong class="check-name">${escapeHtml(g.name)}</strong>
                             <span  class="text-xs text-muted">(${escapeHtml(g.country || '全部')} · ${escapeHtml(g.ip_type === 'residential' ? '家宽' : (g.ip_type === 'hosting' ? '机房' : '不限'))} · ${escapeHtml(metricText)} Top${escapeHtml(g.target_count)})</span>
                         </label>
@@ -1868,9 +1868,9 @@
             const isEn = getLanguage() === 'en';
             const titlesZh = {
                 dashboard: '运行概览',
-                singbox: '边缘抗封锁入站 (sing-box)',
-                matrix: '多端口代理与自适应分流矩阵',
-                nodes: '优质 VPN 节点列表',
+                singbox: 'sing-box 节点管理',
+                matrix: '端口分流与出口组',
+                nodes: 'VPN 节点列表',
                 settings: '系统与安全参数设置'
             };
             const titlesEn = {
@@ -2078,10 +2078,10 @@
                 guide.classList.remove('hidden');
                 guide.innerHTML = `
                     <div  class="empty-title">
-                        尚未在系统中检测到 sing-box 边缘服务端
+                        尚未在系统中检测到 sing-box 服务
                     </div>
                     <div class="empty-guide-copy">
-                        在 VPS 终端执行安装后，即可在此直接纳管 VLESS-REALITY、Hysteria2、TUIC、Shadowsocks 2022 等顶级抗封锁协议，并一键将其流量通过 NXGate 的全球家宽住宅池分流出海。
+                        在 VPS 终端执行安装后，即可在此添加 VLESS、Hysteria2 等协议节点，并支持直连或绑定网关出口分流出海。
                     </div>
                     <div class="command-box">
                         <span>bash &lt;(curl -fsSL https://raw.githubusercontent.com/xiumuzidiao0/sing-box/main/install.sh)</span>
@@ -2097,13 +2097,13 @@
                 guide.classList.remove('hidden');
                 guide.innerHTML = `
                     <div  class="empty-title">
-                        暂无活跃的抗封锁入站配置
+                        暂无 sing-box 节点
                     </div>
                     <div class="empty-guide-copy compact">
-                        点击下方按钮即可一键新建 VLESS-REALITY 或 Hysteria2 入站，系统将自动分配端口、计算 TLS 凭证，并链式绑定至 NXGate 代理出口。
+                        点击下方按钮即可新建 VLESS、Hysteria2 等入站协议节点，并可生成通用与 Clash 订阅链接。
                     </div>
                     <button class="btn" data-action="openAddSingBoxModal">
-                        + 新建第一个抗封锁入站节点
+                        + 添加节点
                     </button>
                 `;
                 return;
@@ -2263,7 +2263,7 @@
             const isSocks = proto === 'socks';
 
             if (isReality) {
-                sniLabel.innerText = '自定义 SNI 伪装域名 (借用权威名站)';
+                sniLabel.innerText = '自定义 SNI 伪装域名';
                 if (sniInput) sniInput.placeholder = 'auto (知名权威站，如 www.amazon.com)';
             } else if (isTLS) {
                 sniLabel.innerText = '域名 / SNI 证书配置 (需已解析域名)';
