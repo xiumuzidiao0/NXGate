@@ -96,6 +96,8 @@ import com.nxgate.app.ui.components.ConnectedButtonItem
 import com.nxgate.app.ui.components.ConnectedButtonGroup
 import com.nxgate.app.ui.components.ConnectedButtonStyle
 import com.nxgate.app.ui.components.GlobalServerSwitcherTitle
+import com.nxgate.app.util.AppStringsEn
+import com.nxgate.app.util.LocalAppStrings
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -112,6 +114,7 @@ fun ServerSystemScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val strings = LocalAppStrings.current
     val scope = rememberCoroutineScope()
     val scrollState = rememberScrollState()
 
@@ -317,7 +320,7 @@ fun ServerSystemScreen(
                                         modifier = Modifier.size(22.dp)
                                     )
                                     Text(
-                                        text = "版本与自愈更新",
+                                        text = strings.versionAndUpdates,
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.onSurface
@@ -400,7 +403,7 @@ fun ServerSystemScreen(
                                                     modifier = Modifier.size(18.dp)
                                                 )
                                                 Text(
-                                                    text = "发现新版本可用: v${updateInfo!!.latestVersion}",
+                                                    text = "${strings.hasUpdateAvailable}: v${updateInfo!!.latestVersion}",
                                                     style = MaterialTheme.typography.titleSmall,
                                                     fontWeight = FontWeight.Bold,
                                                     color = MaterialTheme.colorScheme.onTertiaryContainer
@@ -440,7 +443,7 @@ fun ServerSystemScreen(
                                                 modifier = Modifier.size(18.dp)
                                             )
                                             Text(
-                                                text = "当前已是最新构建 (v${updateInfo!!.currentVersion})",
+                                                text = "${strings.currentLatest} (v${updateInfo!!.currentVersion})",
                                                 style = MaterialTheme.typography.bodyMedium,
                                                 color = MaterialTheme.colorScheme.onSurface
                                             )
@@ -477,7 +480,7 @@ fun ServerSystemScreen(
                                     } else {
                                         Icon(Icons.Rounded.Sync, contentDescription = null, modifier = Modifier.size(16.dp))
                                         Spacer(Modifier.width(6.dp))
-                                        Text("检查更新")
+                                        Text(strings.checkUpdate)
                                     }
                                 }
 
@@ -493,7 +496,7 @@ fun ServerSystemScreen(
                                     ) {
                                         Icon(Icons.Rounded.SystemUpdate, contentDescription = null, modifier = Modifier.size(16.dp))
                                         Spacer(Modifier.width(6.dp))
-                                        Text("升级服务器")
+                                        Text(strings.updateServer)
                                     }
                                 } else if (updateInfo?.releaseNotes?.isNotBlank() == true) {
                                     OutlinedButton(
@@ -503,7 +506,7 @@ fun ServerSystemScreen(
                                     ) {
                                         Icon(Icons.AutoMirrored.Rounded.Article, contentDescription = null, modifier = Modifier.size(16.dp))
                                         Spacer(Modifier.width(6.dp))
-                                        Text("更新日志")
+                                        Text(strings.releaseNotes)
                                     }
                                 }
                             }
@@ -543,7 +546,7 @@ fun ServerSystemScreen(
                                         modifier = Modifier.size(22.dp)
                                     )
                                     Text(
-                                        text = "age 端到端前向安全加密",
+                                        text = strings.ageE2EEncryption,
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.onSurface
@@ -552,7 +555,7 @@ fun ServerSystemScreen(
                             }
 
                             Text(
-                                text = "开启后，服务端下发的通用订阅与分流配置将自动转换为标准 ASCII Armored age 密文。仅持有私钥的受信任端方可解密，杜绝中转节点嗅探与缓存劫持。",
+                                text = strings.ageDesc,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 lineHeight = MaterialTheme.typography.bodySmall.lineHeight * 1.35f
@@ -573,13 +576,13 @@ fun ServerSystemScreen(
                                 ) {
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
-                                            text = "开启订阅加密保护",
+                                            text = strings.enableAgeProtection,
                                             style = MaterialTheme.typography.bodyMedium,
                                             fontWeight = FontWeight.SemiBold,
                                             color = MaterialTheme.colorScheme.onSurface
                                         )
                                         Text(
-                                            text = if (ageEnabled) "已启用: 未授权访问仅能拉取密文" else "已停用: 下发普通 Base64/YAML",
+                                            text = if (ageEnabled) (if (strings == AppStringsEn) "Enabled: Unauthorized access only receives ciphertext" else "已启用: 未授权访问仅能拉取密文") else (if (strings == AppStringsEn) "Disabled: Standard Base64/YAML delivered" else "已停用: 下发普通 Base64/YAML"),
                                             style = MaterialTheme.typography.bodySmall,
                                             color = if (ageEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -595,8 +598,8 @@ fun ServerSystemScreen(
                             OutlinedTextField(
                                 value = agePublicKey,
                                 onValueChange = { agePublicKey = it.trim() },
-                                label = { Text("age Recipient 公钥 (age1... / age1pq...)") },
-                                placeholder = { Text("例如 age1ql3z7hjy...") },
+                                label = { Text(strings.ageRecipientPublicKey) },
+                                placeholder = { Text("age1...") },
                                 singleLine = false,
                                 maxLines = 3,
                                 shape = RoundedCornerShape(12.dp),
@@ -619,7 +622,7 @@ fun ServerSystemScreen(
                                 ) {
                                     Icon(Icons.Rounded.VpnKey, contentDescription = null, modifier = Modifier.size(16.dp))
                                     Spacer(Modifier.width(6.dp))
-                                    Text("生成新密钥对", fontSize = 12.sp)
+                                    Text(strings.generateNewKeyPair, fontSize = 12.sp)
                                 }
 
                                 OutlinedButton(
@@ -632,7 +635,7 @@ fun ServerSystemScreen(
                                 ) {
                                     Icon(Icons.Rounded.Key, contentDescription = null, modifier = Modifier.size(16.dp))
                                     Spacer(Modifier.width(6.dp))
-                                    Text("从私钥推导", fontSize = 12.sp)
+                                    Text(strings.deriveFromSecretKey, fontSize = 12.sp)
                                 }
                             }
 
@@ -650,7 +653,7 @@ fun ServerSystemScreen(
                                         isSavingSettings = false
                                         if (res.isSuccess) {
                                             serverSettings = updated
-                                            Toast.makeText(context, "age 加密策略配置已持久化保存！", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(context, if (strings == AppStringsEn) "age encryption settings saved!" else "age 加密策略配置已持久化保存！", Toast.LENGTH_SHORT).show()
                                         } else {
                                             Toast.makeText(context, "保存失败: ${res.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
                                         }
@@ -668,7 +671,7 @@ fun ServerSystemScreen(
                                 } else {
                                     Icon(Icons.Rounded.Lock, contentDescription = null, modifier = Modifier.size(16.dp))
                                     Spacer(Modifier.width(6.dp))
-                                    Text("保存 age 加密策略")
+                                    Text(strings.saveAgePolicy)
                                 }
                             }
                         }
@@ -707,7 +710,7 @@ fun ServerSystemScreen(
                                         modifier = Modifier.size(22.dp)
                                     )
                                     Text(
-                                        text = "免密订阅令牌 (SubToken)",
+                                        text = strings.subTokenTitle,
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.onSurface
@@ -716,7 +719,7 @@ fun ServerSystemScreen(
                             }
 
                             Text(
-                                text = "专属 16 位安全令牌可隔离管理面板路径与密码，供 Clash、sing-box 等外部客户端免认证静默拉取订阅，探测扫描直接返回 404。",
+                                text = strings.subTokenDesc,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -756,7 +759,7 @@ fun ServerSystemScreen(
                                 ) {
                                     Icon(Icons.Rounded.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
                                     Spacer(Modifier.width(6.dp))
-                                    Text("重置令牌")
+                                    Text(strings.resetToken)
                                 }
 
                                 Button(
@@ -769,7 +772,7 @@ fun ServerSystemScreen(
                                             isSavingSettings = false
                                             if (res.isSuccess) {
                                                 serverSettings = updated
-                                                Toast.makeText(context, "SubToken 已更新并生效！", Toast.LENGTH_SHORT).show()
+                                                Toast.makeText(context, if (strings == AppStringsEn) "SubToken saved!" else "SubToken 已更新并生效！", Toast.LENGTH_SHORT).show()
                                             } else {
                                                 Toast.makeText(context, "保存失败: ${res.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
                                             }
@@ -778,7 +781,7 @@ fun ServerSystemScreen(
                                     shape = RoundedCornerShape(12.dp),
                                     modifier = Modifier.weight(1f)
                                 ) {
-                                    Text("保存令牌")
+                                    Text(strings.saveToken)
                                 }
                             }
                         }
@@ -817,7 +820,7 @@ fun ServerSystemScreen(
                                         modifier = Modifier.size(22.dp)
                                     )
                                     Text(
-                                        text = "Telegram 异常通报与告警",
+                                        text = strings.telegramAlertsTitle,
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.onSurface
@@ -826,7 +829,7 @@ fun ServerSystemScreen(
                             }
 
                             Text(
-                                text = "当 VPS 网关出现物理断流、假死触发 Failover 故障转移换线、或节点池全量拉取异常时，远端通过 Telegram 机器人实时推流通报。",
+                                text = strings.telegramDesc,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -879,7 +882,7 @@ fun ServerSystemScreen(
                                     } else {
                                         Icon(Icons.AutoMirrored.Rounded.Send, contentDescription = null, modifier = Modifier.size(16.dp))
                                         Spacer(Modifier.width(6.dp))
-                                        Text("测试推送")
+                                        Text(strings.testAlert)
                                     }
                                 }
 
@@ -896,7 +899,7 @@ fun ServerSystemScreen(
                                             isSavingSettings = false
                                             if (res.isSuccess) {
                                                 serverSettings = updated
-                                                Toast.makeText(context, "Telegram 配置已保存", Toast.LENGTH_SHORT).show()
+                                                Toast.makeText(context, if (strings == AppStringsEn) "Telegram config saved!" else "Telegram 配置已保存", Toast.LENGTH_SHORT).show()
                                             } else {
                                                 Toast.makeText(context, "保存失败: ${res.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
                                             }
@@ -905,7 +908,7 @@ fun ServerSystemScreen(
                                     shape = RoundedCornerShape(12.dp),
                                     modifier = Modifier.weight(1f)
                                 ) {
-                                    Text("保存通知配置")
+                                    Text(strings.saveTelegramConfig)
                                 }
                             }
                         }
@@ -939,7 +942,7 @@ fun ServerSystemScreen(
                                     modifier = Modifier.size(22.dp)
                                 )
                                 Text(
-                                    text = "网关运维与自愈工具箱",
+                                    text = strings.maintenanceToolkit,
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSurface
@@ -949,7 +952,7 @@ fun ServerSystemScreen(
                             ConnectedButtonGroup(
                                 items = listOf(
                                     ConnectedButtonItem(
-                                        text = if (isRefreshingPool) "刷新中..." else "刷新节点源",
+                                        text = if (isRefreshingPool) "..." else strings.refreshMirror,
                                         style = ConnectedButtonStyle.Tonal,
                                         icon = Icons.Rounded.Refresh,
                                         onClick = {
@@ -958,7 +961,7 @@ fun ServerSystemScreen(
                                                 val res = NXGateApplication.instance.apiClient.refreshPool(activeServer)
                                                 isRefreshingPool = false
                                                 if (res.isSuccess) {
-                                                    Toast.makeText(context, "已触发服务端全量镜像拉取任务！", Toast.LENGTH_SHORT).show()
+                                                    Toast.makeText(context, if (strings == AppStringsEn) "Triggered mirror refresh task" else "已触发服务端全量镜像拉取任务！", Toast.LENGTH_SHORT).show()
                                                 } else {
                                                     Toast.makeText(context, "触发失败: ${res.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
                                                 }
@@ -966,7 +969,7 @@ fun ServerSystemScreen(
                                         }
                                     ),
                                     ConnectedButtonItem(
-                                        text = if (isResurrecting) "探活中..." else "影子协议探活",
+                                        text = if (isResurrecting) "..." else strings.shadowProbe,
                                         style = ConnectedButtonStyle.Tonal,
                                         icon = Icons.Rounded.Sync,
                                         onClick = {
@@ -975,7 +978,7 @@ fun ServerSystemScreen(
                                                 val res = NXGateApplication.instance.apiClient.resurrectBlacklist(activeServer)
                                                 isResurrecting = false
                                                 if (res.isSuccess) {
-                                                    Toast.makeText(context, "已触发对屏蔽隔离节点的深度 OpenVPN/TLS 影子探活！", Toast.LENGTH_SHORT).show()
+                                                    Toast.makeText(context, if (strings == AppStringsEn) "Triggered shadow probing for blocked nodes" else "已触发对屏蔽隔离节点的深度 OpenVPN/TLS 影子探活！", Toast.LENGTH_SHORT).show()
                                                 } else {
                                                     Toast.makeText(context, "探活失败: ${res.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
                                                 }
@@ -983,13 +986,13 @@ fun ServerSystemScreen(
                                         }
                                     ),
                                     ConnectedButtonItem(
-                                        text = "清空硬屏蔽",
+                                        text = strings.clearBlacklist,
                                         style = ConnectedButtonStyle.Outlined,
                                         icon = Icons.Rounded.DeleteSweep,
                                         onClick = { showClearBlacklistDialog = true }
                                     ),
                                     ConnectedButtonItem(
-                                        text = "实时日志",
+                                        text = strings.liveLogs,
                                         style = ConnectedButtonStyle.Filled,
                                         icon = Icons.AutoMirrored.Rounded.Article,
                                         onClick = {

@@ -3,4 +3,8 @@
     <string name="app_name">NXGate</string>
     <string name="widget_name">NXGate 网关状态</string>
     <string name="widget_description">实时查看当前出海网关出口、网速与一键换线</string>
+    <string name="channel_alerts_name">NXGate 故障告警与换线</string>
+    <string name="channel_alerts_desc">当远端网关发生断流、自动故障转移或节点异常时发出紧急通报</string>
+    <string name="channel_status_name">NXGate 网关状态</string>
+    <string name="channel_status_desc">常规状态通报与快捷换线操作反馈</string>
 </resources>

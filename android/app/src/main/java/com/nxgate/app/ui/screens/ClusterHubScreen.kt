@@ -51,6 +51,7 @@ import com.nxgate.app.ui.components.ConnectedButtonItem
 import com.nxgate.app.ui.components.ConnectedButtonGroup
 import com.nxgate.app.ui.components.ConnectedButtonStyle
 import com.nxgate.app.ui.components.SubscriptionDialog
+import com.nxgate.app.util.LocalAppStrings
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -68,6 +69,7 @@ fun ClusterHubScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val strings = LocalAppStrings.current
     val clipboardManager = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
     val scrollState = rememberScrollState()
@@ -82,7 +84,7 @@ fun ClusterHubScreen(
             TopAppBar(
                 title = {
                     Text(
-                        text = "VPN 集群监控",
+                        text = strings.clusterMonitor,
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -95,7 +97,7 @@ fun ClusterHubScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Rounded.Settings,
-                            contentDescription = "配置与安全设置",
+                            contentDescription = strings.settingsTitle,
                             tint = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.size(24.dp)
                         )
@@ -117,7 +119,7 @@ fun ClusterHubScreen(
             ) {
                 Icon(
                     imageVector = Icons.Rounded.Add,
-                    contentDescription = "添加新服务器",
+                    contentDescription = strings.addServer,
                     modifier = Modifier.size(24.dp)
                 )
             }
@@ -157,14 +159,14 @@ fun ClusterHubScreen(
                         verticalArrangement = Arrangement.Center
                     ) {
                         Text(
-                            text = "集群全局汇总",
+                            text = strings.clusterSummary,
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onPrimaryContainer
                         )
                         Spacer(Modifier.height(8.dp))
                         Text(
-                            text = "纳管主机：${servers.size} 台在线 / ${servers.count { !it.isOnline }} 台离线\n实时吞吐：下行 ${summary.downSpeedStr}，上行 ${summary.upSpeedStr}\n今日总流量：${summary.todayTrafficStr}",
+                            text = "${strings.managedHosts}: ${servers.size} ${strings.hostsOnline} / ${servers.count { !it.isOnline }} ${strings.hostsOffline}\n${strings.liveThroughput}: ${strings.downSpeed} ${summary.downSpeedStr}, ${strings.upSpeed} ${summary.upSpeedStr}\n${strings.todayTraffic}: ${summary.todayTrafficStr}",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.9f),
                             lineHeight = MaterialTheme.typography.bodyMedium.lineHeight * 1.35f
@@ -180,7 +182,7 @@ fun ClusterHubScreen(
                         color = MaterialTheme.colorScheme.surfaceContainerLow
                     ) {
                         Text(
-                            text = "当前暂未纳管任何服务器，请点击右下角按钮或右上角扫码添加 VPS。",
+                            text = strings.noServers,
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(16.dp)
@@ -210,16 +212,16 @@ fun ClusterHubScreen(
                                 verticalArrangement = Arrangement.Center
                             ) {
                                 Text(
-                                    text = "${server.name} ${if (server.isOnline && server.latencyMs > 0) "在线 (${server.latencyMs}ms)" else "待测/离线"}",
+                                    text = "${server.name} ${if (server.isOnline && server.latencyMs > 0) "${strings.online} (${server.latencyMs}ms)" else "${strings.offline}"}",
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Spacer(Modifier.height(8.dp))
-                                val exitText = if (server.exitIp.isNotEmpty()) "${server.exitIp} ${server.ipType}" else "待测/未就绪"
-                                val unlockText = if (server.unlockStatus.isNotEmpty()) server.unlockStatus else "待探测"
+                                val exitText = if (server.exitIp.isNotEmpty()) "${server.exitIp} ${server.ipType}" else strings.unknown
+                                val unlockText = if (server.unlockStatus.isNotEmpty()) server.unlockStatus else "-"
                                 Text(
-                                    text = "物理出口：$exitText\n智能解锁：$unlockText\n下行 ${server.downSpeedStr}，总计 ${server.totalTrafficStr}，活跃连接 ${server.activeConns}",
+                                    text = "${strings.physicalExit}: $exitText\n${strings.aiUnlock}: $unlockText\n${strings.downSpeed} ${server.downSpeedStr}, ${strings.totalTraffic} ${server.totalTrafficStr}, ${strings.activeConns} ${server.activeConns}",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurface,
                                     lineHeight = MaterialTheme.typography.bodyMedium.lineHeight * 1.35f
@@ -231,7 +233,7 @@ fun ClusterHubScreen(
                         ConnectedButtonGroup(
                             items = listOf(
                                 ConnectedButtonItem(
-                                    text = "一键换线",
+                                    text = strings.quickRotate,
                                     style = ConnectedButtonStyle.Tonal,
                                     onClick = {
                                         scope.launch {
@@ -245,14 +247,14 @@ fun ClusterHubScreen(
                                     }
                                 ),
                                 ConnectedButtonItem(
-                                    text = "获取订阅",
+                                    text = strings.getSub,
                                     style = ConnectedButtonStyle.Tonal,
                                     onClick = {
                                         subscriptionServerTarget = server
                                     }
                                 ),
                                 ConnectedButtonItem(
-                                    text = "控制台",
+                                    text = strings.console,
                                     style = ConnectedButtonStyle.Filled,
                                     onClick = { onSelectServerAndOpenConsole(server) }
                                 )

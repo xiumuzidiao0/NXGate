@@ -26,19 +26,19 @@ object NotificationHelper {
 
             val alertChannel = NotificationChannel(
                 CHANNEL_ALERTS,
-                "NXGate 故障告警与换线",
+                context.getString(R.string.channel_alerts_name),
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "当远端网关发生断流、自动故障转移或节点异常时发出紧急通报"
+                description = context.getString(R.string.channel_alerts_desc)
                 enableVibration(true)
             }
 
             val statusChannel = NotificationChannel(
                 CHANNEL_STATUS,
-                "NXGate 网关状态",
+                context.getString(R.string.channel_status_name),
                 NotificationManager.IMPORTANCE_DEFAULT
             ).apply {
-                description = "常规状态通报与快捷换线操作反馈"
+                description = context.getString(R.string.channel_status_desc)
             }
 
             notificationManager.createNotificationChannel(alertChannel)

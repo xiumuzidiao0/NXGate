@@ -78,6 +78,8 @@ import com.nxgate.app.ui.components.GlobalServerSwitcherTitle
 import com.nxgate.app.ui.components.TrafficStatsCard
 import com.nxgate.app.ui.components.UnlockPill
 import com.nxgate.app.ui.components.countryFlag
+import com.nxgate.app.util.AppStringsEn
+import com.nxgate.app.util.LocalAppStrings
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -216,6 +218,7 @@ fun ServerConsoleScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val strings = LocalAppStrings.current
     val scope = rememberCoroutineScope()
     val scrollState = rememberScrollState()
 
@@ -423,7 +426,7 @@ fun ServerConsoleScreen(
                                 modifier = Modifier.size(16.dp)
                             )
                             Text(
-                                text = "正在尝试恢复与网关的实时事件推送...",
+                                text = strings.sseReconnecting,
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -452,13 +455,17 @@ fun ServerConsoleScreen(
                             Spacer(Modifier.width(12.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "HTTP 未加密传输提醒",
+                                    text = strings.cleartextAlertTitle,
                                     style = MaterialTheme.typography.titleSmall,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onErrorContainer
                                 )
                                 Text(
-                                    text = "当前服务器 [${activeServer.name}] (${activeServer.host}:${activeServer.port}) 使用 HTTP 协议连接，未启用 HTTPS 安全加密，在公共 WiFi 或非受信任网络中管理可能存在被窃听风险。建议配置 HTTPS。",
+                                    text = if (strings == AppStringsEn) {
+                                        "Current server [${activeServer.name}] (${activeServer.host}:${activeServer.port}) uses unencrypted HTTP. Manage with caution on public networks."
+                                    } else {
+                                        "当前服务器 [${activeServer.name}] (${activeServer.host}:${activeServer.port}) 使用 HTTP 协议连接，未启用 HTTPS 安全加密，在公共 WiFi 或非受信任网络中管理可能存在被窃听风险。建议配置 HTTPS。"
+                                    },
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.9f)
                                 )
@@ -527,7 +534,7 @@ fun ServerConsoleScreen(
                                     verticalArrangement = Arrangement.Center
                                 ) {
                                     Text(
-                                        text = "系统主出口网关 (tun0)",
+                                        text = strings.primaryGateway,
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.onSurface
@@ -547,7 +554,7 @@ fun ServerConsoleScreen(
                             ConnectedButtonGroup(
                                 items = listOf(
                                     ConnectedButtonItem(
-                                        text = "切换主出口",
+                                        text = strings.quickRotate,
                                         style = ConnectedButtonStyle.Filled,
                                         onClick = {
                                             if (activeServer != null) {
@@ -694,7 +701,7 @@ fun ServerConsoleScreen(
                     ConnectedButtonGroup(
                         items = listOf(
                             ConnectedButtonItem(
-                                text = "切换主出口",
+                                text = strings.quickRotate,
                                 style = ConnectedButtonStyle.Filled,
                                 onClick = {
                                     if (activeServer != null) {

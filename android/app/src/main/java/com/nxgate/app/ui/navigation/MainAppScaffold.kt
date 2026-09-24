@@ -54,20 +54,30 @@ import com.nxgate.app.ui.screens.RoutingMatrixScreen
 import com.nxgate.app.ui.screens.ServerConsoleScreen
 import com.nxgate.app.ui.screens.ServerSystemScreen
 import com.nxgate.app.ui.screens.SettingsSecurityScreen
+import com.nxgate.app.util.AppStrings
+import com.nxgate.app.util.LocalAppStrings
 
 enum class AppNavDestination(
-    val title: String,
     val icon: ImageVector
 ) {
-    Dashboard("概览", Icons.Rounded.Dashboard),
-    Monitoring("监控", Icons.Rounded.ShowChart),
-    Routing("调度", Icons.Rounded.AltRoute),
-    Nodes("节点", Icons.Rounded.Public),
-    System("系统", Icons.Rounded.Tune)
+    Dashboard(Icons.Rounded.Dashboard),
+    Monitoring(Icons.Rounded.ShowChart),
+    Routing(Icons.Rounded.AltRoute),
+    Nodes(Icons.Rounded.Public),
+    System(Icons.Rounded.Tune);
+
+    fun displayTitle(strings: AppStrings): String = when (this) {
+        Dashboard -> strings.navDashboard
+        Monitoring -> strings.navMonitoring
+        Routing -> strings.navRouting
+        Nodes -> strings.navNodes
+        System -> strings.navSystem
+    }
 }
 
 @Composable
 fun MainAppScaffold() {
+    val strings = LocalAppStrings.current
     val serverStore = NXGateApplication.instance.serverStore
     val servers by serverStore.servers.collectAsState()
     val activeServer by serverStore.activeServer.collectAsState()
@@ -143,13 +153,13 @@ fun MainAppScaffold() {
                             icon = {
                                 Icon(
                                     imageVector = destination.icon,
-                                    contentDescription = destination.title,
+                                    contentDescription = destination.displayTitle(strings),
                                     modifier = Modifier.size(24.dp)
                                 )
                             },
                             label = {
                                 Text(
-                                    text = destination.title,
+                                    text = destination.displayTitle(strings),
                                     style = MaterialTheme.typography.labelMedium
                                 )
                             },
@@ -188,13 +198,13 @@ fun MainAppScaffold() {
                             icon = {
                                 Icon(
                                     imageVector = destination.icon,
-                                    contentDescription = destination.title,
+                                    contentDescription = destination.displayTitle(strings),
                                     modifier = Modifier.size(24.dp)
                                 )
                             },
                             label = {
                                 Text(
-                                    text = destination.title,
+                                    text = destination.displayTitle(strings),
                                     style = MaterialTheme.typography.labelMedium
                                 )
                             },

@@ -36,11 +36,250 @@
         let cachedUnlockMap = {};
         let activeQuickFilter = 'all';
 
+        const I18N = {
+            zh: {
+                'brand.sub': '边缘多出口网关',
+                'nav.dashboard': '运行概览',
+                'nav.singbox': '边缘入站',
+                'nav.matrix': '多端口分流',
+                'nav.nodes': '节点广场',
+                'nav.settings': '系统设置',
+                'nav.local_exit': '本地出口',
+                'nav.collapse': '收起侧栏',
+                'nav.expand': '展开侧栏',
+                'header.mobile_app': '手机 App 绑定',
+                'header.quick_connect': '智能连接最优节点',
+                'header.disconnect': '断开连接',
+                'header.checking': '检查中',
+                'header.connected': '已连通就绪',
+                'header.connecting': '正在连接中...',
+                'header.disconnected': '未连接',
+                'title.dashboard': '运行概览',
+                'title.singbox': '边缘抗封锁入站 (sing-box)',
+                'title.matrix': '多端口代理与自适应分流矩阵',
+                'title.nodes': '优质 VPN 节点列表',
+                'title.settings': '系统与安全参数设置',
+                'stat.down_speed': '实时下载速率',
+                'stat.up_speed': '实时上传速率',
+                'stat.active_conns': '活跃代理连接',
+                'stat.total_down': '总计下载: ',
+                'stat.total_up': '总计上传: ',
+                'stat.proxy_port': '默认端口: ',
+                'stat.candidates': '出海候选节点',
+                'stat.active_tunnels': '已拉起隧道网卡',
+                'dash.primary_status': '主隧道连接状态',
+                'dash.tunnels_matrix': '物理隧道多网卡矩阵',
+                'dash.traffic_waveform': '实时网络吞吐波形',
+                'dash.tx': '上行 (TX)',
+                'dash.rx': '下行 (RX)',
+                'dash.dev_zero': '设备：主网卡零号，策略表一百',
+                'dash.no_tunnels': '当前未拉起独立并发网卡，所有多端口与边缘协议均汇聚至系统主网关 tun0 出海。',
+                'sb.title': '边缘协议入站矩阵 (sing-box)',
+                'sb.sub': '纳管边缘 sing-box 原生 22 种抗封锁协议入站，并将流量无缝链式调度至住宅出海隧道。',
+                'sb.add_btn': '添加边缘协议入站',
+                'sb.clash_sub': 'Clash 订阅',
+                'sb.generic_sub': '通用订阅',
+                'sb.age_helper': '端到端 age 加密',
+                'matrix.ports_tab': '多端口代理规则',
+                'matrix.groups_tab': '自适应动态隧道组',
+                'matrix.add_port': '添加端口规则',
+                'matrix.add_group': '添加自适应组',
+                'matrix.evaluate': '立即评估换线',
+                'nodes.title': '节点广场与探活过滤',
+                'nodes.refresh_feed': '刷新节点镜像',
+                'nodes.resurrect': '探活复活',
+                'nodes.blacklist_btn': '已屏蔽库',
+                'nodes.search_ph': '搜索 IP、国家、省份、城市或运营商...',
+                'nodes.filter_all': '全部节点',
+                'nodes.filter_fav': '我的收藏',
+                'nodes.filter_jp': '日本节点',
+                'nodes.filter_us': '美国节点',
+                'nodes.filter_res': '原生住宅宽带',
+                'nodes.filter_ai': '三大AI全通',
+                'nodes.country_all': '全部国家/地区',
+                'nodes.iptype_all': '全部网络类型',
+                'nodes.iptype_res': '原生住宅宽带 (家宽)',
+                'nodes.iptype_host': '机房/数据中心 IP',
+                'nodes.sort_default': '默认推荐排序',
+                'nodes.sort_latency': '按测速延迟 (从低到高)',
+                'nodes.sort_speed': '按节点带宽 (从大到小)',
+                'nodes.sort_score': '按综合评分 (从高到低)',
+                'set.tab_base': '基础与网络',
+                'set.tab_tg': 'Telegram 告警',
+                'set.tab_app': '移动端连接',
+                'set.tab_update': '系统更新',
+                'set.lang': '界面语言 / Language',
+                'set.save_btn': '保存全部设置'
+            },
+            en: {
+                'brand.sub': 'Multi-Egress Edge Gateway',
+                'nav.dashboard': 'Dashboard',
+                'nav.singbox': 'Edge Ingress',
+                'nav.matrix': 'Port Matrix',
+                'nav.nodes': 'Node Square',
+                'nav.settings': 'Settings',
+                'nav.local_exit': 'Local Exit',
+                'nav.collapse': 'Collapse Sidebar',
+                'nav.expand': 'Expand Sidebar',
+                'header.mobile_app': 'Mobile App Pairing',
+                'header.quick_connect': 'Connect Optimal Node',
+                'header.disconnect': 'Disconnect',
+                'header.checking': 'Checking',
+                'header.connected': 'Connected & Ready',
+                'header.connecting': 'Connecting...',
+                'header.disconnected': 'Disconnected',
+                'title.dashboard': 'Dashboard Overview',
+                'title.singbox': 'Edge Anti-Censorship Ingress (sing-box)',
+                'title.matrix': 'Multi-Port Proxy & Routing Matrix',
+                'title.nodes': 'VPN Node Square',
+                'title.settings': 'System & Security Settings',
+                'stat.down_speed': 'Download Speed',
+                'stat.up_speed': 'Upload Speed',
+                'stat.active_conns': 'Active Connections',
+                'stat.total_down': 'Total Down: ',
+                'stat.total_up': 'Total Up: ',
+                'stat.proxy_port': 'Default Port: ',
+                'stat.candidates': 'Egress Candidates',
+                'stat.active_tunnels': 'Active Tunnels',
+                'dash.primary_status': 'Primary Tunnel Status',
+                'dash.tunnels_matrix': 'Tunnel Interface Matrix',
+                'dash.traffic_waveform': 'Real-time Traffic Waveform',
+                'dash.tx': 'Upload (TX)',
+                'dash.rx': 'Download (RX)',
+                'dash.dev_zero': 'Device: Primary tun0, Table 100',
+                'dash.no_tunnels': 'No independent concurrent interfaces started. All multi-port and edge inbounds are aggregated to primary tun0.',
+                'sb.title': 'Edge Inbound Protocols (sing-box)',
+                'sb.sub': 'Manage sing-box native 22 anti-censorship protocols and chain traffic into residential exit tunnels.',
+                'sb.add_btn': 'Add Inbound Protocol',
+                'sb.clash_sub': 'Clash Sub',
+                'sb.generic_sub': 'Universal Sub',
+                'sb.age_helper': 'age Encryption',
+                'matrix.ports_tab': 'Port Routing Rules',
+                'matrix.groups_tab': 'Adaptive Dynamic Groups',
+                'matrix.add_port': 'Add Port Rule',
+                'matrix.add_group': 'Add Dynamic Group',
+                'matrix.evaluate': 'Evaluate & Rotate',
+                'nodes.title': 'Node Square & Health Probing',
+                'nodes.refresh_feed': 'Refresh Mirror',
+                'nodes.resurrect': 'Probe & Resurrect',
+                'nodes.blacklist_btn': 'Blacklisted Nodes',
+                'nodes.search_ph': 'Search IP, country, region, city, ISP...',
+                'nodes.filter_all': 'All Nodes',
+                'nodes.filter_fav': 'Favorites',
+                'nodes.filter_jp': 'Japan',
+                'nodes.filter_us': 'United States',
+                'nodes.filter_res': 'Residential',
+                'nodes.filter_ai': 'Triple AI',
+                'nodes.country_all': 'All Countries / Regions',
+                'nodes.iptype_all': 'All Network Types',
+                'nodes.iptype_res': 'Residential Broadband',
+                'nodes.iptype_host': 'Datacenter / Hosting IP',
+                'nodes.sort_default': 'Default Recommendation',
+                'nodes.sort_latency': 'Latency (Low to High)',
+                'nodes.sort_speed': 'Bandwidth (High to Low)',
+                'nodes.sort_score': 'Score (High to Low)',
+                'set.tab_base': 'General Settings',
+                'set.tab_tg': 'Telegram Alerts',
+                'set.tab_app': 'Mobile App',
+                'set.tab_update': 'System Update',
+                'set.lang': 'Language / 界面语言',
+                'set.save_btn': 'Save All Settings'
+            }
+        };
+
+        function getLanguage() {
+            try {
+                const saved = localStorage.getItem('nxgate_lang');
+                if (saved === 'en' || saved === 'zh') return saved;
+            } catch(e) {}
+            return 'zh';
+        }
+
+        function t(key, fallback) {
+            const lang = getLanguage();
+            if (I18N[lang] && I18N[lang][key] !== undefined) {
+                return I18N[lang][key];
+            }
+            if (I18N.zh && I18N.zh[key] !== undefined) {
+                return I18N.zh[key];
+            }
+            return fallback !== undefined ? fallback : key;
+        }
+
+        function applyLanguage(lang = getLanguage(), container = document) {
+            container.querySelectorAll('[data-i18n]').forEach(el => {
+                const text = t(el.dataset.i18n);
+                if (text) el.textContent = text;
+            });
+            container.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+                const text = t(el.dataset.i18nPlaceholder);
+                if (text) el.placeholder = text;
+            });
+            container.querySelectorAll('[data-i18n-title]').forEach(el => {
+                const text = t(el.dataset.i18nTitle);
+                if (text) el.title = text;
+            });
+            const langBtnText = document.getElementById('lang-btn-text');
+            if (langBtnText) {
+                langBtnText.textContent = lang === 'zh' ? 'English' : '中文';
+            }
+            const langSelect = document.getElementById('cfg-ui-lang');
+            if (langSelect) {
+                langSelect.value = lang;
+            }
+            document.documentElement.lang = (lang === 'zh' ? 'zh-CN' : 'en');
+        }
+
+        function toggleLanguage() {
+            const nextLang = getLanguage() === 'zh' ? 'en' : 'zh';
+            setLanguage(nextLang);
+        }
+
+        function onUiLanguageChanged(event) {
+            const newLang = event?.target?.value || 'zh';
+            setLanguage(newLang);
+        }
+
+        function setLanguage(lang) {
+            try {
+                localStorage.setItem('nxgate_lang', lang);
+            } catch(e) {}
+            applyLanguage(lang);
+            const hash = (window.location.hash || '#dashboard').replace(/^#/, '');
+            switchView(hash);
+            if (currentState) {
+                const traffic = currentState.traffic || {};
+                const downEl = document.getElementById('stat-total-down');
+                if (downEl) downEl.innerText = t('stat.total_down') + formatBytes(traffic.total_download_bytes || 0);
+                const upEl = document.getElementById('stat-total-up');
+                if (upEl) upEl.innerText = t('stat.total_up') + formatBytes(traffic.total_upload_bytes || 0);
+                const portEl = document.getElementById('stat-proxy-port');
+                if (portEl) portEl.innerText = `${t('stat.proxy_port')}${currentState.proxy_addr ? currentState.proxy_addr.split(':').pop() : '7928'}`;
+                const vpn = currentState.vpn || {};
+                const badge = document.getElementById('conn-badge');
+                if (badge) {
+                    if (vpn.status === 'connected') badge.innerHTML = `<span class="status-dot"></span> ${t('header.connected')}`;
+                    else if (vpn.status === 'connecting' || vpn.status === 'reconnecting') badge.innerHTML = `<span class="status-dot"></span> ${t('header.connecting')}`;
+                    else badge.innerHTML = `<span class="status-dot"></span> ${t('header.disconnected')}`;
+                }
+            }
+            if (allNodes.length > 0) renderNodes(allNodes);
+            if (singBoxOverview) renderSingBox(singBoxOverview);
+            showToast(lang === 'en' ? 'Language switched to English' : '已切换至简体中文');
+        }
+
         const countryNames = {
             JP: '日本', US: '美国', KR: '韩国', TW: '台湾', HK: '香港',
             SG: '新加坡', GB: '英国', DE: '德国', FR: '法国', CA: '加拿大',
             AU: '澳大利亚', VN: '越南', TH: '泰国', MY: '马来西亚', IN: '印度',
             RU: '俄罗斯', NL: '荷兰', BR: '巴西', PH: '菲律宾', ID: '印尼'
+        };
+
+        const countryNamesEn = {
+            JP: 'Japan', US: 'United States', KR: 'South Korea', TW: 'Taiwan', HK: 'Hong Kong',
+            SG: 'Singapore', GB: 'United Kingdom', DE: 'Germany', FR: 'France', CA: 'Canada',
+            AU: 'Australia', VN: 'Vietnam', TH: 'Thailand', MY: 'Malaysia', IN: 'India',
+            RU: 'Russia', NL: 'Netherlands', BR: 'Brazil', PH: 'Philippines', ID: 'Indonesia'
         };
 
         const flagSVGs = {
@@ -64,7 +303,13 @@
             return '<svg aria-hidden="true" class="flag-img flag-fallback" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="#64748b" fill="none"/><line x1="2" y1="12" x2="22" y2="12" stroke="#64748b"/></svg>';
         }
 
-        function getCountryName(code) { return countryNames[code] || code; }
+        function getCountryName(code) {
+            code = (code || '').toUpperCase();
+            if (getLanguage() === 'en') {
+                return countryNamesEn[code] || code;
+            }
+            return countryNames[code] || code;
+        }
 
         function escapeHtml(value) {
             return String(value ?? '').replace(/[&<>"']/g, c => ({
@@ -197,10 +442,10 @@
                 // Speed stats
                 document.getElementById('stat-down-speed').innerText = formatSpeed(traffic.download_speed_bps || 0);
                 document.getElementById('stat-up-speed').innerText = formatSpeed(traffic.upload_speed_bps || 0);
-                document.getElementById('stat-total-down').innerText = '总计下载: ' + formatBytes(traffic.total_download_bytes || 0);
-                document.getElementById('stat-total-up').innerText = '总计上传: ' + formatBytes(traffic.total_upload_bytes || 0);
+                document.getElementById('stat-total-down').innerText = t('stat.total_down') + formatBytes(traffic.total_download_bytes || 0);
+                document.getElementById('stat-total-up').innerText = t('stat.total_up') + formatBytes(traffic.total_upload_bytes || 0);
                 document.getElementById('stat-active-conns').innerText = traffic.active_connections || 0;
-                document.getElementById('stat-proxy-port').innerText = `默认端口: ${data.proxy_addr ? data.proxy_addr.split(':').pop() : '7928'}`;
+                document.getElementById('stat-proxy-port').innerText = `${t('stat.proxy_port')}${data.proxy_addr ? data.proxy_addr.split(':').pop() : '7928'}`;
 
                 // Status Badge & Buttons
                 const badge = document.getElementById('conn-badge');
@@ -209,30 +454,31 @@
 
                 badge.className = 'badge ' + (vpn.status || 'disconnected');
                 if (vpn.status === 'connected') {
-                    badge.innerHTML = '<span class="status-dot"></span> 已连通就绪';
+                    badge.innerHTML = `<span class="status-dot"></span> ${t('header.connected')}`;
                     btnConnect.classList.add('hidden');
                     btnDisconnect.classList.remove('hidden');
                 } else if (vpn.status === 'connecting' || vpn.status === 'reconnecting') {
-                    badge.innerHTML = '<span class="status-dot"></span> 正在连接中...';
+                    badge.innerHTML = `<span class="status-dot"></span> ${t('header.connecting')}`;
                     btnConnect.disabled = true;
                     btnDisconnect.classList.remove('hidden');
                 } else {
-                    badge.innerHTML = '<span class="status-dot"></span> 未连接';
+                    badge.innerHTML = `<span class="status-dot"></span> ${t('header.disconnected')}`;
                     btnConnect.classList.remove('hidden');
                     btnConnect.disabled = false;
                     btnDisconnect.classList.add('hidden');
                 }
 
                 // Info card
-                document.getElementById('vpn-status-text').innerText = vpn.status_text || vpn.status || '未连接';
+                const isEn = getLanguage() === 'en';
+                document.getElementById('vpn-status-text').innerText = vpn.status === 'connected' ? (isEn ? 'Connected' : '已连接') : (vpn.status_text || vpn.status || (isEn ? 'Disconnected' : '未连接'));
                 document.getElementById('vpn-node-ip').innerText = vpn.active_node ? `${vpn.active_node.ip}:${vpn.active_node.port}` : '-';
 
                 if (vpn.active_node) {
-                    let typeBadge = '<span class="badge badge-residential">住宅宽带</span>';
+                    let typeBadge = `<span class="badge badge-residential">${isEn ? 'Residential' : '住宅宽带'}</span>`;
                     if (vpn.active_node.ip_type === 'hosting') {
-                        typeBadge = '<span class="badge badge-hosting">机房网络</span>';
+                        typeBadge = `<span class="badge badge-hosting">${isEn ? 'Datacenter' : '机房网络'}</span>`;
                     } else if (vpn.active_node.ip_type === 'mobile') {
-                        typeBadge = '<span class="badge badge-mobile">移动网络</span>';
+                        typeBadge = `<span class="badge badge-mobile">${isEn ? 'Mobile' : '移动网络'}</span>`;
                     }
                     document.getElementById('vpn-node-type').innerHTML = `${typeBadge} ${escapeHtml(vpn.active_node.isp || '')}`;
                     const loc = [getCountryName(vpn.active_node.country_short), vpn.active_node.region, vpn.active_node.city].filter(Boolean).join(' · ');
@@ -245,7 +491,7 @@
                 }
 
                 document.getElementById('vpn-proxy-addr').innerText = data.proxy_addr ? `${data.proxy_addr} (HTTP/SOCKS5)` : '-';
-                document.getElementById('vpn-last-msg').innerText = vpn.last_message || '服务正常运行中';
+                document.getElementById('vpn-last-msg').innerText = vpn.last_message || (isEn ? 'Service running normally' : '服务正常运行中');
 
                 if (vpn.uptime_seconds > 0) {
                     const m = Math.floor(vpn.uptime_seconds / 60);
@@ -1619,18 +1865,27 @@
             }
 
             // 4. 更新顶部大标题
-            const titles = {
+            const isEn = getLanguage() === 'en';
+            const titlesZh = {
                 dashboard: '运行概览',
                 singbox: '边缘抗封锁入站 (sing-box)',
                 matrix: '多端口代理与自适应分流矩阵',
                 nodes: '优质 VPN 节点列表',
                 settings: '系统与安全参数设置'
             };
+            const titlesEn = {
+                dashboard: 'Dashboard Overview',
+                singbox: 'Edge Ingress (sing-box)',
+                matrix: 'Multi-Port Proxy & Routing Matrix',
+                nodes: 'VPN Node Square',
+                settings: 'System & Security Settings'
+            };
+            const titles = isEn ? titlesEn : titlesZh;
             const titleEl = document.getElementById('page-title');
             if (titleEl && titles[viewName]) {
                 titleEl.innerText = titles[viewName];
             }
-            document.title = `${titles[viewName] || '控制台'} · NXGate`;
+            document.title = `${titles[viewName] || (isEn ? 'Console' : '控制台')} · NXGate`;
 
             // 5. 同步浏览器 Hash 路由，便于后退/前进
             if (window.location.hash !== '#' + viewName) {
@@ -1717,7 +1972,8 @@
         function updateSidebarUI(isCollapsed) {
             const btn = document.getElementById('sidebar-collapse-btn');
             const hBtn = document.getElementById('btn-toggle-sidebar');
-            const tooltip = isCollapsed ? '展开侧边栏' : '收起侧边栏';
+            const isEn = getLanguage() === 'en';
+            const tooltip = isCollapsed ? (isEn ? 'Expand Sidebar' : '展开侧边栏') : (isEn ? 'Collapse Sidebar' : '收起侧边栏');
             if (btn) btn.setAttribute('title', tooltip);
             if (hBtn) hBtn.setAttribute('title', tooltip);
         }
@@ -2834,7 +3090,9 @@
             deriveAgePublicKey,
             copyAgePublicKey,
             applyAgePublicKey,
-            onAgeToggleChanged
+            onAgeToggleChanged,
+            toggleLanguage,
+            onUiLanguageChanged
         };
 
         function runDataAction(element, dataKey, event) {
@@ -2899,6 +3157,7 @@
         });
 
         window.onload = () => {
+            applyLanguage(getLanguage());
             enhanceInteractiveElements();
             new MutationObserver(mutations => {
                 mutations.forEach(mutation => {

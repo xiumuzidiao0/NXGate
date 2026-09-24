@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">NXGate</string>
+    <string name="widget_name">NXGate Gateway Status</string>
+    <string name="widget_description">Live view of egress gateway exit, speed, and one-tap failover</string>
+    <string name="channel_alerts_name">NXGate Alerts &amp; Failover</string>
+    <string name="channel_alerts_desc">Alerts when remote gateway suffers stream interruption or auto failover</string>
+    <string name="channel_status_name">NXGate Gateway Status</string>
+    <string name="channel_status_desc">General status notices and fast rotate feedback</string>
+</resources>

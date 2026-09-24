@@ -44,6 +44,7 @@ import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.QrCodeScanner
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Timer
+import androidx.compose.material.icons.rounded.Translate
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -101,6 +102,8 @@ import com.nxgate.app.ui.components.ConnectedButtonStyle
 import com.nxgate.app.ui.components.ConnectedChipGroup
 import com.nxgate.app.ui.components.ConnectedListItem
 import com.nxgate.app.ui.components.openSecuritySettings
+import com.nxgate.app.util.AppStringsEn
+import com.nxgate.app.util.LocalAppStrings
 import kotlinx.coroutines.launch
 import java.util.UUID
 
@@ -112,6 +115,7 @@ fun SettingsSecurityScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val strings = LocalAppStrings.current
     val haptic = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
     val scrollState = rememberScrollState()
@@ -142,6 +146,9 @@ fun SettingsSecurityScreen(
     var biometricEnabled by remember { mutableStateOf(NXGateApplication.instance.serverStore.biometricEnabled.value) }
     val biometricTimeout by NXGateApplication.instance.serverStore.biometricTimeoutSeconds.collectAsState()
     var showBiometricTimeoutDialog by remember { mutableStateOf(false) }
+
+    val appLanguage by NXGateApplication.instance.serverStore.appLanguage.collectAsState()
+    var showLanguageDialog by remember { mutableStateOf(false) }
     var cleartextWarningEnabled by remember { mutableStateOf(NXGateApplication.instance.serverStore.cleartextWarningEnabled.value) }
 
     // Server deletion confirmation target
@@ -583,12 +590,12 @@ fun SettingsSecurityScreen(
                             HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
                             // 安全偏好
-                            val landscapePrefCount = if (biometricEnabled) 3 else 2
+                            val landscapePrefCount = (if (biometricEnabled) 3 else 2) + 1
                             Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                                 ConnectedListItem(
                                     index = 0,
                                     total = landscapePrefCount,
-                                    headline = "生物识别安全锁",
+                                    headline = strings.biometricLock,
                                     supportingText = if (biometricEnabled) "后台等待 ${formatBiometricTimeoutShort(biometricTimeout)} 或冷启动时需要验证" else "冷启动与切回前台时无需验证",
                                     leadingIcon = Icons.Rounded.Fingerprint,
                                     trailingContent = {
@@ -608,7 +615,7 @@ fun SettingsSecurityScreen(
                                     ConnectedListItem(
                                         index = 1,
                                         total = landscapePrefCount,
-                                        headline = "后台锁定等待时间",
+                                        headline = strings.backgroundTimeout,
                                         supportingText = formatBiometricTimeout(biometricTimeout),
                                         leadingIcon = Icons.Rounded.Timer,
                                         trailingContent = {
@@ -626,8 +633,8 @@ fun SettingsSecurityScreen(
                                 ConnectedListItem(
                                     index = if (biometricEnabled) 2 else 1,
                                     total = landscapePrefCount,
-                                    headline = "HTTP 传输风险提醒",
-                                    supportingText = "检测到使用 HTTP 未加密连接时显示警告",
+                                    headline = strings.cleartextWarning,
+                                    supportingText = strings.cleartextWarningDesc,
                                     leadingIcon = Icons.Rounded.Warning,
                                     trailingContent = {
                                         Switch(
@@ -647,6 +654,31 @@ fun SettingsSecurityScreen(
                                         cleartextWarningEnabled = !cleartextWarningEnabled
                                         NXGateApplication.instance.serverStore.setCleartextWarningEnabled(cleartextWarningEnabled)
                                     }
+                                )
+
+                                ConnectedListItem(
+                                    index = if (biometricEnabled) 3 else 2,
+                                    total = landscapePrefCount,
+                                    headline = strings.appLanguageTitle,
+                                    supportingText = when (appLanguage) {
+                                        "en" -> strings.langEn
+                                        "zh" -> strings.langZh
+                                        else -> strings.langSystem
+                                    },
+                                    leadingIcon = Icons.Rounded.Translate,
+                                    trailingContent = {
+                                        Text(
+                                            text = when (appLanguage) {
+                                                "en" -> "EN"
+                                                "zh" -> "中文"
+                                                else -> "Auto"
+                                            },
+                                            style = MaterialTheme.typography.labelLarge,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    },
+                                    onClick = { showLanguageDialog = true }
                                 )
                             }
 
@@ -930,12 +962,12 @@ fun SettingsSecurityScreen(
                     }
 
                     // 5. 安全偏好列表
-                    val portraitPrefCount = if (biometricEnabled) 3 else 2
+                    val portraitPrefCount = (if (biometricEnabled) 3 else 2) + 1
                     Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                         ConnectedListItem(
                             index = 0,
                             total = portraitPrefCount,
-                            headline = "生物识别安全锁",
+                            headline = strings.biometricLock,
                             supportingText = if (biometricEnabled) "后台等待 ${formatBiometricTimeoutShort(biometricTimeout)} 或冷启动时需要验证" else "冷启动与切回前台时无需验证",
                             leadingIcon = Icons.Rounded.Fingerprint,
                             trailingContent = {
@@ -962,7 +994,7 @@ fun SettingsSecurityScreen(
                             ConnectedListItem(
                                 index = 1,
                                 total = portraitPrefCount,
-                                headline = "后台锁定等待时间",
+                                headline = strings.backgroundTimeout,
                                 supportingText = formatBiometricTimeout(biometricTimeout),
                                 leadingIcon = Icons.Rounded.Timer,
                                 trailingContent = {
@@ -980,8 +1012,8 @@ fun SettingsSecurityScreen(
                         ConnectedListItem(
                             index = if (biometricEnabled) 2 else 1,
                             total = portraitPrefCount,
-                            headline = "明文传输风险提醒",
-                            supportingText = "检测到未启用加密连接时显示警告",
+                            headline = strings.cleartextWarning,
+                            supportingText = strings.cleartextWarningDesc,
                             leadingIcon = Icons.Rounded.Warning,
                             trailingContent = {
                                 Switch(
@@ -1001,6 +1033,31 @@ fun SettingsSecurityScreen(
                                 cleartextWarningEnabled = !cleartextWarningEnabled
                                 NXGateApplication.instance.serverStore.setCleartextWarningEnabled(cleartextWarningEnabled)
                             }
+                        )
+
+                        ConnectedListItem(
+                            index = if (biometricEnabled) 3 else 2,
+                            total = portraitPrefCount,
+                            headline = strings.appLanguageTitle,
+                            supportingText = when (appLanguage) {
+                                "en" -> strings.langEn
+                                "zh" -> strings.langZh
+                                else -> strings.langSystem
+                            },
+                            leadingIcon = Icons.Rounded.Translate,
+                            trailingContent = {
+                                Text(
+                                    text = when (appLanguage) {
+                                        "en" -> "EN"
+                                        "zh" -> "中文"
+                                        else -> "Auto"
+                                    },
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            },
+                            onClick = { showLanguageDialog = true }
                         )
                     }
 
@@ -1075,6 +1132,91 @@ fun SettingsSecurityScreen(
                     } else {
                         Toast.makeText(context, "已扫码录入网关 [${profileToSave.name}]，但连通测试未通过: ${res.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
                     }
+                }
+            }
+        )
+    }
+
+    // Language Picker Dialog
+    if (showLanguageDialog) {
+        val langOptions = listOf(
+            "system" to strings.langSystem,
+            "zh" to strings.langZh,
+            "en" to strings.langEn
+        )
+        AlertDialog(
+            onDismissRequest = { showLanguageDialog = false },
+            shape = RoundedCornerShape(28.dp),
+            title = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Icon(
+                        Icons.Rounded.Translate,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Text(
+                        text = strings.appLanguageTitle,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = strings.appLanguageDesc,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    langOptions.forEach { (key, label) ->
+                        val isSelected = appLanguage == key
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    NXGateApplication.instance.serverStore.setAppLanguage(key)
+                                    showLanguageDialog = false
+                                }
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = label,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+                                )
+                                if (isSelected) {
+                                    Icon(
+                                        Icons.Rounded.Check,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showLanguageDialog = false }) {
+                    Text(strings.close)
                 }
             }
         )
