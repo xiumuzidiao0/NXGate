@@ -32,7 +32,7 @@ BIN_PATH="${INSTALL_DIR}/nxgate"
 CONFIG_FILE="${INSTALL_DIR}/config.env"
 SERVICE_FILE="/etc/systemd/system/nxgate.service"
 GITHUB_REPO="https://github.com/xiumuzidiao0/NXGate.git"
-DEFAULT_VERSION="2.5.9"
+DEFAULT_VERSION="2.5.9.1"
 REQUIRED_GO_VERSION="1.25.13"
 
 get_app_version() {

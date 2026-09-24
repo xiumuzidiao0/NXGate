@@ -109,7 +109,29 @@
                 'set.tab_app': '移动端连接',
                 'set.tab_update': '系统更新',
                 'set.lang': '界面语言 / Language',
-                'set.save_btn': '保存全部设置'
+                'set.save_btn': '保存全部设置',
+                'dash.conn_status': '连接状态',
+                'dash.node_ip': '活跃节点 IP',
+                'dash.node_type': '网络类型 / ISP',
+                'dash.node_country': '国家 / 城市地区',
+                'dash.local_proxy': '默认本地代理',
+                'dash.live_logs': '实时运行日志',
+                'dash.clear_logs': '清屏',
+                'nodes.probe_btn': '一键测速与解锁检测',
+                'nodes.filter_gpt': '解锁 ChatGPT',
+                'nodes.filter_claude': '解锁 Claude',
+                'nodes.filter_gemini': '解锁 Gemini',
+                'nodes.filter_host': '机房网络',
+                'nodes.filter_nf': '解锁 Netflix',
+                'th.favorite': '收藏',
+                'th.region': '国家 / 城市',
+                'th.endpoint': '出口端点',
+                'th.network_type': '网络类型 / ISP',
+                'th.latency': '延迟 / 可用性',
+                'th.reputation': '信誉',
+                'th.unlocks': 'AI / 流媒体解锁',
+                'th.speed': '带宽 / 评分',
+                'th.actions': '操作'
             },
             en: {
                 'brand.sub': 'Multi-Egress Gateway',
@@ -183,7 +205,29 @@
                 'set.tab_app': 'Mobile App',
                 'set.tab_update': 'System Update',
                 'set.lang': 'Language / 界面语言',
-                'set.save_btn': 'Save All Settings'
+                'set.save_btn': 'Save All Settings',
+                'dash.conn_status': 'Connection Status',
+                'dash.node_ip': 'Active Node IP',
+                'dash.node_type': 'Network Type / ISP',
+                'dash.node_country': 'Country / Region',
+                'dash.local_proxy': 'Local Proxy',
+                'dash.live_logs': 'Real-time System Logs',
+                'dash.clear_logs': 'Clear',
+                'nodes.probe_btn': 'Probe Speed & Unlocks',
+                'nodes.filter_gpt': 'ChatGPT OK',
+                'nodes.filter_claude': 'Claude OK',
+                'nodes.filter_gemini': 'Gemini OK',
+                'nodes.filter_host': 'Datacenter',
+                'nodes.filter_nf': 'Netflix OK',
+                'th.favorite': 'Fav',
+                'th.region': 'Region / City',
+                'th.endpoint': 'Endpoint',
+                'th.network_type': 'Type / ISP',
+                'th.latency': 'Latency / Health',
+                'th.reputation': 'Rep',
+                'th.unlocks': 'AI & Streaming Unlocks',
+                'th.speed': 'Bandwidth / Score',
+                'th.actions': 'Actions'
             }
         };
 
@@ -265,6 +309,9 @@
             }
             if (allNodes.length > 0) renderNodes(allNodes);
             if (singBoxOverview) renderSingBox(singBoxOverview);
+            if (currentDynamicGroups) renderDynamicGroups();
+            if (currentPortRules) renderPortRules();
+            if (currentState) fetchStatus();
             showToast(lang === 'en' ? 'Language switched to English' : '已切换至简体中文');
         }
 
@@ -354,24 +401,25 @@
 
         function renderUnlockBadges(u) {
             if (!u) return '<span  class="text-xs text-muted">-</span>';
+            const isEn = getLanguage() === 'en';
             const badges = [];
-            if (u.openai === 'unlocked') badges.push('<span class="badge unlock-badge unlock-open" title="OpenAI / ChatGPT 解锁正常">GPT 可用</span>');
-            else if (u.openai === 'blocked') badges.push('<span class="badge unlock-badge unlock-blocked" title="OpenAI 阻断拦截">GPT 阻断</span>');
+            if (u.openai === 'unlocked') badges.push(`<span class="badge unlock-badge unlock-open" title="${isEn ? 'OpenAI / ChatGPT Available' : 'OpenAI / ChatGPT 解锁正常'}">${isEn ? 'GPT OK' : 'GPT 可用'}</span>`);
+            else if (u.openai === 'blocked') badges.push(`<span class="badge unlock-badge unlock-blocked" title="${isEn ? 'OpenAI Blocked' : 'OpenAI 阻断拦截'}">${isEn ? 'GPT Block' : 'GPT 阻断'}</span>`);
 
-            if (u.claude === 'unlocked') badges.push('<span class="badge unlock-badge unlock-open" title="Claude / Anthropic 访问正常">Claude 可用</span>');
-            else if (u.claude === 'blocked') badges.push('<span class="badge unlock-badge unlock-blocked" title="Claude 风控拦截">Claude 阻断</span>');
+            if (u.claude === 'unlocked') badges.push(`<span class="badge unlock-badge unlock-open" title="${isEn ? 'Claude / Anthropic Available' : 'Claude / Anthropic 访问正常'}">${isEn ? 'Claude OK' : 'Claude 可用'}</span>`);
+            else if (u.claude === 'blocked') badges.push(`<span class="badge unlock-badge unlock-blocked" title="${isEn ? 'Claude Blocked' : 'Claude 风控拦截'}">${isEn ? 'Claude Block' : 'Claude 阻断'}</span>`);
 
-            if (u.gemini === 'unlocked') badges.push('<span class="badge unlock-badge unlock-open" title="Google Gemini 访问正常">Gemini 可用</span>');
-            else if (u.gemini === 'blocked') badges.push('<span class="badge unlock-badge unlock-blocked" title="Google Gemini 限制访问">Gemini 阻断</span>');
+            if (u.gemini === 'unlocked') badges.push(`<span class="badge unlock-badge unlock-open" title="${isEn ? 'Google Gemini Available' : 'Google Gemini 访问正常'}">${isEn ? 'Gemini OK' : 'Gemini 可用'}</span>`);
+            else if (u.gemini === 'blocked') badges.push(`<span class="badge unlock-badge unlock-blocked" title="${isEn ? 'Google Gemini Blocked' : 'Google Gemini 限制访问'}">${isEn ? 'Gemini Block' : 'Gemini 阻断'}</span>`);
 
-            if (u.netflix === 'unlocked') badges.push('<span class="badge unlock-badge unlock-warn" title="Netflix 原生流媒体解锁">NF 可用</span>');
-            else if (u.netflix === 'blocked') badges.push('<span class="badge unlock-badge unlock-blocked" title="Netflix 限制访问">NF 限制</span>');
+            if (u.netflix === 'unlocked') badges.push(`<span class="badge unlock-badge unlock-warn" title="${isEn ? 'Netflix Native Streaming Available' : 'Netflix 原生流媒体解锁'}">${isEn ? 'NF OK' : 'NF 可用'}</span>`);
+            else if (u.netflix === 'blocked') badges.push(`<span class="badge unlock-badge unlock-blocked" title="${isEn ? 'Netflix Restricted' : 'Netflix 限制访问'}">${isEn ? 'NF Restrict' : 'NF 限制'}</span>`);
 
-            if (u.google === 'unlocked') badges.push('<span class="badge unlock-badge text-accent" title="Google Search 干净无验证码">Google 可用</span>');
-            else if (u.google === 'blocked') badges.push('<span class="badge unlock-badge unlock-blocked" title="Google 出现验证码异常">Google 验证</span>');
+            if (u.google === 'unlocked') badges.push(`<span class="badge unlock-badge text-accent" title="${isEn ? 'Google Clean Search' : 'Google Search 干净无验证码'}">${isEn ? 'Google OK' : 'Google 可用'}</span>`);
+            else if (u.google === 'blocked') badges.push(`<span class="badge unlock-badge unlock-blocked" title="${isEn ? 'Google Captcha Required' : 'Google 出现验证码异常'}">${isEn ? 'Google Captcha' : 'Google 验证'}</span>`);
 
-            if (badges.length === 0) return '<span class="text-xs text-muted">未检测</span>';
-            const tag = u.is_probed ? '<span class="badge badge-system badge-mini" title="经虚拟网卡物理流量实测">实测</span> ' : '';
+            if (badges.length === 0) return `<span class="text-xs text-muted">${isEn ? 'Not Probed' : '未检测'}</span>`;
+            const tag = u.is_probed ? `<span class="badge badge-system badge-mini" title="${isEn ? 'Probed via virtual NIC' : '经虚拟网卡物理流量实测'}">${isEn ? 'Probed' : '实测'}</span> ` : '';
             return `<div class="unlock-badges">${tag}${badges.join('')}</div>`;
         }
 
@@ -496,14 +544,14 @@
                 if (vpn.uptime_seconds > 0) {
                     const m = Math.floor(vpn.uptime_seconds / 60);
                     const s = vpn.uptime_seconds % 60;
-                    document.getElementById('vpn-uptime').innerText = `已连接运行: ${m}分${s}秒`;
+                    document.getElementById('vpn-uptime').innerText = isEn ? `Uptime: ${m}m ${s}s` : `已连接运行: ${m}分${s}秒`;
                 } else {
-                    document.getElementById('vpn-uptime').innerText = '运行时间: -';
+                    document.getElementById('vpn-uptime').innerText = isEn ? 'Uptime: -' : '运行时间: -';
                 }
 
-                const totalStr = data.total_node_count && data.total_node_count > data.node_count ? ` (历史全库: ${data.total_node_count})` : '';
-                document.getElementById('stat-nodes-count').innerText = `${data.node_count || 0}${totalStr} / 屏蔽 ${data.blacklist_count || 0}`;
-                document.getElementById('stat-node-source').innerText = `数据源: ${data.node_source || '未知'}`;
+                const totalStr = data.total_node_count && data.total_node_count > data.node_count ? (isEn ? ` (All: ${data.total_node_count})` : ` (历史全库: ${data.total_node_count})`) : '';
+                document.getElementById('stat-nodes-count').innerText = `${data.node_count || 0}${totalStr} / ${isEn ? 'Blocked ' : '屏蔽 '}${data.blacklist_count || 0}`;
+                document.getElementById('stat-node-source').innerText = `${isEn ? 'Source: ' : '数据源: '}${data.node_source || (isEn ? 'Unknown' : '未知')}`;
 
                 // Render active tunnels strip sorted stably by virtual interface index (tun0, tun1, tun2...)
                 const tunnels = (data.tunnels || []).sort((a, b) => {
@@ -515,7 +563,7 @@
                 const tunListEl = document.getElementById('active-tunnels-list');
                 if (tunListEl) {
                     if (tunnels.length === 0) {
-                        tunListEl.innerHTML = '<div  class="empty-copy">暂无独立并发出口，在下方节点列表中点击「+并发」即可多节点同时在线</div>';
+                        tunListEl.innerHTML = `<div class="empty-copy">${isEn ? 'No secondary egress tunnels active. Click "+Tunnel" in node list to enable concurrent multi-egress.' : '暂无独立并发出口，在下方节点列表中点击「+并发」即可多节点同时在线'}</div>`;
                     } else {
                         tunListEl.innerHTML = tunnels.map(t => {
                             const cCode = t.node ? t.node.country_short : '';
@@ -525,15 +573,16 @@
                             const badgeClass = isUp ? 'connected' : (t.status === 'connecting' ? 'connecting' : 'disconnected');
                             const unlockBadges = renderUnlockBadges(t.unlock || (t.node ? cachedUnlockMap[t.node.ip] : null));
                             const pingStr = t.node && t.node.latency_ms > 0 ? `<span class="ping-ok">${t.node.latency_ms}ms</span>` : '';
+                            const statusStr = t.status === 'connected' ? (isEn ? 'Online' : '在线') : (t.status === 'connecting' ? (isEn ? 'Connecting' : '连接中') : (isEn ? 'Disconnected' : '断开'));
                             return `
                                 <div class="tunnel-chip">
-                                    <strong  class="mono text-accent">${escapeHtml(t.dev_name)}</strong>
-                                    <span class="badge ${badgeClass} badge-mini" ><span class="status-dot"></span> ${escapeHtml(t.status === 'connected' ? '在线' : t.status)}</span>
+                                    <strong class="mono text-accent">${escapeHtml(t.dev_name)}</strong>
+                                    <span class="badge ${badgeClass} badge-mini"><span class="status-dot"></span> ${escapeHtml(statusStr)}</span>
                                     <span class="flag-box text-note">${flag} ${escapeHtml(ip)}</span>
                                     ${pingStr}
                                     <div class="tunnel-flags">${unlockBadges}</div>
-                                    <button class="btn btn-outline btn-xs" data-action="probeTunnelUnlock" data-args="${jsonAttr([t.id])}" title="探测该出口的AI与流媒体解锁状态">测解锁</button>
-                                    <button class="btn btn-danger btn-xs" data-action="stopTunnel" data-args="${jsonAttr([t.id])}">断开</button>
+                                    <button class="btn btn-outline btn-xs" data-action="probeTunnelUnlock" data-args="${jsonAttr([t.id])}" title="${isEn ? 'Probe AI & streaming unlock status for this exit' : '探测该出口的AI与流媒体解锁状态'}">${isEn ? 'Unlock' : '测解锁'}</button>
+                                    <button class="btn btn-danger btn-xs" data-action="stopTunnel" data-args="${jsonAttr([t.id])}">${isEn ? 'Disconnect' : '断开'}</button>
                                 </div>
                             `;
                         }).join('');
@@ -679,10 +728,11 @@
                 return 0;
             });
 
-            document.getElementById('filtered-count').innerText = `已筛选出 ${filtered.length} / ${allNodes.length} 个节点`;
+            const isEn = getLanguage() === 'en';
+            document.getElementById('filtered-count').innerText = `${isEn ? 'Showing ' : '已筛选出 '}${filtered.length} / ${allNodes.length} ${isEn ? 'nodes' : '个节点'}`;
 
             if (filtered.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="9"  class="empty-state">未找到匹配条件的节点</td></tr>';
+                tbody.innerHTML = `<tr><td colspan="9" class="empty-state">${isEn ? 'No nodes match the selected criteria' : '未找到匹配条件的节点'}</td></tr>`;
                 return;
             }
 
@@ -692,20 +742,20 @@
 
                 let latencyBadge = '';
                 if (n.latency_ms > 0) {
-                    latencyBadge = `<span class="badge latency-badge latency-available"><span class="status-dot"></span> 可用 ${n.latency_ms} ms</span>`;
+                    latencyBadge = `<span class="badge latency-badge latency-available"><span class="status-dot"></span> ${isEn ? 'OK ' : '可用 '}${n.latency_ms} ms</span>`;
                 } else if (n.latency_ms === -1) {
-                    latencyBadge = `<span class="badge latency-badge latency-timeout"><span class="status-dot"></span> 超时不可达</span>`;
+                    latencyBadge = `<span class="badge latency-badge latency-timeout"><span class="status-dot"></span> ${isEn ? 'Timeout' : '超时不可达'}</span>`;
                 } else {
-                    latencyBadge = `<span class="badge latency-badge latency-unknown"><span class="status-dot"></span> 未测速</span>`;
+                    latencyBadge = `<span class="badge latency-badge latency-unknown"><span class="status-dot"></span> ${isEn ? 'Untested' : '未测速'}</span>`;
                 }
 
                 const speedMbps = (n.speed / 1000000).toFixed(1) + ' Mbps';
 
-                let typeTag = '<span class="badge badge-residential">住宅宽带</span>';
+                let typeTag = `<span class="badge badge-residential">${isEn ? 'Residential' : '住宅宽带'}</span>`;
                 if (n.ip_type === 'hosting') {
-                    typeTag = '<span class="badge badge-hosting">机房网络</span>';
+                    typeTag = `<span class="badge badge-hosting">${isEn ? 'Datacenter' : '机房网络'}</span>`;
                 } else if (n.ip_type === 'mobile') {
-                    typeTag = '<span class="badge badge-mobile">移动网络</span>';
+                    typeTag = `<span class="badge badge-mobile">${isEn ? 'Mobile' : '移动网络'}</span>`;
                 }
 
                 const ispInfo = n.isp ? `<div class="node-isp" title="${escapeHtml(n.isp)}">${escapeHtml(n.isp)}</div>` : '';
@@ -713,49 +763,49 @@
 
                 const repVal = n.reputation_score !== undefined ? n.reputation_score : 60;
                 const repClass = repVal < 45 ? 'rep-bad' : (repVal < 70 ? 'rep-warn' : 'rep-good');
-                const repBadge = `<span class="badge reputation-badge ${repClass}">${repVal}分</span>`;
+                const repBadge = `<span class="badge reputation-badge ${repClass}">${repVal}${isEn ? ' pts' : '分'}</span>`;
 
                 const unlockData = (cachedUnlockMap && cachedUnlockMap[n.ip]) || n.unlock;
-                const unlockInfo = unlockData ? renderUnlockBadges(unlockData) : '<span  class="text-xs text-muted">未检测</span>';
+                const unlockInfo = unlockData ? renderUnlockBadges(unlockData) : `<span class="text-xs text-muted">${isEn ? 'Not Probed' : '未检测'}</span>`;
 
                 return `
                     <tr class="${isCurrent ? 'node-row-current' : (activeTun ? 'node-row-active' : '')}">
-                        <td data-label=""  class="text-center">
-                            <button class="star-btn ${n.is_favorite ? 'active' : ''}" data-action="toggleFavorite" data-args="${jsonAttr([n.id])}" title="${n.is_favorite ? '取消收藏' : '加入收藏'}">
+                        <td data-label="" class="text-center">
+                            <button class="star-btn ${n.is_favorite ? 'active' : ''}" data-action="toggleFavorite" data-args="${jsonAttr([n.id])}" title="${n.is_favorite ? (isEn ? 'Remove from favorites' : '取消收藏') : (isEn ? 'Add to favorites' : '加入收藏')}">
                                 ${n.is_favorite ? '<svg viewBox="0 0 24 24" width="14" height="14" fill="#f59e0b" stroke="#f59e0b" stroke-width="1.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>' : '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#64748b" stroke-width="1.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>'}
                             </button>
                         </td>
-                        <td data-label="地区">
+                        <td data-label="${isEn ? 'Region' : '地区'}">
                             <div class="flag-box">
                                 ${getCountryFlagSVG(n.country_short)}
                                 <span>${escapeHtml(getCountryName(n.country_short))}</span>
                                 ${cityInfo}
                             </div>
                         </td>
-                        <td data-label="出口端点">
+                        <td data-label="${isEn ? 'Endpoint' : '出口端点'}">
                             <div class="node-endpoint">${escapeHtml(n.ip)}:${escapeHtml(n.port)}</div>
                             <span class="badge badge-proto">${escapeHtml(String(n.proto || '').toUpperCase())}</span>
                         </td>
-                        <td data-label="网络类型">${typeTag}${ispInfo}</td>
-                        <td data-label="延迟">${latencyBadge}</td>
-                        <td data-label="信誉">${repBadge}</td>
-                        <td data-label="解锁能力">${unlockInfo}</td>
-                        <td data-label="带宽">
+                        <td data-label="${isEn ? 'Type' : '网络类型'}">${typeTag}${ispInfo}</td>
+                        <td data-label="${isEn ? 'Latency' : '延迟'}">${latencyBadge}</td>
+                        <td data-label="${isEn ? 'Reputation' : '信誉'}">${repBadge}</td>
+                        <td data-label="${isEn ? 'Unlocks' : '解锁能力'}">${unlockInfo}</td>
+                        <td data-label="${isEn ? 'Bandwidth' : '带宽'}">
                             <div class="node-speed">${speedMbps}</div>
-                            <div  class="text-xs text-muted">评分: ${n.score}</div>
+                            <div class="text-xs text-muted">${isEn ? 'Score: ' : '评分: '}${n.score}</div>
                         </td>
-                        <td data-label="操作"  class="text-right">
+                        <td data-label="${isEn ? 'Actions' : '操作'}" class="text-right">
                             ${isCurrent ?
-                                '<span class="badge connected"><span class="status-dot"></span> 当前主连</span>' :
+                                `<span class="badge connected"><span class="status-dot"></span> ${isEn ? 'Primary' : '当前主连'}</span>` :
                                 (activeTun ?
                                     `<div class="action-group">
                                         <span class="badge badge-current"><span class="status-dot"></span> ${escapeHtml(activeTun.dev_name)}</span>
-                                        <button class="btn btn-danger btn-xs" data-action="stopTunnel" data-args="${jsonAttr([activeTun.id])}">断开</button>
+                                        <button class="btn btn-danger btn-xs" data-action="stopTunnel" data-args="${jsonAttr([activeTun.id])}">${isEn ? 'Disconnect' : '断开'}</button>
                                     </div>` :
                                     `<div class="action-group">
-                                        <button class="btn btn-xs" data-action="connectToNode" data-args="${jsonAttr([n.id])}" title="设置为主网关出口">主连</button>
-                                        <button class="btn btn-outline btn-xs" data-action="startNewTunnel" data-args="${jsonAttr([n.id])}" title="启动为新的独立并发出口">+并发</button>
-                                        <button class="btn btn-outline btn-xs btn-icon-danger" data-action="addNodeToBlacklist" data-args="${jsonAttr([n.id, n.ip, n.country_short])}" title="屏蔽/拉黑此节点24小时">×</button>
+                                        <button class="btn btn-xs" data-action="connectToNode" data-args="${jsonAttr([n.id])}" title="${isEn ? 'Set as primary gateway exit' : '设置为主网关出口'}">${isEn ? 'Primary' : '主连'}</button>
+                                        <button class="btn btn-outline btn-xs" data-action="startNewTunnel" data-args="${jsonAttr([n.id])}" title="${isEn ? 'Launch as new independent tunnel exit' : '启动为新的独立并发出口'}">${isEn ? '+Tunnel' : '+并发'}</button>
+                                        <button class="btn btn-outline btn-xs btn-icon-danger" data-action="addNodeToBlacklist" data-args="${jsonAttr([n.id, n.ip, n.country_short])}" title="${isEn ? 'Blacklist node for 24h' : '屏蔽/拉黑此节点24小时'}">×</button>
                                     </div>`
                                 )
                             }
@@ -1076,49 +1126,51 @@
         function renderDynamicGroups() {
             const container = document.getElementById('dynamic-groups-container');
             if (!container) return;
+            const isEn = getLanguage() === 'en';
             if (!currentDynamicGroups || currentDynamicGroups.length === 0) {
-                container.innerHTML = '<div class="list-empty">暂无动态出口组，点击右上角「+ 新建出口组」即可按规则自动维持出口</div>';
+                container.innerHTML = `<div class="list-empty">${isEn ? 'No dynamic exit groups. Click "+ Add Exit Group" to maintain exits automatically.' : '暂无动态出口组，点击右上角「+ 新建出口组」即可按规则自动维持出口'}</div>`;
                 return;
             }
 
             container.innerHTML = currentDynamicGroups.map(g => {
-                let metricText = '延迟最低优先';
-                if (g.sort_by === 'speed') metricText = '带宽最大优先';
-                if (g.sort_by === 'score') metricText = '评分最高优先';
+                let metricText = isEn ? 'Lowest Latency' : '延迟最低优先';
+                if (g.sort_by === 'speed') metricText = isEn ? 'Highest Bandwidth' : '带宽最大优先';
+                if (g.sort_by === 'score') metricText = isEn ? 'Highest Score' : '评分最高优先';
 
-                let ipTypeText = '全部网络类型';
-                if (g.ip_type === 'residential') ipTypeText = '住宅宽带 IP';
-                if (g.ip_type === 'hosting') ipTypeText = '机房 IP';
-                if (g.ip_type === 'mobile') ipTypeText = '移动网络';
+                let ipTypeText = isEn ? 'All Network Types' : '全部网络类型';
+                if (g.ip_type === 'residential') ipTypeText = isEn ? 'Residential Broadband' : '住宅宽带 IP';
+                if (g.ip_type === 'hosting') ipTypeText = isEn ? 'Datacenter IP' : '机房 IP';
+                if (g.ip_type === 'mobile') ipTypeText = isEn ? 'Mobile Network' : '移动网络';
 
                 let unlockText = '';
-                if (g.unlock_filter === 'ai') unlockText = '<span>解锁: <strong class="unlock-ai">三大 AI (GPT+Claude+Gemini)</strong></span>';
-                else if (g.unlock_filter === 'streaming') unlockText = '<span>解锁: <strong class="unlock-stream">仅流媒体</strong></span>';
-                else if (g.unlock_filter === 'full' || g.unlock_filter === 'all') unlockText = '<span>解锁: <strong class="unlock-full">全解锁 (三大 AI+流媒体)</strong></span>';
+                if (g.unlock_filter === 'ai') unlockText = `<span>${isEn ? 'Unlock: ' : '解锁: '}<strong class="unlock-ai">${isEn ? 'Triple AI (GPT+Claude+Gemini)' : '三大 AI (GPT+Claude+Gemini)'}</strong></span>`;
+                else if (g.unlock_filter === 'streaming') unlockText = `<span>${isEn ? 'Unlock: ' : '解锁: '}<strong class="unlock-stream">${isEn ? 'Streaming Only' : '仅流媒体'}</strong></span>`;
+                else if (g.unlock_filter === 'full' || g.unlock_filter === 'all') unlockText = `<span>${isEn ? 'Unlock: ' : '解锁: '}<strong class="unlock-full">${isEn ? 'Full Unlock (AI+Streaming)' : '全解锁 (三大 AI+流媒体)'}</strong></span>`;
 
                 const isSys = g.is_system || g.id === 'system-primary';
-                const sysBadge = isSys ? '<span class="badge badge-system">系统主连网关 (tun0)</span>' : `<span class="badge badge-accent">Top ${g.target_count} 隧道</span>`;
-                const deleteBtn = isSys ? '' : `<button class="btn btn-danger btn-xs" data-action="deleteDynamicGroup" data-args="${jsonAttr([g.id])}">删除</button>`;
-                const editLabel = isSys ? '配置主连策略' : '编辑';
+                const sysBadge = isSys ? `<span class="badge badge-system">${isEn ? 'Primary Gateway (tun0)' : '系统主连网关 (tun0)'}</span>` : `<span class="badge badge-accent">Top ${g.target_count} ${isEn ? 'Tunnels' : '隧道'}</span>`;
+                const deleteBtn = isSys ? '' : `<button class="btn btn-danger btn-xs" data-action="deleteDynamicGroup" data-args="${jsonAttr([g.id])}">${isEn ? 'Delete' : '删除'}</button>`;
+                const editLabel = isSys ? (isEn ? 'Configure Strategy' : '配置主连策略') : (isEn ? 'Edit' : '编辑');
 
-                const countryStr = g.country ? `${getCountryName(g.country)} (${g.country})` : '全部国家/地区';
+                const countryStr = g.country ? `${getCountryName(g.country)} (${g.country})` : (isEn ? 'All Countries / Regions' : '全部国家/地区');
                 const activeCount = (g.active_tunnel_ids || []).length;
                 const statusClass = activeCount >= g.target_count ? 'connected' : (activeCount > 0 ? 'connecting' : 'disconnected');
+                const statusText = g.status_text || (isEn ? 'Normal' : '正常');
 
                 return `
                     <div class="dynamic-group-card ${isSys ? 'is-system' : ''}">
                         <div>
                             <div class="dynamic-group-title-row">
-                                <span class="badge ${statusClass}"><span class="status-dot"></span> ${escapeHtml(g.status_text || '正常')}</span>
+                                <span class="badge ${statusClass}"><span class="status-dot"></span> ${escapeHtml(statusText)}</span>
                                 <strong class="dynamic-group-name">${escapeHtml(g.name)}</strong>
                                 ${sysBadge}
                             </div>
                             <div class="dynamic-group-meta">
-                                <span>目标: <strong class="text-strong">${escapeHtml(countryStr)}</strong></span>
-                                <span>类型: <strong class="text-strong">${escapeHtml(ipTypeText)}</strong></span>
+                                <span>${isEn ? 'Target: ' : '目标: '}<strong class="text-strong">${escapeHtml(countryStr)}</strong></span>
+                                <span>${isEn ? 'Type: ' : '类型: '}<strong class="text-strong">${escapeHtml(ipTypeText)}</strong></span>
                                 ${unlockText}
-                                <span>指标: <strong class="dynamic-metric">${metricText}</strong></span>
-                                <span>周期: <strong class="text-strong">${g.interval_minutes}分钟</strong></span>
+                                <span>${isEn ? 'Policy: ' : '指标: '}<strong class="dynamic-metric">${metricText}</strong></span>
+                                <span>${isEn ? 'Interval: ' : '周期: '}<strong class="text-strong">${g.interval_minutes}${isEn ? ' min' : '分钟'}</strong></span>
                             </div>
                         </div>
                         <div class="row gap-1">
@@ -1493,26 +1545,27 @@
         function renderPortRules() {
             const container = document.getElementById('port-rules-cards');
             if (!container) return;
+            const isEn = getLanguage() === 'en';
             if (!currentPortRules || currentPortRules.length === 0) {
-                container.innerHTML = '<div class="list-empty">暂未配置自定义端口，点击上方「+ 新增代理端口」添加</div>';
+                container.innerHTML = `<div class="list-empty">${isEn ? 'No port routing rules. Click "+ Add Port Rule" above to specify port exits.' : '暂未配置自定义端口，点击上方「+ 新增代理端口」添加'}</div>`;
                 return;
             }
 
             const tunnels = (currentState && currentState.tunnels) ? currentState.tunnels : [];
 
             container.innerHTML = currentPortRules.map(r => {
-                let policyBadge = '<span class="badge policy-round"><svg aria-hidden="true" viewBox="0 0 24 24" class="icon-xs icon-stroke"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> 单连接轮询</span>';
+                let policyBadge = `<span class="badge policy-round"><svg aria-hidden="true" viewBox="0 0 24 24" class="icon-xs icon-stroke"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> ${isEn ? 'Round-Robin' : '单连接轮询'}</span>`;
                 if (r.policy === 'random') {
-                    policyBadge = '<span class="badge policy-random"><svg aria-hidden="true" viewBox="0 0 24 24" class="icon-xs icon-stroke"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> 随机分发</span>';
+                    policyBadge = `<span class="badge policy-random"><svg aria-hidden="true" viewBox="0 0 24 24" class="icon-xs icon-stroke"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> ${isEn ? 'Random' : '随机分发'}</span>`;
                 } else if (r.policy === 'interval') {
-                    policyBadge = `<span class="badge policy-interval"><svg aria-hidden="true" viewBox="0 0 24 24" class="icon-xs icon-stroke"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> 定时轮换 (${r.interval_seconds || 300}s)</span>`;
+                    policyBadge = `<span class="badge policy-interval"><svg aria-hidden="true" viewBox="0 0 24 24" class="icon-xs icon-stroke"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> ${isEn ? 'Timed Rotation' : '定时轮换'} (${r.interval_seconds || 300}s)</span>`;
                 }
 
-                let authBadge = '<span class="auth-note">系统随机账密</span>';
+                let authBadge = `<span class="auth-note">${isEn ? 'Random Credentials' : '系统随机账密'}</span>`;
                 if (r.auth_mode === 'none') {
-                    authBadge = '<span class="auth-note auth-open">免密直连</span>';
+                    authBadge = `<span class="auth-note auth-open">${isEn ? 'No Auth (Direct)' : '免密直连'}</span>`;
                 } else if (r.auth_mode === 'custom') {
-                    authBadge = `<span class="auth-note text-accent">独立账号: ${escapeHtml(r.auth_user || '未设')}</span>`;
+                    authBadge = `<span class="auth-note text-accent">${isEn ? 'Custom: ' : '独立账号: '}${escapeHtml(r.auth_user || (isEn ? 'Not Set' : '未设'))}</span>`;
                 }
 
                 let boundBadges = [];
@@ -1520,7 +1573,7 @@
                     r.bound_group_ids.forEach(gid => {
                         const g = currentDynamicGroups.find(item => item.id === gid);
                         const gName = g ? g.name : gid;
-                        boundBadges.push(`<span class="badge badge-system">动态池: ${escapeHtml(gName)}</span>`);
+                        boundBadges.push(`<span class="badge badge-system">${isEn ? 'Group: ' : '动态池: '}${escapeHtml(gName)}</span>`);
                     });
                 }
                 if (r.bound_tunnel_ids && r.bound_tunnel_ids.length > 0) {
@@ -1537,7 +1590,7 @@
 
                 let boundHtml = boundBadges.join(' ');
                 if (boundBadges.length === 0) {
-                    boundHtml = '<span class="auth-note text-accent">全部在线隧道 (动态负载均衡)</span>';
+                    boundHtml = `<span class="auth-note text-accent">${isEn ? 'All Online Tunnels (Dynamic Load Balancing)' : '全部在线隧道 (动态负载均衡)'}</span>`;
                 }
 
                 const httpUrl = `http://127.0.0.1:${r.port}`;
@@ -1552,29 +1605,29 @@
                                 <span class="badge badge-proto badge-mini">HTTP / SOCKS5</span>
                             </div>
                             <div  class="row items-center gap-2 wrap">
-                                <span class="copy-pill" data-action="copyText" data-args="${jsonAttr([httpUrl, 'HTTP 代理地址'])}">
+                                <span class="copy-pill" data-action="copyText" data-args="${jsonAttr([httpUrl, isEn ? 'HTTP Proxy URL' : 'HTTP 代理地址'])}">
                                     <svg aria-hidden="true"  viewBox="0 0 24 24" class="icon-xs icon-stroke"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
                                     http://127.0.0.1:${r.port}
                                 </span>
-                                <span class="copy-pill" data-action="copyText" data-args="${jsonAttr([socksUrl, 'SOCKS5 代理地址'])}">
+                                <span class="copy-pill" data-action="copyText" data-args="${jsonAttr([socksUrl, isEn ? 'SOCKS5 Proxy URL' : 'SOCKS5 代理地址'])}">
                                     <svg aria-hidden="true"  viewBox="0 0 24 24" class="icon-xs icon-stroke"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
                                     socks5://127.0.0.1:${r.port}
                                 </span>
-                                <button class="btn btn-outline btn-xs" data-action="editPortRule" data-args="${jsonAttr([r.port])}">编辑</button>
-                                <button class="btn btn-danger btn-xs" data-action="deletePortRule" data-args="${jsonAttr([r.port])}">删除</button>
+                                <button class="btn btn-outline btn-xs" data-action="editPortRule" data-args="${jsonAttr([r.port])}">${isEn ? 'Edit' : '编辑'}</button>
+                                <button class="btn btn-danger btn-xs" data-action="deletePortRule" data-args="${jsonAttr([r.port])}">${isEn ? 'Delete' : '删除'}</button>
                             </div>
                         </div>
                         <div class="port-card-body">
                             <div class="port-card-col">
-                                <span class="port-card-label">分流调度策略</span>
+                                <span class="port-card-label">${isEn ? 'Routing Policy' : '分流调度策略'}</span>
                                 <div class="port-card-val">${policyBadge}</div>
                             </div>
                             <div class="port-card-col">
-                                <span class="port-card-label">绑定出口 / 动态出口组</span>
+                                <span class="port-card-label">${isEn ? 'Bound Egress / Exit Groups' : '绑定出口 / 动态出口组'}</span>
                                 <div class="port-card-val">${boundHtml}</div>
                             </div>
                             <div class="port-card-col">
-                                <span class="port-card-label">代理鉴权状态</span>
+                                <span class="port-card-label">${isEn ? 'Authentication' : '代理鉴权状态'}</span>
                                 <div class="port-card-val">${authBadge}</div>
                             </div>
                         </div>
@@ -2024,28 +2077,29 @@
             const addBtn = document.getElementById('btn-add-sb-node');
 
             if (!statusBadge || !grid) return;
+            const isEn = getLanguage() === 'en';
 
             // 1. 服务状态指示徽章
             if (data && data.installed) {
                 const isRunning = data.status && data.status.core && data.status.core.running;
-                const coreVer = (data.status && data.status.core && data.status.core.version) || '已安装';
+                const coreVer = (data.status && data.status.core && data.status.core.version) || (isEn ? 'Installed' : '已安装');
                 if (isRunning) {
                     statusBadge.className = 'badge connected';
-                    statusBadge.innerHTML = `<span class="status-dot"></span> 运行中 (${escapeHtml(coreVer)})`;
+                    statusBadge.innerHTML = `<span class="status-dot"></span> ${isEn ? 'Running' : '运行中'} (${escapeHtml(coreVer)})`;
                 } else {
                     statusBadge.className = 'badge connecting';
-                    statusBadge.innerHTML = `<span class="status-dot"></span> 服务就绪 (${escapeHtml(coreVer)})`;
+                    statusBadge.innerHTML = `<span class="status-dot"></span> ${isEn ? 'Ready' : '服务就绪'} (${escapeHtml(coreVer)})`;
                 }
                 if (addBtn) addBtn.disabled = false;
             } else {
                 statusBadge.className = 'badge disconnected';
-                statusBadge.innerHTML = `<span class="status-dot"></span> 未安装 / 未运行`;
+                statusBadge.innerHTML = `<span class="status-dot"></span> ${isEn ? 'Not Installed / Offline' : '未安装 / 未运行'}`;
             }
 
             // 2. 远程订阅状态指示
             if (data && data.subscription && data.subscription.enabled) {
                 subBadge.classList.remove('hidden');
-                subBadge.innerText = `订阅: (${data.subscription.node_count || 0} 节点)`;
+                subBadge.innerText = `${isEn ? 'Sub: ' : '订阅: '}(${data.subscription.node_count || 0} ${isEn ? 'nodes' : '节点'})`;
             } else {
                 subBadge.classList.add('hidden');
             }
@@ -2055,7 +2109,7 @@
             const ageBtn = document.getElementById('btn-age-helper');
             const isAgeOn = data && data.subscription && data.subscription.age_encrypt_enabled && data.subscription.age_public_key;
             if (ageBtnText) {
-                ageBtnText.innerText = isAgeOn ? 'age 加密 (开启)' : 'age 加密';
+                ageBtnText.innerText = isAgeOn ? (isEn ? 'age Encrypt (On)' : 'age 加密 (开启)') : (isEn ? 'age Encrypt' : 'age 加密');
             }
             if (ageBtn) {
                 if (isAgeOn) {
@@ -2078,14 +2132,14 @@
                 guide.classList.remove('hidden');
                 guide.innerHTML = `
                     <div  class="empty-title">
-                        尚未在系统中检测到 sing-box 服务
+                        ${isEn ? 'sing-box service not detected on this system' : '尚未在系统中检测到 sing-box 服务'}
                     </div>
                     <div class="empty-guide-copy">
-                        在 VPS 终端执行安装后，即可在此添加 VLESS、Hysteria2 等协议节点，并支持直连或绑定网关出口分流出海。
+                        ${isEn ? 'Run the installation command on your VPS terminal to configure VLESS, Hysteria2 and other protocols with gateway egress routing.' : '在 VPS 终端执行安装后，即可在此添加 VLESS、Hysteria2 等协议节点，并支持直连或绑定网关出口分流出海。'}
                     </div>
                     <div class="command-box">
                         <span>bash &lt;(curl -fsSL https://raw.githubusercontent.com/xiumuzidiao0/sing-box/main/install.sh)</span>
-                        <button type="button" class="btn btn-outline btn-xs" data-action="copyText" data-args="${jsonAttr(['bash <(curl -fsSL https://raw.githubusercontent.com/xiumuzidiao0/sing-box/main/install.sh)', 'sing-box 一键安装指令'])}">复制</button>
+                        <button type="button" class="btn btn-outline btn-xs" data-action="copyText" data-args="${jsonAttr(['bash <(curl -fsSL https://raw.githubusercontent.com/xiumuzidiao0/sing-box/main/install.sh)', isEn ? 'sing-box install command' : 'sing-box 一键安装指令'])}">${isEn ? 'Copy' : '复制'}</button>
                     </div>
                 `;
                 return;
@@ -2097,13 +2151,13 @@
                 guide.classList.remove('hidden');
                 guide.innerHTML = `
                     <div  class="empty-title">
-                        暂无 sing-box 节点
+                        ${isEn ? 'No sing-box nodes configured' : '暂无 sing-box 节点'}
                     </div>
                     <div class="empty-guide-copy compact">
-                        点击下方按钮即可新建 VLESS、Hysteria2 等入站协议节点，并可生成通用与 Clash 订阅链接。
+                        ${isEn ? 'Click the button below to add inbound protocol nodes and generate universal or Clash subscriptions.' : '点击下方按钮即可新建 VLESS、Hysteria2 等入站协议节点，并可生成通用与 Clash 订阅链接。'}
                     </div>
                     <button class="btn" data-action="openAddSingBoxModal">
-                        + 添加节点
+                        + ${isEn ? 'Add Node' : '添加节点'}
                     </button>
                 `;
                 return;
@@ -2139,7 +2193,7 @@
                 const isChained = n.outbound && n.outbound !== 'direct';
                 const chainSelectClass = isChained ? 'sb-chain-select active-chain' : 'sb-chain-select';
 
-                const sniText = n.sni || n.host || '无伪装域名';
+                const sniText = n.sni || n.host || (isEn ? 'None' : '无伪装域名');
                 const networkText = `${n.network || 'tcp'}${n.flow ? ' (' + n.flow + ')' : ''}`;
 
                 return `
@@ -2149,14 +2203,14 @@
                                 <span class="sb-proto-pill ${protoPillClass}">${escapeHtml(n.protocol)}</span>
                                 <strong class="node-port">:${n.port}</strong>
                             </div>
-                            <span class="badge connected badge-mini"><span class="status-dot"></span> 在网监听</span>
+                            <span class="badge connected badge-mini"><span class="status-dot"></span> ${isEn ? 'Listening' : '在网监听'}</span>
                         </div>
 
                         <!-- 链式出口动态选择器 -->
                         <div class="sb-chain-box">
                             <div class="sb-chain-label">
                                 <svg aria-hidden="true" viewBox="0 0 24 24" class="icon-xs icon-stroke"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-                                链式出口路由 (Forwarding Exit)
+                                ${isEn ? 'Forwarding Egress Exit' : '出口路由 (Forwarding Exit)'}
                             </div>
                             <select class="${chainSelectClass}" data-change-action="updateNodeOutboundFromSelect" data-node-name="${escapeHtml(n.name)}">
                                 ${outboundOptions}
@@ -2166,11 +2220,11 @@
                         <!-- 节点核心参数摘要 -->
                         <div class="sb-node-info">
                             <div class="sb-info-item">
-                                <span class="sb-info-lbl">SNI / 伪装域名</span>
+                                <span class="sb-info-lbl">${isEn ? 'SNI / Camouflage' : 'SNI / 伪装域名'}</span>
                                 <span class="sb-info-val" title="${escapeHtml(sniText)}">${escapeHtml(sniText)}</span>
                             </div>
                             <div class="sb-info-item">
-                                <span class="sb-info-lbl">传输层 / 流控</span>
+                                <span class="sb-info-lbl">${isEn ? 'Transport / Flow' : '传输层 / 流控'}</span>
                                 <span class="sb-info-val" title="${escapeHtml(networkText)}">${escapeHtml(networkText)}</span>
                             </div>
                         </div>
@@ -2180,14 +2234,14 @@
                             <div  class="row gap-1">
                                 <button class="btn btn-outline btn-xs" data-action="copyNodeShareLink" data-args="${jsonAttr([n.url, n.protocol])}">
                                     <svg aria-hidden="true" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                                    复制链接
+                                    ${isEn ? 'Copy' : '复制链接'}
                                 </button>
                                 <button class="btn btn-outline btn-xs" data-action="showNodeQRCode" data-args="${jsonAttr([n.url, `${n.protocol} :${n.port}`])}">
                                     <svg aria-hidden="true" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-                                    二维码
+                                    ${isEn ? 'QR' : '二维码'}
                                 </button>
                             </div>
-                            <button class="btn btn-danger btn-xs" title="删除此入站配置" data-action="deleteSingBoxNode" data-args="${jsonAttr([n.name])}">
+                            <button class="btn btn-danger btn-xs" title="${isEn ? 'Delete node' : '删除此节点配置'}" data-action="deleteSingBoxNode" data-args="${jsonAttr([n.name])}">
                                 <svg aria-hidden="true" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
                             </button>
                         </div>

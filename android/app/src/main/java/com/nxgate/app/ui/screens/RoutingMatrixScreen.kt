@@ -90,7 +90,10 @@ import com.nxgate.app.ui.components.ConnectedListItem
 import com.nxgate.app.ui.components.GlobalServerSwitcherTitle
 import com.nxgate.app.ui.components.SubscriptionDialog
 import com.nxgate.app.ui.components.countryChineseName
+import com.nxgate.app.ui.components.countryDisplayName
 import com.nxgate.app.ui.components.countryFlag
+import com.nxgate.app.util.AppStringsEn
+import com.nxgate.app.util.LocalAppStrings
 import androidx.compose.material.icons.rounded.CloudDownload
 import kotlinx.coroutines.launch
 
@@ -126,20 +129,23 @@ fun RoutingMatrixScreen(
     val isTablet = configuration.screenWidthDp >= 600
     val isTabletLandscape = isTablet && isLandscape
 
+    val strings = LocalAppStrings.current
+    val isEn = strings == AppStringsEn
+
     // Tab state: 0 = 多端口, 1 = 自适应组, 2 = 边缘入站
     var selectedTabIndex by remember { mutableIntStateOf(0) }
-    val tabTitles = listOf("多端口", "自适应组", "边缘入站")
+    val tabTitles = listOf(strings.portRules, strings.dynamicGroups, strings.edgeInbounds)
     var showSubscriptionDialog by remember { mutableStateOf(false) }
 
     // Real server states
     var portRules by remember { mutableStateOf<List<PortRuleItem>>(emptyList()) }
     var dynamicGroups by remember { mutableStateOf<List<DynamicGroupCard>>(emptyList()) }
     var inbounds by remember { mutableStateOf<List<InboundProtocolItem>>(emptyList()) }
-    var availableOutbounds by remember {
+    var availableOutbounds by remember(isEn) {
         mutableStateOf(
             listOf(
-                AvailableOutbound(7928, "socks5://127.0.0.1:7928", "NXGate 默认出口 (PORT 7928)", true),
-                AvailableOutbound(0, "direct", "直连出口 (VPS 本机原生网络)", false)
+                AvailableOutbound(7928, "socks5://127.0.0.1:7928", if (isEn) "NXGate Default Egress (PORT 7928)" else "NXGate 默认出口 (PORT 7928)", true),
+                AvailableOutbound(0, "direct", if (isEn) "Direct Egress (VPS Native Network)" else "直连出口 (VPS 本机原生网络)", false)
             )
         )
     }
@@ -149,30 +155,30 @@ fun RoutingMatrixScreen(
     var editPortRuleTarget by remember { mutableStateOf<PortRuleItem?>(null) }
     var inputPortNum by remember { mutableStateOf("7931") }
 
-    val portPolicyOptions = remember {
+    val portPolicyOptions = remember(isEn) {
         listOf(
-            PortPolicyOption("round_robin", "轮询负载均衡 (Round-Robin)"),
-            PortPolicyOption("interval", "定时自动轮换 (Interval)"),
-            PortPolicyOption("random", "动态随机分流 (Random)")
+            PortPolicyOption("round_robin", if (isEn) "Round-Robin Load Balancing" else "轮询负载均衡 (Round-Robin)"),
+            PortPolicyOption("interval", if (isEn) "Timed Rotation (Interval)" else "定时自动轮换 (Interval)"),
+            PortPolicyOption("random", if (isEn) "Dynamic Random Routing" else "动态随机分流 (Random)")
         )
     }
     var selectedPortPolicyOption by remember { mutableStateOf(portPolicyOptions[0]) }
 
-    val portIntervalOptions = remember {
+    val portIntervalOptions = remember(isEn) {
         listOf(
-            PortIntervalOption(60, "1 分钟 (60 秒)"),
-            PortIntervalOption(300, "5 分钟 (300 秒 - 默认)"),
-            PortIntervalOption(900, "15 分钟 (900 秒)"),
-            PortIntervalOption(3600, "1 小时 (3600 秒)")
+            PortIntervalOption(60, if (isEn) "1 min (60s)" else "1 分钟 (60 秒)"),
+            PortIntervalOption(300, if (isEn) "5 min (300s - Default)" else "5 分钟 (300 秒 - 默认)"),
+            PortIntervalOption(900, if (isEn) "15 min (900s)" else "15 分钟 (900 秒)"),
+            PortIntervalOption(3600, if (isEn) "1 hour (3600s)" else "1 小时 (3600 秒)")
         )
     }
     var selectedPortIntervalOption by remember { mutableStateOf(portIntervalOptions[1]) }
 
-    val portAuthOptions = remember {
+    val portAuthOptions = remember(isEn) {
         listOf(
-            PortAuthOption("random", "系统随机账密 (安全解耦)"),
-            PortAuthOption("none", "免密直接连接 (本地首选)"),
-            PortAuthOption("custom", "自定义独立账密 (指定账号密码)")
+            PortAuthOption("random", if (isEn) "Random Credentials (Isolated)" else "系统随机账密 (安全解耦)"),
+            PortAuthOption("none", if (isEn) "No Auth Direct (Local)" else "免密直接连接 (本地首选)"),
+            PortAuthOption("custom", if (isEn) "Custom Credentials" else "自定义独立账密 (指定账号密码)")
         )
     }
     var selectedPortAuthOption by remember { mutableStateOf(portAuthOptions[0]) }
@@ -187,11 +193,11 @@ fun RoutingMatrixScreen(
     var showGroupDialog by remember { mutableStateOf(false) }
     var editGroupTarget by remember { mutableStateOf<DynamicGroupCard?>(null) }
     var deleteGroupCandidate by remember { mutableStateOf<DynamicGroupCard?>(null) }
-    var groupNameInput by remember { mutableStateOf("日本Top3住宅组") }
+    var groupNameInput by remember(isEn) { mutableStateOf(if (isEn) "Japan Residential Top 3" else "日本Top3住宅组") }
 
-    val groupCountryOptions = remember {
+    val groupCountryOptions = remember(isEn) {
         val list = mutableListOf(
-            GroupCountryOption("ALL", "全部国家/地区 (不限)")
+            GroupCountryOption("ALL", if (isEn) "All Countries / Regions (Any)" else "全部国家/地区 (不限)")
         )
         val majorCodes = listOf(
             "JP", "US", "KR", "TW", "HK", "SG", "GB", "DE", "FR", "CA", "AU",
@@ -201,59 +207,59 @@ fun RoutingMatrixScreen(
         )
         majorCodes.forEach { code ->
             val flag = countryFlag(code)
-            val name = countryChineseName(code)
+            val name = countryDisplayName(code, isEn)
             list.add(GroupCountryOption(code, "$flag $name ($code)"))
         }
         list
     }
     var selectedGroupCountryOption by remember { mutableStateOf(groupCountryOptions[1]) }
 
-    val groupIpTypeOptions = remember {
+    val groupIpTypeOptions = remember(isEn) {
         listOf(
-            GroupIpTypeOption("all", "全部网络类型 (不限)"),
-            GroupIpTypeOption("residential", "住宅宽带 IP (家宽原生)"),
-            GroupIpTypeOption("hosting", "机房/数据中心 IP")
+            GroupIpTypeOption("all", if (isEn) "All Network Types (Any)" else "全部网络类型 (不限)"),
+            GroupIpTypeOption("residential", if (isEn) "Residential Broadband" else "住宅宽带 IP (家宽原生)"),
+            GroupIpTypeOption("hosting", if (isEn) "Datacenter / Hosting IP" else "机房/数据中心 IP")
         )
     }
     var selectedGroupIpTypeOption by remember { mutableStateOf(groupIpTypeOptions[1]) }
 
-    val groupUnlockOptions = remember {
+    val groupUnlockOptions = remember(isEn) {
         listOf(
-            GroupUnlockOption("none", "不限解锁能力 (全量候选)"),
-            GroupUnlockOption("ai", "必须支持三大 AI (ChatGPT+Claude+Gemini)"),
-            GroupUnlockOption("streaming", "必须支持主流流媒体 (Netflix/Google)"),
-            GroupUnlockOption("all", "全解锁 (三大 AI + 流媒体)")
+            GroupUnlockOption("none", if (isEn) "Any Unlock Capability" else "不限解锁能力 (全量候选)"),
+            GroupUnlockOption("ai", if (isEn) "Triple AI (ChatGPT+Claude+Gemini)" else "必须支持三大 AI (ChatGPT+Claude+Gemini)"),
+            GroupUnlockOption("streaming", if (isEn) "Streaming (Netflix/Google)" else "必须支持主流流媒体 (Netflix/Google)"),
+            GroupUnlockOption("all", if (isEn) "Full Unlock (AI + Streaming)" else "全解锁 (三大 AI + 流媒体)")
         )
     }
     var selectedGroupUnlockOption by remember { mutableStateOf(groupUnlockOptions[1]) }
 
-    val groupSortOptions = remember {
+    val groupSortOptions = remember(isEn) {
         listOf(
-            GroupSortOption("latency", "最低延迟优先 (TCP 测速)"),
-            GroupSortOption("speed", "最大带宽优先 (Mbps)"),
-            GroupSortOption("score", "综合评分最高优先")
+            GroupSortOption("latency", if (isEn) "Lowest Latency (TCP Ping)" else "最低延迟优先 (TCP 测速)"),
+            GroupSortOption("speed", if (isEn) "Highest Bandwidth (Mbps)" else "最大带宽优先 (Mbps)"),
+            GroupSortOption("score", if (isEn) "Highest Overall Score" else "综合评分最高优先")
         )
     }
     var selectedGroupSortOption by remember { mutableStateOf(groupSortOptions[0]) }
 
-    val groupTargetCountOptions = remember {
+    val groupTargetCountOptions = remember(isEn) {
         listOf(
-            GroupTargetCountOption(1, "维持 1 个并发出口"),
-            GroupTargetCountOption(2, "维持 2 个并发出口"),
-            GroupTargetCountOption(3, "维持 3 个并发出口 (推荐)"),
-            GroupTargetCountOption(5, "维持 5 个并发出口"),
-            GroupTargetCountOption(8, "维持 8 个并发出口")
+            GroupTargetCountOption(1, if (isEn) "Maintain 1 Exit Tunnel" else "维持 1 个并发出口"),
+            GroupTargetCountOption(2, if (isEn) "Maintain 2 Exit Tunnels" else "维持 2 个并发出口"),
+            GroupTargetCountOption(3, if (isEn) "Maintain 3 Exit Tunnels (Recommended)" else "维持 3 个并发出口 (推荐)"),
+            GroupTargetCountOption(5, if (isEn) "Maintain 5 Exit Tunnels" else "维持 5 个并发出口"),
+            GroupTargetCountOption(8, if (isEn) "Maintain 8 Exit Tunnels" else "维持 8 个并发出口")
         )
     }
     var selectedGroupTargetCountOption by remember { mutableStateOf(groupTargetCountOptions[2]) }
 
-    val groupIntervalOptions = remember {
+    val groupIntervalOptions = remember(isEn) {
         listOf(
-            GroupIntervalOption(0, "关闭定时轮换 (保持固定连接)"),
-            GroupIntervalOption(5, "每 5 分钟重评轮换"),
-            GroupIntervalOption(15, "每 15 分钟重评轮换 (推荐)"),
-            GroupIntervalOption(30, "每 30 分钟重评轮换"),
-            GroupIntervalOption(60, "每 60 分钟 (1 小时) 重评轮换")
+            GroupIntervalOption(0, if (isEn) "Disabled (Fixed Connection)" else "关闭定时轮换 (保持固定连接)"),
+            GroupIntervalOption(5, if (isEn) "Rotate every 5 min" else "每 5 分钟重评轮换"),
+            GroupIntervalOption(15, if (isEn) "Rotate every 15 min (Recommended)" else "每 15 分钟重评轮换 (推荐)"),
+            GroupIntervalOption(30, if (isEn) "Rotate every 30 min" else "每 30 分钟重评轮换"),
+            GroupIntervalOption(60, if (isEn) "Rotate every 60 min (1 hour)" else "每 60 分钟 (1 小时) 重评轮换")
         )
     }
     var selectedGroupIntervalOption by remember { mutableStateOf(groupIntervalOptions[2]) }
@@ -419,7 +425,11 @@ fun RoutingMatrixScreen(
                                             color = MaterialTheme.colorScheme.surfaceContainerLow
                                         ) {
                                             Text(
-                                                text = if (activeServer == null) "当前尚未纳管任何服务器，请前往「概览」或「设置」添加 VPS 网关。" else "当前服务器尚未配置独立代理端口规则，请点击下方「新建代理端口」添加。",
+                                                text = if (activeServer == null) {
+                                                    if (isEn) "No servers managed yet. Go to Dashboard or Settings to add a VPS gateway." else "当前尚未纳管任何服务器，请前往「概览」或「设置」添加 VPS 网关。"
+                                                } else {
+                                                    if (isEn) "No port proxy rules configured on this server. Tap \"Add Port Rule\" below to create one." else "当前服务器尚未配置独立代理端口规则，请点击下方「新建代理端口」添加。"
+                                                },
                                                 style = MaterialTheme.typography.bodyMedium,
                                                 color = MaterialTheme.colorScheme.onSurface,
                                                 modifier = Modifier.padding(20.dp)
@@ -446,17 +456,18 @@ fun RoutingMatrixScreen(
                                                                     NXGateApplication.instance.apiClient.savePortRules(activeServer, updated)
                                                                 }
                                                             }
-                                                            Toast.makeText(context, "端口 ${rule.port} 状态已更新为: ${if (!rule.enabled) "已启用" else "已停用"}", Toast.LENGTH_SHORT).show()
+                                                            val statusMsg = if (isEn) "Port ${rule.port} is now ${if (!rule.enabled) "enabled" else "disabled"}" else "端口 ${rule.port} 状态已更新为: ${if (!rule.enabled) "已启用" else "已停用"}"
+                                                            Toast.makeText(context, statusMsg, Toast.LENGTH_SHORT).show()
                                                         }) {
                                                             Icon(
                                                                 imageVector = if (rule.enabled) Icons.Rounded.ToggleOn else Icons.Rounded.ToggleOff,
-                                                                contentDescription = "切换开关",
+                                                                contentDescription = if (isEn) "Toggle switch" else "切换开关",
                                                                 tint = if (rule.enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
                                                                 modifier = Modifier.size(32.dp)
                                                             )
                                                         }
                                                         IconButton(onClick = { deletePortRuleCandidate = rule }) {
-                                                            Icon(Icons.Rounded.Delete, contentDescription = "删除端口规则", tint = MaterialTheme.colorScheme.error)
+                                                            Icon(Icons.Rounded.Delete, contentDescription = if (isEn) "Delete" else "删除端口规则", tint = MaterialTheme.colorScheme.error)
                                                         }
                                                     }
                                                 },
@@ -481,7 +492,7 @@ fun RoutingMatrixScreen(
                                     ConnectedButtonGroup(
                                         items = listOf(
                                             ConnectedButtonItem(
-                                                text = "新建代理端口",
+                                                text = if (isEn) "Add Port Rule" else "新建代理端口",
                                                 style = ConnectedButtonStyle.Filled,
                                                 icon = Icons.Rounded.Add,
                                                 onClick = {
@@ -498,7 +509,7 @@ fun RoutingMatrixScreen(
                                                 }
                                             ),
                                             ConnectedButtonItem(
-                                                text = "刷新端口状态",
+                                                text = if (isEn) "Refresh Ports" else "刷新端口状态",
                                                 style = ConnectedButtonStyle.Tonal,
                                                 icon = Icons.Rounded.Refresh,
                                                 onClick = {
@@ -506,7 +517,7 @@ fun RoutingMatrixScreen(
                                                         scope.launch {
                                                             val res = NXGateApplication.instance.apiClient.fetchPortRules(activeServer)
                                                             if (res.isSuccess) portRules = res.getOrNull() ?: portRules
-                                                            Toast.makeText(context, "已从服务器获取最新端口分流规则！", Toast.LENGTH_SHORT).show()
+                                                            Toast.makeText(context, if (isEn) "Port rules updated from server!" else "已从服务器获取最新端口分流规则！", Toast.LENGTH_SHORT).show()
                                                         }
                                                     }
                                                 }
@@ -516,7 +527,7 @@ fun RoutingMatrixScreen(
                                 }
                             }
 
-                            // ==================== TAB 1: 动态自适应组 (全增删改查) ====================
+                            // ==================== TAB 1: 动态出口组 (全增删改查) ====================
                             1 -> {
                                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                                     if (dynamicGroups.isEmpty()) {
@@ -526,7 +537,11 @@ fun RoutingMatrixScreen(
                                             color = MaterialTheme.colorScheme.surfaceContainerLow
                                         ) {
                                             Text(
-                                                text = if (activeServer == null) "当前尚未纳管任何服务器，请前往「概览」或「设置」添加 VPS 网关。" else "当前服务器尚未配置动态自适应组，请点击下方「新建自适应组」添加。",
+                                                text = if (activeServer == null) {
+                                                    if (isEn) "No servers managed yet. Go to Dashboard or Settings to add a VPS gateway." else "当前尚未纳管任何服务器，请前往「概览」或「设置」添加 VPS 网关。"
+                                                } else {
+                                                    if (isEn) "No dynamic exit groups configured. Tap \"Add Exit Group\" below to create one." else "当前服务器尚未配置动态出口组，请点击下方「新建出口组」添加。"
+                                                },
                                                 style = MaterialTheme.typography.bodyMedium,
                                                 color = MaterialTheme.colorScheme.onSurface,
                                                 modifier = Modifier.padding(20.dp)
@@ -562,7 +577,7 @@ fun RoutingMatrixScreen(
                                                     )
                                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                                         Text(
-                                                            text = if (group.isSystem) "系统主出口(tun0)" else "自适应池 (${group.targetCount}网卡)",
+                                                            text = if (group.isSystem) (if (isEn) "Primary (tun0)" else "系统主出口(tun0)") else (if (isEn) "Exit Group (${group.targetCount} NICs)" else "出口组 (${group.targetCount}网卡)"),
                                                             style = MaterialTheme.typography.labelSmall,
                                                             color = MaterialTheme.colorScheme.primary
                                                         )
@@ -571,7 +586,7 @@ fun RoutingMatrixScreen(
                                                                 onClick = { deleteGroupCandidate = group },
                                                                 modifier = Modifier.size(32.dp)
                                                             ) {
-                                                                Icon(Icons.Rounded.Delete, contentDescription = "删除组", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
+                                                                Icon(Icons.Rounded.Delete, contentDescription = if (isEn) "Delete" else "删除组", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
                                                             }
                                                         }
                                                     }
@@ -605,7 +620,7 @@ fun RoutingMatrixScreen(
                                                     ) {
                                                         Icon(Icons.Rounded.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
                                                         Spacer(Modifier.width(4.dp))
-                                                        Text("编辑规则", style = MaterialTheme.typography.labelMedium)
+                                                        Text(if (isEn) "Edit Rule" else "编辑规则", style = MaterialTheme.typography.labelMedium)
                                                     }
                                                 }
                                             }
@@ -613,29 +628,29 @@ fun RoutingMatrixScreen(
                                     }
                                     }
 
-                                    // 自适应组操作组
+                                    // 出口组操作组
                                     ConnectedButtonGroup(
                                         items = listOf(
                                             ConnectedButtonItem(
-                                                text = "立即重评换线",
+                                                text = if (isEn) "Evaluate & Rotate" else "立即重评换线",
                                                 style = ConnectedButtonStyle.Filled,
                                                 icon = Icons.Rounded.Refresh,
                                                 onClick = {
                                                     if (activeServer != null) {
                                                         scope.launch {
                                                             val res = NXGateApplication.instance.apiClient.triggerRotate(activeServer)
-                                                            Toast.makeText(context, res.getOrDefault("已触发自适应组重新测速探测并替换失效节点！"), Toast.LENGTH_SHORT).show()
+                                                            Toast.makeText(context, res.getOrDefault(if (isEn) "Triggered exit group re-evaluation" else "已触发自适应组重新测速探测并替换失效节点！"), Toast.LENGTH_SHORT).show()
                                                         }
                                                     }
                                                 }
                                             ),
                                             ConnectedButtonItem(
-                                                text = "新建自适应组",
+                                                text = if (isEn) "Add Exit Group" else "新建出口组",
                                                 style = ConnectedButtonStyle.Tonal,
                                                 icon = Icons.Rounded.Add,
                                                 onClick = {
                                                     editGroupTarget = null
-                                                    groupNameInput = "新自适应住宅池"
+                                                    groupNameInput = if (isEn) "Residential Exit Group" else "新动态出口组"
                                                     selectedGroupCountryOption = groupCountryOptions[1]
                                                     selectedGroupIpTypeOption = groupIpTypeOptions[1]
                                                     selectedGroupUnlockOption = groupUnlockOptions[1]
@@ -660,7 +675,11 @@ fun RoutingMatrixScreen(
                                             color = MaterialTheme.colorScheme.surfaceContainerLow
                                         ) {
                                             Text(
-                                                text = if (activeServer == null) "当前尚未纳管任何服务器，请前往「概览」或「设置」添加 VPS 网关。" else "当前服务器尚未创建 sing-box 节点，请点击下方「添加节点」创建。",
+                                                text = if (activeServer == null) {
+                                                    if (isEn) "No servers managed yet. Go to Dashboard or Settings to add a VPS gateway." else "当前尚未纳管任何服务器，请前往「概览」或「设置」添加 VPS 网关。"
+                                                } else {
+                                                    if (isEn) "No sing-box nodes configured. Tap \"Add Node\" below to create one." else "当前服务器尚未创建 sing-box 节点，请点击下方「添加节点」创建。"
+                                                },
                                                 style = MaterialTheme.typography.bodyMedium,
                                                 color = MaterialTheme.colorScheme.onSurface,
                                                 modifier = Modifier.padding(20.dp)
@@ -678,21 +697,21 @@ fun RoutingMatrixScreen(
                                                 trailingContent = {
                                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                                         IconButton(onClick = { showInboundQRDialog = inbound }) {
-                                                            Icon(Icons.Rounded.QrCode2, contentDescription = "分享", tint = MaterialTheme.colorScheme.primary)
+                                                            Icon(Icons.Rounded.QrCode2, contentDescription = if (isEn) "Share" else "分享", tint = MaterialTheme.colorScheme.primary)
                                                         }
                                                         IconButton(onClick = {
                                                             selectedInboundForOutboundSwitch = inbound
                                                             switchOutboundTargetOption = availableOutbounds.find { it.addr == inbound.outbound } ?: availableOutbounds.first()
                                                         }) {
-                                                            Icon(Icons.Rounded.SwapHoriz, contentDescription = "更改出口", tint = MaterialTheme.colorScheme.secondary)
+                                                            Icon(Icons.Rounded.SwapHoriz, contentDescription = if (isEn) "Change Egress" else "更改出口", tint = MaterialTheme.colorScheme.secondary)
                                                         }
                                                         IconButton(onClick = { deleteInboundCandidate = inbound }) {
-                                                            Icon(Icons.Rounded.Delete, contentDescription = "删除入站", tint = MaterialTheme.colorScheme.error)
+                                                            Icon(Icons.Rounded.Delete, contentDescription = if (isEn) "Delete" else "删除入站", tint = MaterialTheme.colorScheme.error)
                                                         }
                                                     }
                                                 },
                                                 onClick = {
-                                                    Toast.makeText(context, "入站: ${inbound.name} (外部端口 ${inbound.port})", Toast.LENGTH_SHORT).show()
+                                                    Toast.makeText(context, "${if (isEn) "Inbound: " else "入站: "}${inbound.name} (Port ${inbound.port})", Toast.LENGTH_SHORT).show()
                                                 }
                                             )
                                         }
@@ -703,7 +722,7 @@ fun RoutingMatrixScreen(
                                     ConnectedButtonGroup(
                                         items = listOf(
                                             ConnectedButtonItem(
-                                                text = "新建入站节点",
+                                                text = if (isEn) "Add Node" else "添加节点",
                                                 style = ConnectedButtonStyle.Filled,
                                                 icon = Icons.Rounded.Add,
                                                 onClick = {
@@ -714,7 +733,7 @@ fun RoutingMatrixScreen(
                                                 }
                                             ),
                                             ConnectedButtonItem(
-                                                text = "获取订阅",
+                                                text = if (isEn) "Get Subscriptions" else "获取订阅",
                                                 style = ConnectedButtonStyle.Tonal,
                                                 icon = Icons.Rounded.CloudDownload,
                                                 onClick = {
@@ -757,7 +776,7 @@ fun RoutingMatrixScreen(
             containerColor = MaterialTheme.colorScheme.surfaceContainer,
             title = {
                 Text(
-                    text = if (isEditing) "编辑端口 [${editPortRuleTarget?.port}] 规则" else "新建代理分流端口",
+                    text = if (isEditing) (if (isEn) "Edit Port [${editPortRuleTarget?.port}]" else "编辑端口 [${editPortRuleTarget?.port}] 规则") else (if (isEn) "Add Port Rule" else "新建代理分流端口"),
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold
                 )
@@ -770,7 +789,7 @@ fun RoutingMatrixScreen(
                     OutlinedTextField(
                         value = inputPortNum,
                         onValueChange = { inputPortNum = it },
-                        label = { Text("监听端口 [1-65535]") },
+                        label = { Text(if (isEn) "Listen Port [1-65535]" else "监听端口 [1-65535]") },
                         singleLine = true,
                         enabled = !isEditing,
                         modifier = Modifier.fillMaxWidth()
@@ -778,7 +797,7 @@ fun RoutingMatrixScreen(
 
                     // 调度策略下拉框
                     AppExposedDropdown(
-                        label = "调度策略 (分流算法)",
+                        label = if (isEn) "Routing Policy" else "调度策略 (分流算法)",
                         options = portPolicyOptions,
                         selectedOption = selectedPortPolicyOption,
                         onOptionSelected = { selectedPortPolicyOption = it },
@@ -788,7 +807,7 @@ fun RoutingMatrixScreen(
                     // 定时轮换周期下拉框
                     if (selectedPortPolicyOption.key == "interval") {
                         AppExposedDropdown(
-                            label = "自动轮换周期",
+                            label = if (isEn) "Rotation Interval" else "自动轮换周期",
                             options = portIntervalOptions,
                             selectedOption = selectedPortIntervalOption,
                             onOptionSelected = { selectedPortIntervalOption = it },
@@ -798,7 +817,7 @@ fun RoutingMatrixScreen(
 
                     // 鉴权模式下拉框
                     AppExposedDropdown(
-                        label = "代理鉴权模式",
+                        label = if (isEn) "Authentication Mode" else "代理鉴权模式",
                         options = portAuthOptions,
                         selectedOption = selectedPortAuthOption,
                         onOptionSelected = { selectedPortAuthOption = it },
@@ -810,14 +829,14 @@ fun RoutingMatrixScreen(
                             OutlinedTextField(
                                 value = inputAuthUser,
                                 onValueChange = { inputAuthUser = it },
-                                label = { Text("用户名") },
+                                label = { Text(if (isEn) "Username" else "用户名") },
                                 singleLine = true,
                                 modifier = Modifier.weight(1f)
                             )
                             OutlinedTextField(
                                 value = inputAuthPass,
                                 onValueChange = { inputAuthPass = it },
-                                label = { Text("密码") },
+                                label = { Text(if (isEn) "Password" else "密码") },
                                 singleLine = true,
                                 modifier = Modifier.weight(1f)
                             )
@@ -826,8 +845,8 @@ fun RoutingMatrixScreen(
 
                     HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
-                    // 绑定自适应组与出口部分 (对齐 Web 控制台)
-                    Text("绑定出网出口范围:", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                    // 绑定出口部分
+                    Text(if (isEn) "Bound Egress Range:" else "绑定出网出口范围:", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
 
                     // Checkbox 1: 全部在线隧道
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
@@ -838,12 +857,12 @@ fun RoutingMatrixScreen(
                                 if (it) selectedBoundGroups = emptySet()
                             }
                         )
-                        Text("全部在线隧道 (默认全池负载均衡)", style = MaterialTheme.typography.bodyMedium)
+                        Text(if (isEn) "All Online Tunnels (Full Pool Load Balancing)" else "全部在线隧道 (默认全池负载均衡)", style = MaterialTheme.typography.bodyMedium)
                     }
 
-                    // Checkbox 2: 绑定自适应动态出口组
+                    // Checkbox 2: 绑定动态出口组
                     if (dynamicGroups.isNotEmpty()) {
-                        Text("自适应动态出口组 (自动维持Top N并定期轮换):", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                        Text(if (isEn) "Dynamic Exit Groups (Maintains Top N with Rotation):" else "动态出口组 (自动维持Top N并定期轮换):", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                         dynamicGroups.forEach { group ->
                             val isChecked = !bindAllTunnels && selectedBoundGroups.contains(group.id)
                             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
@@ -854,7 +873,7 @@ fun RoutingMatrixScreen(
                                         selectedBoundGroups = if (checked) selectedBoundGroups + group.id else selectedBoundGroups - group.id
                                     }
                                 )
-                                Text("${group.name} (${group.country} · ${group.targetCount}出口)", style = MaterialTheme.typography.bodySmall)
+                                Text("${group.name} (${group.country} · ${group.targetCount} ${if (isEn) "exits" else "出口"})", style = MaterialTheme.typography.bodySmall)
                             }
                         }
                     }
@@ -892,10 +911,10 @@ fun RoutingMatrixScreen(
                         }
                         showPortDialog = false
                         editPortRuleTarget = null
-                        Toast.makeText(context, "端口 [$portNum] 分流规则与出口绑定已下发！", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, if (isEn) "Port [$portNum] rule saved!" else "端口 [$portNum] 分流规则与出口绑定已下发！", Toast.LENGTH_SHORT).show()
                     }
                 ) {
-                    Text("保存生效", fontWeight = FontWeight.Bold)
+                    Text(if (isEn) "Save & Apply" else "保存生效", fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
@@ -903,7 +922,7 @@ fun RoutingMatrixScreen(
                     showPortDialog = false
                     editPortRuleTarget = null
                 }) {
-                    Text("取消")
+                    Text(if (isEn) "Cancel" else "取消")
                 }
             }
         )
@@ -916,8 +935,8 @@ fun RoutingMatrixScreen(
             onDismissRequest = { deletePortRuleCandidate = null },
             shape = RoundedCornerShape(28.dp),
             containerColor = MaterialTheme.colorScheme.surfaceContainer,
-            title = { Text("确认删除端口 [${target.port}] 分流规则？", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) },
-            text = { Text("删除后将停止该端口的监听与分流转发，确定删除吗？", style = MaterialTheme.typography.bodyMedium) },
+            title = { Text(if (isEn) "Delete Port [${target.port}] Rule?" else "确认删除端口 [${target.port}] 分流规则？", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) },
+            text = { Text(if (isEn) "Listening and proxy routing on this port will stop. Are you sure?" else "删除后将停止该端口的监听与分流转发，确定删除吗？", style = MaterialTheme.typography.bodyMedium) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -929,14 +948,14 @@ fun RoutingMatrixScreen(
                             }
                         }
                         deletePortRuleCandidate = null
-                        Toast.makeText(context, "已删除端口 [${target.port}] 规则！", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, if (isEn) "Port [${target.port}] deleted!" else "已删除端口 [${target.port}] 规则！", Toast.LENGTH_SHORT).show()
                     }
                 ) {
-                    Text("确认删除", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+                    Text(if (isEn) "Delete" else "确认删除", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { deletePortRuleCandidate = null }) { Text("取消") }
+                TextButton(onClick = { deletePortRuleCandidate = null }) { Text(if (isEn) "Cancel" else "取消") }
             }
         )
     }
@@ -953,7 +972,7 @@ fun RoutingMatrixScreen(
             containerColor = MaterialTheme.colorScheme.surfaceContainer,
             title = {
                 Text(
-                    text = if (isEditing) "编辑自适应组 [${editGroupTarget?.name}]" else "新建自适应动态组",
+                    text = if (isEditing) (if (isEn) "Edit Exit Group [${editGroupTarget?.name}]" else "编辑出口组 [${editGroupTarget?.name}]") else (if (isEn) "New Dynamic Exit Group" else "新建动态出口组"),
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold
                 )
@@ -966,14 +985,14 @@ fun RoutingMatrixScreen(
                     OutlinedTextField(
                         value = groupNameInput,
                         onValueChange = { groupNameInput = it },
-                        label = { Text("组名称") },
+                        label = { Text(if (isEn) "Group Name" else "组名称") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
 
                     // 国家下拉框
                     AppExposedDropdown(
-                        label = "目标国家/地区",
+                        label = if (isEn) "Target Country / Region" else "目标国家/地区",
                         options = groupCountryOptions,
                         selectedOption = selectedGroupCountryOption,
                         onOptionSelected = { selectedGroupCountryOption = it },
@@ -982,7 +1001,7 @@ fun RoutingMatrixScreen(
 
                     // 网络类型下拉框
                     AppExposedDropdown(
-                        label = "目标网络类型",
+                        label = if (isEn) "Target Network Type" else "目标网络类型",
                         options = groupIpTypeOptions,
                         selectedOption = selectedGroupIpTypeOption,
                         onOptionSelected = { selectedGroupIpTypeOption = it },
@@ -991,7 +1010,7 @@ fun RoutingMatrixScreen(
 
                     // 解锁要求下拉框
                     AppExposedDropdown(
-                        label = "节点解锁要求",
+                        label = if (isEn) "Unlock Requirement" else "节点解锁要求",
                         options = groupUnlockOptions,
                         selectedOption = selectedGroupUnlockOption,
                         onOptionSelected = { selectedGroupUnlockOption = it },
@@ -1000,7 +1019,7 @@ fun RoutingMatrixScreen(
 
                     // 择优排序指标下拉框
                     AppExposedDropdown(
-                        label = "择优筛选指标",
+                        label = if (isEn) "Ranking Metric" else "择优筛选指标",
                         options = groupSortOptions,
                         selectedOption = selectedGroupSortOption,
                         onOptionSelected = { selectedGroupSortOption = it },
@@ -1010,7 +1029,7 @@ fun RoutingMatrixScreen(
                     // 维持并发数与周期下拉框
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         AppExposedDropdown(
-                            label = "维持并发数",
+                            label = if (isEn) "Concurrency" else "维持并发数",
                             options = groupTargetCountOptions,
                             selectedOption = selectedGroupTargetCountOption,
                             onOptionSelected = { selectedGroupTargetCountOption = it },
@@ -1018,7 +1037,7 @@ fun RoutingMatrixScreen(
                             modifier = Modifier.weight(1f)
                         )
                         AppExposedDropdown(
-                            label = "重评轮换周期",
+                            label = if (isEn) "Rotation" else "重评轮换周期",
                             options = groupIntervalOptions,
                             selectedOption = selectedGroupIntervalOption,
                             onOptionSelected = { selectedGroupIntervalOption = it },
@@ -1034,7 +1053,7 @@ fun RoutingMatrixScreen(
                         val targetId = editGroupTarget?.id ?: "dg-${System.currentTimeMillis() % 100000}"
                         val newG = DynamicGroupCard(
                             id = targetId,
-                            name = groupNameInput.trim().ifEmpty { "自适应组" },
+                            name = groupNameInput.trim().ifEmpty { if (isEn) "Exit Group" else "自适应组" },
                             country = selectedGroupCountryOption.code,
                             targetCount = selectedGroupTargetCountOption.count,
                             intervalMinutes = selectedGroupIntervalOption.minutes,
@@ -1055,10 +1074,10 @@ fun RoutingMatrixScreen(
                         }
                         showGroupDialog = false
                         editGroupTarget = null
-                        Toast.makeText(context, "自适应组 [${newG.name}] 已成功保存下发生效！", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, if (isEn) "Exit group [${newG.name}] saved!" else "动态出口组 [${newG.name}] 已成功保存下发生效！", Toast.LENGTH_SHORT).show()
                     }
                 ) {
-                    Text("保存生效", fontWeight = FontWeight.Bold)
+                    Text(if (isEn) "Save & Apply" else "保存生效", fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
@@ -1066,7 +1085,7 @@ fun RoutingMatrixScreen(
                     showGroupDialog = false
                     editGroupTarget = null
                 }) {
-                    Text("取消")
+                    Text(if (isEn) "Cancel" else "取消")
                 }
             }
         )
@@ -1079,8 +1098,8 @@ fun RoutingMatrixScreen(
             onDismissRequest = { deleteGroupCandidate = null },
             shape = RoundedCornerShape(28.dp),
             containerColor = MaterialTheme.colorScheme.surfaceContainer,
-            title = { Text("确认删除自适应组？", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) },
-            text = { Text("删除组 [${target.name}] 将同步释放其维护的所有并发隧道，确定删除吗？", style = MaterialTheme.typography.bodyMedium) },
+            title = { Text(if (isEn) "Delete Exit Group?" else "确认删除自适应组？", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) },
+            text = { Text(if (isEn) "Deleting [${target.name}] will release all maintained tunnels. Are you sure?" else "删除组 [${target.name}] 将同步释放其维护的所有并发隧道，确定删除吗？", style = MaterialTheme.typography.bodyMedium) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -1091,14 +1110,14 @@ fun RoutingMatrixScreen(
                             }
                         }
                         deleteGroupCandidate = null
-                        Toast.makeText(context, "已成功删除自适应组 [${target.name}]！", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, if (isEn) "Exit group [${target.name}] deleted!" else "已成功删除自适应组 [${target.name}]！", Toast.LENGTH_SHORT).show()
                     }
                 ) {
-                    Text("确认删除", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+                    Text(if (isEn) "Delete" else "确认删除", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { deleteGroupCandidate = null }) { Text("取消") }
+                TextButton(onClick = { deleteGroupCandidate = null }) { Text(if (isEn) "Cancel" else "取消") }
             }
         )
     }
@@ -1106,20 +1125,20 @@ fun RoutingMatrixScreen(
     // 5. Add SingBox Inbound Protocol Dialog (完整 22 种协议分类与动态出口下拉框)
     if (showAddInboundDialog) {
         val protoCategories = listOf(
-            "推荐免域名" to listOf(
+            (if (isEn) "Recommended (No Domain)" else "推荐免域名") to listOf(
                 "reality" to "VLESS-REALITY (免域名)",
                 "rh2" to "VLESS-H2-REALITY (多路复用)",
                 "hy2" to "Hysteria2 (QUIC丢包克星)",
                 "tuic" to "TUIC v5 (BBR拥塞控制)",
                 "ss" to "Shadowsocks 2022"
             ),
-            "经典穿透" to listOf(
+            (if (isEn) "Popular Direct" else "经典穿透") to listOf(
                 "trojan" to "Trojan (经典HTTPS伪装)",
-                "anytls" to "AnyTLS (自适应特征)",
+                "anytls" to "AnyTLS (抗阻断传输)",
                 "socks" to "Socks5 (标准局域网代理)",
                 "direct" to "Direct (端口转发中继)"
             ),
-            "CDN/域名TLS" to listOf(
+            (if (isEn) "CDN / Domain TLS" else "CDN/域名TLS") to listOf(
                 "vws" to "VLESS-WS-TLS (CDN优选)",
                 "wss" to "VMess-WS-TLS (救砖方案)",
                 "tws" to "Trojan-WS-TLS",
@@ -1130,7 +1149,7 @@ fun RoutingMatrixScreen(
                 "h2" to "VMess-H2-TLS",
                 "th2" to "Trojan-H2-TLS"
             ),
-            "原生传输" to listOf(
+            (if (isEn) "Raw Transport" else "原生传输") to listOf(
                 "ws" to "VMess-WS (明文反代)",
                 "tcp" to "VMess-TCP",
                 "http" to "HTTP 代理",
@@ -1142,7 +1161,7 @@ fun RoutingMatrixScreen(
             onDismissRequest = { showAddInboundDialog = false },
             shape = RoundedCornerShape(28.dp),
             containerColor = MaterialTheme.colorScheme.surfaceContainer,
-            title = { Text("添加 sing-box 节点", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) },
+            title = { Text(if (isEn) "Add sing-box Node" else "添加 sing-box 节点", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) },
             text = {
                 Column(
                     modifier = Modifier.verticalScroll(rememberScrollState()),
@@ -1169,7 +1188,7 @@ fun RoutingMatrixScreen(
                         }
                     }
 
-                    Text("选择具体协议:", style = MaterialTheme.typography.labelMedium)
+                    Text(if (isEn) "Select Protocol:" else "选择具体协议:", style = MaterialTheme.typography.labelMedium)
                     val currentProtos = protoCategories[selectedProtoCat].second
                     currentProtos.forEach { (pKey, pLabel) ->
                         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
@@ -1181,14 +1200,14 @@ fun RoutingMatrixScreen(
                     OutlinedTextField(
                         value = newInboundPort,
                         onValueChange = { newInboundPort = it },
-                        label = { Text("外部端口 (填 auto 自动分配高位端口)") },
+                        label = { Text(if (isEn) "External Port (enter auto for dynamic)" else "外部端口 (填 auto 自动分配高位端口)") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
 
                     // 动态出口下拉框
                     AppExposedDropdown(
-                        label = "出口链式分流指向",
+                        label = if (isEn) "Forwarding Egress Exit" else "出口链式分流指向",
                         options = availableOutbounds,
                         selectedOption = selectedInboundOutboundOption,
                         onOptionSelected = { selectedInboundOutboundOption = it },
@@ -1208,20 +1227,20 @@ fun RoutingMatrixScreen(
                                         val data = refreshRes.getOrNull()
                                         if (data != null && data.nodes.isNotEmpty()) inbounds = data.nodes
                                     }
-                                    Toast.makeText(context, "边缘入站节点已成功创建并启动", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, if (isEn) "sing-box node created and started" else "sing-box 节点已成功创建并启动", Toast.LENGTH_SHORT).show()
                                 } else {
-                                    Toast.makeText(context, "创建失败: ${res.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "${if (isEn) "Creation failed: " else "创建失败: "}${res.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
                                 }
                             }
                         }
                         showAddInboundDialog = false
                     }
                 ) {
-                    Text("确定创建", fontWeight = FontWeight.Bold)
+                    Text(if (isEn) "Create Inbound" else "确定创建", fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showAddInboundDialog = false }) { Text("取消") }
+                TextButton(onClick = { showAddInboundDialog = false }) { Text(if (isEn) "Cancel" else "取消") }
             }
         )
     }

@@ -555,7 +555,7 @@ fun NodeSquareScreen(
                     OutlinedTextField(
                         value = searchQuery,
                         onValueChange = { searchQuery = it },
-                        label = { Text("搜索 IP / 国家代码 / 运营商关键词") },
+                        label = { Text(if (strings == AppStringsEn) "Search IP / Country / ISP" else "搜索 IP / 国家代码 / 运营商关键词") },
                         singleLine = true,
                         shape = RoundedCornerShape(16.dp),
                         modifier = Modifier.fillMaxWidth()
@@ -572,13 +572,14 @@ fun NodeSquareScreen(
                 }
 
                 // 2. 下拉框筛选控制区域 (平板横屏三列并排，手机自适应堆叠)
+                val isEn = strings == AppStringsEn
                 if (isTabletLandscape) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         AppExposedDropdown(
-                            label = "国家/地区分类",
+                            label = if (isEn) "Country / Region" else "国家/地区分类",
                             options = countryOptions,
                             selectedOption = selectedCountryOption,
                             onOptionSelected = { selectedCountryOption = it },
@@ -587,7 +588,7 @@ fun NodeSquareScreen(
                             modifier = Modifier.weight(1.2f)
                         )
                         AppExposedDropdown(
-                            label = "网络类型",
+                            label = if (isEn) "Network Type" else "网络类型",
                             options = ipTypeOptions,
                             selectedOption = selectedIpTypeOption,
                             onOptionSelected = { selectedIpTypeOption = it },
@@ -596,7 +597,7 @@ fun NodeSquareScreen(
                             modifier = Modifier.weight(1f)
                         )
                         AppExposedDropdown(
-                            label = "排序规则",
+                            label = if (isEn) "Sort Order" else "排序规则",
                             options = sortOptions,
                             selectedOption = selectedSortOption,
                             onOptionSelected = { selectedSortOption = it },
@@ -608,7 +609,7 @@ fun NodeSquareScreen(
                 } else {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         AppExposedDropdown(
-                            label = "按国家或地区分类选择",
+                            label = if (isEn) "Country / Region" else "按国家或地区分类选择",
                             options = countryOptions,
                             selectedOption = selectedCountryOption,
                             onOptionSelected = { selectedCountryOption = it },
@@ -621,7 +622,7 @@ fun NodeSquareScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             AppExposedDropdown(
-                                label = "网络类型",
+                                label = if (isEn) "Network Type" else "网络类型",
                                 options = ipTypeOptions,
                                 selectedOption = selectedIpTypeOption,
                                 onOptionSelected = { selectedIpTypeOption = it },
@@ -630,7 +631,7 @@ fun NodeSquareScreen(
                                 modifier = Modifier.weight(1f)
                             )
                             AppExposedDropdown(
-                                label = "排序方式",
+                                label = if (isEn) "Sort Order" else "排序方式",
                                 options = sortOptions,
                                 selectedOption = selectedSortOption,
                                 onOptionSelected = { selectedSortOption = it },
@@ -649,7 +650,7 @@ fun NodeSquareScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = if (isLoadingNodes) "正在加载全量节点..." else "当前展示 ${filteredNodes.size} / 全库 ${allNodes.size} 个节点",
+                        text = if (isLoadingNodes) (if (isEn) "Loading all nodes..." else "正在加载全量节点...") else (if (isEn) "Showing ${filteredNodes.size} / ${allNodes.size} nodes" else "当前展示 ${filteredNodes.size} / 全库 ${allNodes.size} 个节点"),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.Bold
@@ -659,19 +660,19 @@ fun NodeSquareScreen(
                 ConnectedButtonGroup(
                     items = listOf(
                         ConnectedButtonItem(
-                            text = "全量并发测速",
+                            text = if (isEn) "Probe All Speeds" else "全量并发测速",
                             style = ConnectedButtonStyle.Filled,
                             onClick = {
                                 if (activeServer != null) {
                                     scope.launch {
                                         NXGateApplication.instance.apiClient.probeNodes(activeServer)
-                                        Toast.makeText(context, "已触发远端对候选节点进行并发测速！", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, if (isEn) "Triggered latency and speed test on server!" else "已触发远端对候选节点进行并发测速！", Toast.LENGTH_SHORT).show()
                                     }
                                 }
                             }
                         ),
                         ConnectedButtonItem(
-                            text = "屏蔽库 (${blacklistItems.size})",
+                            text = "${if (isEn) "Blacklist" else "屏蔽库"} (${blacklistItems.size})",
                             style = ConnectedButtonStyle.Tonal,
                             onClick = { showBlacklistSheet = true }
                         )

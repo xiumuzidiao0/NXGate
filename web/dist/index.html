@@ -23,7 +23,7 @@
                 </div>
                 <div class="brand-text">
                     <div class="brand-title">NXGate</div>
-                    <div class="brand-sub"><span data-i18n="brand.sub">多出口智能网关</span> <span class="version-trigger" data-action="openUpdateModal" title="点击检查系统更新"><span id="sidebar-version-badge" class="badge-ver">v2.5.9</span></span></div>
+                    <div class="brand-sub"><span data-i18n="brand.sub">多出口智能网关</span> <span class="version-trigger" data-action="openUpdateModal" title="点击检查系统更新"><span id="sidebar-version-badge" class="badge-ver">v2.5.9.1</span></span></div>
                 </div>
             </div>
 
@@ -79,7 +79,7 @@
                     </button>
                     <h1 id="page-title">运行概览</h1>
                     <span id="conn-badge" class="badge disconnected"><span class="status-dot"></span> 检查中</span>
-                    <span class="version-trigger" data-action="openUpdateModal" title="点击检查系统更新"><span id="app-version-badge" class="badge badge-accent">v2.5.9</span><span id="header-update-dot" class="badge-dot-pulse hidden" title="发现新版本"></span></span>
+                    <span class="version-trigger" data-action="openUpdateModal" title="点击检查系统更新"><span id="app-version-badge" class="badge badge-accent">v2.5.9.1</span><span id="header-update-dot" class="badge-dot-pulse hidden" title="发现新版本"></span></span>
                 </div>
 
                 <div class="header-actions">
@@ -110,7 +110,7 @@
         <div class="stat-grid">
             <div class="stat-card">
                 <div class="stat-header">
-                    <span class="stat-title">实时下载速率</span>
+                    <span class="stat-title" data-i18n="stat.down_speed">实时下载速率</span>
                     <svg aria-hidden="true" class="stat-icon" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                 </div>
                 <div id="stat-down-speed" class="stat-val">0 B/s</div>
@@ -118,7 +118,7 @@
             </div>
             <div class="stat-card">
                 <div class="stat-header">
-                    <span class="stat-title">实时上传速率</span>
+                    <span class="stat-title" data-i18n="stat.up_speed">实时上传速率</span>
                     <svg aria-hidden="true" class="stat-icon" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                 </div>
                 <div id="stat-up-speed" class="stat-val">0 B/s</div>
@@ -126,7 +126,7 @@
             </div>
             <div class="stat-card">
                 <div class="stat-header">
-                    <span class="stat-title">活跃代理连接</span>
+                    <span class="stat-title" data-i18n="stat.active_conns">活跃代理连接</span>
                     <svg aria-hidden="true" class="stat-icon" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                 </div>
                 <div id="stat-active-conns" class="stat-val">0</div>
@@ -134,7 +134,7 @@
             </div>
             <div class="stat-card interactive-card"  data-action="openBlacklistModal" title="点击查看与管理故障隔离/已屏蔽的节点">
                 <div class="stat-header">
-                    <span class="stat-title">黑名单管理 <span class="text-accent">↗</span></span>
+                    <span class="stat-title"><span data-i18n="nodes.blacklist_btn">黑名单管理</span> <span class="text-accent">↗</span></span>
                     <svg aria-hidden="true" class="stat-icon" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
                 </div>
                 <div id="stat-nodes-count" class="stat-val">0 / 0</div>
@@ -147,12 +147,12 @@
             <div class="tunnels-strip-header">
                 <div class="tunnels-strip-title">
                     <svg aria-hidden="true" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-                    活跃隧道出口 (<span id="tunnels-count"  class="text-accent">0</span> 个在线)
+                    <span data-i18n="dash.tunnels_matrix">活跃隧道出口</span> (<span id="tunnels-count"  class="text-accent">0</span> 个在线)
                 </div>
                 <div  class="row gap-2">
                     <button class="btn btn-outline btn-xs"  data-action="openPortMatrixModal">
                         <svg aria-hidden="true" viewBox="0 0 24 24"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/></svg>
-                        分流规则
+                        <span data-i18n="nav.matrix">端口分流</span>
                     </button>
                 </div>
             </div>
@@ -169,28 +169,28 @@
                     <div class="card-header">
                         <div class="card-title">
                             <svg aria-hidden="true" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-                            主出口状态
+                            <span data-i18n="dash.primary_status">主出口状态</span>
                         </div>
                         <span id="vpn-uptime"  class="text-sm text-muted">运行时间: -</span>
                     </div>
                     <div class="info-row">
-                        <span class="info-label">连接状态</span>
+                        <span class="info-label" data-i18n="dash.conn_status">连接状态</span>
                         <span id="vpn-status-text" class="info-val">未连接</span>
                     </div>
                     <div class="info-row">
-                        <span class="info-label">活跃节点 IP</span>
+                        <span class="info-label" data-i18n="dash.node_ip">活跃节点 IP</span>
                         <span id="vpn-node-ip" class="info-val">-</span>
                     </div>
                     <div class="info-row">
-                        <span class="info-label">网络类型 / ISP</span>
+                        <span class="info-label" data-i18n="dash.node_type">网络类型 / ISP</span>
                         <span id="vpn-node-type" class="info-val">-</span>
                     </div>
                     <div class="info-row">
-                        <span class="info-label">国家 / 城市地区</span>
+                        <span class="info-label" data-i18n="dash.node_country">国家 / 城市地区</span>
                         <span id="vpn-node-country" class="info-val">-</span>
                     </div>
                     <div class="info-row">
-                        <span class="info-label">默认本地代理</span>
+                        <span class="info-label" data-i18n="dash.local_proxy">默认本地代理</span>
                         <span id="vpn-proxy-addr" class="info-val">127.0.0.1:7928 (HTTP / SOCKS5)</span>
                     </div>
                 </div>
@@ -205,11 +205,11 @@
                 <div class="card-header">
                     <div class="card-title">
                         <svg aria-hidden="true" viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
-                        实时运行日志
+                        <span data-i18n="dash.live_logs">实时运行日志</span>
                     </div>
                     <button class="btn btn-outline btn-xs"  data-action="clearLogs">
                         <svg aria-hidden="true" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-                        清屏
+                        <span data-i18n="dash.clear_logs">清屏</span>
                     </button>
                 </div>
                 <div id="terminal" class="terminal-box" role="log" aria-live="polite" aria-label="实时运行日志">
@@ -286,57 +286,57 @@
         </div>
         <!-- End View 2: sing-box -->
 
-        <!-- View 4: 优质节点列表 Nodes -->
+        <!-- View 4: VPN 节点列表 Nodes -->
         <div id="view-nodes" class="view-page">
         <!-- Node Explorer Card -->
         <div class="card">
             <div class="card-header">
                 <div class="card-title">
                     <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-                    优质 VPN 节点列表
+                    <span data-i18n="title.nodes">VPN 节点列表</span>
                 </div>
                 <div  class="row gap-2 wrap">
                     <button id="btn-probe-nodes" class="btn" data-action="probeCurrentNodes">
                         <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                        一键测速与解锁检测
+                        <span data-i18n="nodes.probe_btn">一键测速与解锁检测</span>
                     </button>
                     <button class="btn btn-outline" data-action="refreshNodes">
                         <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-                        刷新节点源
+                        <span data-i18n="nodes.refresh_feed">刷新节点</span>
                     </button>
                 </div>
             </div>
 
             <!-- Quick Filter Chips Toolbar -->
             <div class="chips-bar">
-                <button type="button" class="chip active" id="chip-all" data-action="selectQuickFilter" data-args="[&quot;all&quot;]">全部节点</button>
-                <button type="button" class="chip" id="chip-fav" data-action="selectQuickFilter" data-args="[&quot;fav&quot;]">仅看收藏 (<span id="fav-count">0</span>)</button>
-                <button type="button" class="chip" id="chip-ai" data-action="selectQuickFilter" data-args="[&quot;ai&quot;]">三大 AI 全解</button>
-                <button type="button" class="chip" id="chip-gpt" data-action="selectQuickFilter" data-args="[&quot;gpt&quot;]">解锁 ChatGPT</button>
-                <button type="button" class="chip" id="chip-claude" data-action="selectQuickFilter" data-args="[&quot;claude&quot;]">解锁 Claude</button>
-                <button type="button" class="chip" id="chip-gemini" data-action="selectQuickFilter" data-args="[&quot;gemini&quot;]">解锁 Gemini</button>
-                <button type="button" class="chip" id="chip-res" data-action="selectQuickFilter" data-args="[&quot;res&quot;]">住宅家宽</button>
-                <button type="button" class="chip" id="chip-host" data-action="selectQuickFilter" data-args="[&quot;host&quot;]">机房网络</button>
+                <button type="button" class="chip active" id="chip-all" data-action="selectQuickFilter" data-args="[&quot;all&quot;]" data-i18n="nodes.filter_all">全部节点</button>
+                <button type="button" class="chip" id="chip-fav" data-action="selectQuickFilter" data-args="[&quot;fav&quot;]"><span data-i18n="nodes.filter_fav">我的收藏</span> (<span id="fav-count">0</span>)</button>
+                <button type="button" class="chip" id="chip-ai" data-action="selectQuickFilter" data-args="[&quot;ai&quot;]" data-i18n="nodes.filter_ai">AI 全解锁</button>
+                <button type="button" class="chip" id="chip-gpt" data-action="selectQuickFilter" data-args="[&quot;gpt&quot;]" data-i18n="nodes.filter_gpt">解锁 ChatGPT</button>
+                <button type="button" class="chip" id="chip-claude" data-action="selectQuickFilter" data-args="[&quot;claude&quot;]" data-i18n="nodes.filter_claude">解锁 Claude</button>
+                <button type="button" class="chip" id="chip-gemini" data-action="selectQuickFilter" data-args="[&quot;gemini&quot;]" data-i18n="nodes.filter_gemini">解锁 Gemini</button>
+                <button type="button" class="chip" id="chip-res" data-action="selectQuickFilter" data-args="[&quot;res&quot;]" data-i18n="nodes.filter_res">原生住宅宽带</button>
+                <button type="button" class="chip" id="chip-host" data-action="selectQuickFilter" data-args="[&quot;host&quot;]" data-i18n="nodes.filter_host">机房网络</button>
                 <button type="button" class="chip" id="chip-fast" data-action="selectQuickFilter" data-args="[&quot;fast&quot;]">延迟 &lt; 150ms</button>
-                <button type="button" class="chip" id="chip-nf" data-action="selectQuickFilter" data-args="[&quot;nf&quot;]">解锁 Netflix</button>
+                <button type="button" class="chip" id="chip-nf" data-action="selectQuickFilter" data-args="[&quot;nf&quot;]" data-i18n="nodes.filter_nf">解锁 Netflix</button>
             </div>
 
             <!-- Filter Inputs -->
             <div class="filter-controls">
-                <input id="search-filter" class="input-field search-wide" type="search" aria-label="搜索节点" placeholder="搜索 IP / 国家 / 城市 / 运营商..."  data-input-action="renderNodes">
+                <input id="search-filter" class="input-field search-wide" type="search" aria-label="搜索节点" placeholder="搜索 IP / 国家 / 城市 / 运营商..." data-i18n-placeholder="nodes.search_ph" data-input-action="renderNodes">
                 <select id="country-filter" class="input-field" aria-label="按国家或地区筛选" data-change-action="renderNodes">
-                    <option value="">全部国家/地区</option>
+                    <option value="" data-i18n="nodes.country_all">全部国家/地区</option>
                 </select>
                 <select id="ip-type-filter" class="input-field" aria-label="按网络类型筛选" data-change-action="renderNodes">
-                    <option value="">全部网络类型</option>
-                    <option value="residential">住宅宽带 IP (家宽)</option>
-                    <option value="hosting">机房/数据中心 IP</option>
+                    <option value="" data-i18n="nodes.iptype_all">全部网络类型</option>
+                    <option value="residential" data-i18n="nodes.iptype_res">原生住宅宽带 (家宽)</option>
+                    <option value="hosting" data-i18n="nodes.iptype_host">机房/数据中心 IP</option>
                     <option value="mobile">移动蜂窝网络 IP</option>
                 </select>
                 <select id="sort-filter" class="input-field" aria-label="节点排序方式" data-change-action="renderNodes">
-                    <option value="latency_asc">排序: 按测速延迟 (从低到高)</option>
-                    <option value="speed_desc">排序: 按节点带宽 (从大到小)</option>
-                    <option value="score_desc">排序: 按综合评分 (从高到低)</option>
+                    <option value="latency_asc" data-i18n="nodes.sort_latency">按测速延迟 (从低到高)</option>
+                    <option value="speed_desc" data-i18n="nodes.sort_speed">按节点带宽 (从大到小)</option>
+                    <option value="score_desc" data-i18n="nodes.sort_score">按综合评分 (从高到低)</option>
                     <option value="ping_asc">排序: 按原始 Ping (从快到慢)</option>
                 </select>
                 <span id="filtered-count"  class="filtered-count">共加载 0 个节点</span>
@@ -347,15 +347,15 @@
                 <table>
                     <thead>
                         <tr>
-                            <th  class="cell-center cell-favorite">收藏</th>
-                            <th>国家 / 城市</th>
-                            <th>出口端点</th>
-                            <th>网络类型 / ISP</th>
-                            <th data-action="toggleSort" data-args="[&quot;latency&quot;]"  title="点击按延迟排序" class="cursor-pointer">延迟 / 可用性 <span id="sort-icon-latency">⇅</span></th>
-                            <th>信誉</th>
-                            <th>AI / 流媒体解锁 (测速同步)</th>
-                            <th data-action="toggleSort" data-args="[&quot;speed&quot;]"  title="点击按带宽排序" class="cursor-pointer">带宽 / 评分 <span id="sort-icon-speed">⇅</span></th>
-                            <th  class="text-right">操作</th>
+                            <th  class="cell-center cell-favorite" data-i18n="th.favorite">收藏</th>
+                            <th data-i18n="th.region">国家 / 城市</th>
+                            <th data-i18n="th.endpoint">出口端点</th>
+                            <th data-i18n="th.network_type">网络类型 / ISP</th>
+                            <th data-action="toggleSort" data-args="[&quot;latency&quot;]"  title="点击按延迟排序" class="cursor-pointer"><span data-i18n="th.latency">延迟 / 可用性</span> <span id="sort-icon-latency">⇅</span></th>
+                            <th data-i18n="th.reputation">信誉</th>
+                            <th data-i18n="th.unlocks">AI / 流媒体解锁</th>
+                            <th data-action="toggleSort" data-args="[&quot;speed&quot;]"  title="点击按带宽排序" class="cursor-pointer"><span data-i18n="th.speed">带宽 / 评分</span> <span id="sort-icon-speed">⇅</span></th>
+                            <th  class="text-right" data-i18n="th.actions">操作</th>
                         </tr>
                     </thead>
                     <tbody id="nodes-tbody">

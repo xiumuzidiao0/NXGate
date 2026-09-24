@@ -1045,13 +1045,15 @@ fun ServerSystemScreen(
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(24.dp)
                     )
-                    Text("确认升级网关核心", fontWeight = FontWeight.Bold)
+                    val isEn = strings == AppStringsEn
+                    Text(if (isEn) "Confirm Gateway Core Upgrade" else "确认升级网关核心", fontWeight = FontWeight.Bold)
                 }
             },
             text = {
+                val isEn = strings == AppStringsEn
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        text = "即将为服务器 [${activeServer.name}] 执行极速热升级：",
+                        text = if (isEn) "About to perform upgrade for [${activeServer.name}]:" else "即将为服务器 [${activeServer.name}] 执行极速热升级：",
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Surface(
@@ -1060,19 +1062,20 @@ fun ServerSystemScreen(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(modifier = Modifier.padding(10.dp)) {
-                            Text("当前版本: v${updateInfo!!.currentVersion}", style = MaterialTheme.typography.bodySmall)
-                            Text("目标版本: v${updateInfo!!.latestVersion}", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                            Text("发布说明: ${updateInfo!!.releaseName}", style = MaterialTheme.typography.bodySmall)
+                            Text(if (isEn) "Current Version: v${updateInfo!!.currentVersion}" else "当前版本: v${updateInfo!!.currentVersion}", style = MaterialTheme.typography.bodySmall)
+                            Text(if (isEn) "Target Version: v${updateInfo!!.latestVersion}" else "目标版本: v${updateInfo!!.latestVersion}", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                            Text(if (isEn) "Release: ${updateInfo!!.releaseName}" else "发布说明: ${updateInfo!!.releaseName}", style = MaterialTheme.typography.bodySmall)
                         }
                     }
                     Text(
-                        text = "服务端将通过 GitHub Release 下载最新预编译包，比对可信 SHA-256 哈希清单，备份当前可执行程序，并通过 systemd 平滑重启网关服务。",
+                        text = if (isEn) "The server will download the latest release from GitHub, verify SHA-256 hash, back up the binary, and gracefully restart the systemd service." else "服务端将通过 GitHub Release 下载最新预编译包，比对可信 SHA-256 哈希清单，备份当前可执行程序，并通过 systemd 平滑重启网关服务。",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             },
             confirmButton = {
+                val isEn = strings == AppStringsEn
                 Button(
                     onClick = {
                         showUpdateConfirmDialog = false
@@ -1080,20 +1083,21 @@ fun ServerSystemScreen(
                         scope.launch {
                             val res = NXGateApplication.instance.apiClient.triggerServerUpdate(activeServer)
                             if (res.isSuccess) {
-                                Toast.makeText(context, "更新任务已启动，正在执行自动部署...", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, if (isEn) "Update started, deploying automatically..." else "更新任务已启动，正在执行自动部署...", Toast.LENGTH_SHORT).show()
                             } else {
                                 isUpdating = false
-                                Toast.makeText(context, "触发更新失败: ${res.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
+                                Toast.makeText(context, "${if (isEn) "Trigger failed: " else "触发更新失败: "}${res.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
                             }
                         }
                     }
                 ) {
-                    Text("立即升级")
+                    Text(if (isEn) "Upgrade Now" else "立即升级")
                 }
             },
             dismissButton = {
+                val isEn = strings == AppStringsEn
                 TextButton(onClick = { showUpdateConfirmDialog = false }) {
-                    Text("取消")
+                    Text(if (isEn) "Cancel" else "取消")
                 }
             }
         )
@@ -1103,11 +1107,12 @@ fun ServerSystemScreen(
     // Release Notes Dialog
     // ==========================================
     if (showReleaseNotesDialog && updateInfo != null) {
+        val isEn = strings == AppStringsEn
         AlertDialog(
             onDismissRequest = { showReleaseNotesDialog = false },
             shape = RoundedCornerShape(24.dp),
             title = {
-                Text("版本说明: v${updateInfo!!.latestVersion.ifEmpty { updateInfo!!.currentVersion }}", fontWeight = FontWeight.Bold)
+                Text(if (isEn) "Release Notes: v${updateInfo!!.latestVersion.ifEmpty { updateInfo!!.currentVersion }}" else "版本说明: v${updateInfo!!.latestVersion.ifEmpty { updateInfo!!.currentVersion }}", fontWeight = FontWeight.Bold)
             },
             text = {
                 Column(
@@ -1117,7 +1122,7 @@ fun ServerSystemScreen(
                         .verticalScroll(rememberScrollState())
                 ) {
                     Text(
-                        text = updateInfo!!.releaseNotes.ifEmpty { "暂无详细发布日志" },
+                        text = updateInfo!!.releaseNotes.ifEmpty { if (isEn) "No release notes available" else "暂无详细发布日志" },
                         style = MaterialTheme.typography.bodySmall,
                         fontFamily = FontFamily.Monospace
                     )
@@ -1125,7 +1130,7 @@ fun ServerSystemScreen(
             },
             confirmButton = {
                 TextButton(onClick = { showReleaseNotesDialog = false }) {
-                    Text("关闭")
+                    Text(if (isEn) "Close" else "关闭")
                 }
             }
         )
@@ -1135,6 +1140,7 @@ fun ServerSystemScreen(
     // Generate age Key Pair Modal Dialog
     // ==========================================
     if (showAgeGenDialog && activeServer != null) {
+        val isEn = strings == AppStringsEn
         AlertDialog(
             onDismissRequest = { showAgeGenDialog = false },
             shape = RoundedCornerShape(24.dp),
@@ -1144,7 +1150,7 @@ fun ServerSystemScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Icon(Icons.Rounded.VpnKey, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                    Text("生成全新 age 密钥对", fontWeight = FontWeight.Bold)
+                    Text(if (isEn) "Generate New age Key Pair" else "生成全新 age 密钥对", fontWeight = FontWeight.Bold)
                 }
             },
             text = {
@@ -1155,7 +1161,7 @@ fun ServerSystemScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Text(
-                        text = "选择密钥算法规范：",
+                        text = if (isEn) "Select Key Algorithm Specification:" else "选择密钥算法规范：",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -1167,13 +1173,13 @@ fun ServerSystemScreen(
                         FilterChip(
                             selected = ageGenType == "x25519",
                             onClick = { ageGenType = "x25519" },
-                            label = { Text("X25519 (标准)") },
+                            label = { Text(if (isEn) "X25519 (Standard)" else "X25519 (标准)") },
                             modifier = Modifier.weight(1f)
                         )
                         FilterChip(
                             selected = ageGenType == "mlkem768x25519",
                             onClick = { ageGenType = "mlkem768x25519" },
-                            label = { Text("MLKEM768 (抗量子)") },
+                            label = { Text(if (isEn) "MLKEM768 (PQ Hybrid)" else "MLKEM768 (抗量子)") },
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -1188,7 +1194,7 @@ fun ServerSystemScreen(
                                     if (res.isSuccess) {
                                         generatedAgeResult = res.getOrNull()
                                     } else {
-                                        Toast.makeText(context, "生成失败: ${res.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
+                                        Toast.makeText(context, "${if (isEn) "Generation failed: " else "生成失败: "}${res.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
                                     }
                                 }
                             },
@@ -1199,7 +1205,7 @@ fun ServerSystemScreen(
                             if (isGeneratingAge) {
                                 CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
                             } else {
-                                Text("立即随机生成")
+                                Text(if (isEn) "Generate Random Pair" else "立即随机生成")
                             }
                         }
                     } else {
@@ -1213,28 +1219,28 @@ fun ServerSystemScreen(
                                 modifier = Modifier.padding(12.dp),
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Text("Recipient 公钥:", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                                Text(if (isEn) "Recipient Public Key (Shareable):" else "Recipient 公钥:", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                                 Text(res.publicKey, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
                                 OutlinedButton(
-                                    onClick = { copyToClipboard("公钥", res.publicKey) },
+                                    onClick = { copyToClipboard(if (isEn) "Public Key" else "公钥", res.publicKey) },
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
                                     Icon(Icons.Rounded.ContentCopy, contentDescription = null, modifier = Modifier.size(14.dp))
                                     Spacer(Modifier.width(6.dp))
-                                    Text("复制公钥")
+                                    Text(if (isEn) "Copy Public Key" else "复制公钥")
                                 }
 
                                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
-                                Text("Identity 私钥 (请妥善离线保存!):", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
+                                Text(if (isEn) "Identity Secret Key (Keep Secret!):" else "Identity 私钥 (请妥善离线保存!):", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
                                 Text(res.secretKey, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
                                 OutlinedButton(
-                                    onClick = { copyToClipboard("私钥", res.secretKey) },
+                                    onClick = { copyToClipboard(if (isEn) "Secret Key" else "私钥", res.secretKey) },
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
                                     Icon(Icons.Rounded.ContentCopy, contentDescription = null, modifier = Modifier.size(14.dp))
                                     Spacer(Modifier.width(6.dp))
-                                    Text("复制私钥")
+                                    Text(if (isEn) "Copy Secret Key" else "复制私钥")
                                 }
                             }
                         }
@@ -1243,19 +1249,19 @@ fun ServerSystemScreen(
                             onClick = {
                                 agePublicKey = res.publicKey
                                 showAgeGenDialog = false
-                                Toast.makeText(context, "已将新生成的公钥填入配置，记得点击「保存」！", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, if (isEn) "Applied public key to settings. Tap Save!" else "已将新生成的公钥填入配置，记得点击「保存」！", Toast.LENGTH_SHORT).show()
                             },
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("应用为此网关公钥")
+                            Text(if (isEn) "Apply as Gateway Recipient" else "应用为此网关公钥")
                         }
                     }
                 }
             },
             confirmButton = {
                 TextButton(onClick = { showAgeGenDialog = false }) {
-                    Text("关闭")
+                    Text(if (isEn) "Close" else "关闭")
                 }
             }
         )
@@ -1265,6 +1271,7 @@ fun ServerSystemScreen(
     // Derive age Key Dialog
     // ==========================================
     if (showAgeDeriveDialog && activeServer != null) {
+        val isEn = strings == AppStringsEn
         AlertDialog(
             onDismissRequest = { showAgeDeriveDialog = false },
             shape = RoundedCornerShape(24.dp),
@@ -1274,13 +1281,13 @@ fun ServerSystemScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Icon(Icons.Rounded.Key, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                    Text("从已有私钥推导公钥", fontWeight = FontWeight.Bold)
+                    Text(if (isEn) "Derive Public Key from Secret Key" else "从已有私钥推导公钥", fontWeight = FontWeight.Bold)
                 }
             },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
-                        text = "输入已有的 age Identity 私钥 (AGE-SECRET-KEY-1...)：",
+                        text = if (isEn) "Enter your age Identity secret key (AGE-SECRET-KEY-1...)：" else "输入已有的 age Identity 私钥 (AGE-SECRET-KEY-1...)：",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -1300,7 +1307,7 @@ fun ServerSystemScreen(
                 Button(
                     onClick = {
                         if (deriveSecretKeyInput.isBlank()) {
-                            Toast.makeText(context, "请输入私钥文本", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, if (isEn) "Please enter secret key text" else "请输入私钥文本", Toast.LENGTH_SHORT).show()
                             return@Button
                         }
                         scope.launch {
@@ -1312,10 +1319,10 @@ fun ServerSystemScreen(
                                 if (pub.isNotEmpty()) {
                                     agePublicKey = pub
                                     showAgeDeriveDialog = false
-                                    Toast.makeText(context, "推导成功，已自动填入 Recipient 公钥！", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, if (isEn) "Derived successfully, filled Recipient public key!" else "推导成功，已自动填入 Recipient 公钥！", Toast.LENGTH_SHORT).show()
                                 }
                             } else {
-                                Toast.makeText(context, "推导失败: ${res.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
+                                Toast.makeText(context, "${if (isEn) "Derivation failed: " else "推导失败: "}${res.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
                             }
                         }
                     },
@@ -1324,13 +1331,13 @@ fun ServerSystemScreen(
                     if (isDerivingAge) {
                         CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
                     } else {
-                        Text("推导并填入")
+                        Text(if (isEn) "Derive & Fill" else "推导并填入")
                     }
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showAgeDeriveDialog = false }) {
-                    Text("取消")
+                    Text(if (isEn) "Cancel" else "取消")
                 }
             }
         )
@@ -1340,12 +1347,13 @@ fun ServerSystemScreen(
     // Clear Blacklist Dialog
     // ==========================================
     if (showClearBlacklistDialog && activeServer != null) {
+        val isEn = strings == AppStringsEn
         AlertDialog(
             onDismissRequest = { showClearBlacklistDialog = false },
             shape = RoundedCornerShape(24.dp),
-            title = { Text("清空全部屏蔽库", fontWeight = FontWeight.Bold) },
+            title = { Text(if (isEn) "Clear Entire Blacklist" else "清空全部屏蔽库", fontWeight = FontWeight.Bold) },
             text = {
-                Text("确定要清空该服务器上的全部硬屏蔽节点与隔离记录吗？清空后，所有被拉黑的节点将在下一周期恢复探测。")
+                Text(if (isEn) "Are you sure you want to clear all blocked nodes and quarantine records? Cleared nodes will be re-evaluated in the next probe cycle." else "确定要清空该服务器上的全部硬屏蔽节点与隔离记录吗？清空后，所有被拉黑的节点将在下一周期恢复探测。")
             },
             confirmButton = {
                 Button(
@@ -1356,20 +1364,20 @@ fun ServerSystemScreen(
                             val res = NXGateApplication.instance.apiClient.clearBlacklist(activeServer)
                             isClearingBlacklist = false
                             if (res.isSuccess) {
-                                Toast.makeText(context, "已成功清空服务端屏蔽库！", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, if (isEn) "Blacklist cleared successfully!" else "已成功清空服务端屏蔽库！", Toast.LENGTH_SHORT).show()
                             } else {
-                                Toast.makeText(context, "清空失败: ${res.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "${if (isEn) "Clear failed: " else "清空失败: "}${res.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
                             }
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) {
-                    Text("确认清空")
+                    Text(if (isEn) "Confirm Clear" else "确认清空")
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showClearBlacklistDialog = false }) {
-                    Text("取消")
+                    Text(if (isEn) "Cancel" else "取消")
                 }
             }
         )
@@ -1379,6 +1387,7 @@ fun ServerSystemScreen(
     // System Logs Modal Bottom Sheet
     // ==========================================
     if (showLogsSheet) {
+        val isEn = strings == AppStringsEn
         ModalBottomSheet(
             onDismissRequest = { showLogsSheet = false },
             sheetState = logsSheetState,
@@ -1396,12 +1405,12 @@ fun ServerSystemScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "服务端实时运行日志",
+                        text = if (isEn) "Server Live Logs" else "服务端实时运行日志",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
                     IconButton(onClick = { showLogsSheet = false }) {
-                        Icon(Icons.Rounded.Close, contentDescription = "关闭")
+                        Icon(Icons.Rounded.Close, contentDescription = if (isEn) "Close" else "关闭")
                     }
                 }
 
@@ -1413,7 +1422,7 @@ fun ServerSystemScreen(
                     }
                 } else if (systemLogs.isEmpty()) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("暂无日志记录", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(if (isEn) "No log records available" else "暂无日志记录", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 } else {
                     LazyColumn(

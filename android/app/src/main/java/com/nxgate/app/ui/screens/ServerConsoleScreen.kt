@@ -557,33 +557,29 @@ fun ServerConsoleScreen(
                                         text = strings.quickRotate,
                                         style = ConnectedButtonStyle.Filled,
                                         onClick = {
-                                            if (activeServer != null) {
-                                                scope.launch {
-                                                    val res = NXGateApplication.instance.apiClient.triggerRotate(activeServer)
-                                                    masterInfo = masterInfo.copy(
-                                                        nodeName = "日本住宅最优节点(已切换)",
-                                                        uptimeStr = "刚刚",
-                                                        status = "断流检测通过",
-                                                        isConnected = true
-                                                    )
-                                                    Toast.makeText(context, res.getOrDefault("已触发主网关切换最优出口！"), Toast.LENGTH_SHORT).show()
-                                                }
+                                            scope.launch {
+                                                val res = NXGateApplication.instance.apiClient.triggerRotate(activeServer)
+                                                masterInfo = masterInfo.copy(
+                                                    nodeName = if (strings == AppStringsEn) "Optimal Residential (Switched)" else "日本住宅最优节点(已切换)",
+                                                    uptimeStr = if (strings == AppStringsEn) "Just now" else "刚刚",
+                                                    status = if (strings == AppStringsEn) "Healthy" else "断流检测通过",
+                                                    isConnected = true
+                                                )
+                                                Toast.makeText(context, res.getOrDefault(if (strings == AppStringsEn) "Triggered switch to optimal egress" else "已触发主网关切换最优出口！"), Toast.LENGTH_SHORT).show()
                                             }
                                         }
                                     ),
                                     ConnectedButtonItem(
-                                        text = "断开主网关",
+                                        text = if (strings == AppStringsEn) "Disconnect Primary" else "断开主网关",
                                         style = ConnectedButtonStyle.Outlined,
                                         onClick = {
-                                            if (activeServer != null) {
-                                                scope.launch {
-                                                    NXGateApplication.instance.apiClient.disconnectMasterVPN(activeServer)
-                                                    masterInfo = masterInfo.copy(
-                                                        status = "已手动断开，保留配置",
-                                                        isConnected = false
-                                                    )
-                                                    Toast.makeText(context, "主网关连接已主动断开，保留配置", Toast.LENGTH_SHORT).show()
-                                                }
+                                            scope.launch {
+                                                NXGateApplication.instance.apiClient.disconnectMasterVPN(activeServer)
+                                                masterInfo = masterInfo.copy(
+                                                    status = if (strings == AppStringsEn) "Disconnected" else "已手动断开，保留配置",
+                                                    isConnected = false
+                                                )
+                                                Toast.makeText(context, if (strings == AppStringsEn) "Primary gateway disconnected" else "主网关连接已主动断开，保留配置", Toast.LENGTH_SHORT).show()
                                             }
                                         }
                                     )
@@ -621,20 +617,16 @@ fun ServerConsoleScreen(
                                     TunnelChipCard(
                                         tunnel = tunnel,
                                         onProbeUnlock = {
-                                            if (activeServer != null) {
-                                                scope.launch {
-                                                    NXGateApplication.instance.apiClient.probeTunnelUnlock(activeServer, tunnel.id)
-                                                    Toast.makeText(context, "正在对网卡 [${tunnel.devName}] 执行三大 AI 与流媒体实测解锁探测...", Toast.LENGTH_SHORT).show()
-                                                }
+                                            scope.launch {
+                                                NXGateApplication.instance.apiClient.probeTunnelUnlock(activeServer, tunnel.id)
+                                                Toast.makeText(context, if (strings == AppStringsEn) "Probing unlocks for [${tunnel.devName}]..." else "正在对网卡 [${tunnel.devName}] 执行三大 AI 与流媒体实测解锁探测...", Toast.LENGTH_SHORT).show()
                                             }
                                         },
                                         onStopTunnel = {
-                                            if (activeServer != null) {
-                                                scope.launch {
-                                                    NXGateApplication.instance.apiClient.stopTunnel(activeServer, tunnel.id)
-                                                    tunnelList = tunnelList.filter { it.id != tunnel.id }
-                                                    Toast.makeText(context, "已断开并注销虚拟网卡 ${tunnel.devName}", Toast.LENGTH_SHORT).show()
-                                                }
+                                            scope.launch {
+                                                NXGateApplication.instance.apiClient.stopTunnel(activeServer, tunnel.id)
+                                                tunnelList = tunnelList.filter { it.id != tunnel.id }
+                                                Toast.makeText(context, if (strings == AppStringsEn) "Disconnected tunnel ${tunnel.devName}" else "已断开并注销虚拟网卡 ${tunnel.devName}", Toast.LENGTH_SHORT).show()
                                             }
                                         }
                                     )
@@ -704,33 +696,29 @@ fun ServerConsoleScreen(
                                 text = strings.quickRotate,
                                 style = ConnectedButtonStyle.Filled,
                                 onClick = {
-                                    if (activeServer != null) {
-                                        scope.launch {
-                                            val res = NXGateApplication.instance.apiClient.triggerRotate(activeServer)
-                                            masterInfo = masterInfo.copy(
-                                                nodeName = "日本住宅最优节点(已切换)",
-                                                uptimeStr = "刚刚",
-                                                status = "断流检测通过",
-                                                isConnected = true
-                                            )
-                                            Toast.makeText(context, res.getOrDefault("已触发主网关切换最优出口！"), Toast.LENGTH_SHORT).show()
-                                        }
+                                    scope.launch {
+                                        val res = NXGateApplication.instance.apiClient.triggerRotate(activeServer)
+                                        masterInfo = masterInfo.copy(
+                                            nodeName = if (strings == AppStringsEn) "Optimal Residential (Switched)" else "日本住宅最优节点(已切换)",
+                                            uptimeStr = if (strings == AppStringsEn) "Just now" else "刚刚",
+                                            status = if (strings == AppStringsEn) "Healthy" else "断流检测通过",
+                                            isConnected = true
+                                        )
+                                        Toast.makeText(context, res.getOrDefault(if (strings == AppStringsEn) "Triggered switch to optimal egress" else "已触发主网关切换最优出口！"), Toast.LENGTH_SHORT).show()
                                     }
                                 }
                             ),
                             ConnectedButtonItem(
-                                text = "断开主网关",
+                                text = if (strings == AppStringsEn) "Disconnect Primary" else "断开主网关",
                                 style = ConnectedButtonStyle.Outlined,
                                 onClick = {
-                                    if (activeServer != null) {
-                                        scope.launch {
-                                            NXGateApplication.instance.apiClient.disconnectMasterVPN(activeServer)
-                                            masterInfo = masterInfo.copy(
-                                                status = "已手动断开，保留配置",
-                                                isConnected = false
-                                            )
-                                            Toast.makeText(context, "主网关连接已主动断开，保留配置", Toast.LENGTH_SHORT).show()
-                                        }
+                                    scope.launch {
+                                        NXGateApplication.instance.apiClient.disconnectMasterVPN(activeServer)
+                                        masterInfo = masterInfo.copy(
+                                            status = if (strings == AppStringsEn) "Disconnected" else "已手动断开，保留配置",
+                                            isConnected = false
+                                        )
+                                        Toast.makeText(context, if (strings == AppStringsEn) "Primary gateway disconnected" else "主网关连接已主动断开，保留配置", Toast.LENGTH_SHORT).show()
                                     }
                                 }
                             )
@@ -764,20 +752,16 @@ fun ServerConsoleScreen(
                                 TunnelChipCard(
                                     tunnel = tunnel,
                                     onProbeUnlock = {
-                                        if (activeServer != null) {
-                                            scope.launch {
-                                                NXGateApplication.instance.apiClient.probeTunnelUnlock(activeServer, tunnel.id)
-                                                Toast.makeText(context, "已对网卡 [${tunnel.devName}] 启动解锁探测！", Toast.LENGTH_SHORT).show()
-                                            }
+                                        scope.launch {
+                                            NXGateApplication.instance.apiClient.probeTunnelUnlock(activeServer, tunnel.id)
+                                            Toast.makeText(context, if (strings == AppStringsEn) "Probing unlocks for [${tunnel.devName}]..." else "已对网卡 [${tunnel.devName}] 启动解锁探测！", Toast.LENGTH_SHORT).show()
                                         }
                                     },
                                     onStopTunnel = {
-                                        if (activeServer != null) {
-                                            scope.launch {
-                                                NXGateApplication.instance.apiClient.stopTunnel(activeServer, tunnel.id)
-                                                tunnelList = tunnelList.filter { it.id != tunnel.id }
-                                                Toast.makeText(context, "已断开并注销虚拟网卡 ${tunnel.devName}", Toast.LENGTH_SHORT).show()
-                                            }
+                                        scope.launch {
+                                            NXGateApplication.instance.apiClient.stopTunnel(activeServer, tunnel.id)
+                                            tunnelList = tunnelList.filter { it.id != tunnel.id }
+                                            Toast.makeText(context, if (strings == AppStringsEn) "Disconnected tunnel ${tunnel.devName}" else "已断开并注销虚拟网卡 ${tunnel.devName}", Toast.LENGTH_SHORT).show()
                                         }
                                     }
                                 )
