@@ -205,10 +205,12 @@ fun ServerSystemScreen(
     // Polling for update status while update is in progress
     LaunchedEffect(isUpdating) {
         if (!isUpdating || activeServer == null) return@LaunchedEffect
+        var consecutiveErrors = 0
         while (isActive && isUpdating) {
             delay(1500)
             val res = NXGateApplication.instance.apiClient.fetchServerUpdateStatus(activeServer)
             if (res.isSuccess) {
+                consecutiveErrors = 0
                 val status = res.getOrNull()
                 updateStatus = status
                 if (status != null && !status.inProgress) {
@@ -216,9 +218,15 @@ fun ServerSystemScreen(
                     if (status.error.isNotEmpty()) {
                         Toast.makeText(context, "更新失败: ${status.error}", Toast.LENGTH_LONG).show()
                     } else {
-                        Toast.makeText(context, "网关自愈更新成功，已重启服务！", Toast.LENGTH_LONG).show()
+                        Toast.makeText(context, "网关更新成功，已重启服务！", Toast.LENGTH_LONG).show()
                         loadAllServerData()
                     }
+                }
+            } else {
+                consecutiveErrors++
+                if (consecutiveErrors >= 40) { // 60s without server response
+                    isUpdating = false
+                    Toast.makeText(context, "查询更新超时，请手动刷新网关状态", Toast.LENGTH_LONG).show()
                 }
             }
         }
@@ -368,7 +376,7 @@ fun ServerSystemScreen(
                                                 color = MaterialTheme.colorScheme.primary
                                             )
                                             Text(
-                                                text = "正在执行服务端自愈更新: ${updateStatus?.step ?: "准备中..."}",
+                                                text = "正在执行服务端更新: ${updateStatus?.step ?: "准备中..."}",
                                                 style = MaterialTheme.typography.bodyMedium,
                                                 fontWeight = FontWeight.SemiBold,
                                                 color = MaterialTheme.colorScheme.onPrimaryContainer
@@ -1058,7 +1066,7 @@ fun ServerSystemScreen(
                         }
                     }
                     Text(
-                        text = "服务端将通过 GitHub Release 下载最新预编译包，比对可信 SHA-256 哈希清单，备份当前可执行程序，并通过 systemd 平滑自愈重启网关服务。",
+                        text = "服务端将通过 GitHub Release 下载最新预编译包，比对可信 SHA-256 哈希清单，备份当前可执行程序，并通过 systemd 平滑重启网关服务。",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

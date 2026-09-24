@@ -1,5 +1,6 @@
 package com.nxgate.app.service
 
+import android.annotation.SuppressLint
 import android.content.Intent
 import android.os.Build
 import android.service.quicksettings.Tile
@@ -76,6 +77,7 @@ class NXGateTileService : TileService() {
         }
     }
 
+    @SuppressLint("StartActivityAndCollapseDeprecated")
     override fun onClick() {
         super.onClick()
         val activeServer = NXGateApplication.instance.serverStore.activeServer.value

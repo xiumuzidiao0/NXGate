@@ -70,7 +70,7 @@ func DefaultProtocols() []ProtocolInfo {
 			Recommended: false,
 			Transport:   "tcp",
 			TLS:         "acme/tls",
-			Description: "多路径自适应 TLS 传输协议，动态流量特征自愈",
+			Description: "多路径 TLS 传输协议，具备抗阻断特性",
 			Args:        []string{"port", "password", "domain"},
 		},
 		{
