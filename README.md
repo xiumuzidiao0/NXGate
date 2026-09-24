@@ -4,6 +4,8 @@
 
 **面向 Linux VPS 的多出口流量调度、全球原生住宅宽带智能发现与边缘抗封锁单端口代理网关系统**
 
+[English](README_EN.md) | [简体中文](README.md)
+
 [![Release](https://img.shields.io/github/v/release/xiumuzidiao0/NXGate?style=flat-square&label=Release&color=16a34a)](https://github.com/xiumuzidiao0/NXGate/releases/latest)
 [![Go Version](https://img.shields.io/badge/Go-1.25.13+-00ADD8?style=flat-square&logo=go)](https://go.dev/)
 [![Platform](https://img.shields.io/badge/Platform-amd64%20%7C%20arm64%20%7C%20386%20%7C%20arm-6366f1?style=flat-square)](https://github.com/xiumuzidiao0/NXGate/releases/latest)

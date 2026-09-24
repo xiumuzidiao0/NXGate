@@ -95,6 +95,15 @@ class ServerStore(private val context: Context) {
     private val _themeBase = MutableStateFlow("neutral") // "neutral", "slate", "sand", "oled"
     val themeBase: StateFlow<String> = _themeBase.asStateFlow()
 
+    private val _appLanguage = MutableStateFlow("system") // "system", "zh", "en"
+    val appLanguage: StateFlow<String> = _appLanguage.asStateFlow()
+
+    fun setAppLanguage(lang: String) {
+        _appLanguage.value = lang
+        prefs.edit().putString(KEY_APP_LANGUAGE, lang).apply()
+        NXGateWidgetProvider.updateAllWidgets(context)
+    }
+
     init {
         loadData()
     }
@@ -126,6 +135,7 @@ class ServerStore(private val context: Context) {
         _themePalette.value = prefs.getString(KEY_THEME_PALETTE, defaultPalette) ?: defaultPalette
         _themeAccent.value = prefs.getString(KEY_THEME_ACCENT, "teal") ?: "teal"
         _themeBase.value = prefs.getString(KEY_THEME_BASE, "neutral") ?: "neutral"
+        _appLanguage.value = prefs.getString(KEY_APP_LANGUAGE, "system") ?: "system"
     }
 
     fun setActiveServer(id: String) {
@@ -384,5 +394,6 @@ class ServerStore(private val context: Context) {
         private const val KEY_THEME_PALETTE = "theme_palette_str"
         private const val KEY_THEME_ACCENT = "theme_accent_str"
         private const val KEY_THEME_BASE = "theme_base_str"
+        private const val KEY_APP_LANGUAGE = "app_language_str"
     }
 }

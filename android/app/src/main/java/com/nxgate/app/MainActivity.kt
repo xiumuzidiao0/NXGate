@@ -12,8 +12,10 @@ import androidx.biometric.BiometricPrompt
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
@@ -21,6 +23,10 @@ import com.nxgate.app.data.ApiClient
 import com.nxgate.app.theme.NXGateTheme
 import com.nxgate.app.ui.components.BiometricLockOverlay
 import com.nxgate.app.ui.navigation.MainAppScaffold
+import com.nxgate.app.util.AppStringsEn
+import com.nxgate.app.util.AppStringsZh
+import com.nxgate.app.util.LocalAppStrings
+import java.util.Locale
 
 class MainActivity : FragmentActivity() {
 
@@ -58,6 +64,18 @@ class MainActivity : FragmentActivity() {
         }
 
         setContent {
+            val appLanguage by serverStore.appLanguage.collectAsState()
+            val currentStrings = remember(appLanguage) {
+                when (appLanguage) {
+                    "en" -> AppStringsEn
+                    "zh" -> AppStringsZh
+                    else -> {
+                        val sysLang = Locale.getDefault().language
+                        if (sysLang.startsWith("zh")) AppStringsZh else AppStringsEn
+                    }
+                }
+            }
+
             val themeMode by serverStore.themeMode.collectAsState()
             val themePalette by serverStore.themePalette.collectAsState()
             val themeAccent by serverStore.themeAccent.collectAsState()
@@ -70,28 +88,30 @@ class MainActivity : FragmentActivity() {
                 else -> isSystemInDarkTheme()
             }
 
-            NXGateTheme(
-                darkTheme = darkTheme,
-                paletteId = themePalette,
-                accentId = themeAccent,
-                baseId = themeBase
-            ) {
-                Box(modifier = Modifier.fillMaxSize()) {
-                    MainAppScaffold()
-                    BiometricLockOverlay(
-                        isLocked = isAppLocked,
-                        onUnlockRequested = {
-                            showBiometricPrompt(
-                                onSuccess = {
-                                    serverStore.setAppLocked(false)
-                                    lastBackgroundTimestamp = 0L
-                                },
-                                onError = { err ->
-                                    Toast.makeText(this@MainActivity, err, Toast.LENGTH_SHORT).show()
-                                }
-                            )
-                        }
-                    )
+            CompositionLocalProvider(LocalAppStrings provides currentStrings) {
+                NXGateTheme(
+                    darkTheme = darkTheme,
+                    paletteId = themePalette,
+                    accentId = themeAccent,
+                    baseId = themeBase
+                ) {
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        MainAppScaffold()
+                        BiometricLockOverlay(
+                            isLocked = isAppLocked,
+                            onUnlockRequested = {
+                                showBiometricPrompt(
+                                    onSuccess = {
+                                        serverStore.setAppLocked(false)
+                                        lastBackgroundTimestamp = 0L
+                                    },
+                                    onError = { err ->
+                                        Toast.makeText(this@MainActivity, err, Toast.LENGTH_SHORT).show()
+                                    }
+                                )
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -129,10 +149,19 @@ class MainActivity : FragmentActivity() {
     }
 
     fun showBiometricPrompt(onSuccess: () -> Unit, onError: (String) -> Unit = {}) {
+        val serverStore = NXGateApplication.instance.serverStore
+        val isEn = when (serverStore.appLanguage.value) {
+            "en" -> true
+            "zh" -> false
+            else -> !Locale.getDefault().language.startsWith("zh")
+        }
+        val title = if (isEn) "Biometric Authentication" else "生物识别安全验证"
+        val subtitle = if (isEn) "Verify fingerprint, face, or device security credentials to unlock NXGate" else "请验证指纹、面容或系统安全锁以解锁 NXGate"
+
         val executor = ContextCompat.getMainExecutor(this)
         val promptInfo = BiometricPrompt.PromptInfo.Builder()
-            .setTitle("生物识别安全验证")
-            .setSubtitle("请验证指纹、面容或系统安全锁以解锁 NXGate")
+            .setTitle(title)
+            .setSubtitle(subtitle)
             .setAllowedAuthenticators(
                 BiometricManager.Authenticators.BIOMETRIC_STRONG or
                         BiometricManager.Authenticators.BIOMETRIC_WEAK or

@@ -76,29 +76,44 @@ class NXGateWidgetProvider : AppWidgetProvider() {
             )
             views.setOnClickPendingIntent(R.id.widget_btn_refresh, refreshPendingIntent)
 
+            val isEn = when (NXGateApplication.instance.serverStore.appLanguage.value) {
+                "en" -> true
+                "zh" -> false
+                else -> !java.util.Locale.getDefault().language.startsWith("zh")
+            }
+            views.setTextViewText(R.id.widget_btn_rotate, if (isEn) "Rotate" else "换线")
+            views.setTextViewText(R.id.widget_btn_refresh, if (isEn) "Refresh" else "刷新")
+            views.setTextViewText(R.id.widget_btn_open, if (isEn) "Console" else "控制台")
+
             if (server == null) {
-                views.setTextViewText(R.id.widget_title, "NXGate (未配置)")
-                views.setTextViewText(R.id.widget_exit_ip, "请先在应用内添加 VPS 网关")
-                views.setTextViewText(R.id.widget_speed, "下行: 0.0 Mb/s · 总计: 0.0 Mb")
-                views.setTextViewText(R.id.widget_status_text, "未连接")
+                views.setTextViewText(R.id.widget_title, if (isEn) "NXGate (Unset)" else "NXGate (未配置)")
+                views.setTextViewText(R.id.widget_exit_ip, if (isEn) "Please add a VPS gateway in app" else "请先在应用内添加 VPS 网关")
+                views.setTextViewText(R.id.widget_speed, if (isEn) "Down: 0.0 Mb/s · Total: 0.0 Mb" else "下行: 0.0 Mb/s · 总计: 0.0 Mb")
+                views.setTextViewText(R.id.widget_status_text, if (isEn) "Disconnected" else "未连接")
                 views.setImageViewResource(R.id.widget_status_dot, R.drawable.widget_dot_offline)
             } else if (liveStatus != null) {
                 val (master, traffic) = liveStatus
                 views.setTextViewText(R.id.widget_title, server.name)
-                val nodeName = if (master.nodeName.isNotBlank()) master.nodeName else "主出口就绪"
-                views.setTextViewText(R.id.widget_exit_ip, "出口: $nodeName")
-                views.setTextViewText(R.id.widget_speed, "下行: ${traffic.downSpeedMbStr} · 上行: ${traffic.upSpeedMbStr}")
-                views.setTextViewText(R.id.widget_status_text, if (master.isConnected) "在线" else "离线")
+                val nodeName = if (master.nodeName.isNotBlank()) master.nodeName else (if (isEn) "Primary Ready" else "主出口就绪")
+                val exitLabel = if (isEn) "Exit: " else "出口: "
+                val downLabel = if (isEn) "Down: " else "下行: "
+                val upLabel = if (isEn) "Up: " else "上行: "
+                views.setTextViewText(R.id.widget_exit_ip, "$exitLabel$nodeName")
+                views.setTextViewText(R.id.widget_speed, "$downLabel${traffic.downSpeedMbStr} · $upLabel${traffic.upSpeedMbStr}")
+                views.setTextViewText(R.id.widget_status_text, if (master.isConnected) (if (isEn) "Online" else "在线") else (if (isEn) "Offline" else "离线"))
                 views.setImageViewResource(
                     R.id.widget_status_dot,
                     if (master.isConnected) R.drawable.widget_dot_online else R.drawable.widget_dot_offline
                 )
             } else {
                 views.setTextViewText(R.id.widget_title, server.name)
-                val exitDesc = if (server.exitIp.isNotEmpty()) "出口: ${server.exitIp} ${server.ipType}" else "出口: 待测"
+                val exitPrefix = if (isEn) "Exit: " else "出口: "
+                val downPrefix = if (isEn) "Down: " else "下行: "
+                val totalPrefix = if (isEn) "Total: " else "总计: "
+                val exitDesc = if (server.exitIp.isNotEmpty()) "$exitPrefix${server.exitIp} ${server.ipType}" else (if (isEn) "Exit: Pending" else "出口: 待测")
                 views.setTextViewText(R.id.widget_exit_ip, exitDesc)
-                views.setTextViewText(R.id.widget_speed, "下行: ${server.downSpeedStr} · 总计: ${server.totalTrafficStr}")
-                views.setTextViewText(R.id.widget_status_text, if (server.isOnline) "在线" else "离线")
+                views.setTextViewText(R.id.widget_speed, "$downPrefix${server.downSpeedStr} · $totalPrefix${server.totalTrafficStr}")
+                views.setTextViewText(R.id.widget_status_text, if (server.isOnline) (if (isEn) "Online" else "在线") else (if (isEn) "Offline" else "离线"))
                 views.setImageViewResource(
                     R.id.widget_status_dot,
                     if (server.isOnline) R.drawable.widget_dot_online else R.drawable.widget_dot_offline

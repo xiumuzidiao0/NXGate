@@ -48,6 +48,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nxgate.app.NXGateApplication
 import com.nxgate.app.model.ServerProfile
+import com.nxgate.app.util.AppStringsEn
+import com.nxgate.app.util.LocalAppStrings
 
 @Composable
 fun SubscriptionDialog(
@@ -55,6 +57,7 @@ fun SubscriptionDialog(
     onDismissRequest: () -> Unit
 ) {
     val context = LocalContext.current
+    val strings = LocalAppStrings.current
     val clipboardManager = LocalClipboardManager.current
     var isLoading by remember { mutableStateOf(true) }
     var genericUrl by remember { mutableStateOf("${server.baseUrl}/api/singbox/subscription") }
@@ -100,12 +103,12 @@ fun SubscriptionDialog(
                 }
                 Column {
                     Text(
-                        text = "获取节点订阅",
+                        text = strings.subDialogTitle,
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = if (nodeCount > 0) "已载入 ${nodeCount} 个在线可用节点" else "实时聚合多协议出口订阅",
+                        text = if (nodeCount > 0) (if (strings == AppStringsEn) "Loaded $nodeCount online nodes" else "已载入 ${nodeCount} 个在线可用节点") else strings.subDialogSubtitle,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -141,7 +144,7 @@ fun SubscriptionDialog(
                                 modifier = Modifier.size(14.dp)
                             )
                             Text(
-                                text = "已开启 age 端到端安全加密保护",
+                                text = strings.ageEncryptedBadge,
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer
@@ -168,7 +171,11 @@ fun SubscriptionDialog(
                             .fillMaxWidth()
                             .clickable {
                                 clipboardManager.setText(AnnotatedString(genericUrl))
-                                val tip = if (isAgeEnabled) "已复制已通过 age 加密的通用订阅 (Base64/Raw)！" else "已复制通用全量订阅链接 (Base64/Raw)！"
+                                val tip = if (strings == AppStringsEn) {
+                                    if (isAgeEnabled) "Copied age-encrypted universal subscription!" else "Copied universal subscription link!"
+                                } else {
+                                    if (isAgeEnabled) "已复制已通过 age 加密的通用订阅 (Base64/Raw)！" else "已复制通用全量订阅链接 (Base64/Raw)！"
+                                }
                                 Toast.makeText(context, tip, Toast.LENGTH_SHORT).show()
                                 onDismissRequest()
                             }
@@ -196,13 +203,13 @@ fun SubscriptionDialog(
                             }
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "通用全量订阅 (Base64/Raw)",
+                                    text = strings.genericSubTitle,
                                     style = MaterialTheme.typography.titleSmall,
                                     fontWeight = FontWeight.SemiBold
                                 )
                                 Spacer(Modifier.height(2.dp))
                                 Text(
-                                    text = "Shadowrocket / v2rayN / sing-box / Surge / Quantumult X",
+                                    text = strings.genericSubDesc,
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     fontSize = 11.sp
@@ -236,7 +243,7 @@ fun SubscriptionDialog(
                             ) {
                                 Icon(
                                     Icons.AutoMirrored.Rounded.OpenInNew,
-                                    contentDescription = "导入客户端",
+                                    contentDescription = strings.importToClient,
                                     tint = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(18.dp)
                                 )
@@ -248,20 +255,20 @@ fun SubscriptionDialog(
                                         putExtra(Intent.EXTRA_TEXT, genericUrl)
                                         type = "text/plain"
                                     }
-                                    context.startActivity(Intent.createChooser(sendIntent, "分享通用订阅链接"))
+                                    context.startActivity(Intent.createChooser(sendIntent, if (strings == AppStringsEn) "Share Universal Subscription" else "分享通用订阅链接"))
                                 },
                                 modifier = Modifier.size(36.dp)
                             ) {
                                 Icon(
                                     Icons.Rounded.Share,
-                                    contentDescription = "分享",
+                                    contentDescription = strings.share,
                                     tint = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(18.dp)
                                 )
                             }
                             Icon(
                                 Icons.Rounded.ContentCopy,
-                                contentDescription = "复制",
+                                contentDescription = strings.copy,
                                 tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(20.dp)
                             )
@@ -276,7 +283,11 @@ fun SubscriptionDialog(
                             .fillMaxWidth()
                             .clickable {
                                 clipboardManager.setText(AnnotatedString(clashUrl))
-                                val tip = if (isAgeEnabled) "已复制已通过 age 加密的 Clash Meta 订阅！" else "已复制 Clash Meta / Mihomo 分流订阅！"
+                                val tip = if (strings == AppStringsEn) {
+                                    if (isAgeEnabled) "Copied age-encrypted Clash subscription!" else "Copied Clash Meta / Mihomo subscription!"
+                                } else {
+                                    if (isAgeEnabled) "已复制已通过 age 加密的 Clash Meta 订阅！" else "已复制 Clash Meta / Mihomo 分流订阅！"
+                                }
                                 Toast.makeText(context, tip, Toast.LENGTH_SHORT).show()
                                 onDismissRequest()
                             }
@@ -304,13 +315,13 @@ fun SubscriptionDialog(
                             }
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "Clash Meta / Mihomo (YAML)",
+                                    text = strings.clashSubTitle,
                                     style = MaterialTheme.typography.titleSmall,
                                     fontWeight = FontWeight.SemiBold
                                 )
                                 Spacer(Modifier.height(2.dp))
                                 Text(
-                                    text = "Clash Verge / Mihomo Party / Stash 专属分流配置",
+                                    text = strings.clashSubDesc,
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     fontSize = 11.sp
@@ -337,7 +348,7 @@ fun SubscriptionDialog(
                             ) {
                                 Icon(
                                     Icons.AutoMirrored.Rounded.OpenInNew,
-                                    contentDescription = "导入 Clash",
+                                    contentDescription = strings.importToClash,
                                     tint = MaterialTheme.colorScheme.secondary,
                                     modifier = Modifier.size(18.dp)
                                 )
@@ -349,20 +360,20 @@ fun SubscriptionDialog(
                                         putExtra(Intent.EXTRA_TEXT, clashUrl)
                                         type = "text/plain"
                                     }
-                                    context.startActivity(Intent.createChooser(sendIntent, "分享 Clash 订阅链接"))
+                                    context.startActivity(Intent.createChooser(sendIntent, if (strings == AppStringsEn) "Share Clash Subscription" else "分享 Clash 订阅链接"))
                                 },
                                 modifier = Modifier.size(36.dp)
                             ) {
                                 Icon(
                                     Icons.Rounded.Share,
-                                    contentDescription = "分享",
+                                    contentDescription = strings.share,
                                     tint = MaterialTheme.colorScheme.secondary,
                                     modifier = Modifier.size(18.dp)
                                 )
                             }
                             Icon(
                                 Icons.Rounded.ContentCopy,
-                                contentDescription = "复制",
+                                contentDescription = strings.copy,
                                 tint = MaterialTheme.colorScheme.secondary,
                                 modifier = Modifier.size(20.dp)
                             )
@@ -373,7 +384,7 @@ fun SubscriptionDialog(
         },
         confirmButton = {
             TextButton(onClick = onDismissRequest) {
-                Text("关闭")
+                Text(strings.close)
             }
         }
     )

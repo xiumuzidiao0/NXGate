@@ -314,6 +314,17 @@ try {
 
     await page.locator('[data-view="nodes"]:visible').click();
     await page.locator("#chip-fav").click();
+
+    // Test Language Toggle (zh <-> en)
+    await page.locator("#btn-toggle-lang").click();
+    await page.waitForTimeout(60);
+    const langEn = await page.evaluate(() => document.documentElement.lang);
+    if (langEn !== "en") failures.push(`${viewport}px: expected lang to be 'en', got '${langEn}'`);
+    await page.locator("#btn-toggle-lang").click();
+    await page.waitForTimeout(60);
+    const langZh = await page.evaluate(() => document.documentElement.lang);
+    if (langZh !== "zh-CN") failures.push(`${viewport}px: expected lang to be 'zh-CN', got '${langZh}'`);
+
     const metrics = await page.evaluate(() => ({
       overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
       inlineHandlers: [...document.querySelectorAll("*")].filter((element) =>

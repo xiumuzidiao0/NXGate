@@ -51,8 +51,29 @@ val COUNTRY_CHINESE_NAMES = mapOf(
     "RO" to "罗马尼亚", "IL" to "以色列", "AE" to "阿联酋", "SA" to "沙特阿拉伯", "CN" to "中国"
 )
 
+val COUNTRY_ENGLISH_NAMES = mapOf(
+    "JP" to "Japan", "US" to "United States", "KR" to "South Korea", "TW" to "Taiwan", "HK" to "Hong Kong",
+    "SG" to "Singapore", "GB" to "United Kingdom", "DE" to "Germany", "FR" to "France", "CA" to "Canada",
+    "AU" to "Australia", "VN" to "Vietnam", "TH" to "Thailand", "MY" to "Malaysia", "IN" to "India",
+    "RU" to "Russia", "NL" to "Netherlands", "BR" to "Brazil", "PH" to "Philippines", "ID" to "Indonesia",
+    "IT" to "Italy", "ES" to "Spain", "SE" to "Sweden", "CH" to "Switzerland", "NZ" to "New Zealand",
+    "PL" to "Poland", "UA" to "Ukraine", "TR" to "Turkey", "ZA" to "South Africa", "AR" to "Argentina",
+    "CL" to "Chile", "CO" to "Colombia", "MX" to "Mexico", "NO" to "Norway", "FI" to "Finland",
+    "DK" to "Denmark", "IE" to "Ireland", "AT" to "Austria", "BE" to "Belgium", "CZ" to "Czech Republic",
+    "RO" to "Romania", "IL" to "Israel", "AE" to "UAE", "SA" to "Saudi Arabia", "CN" to "China"
+)
+
 fun countryChineseName(code: String): String {
     return COUNTRY_CHINESE_NAMES[code.trim().uppercase()] ?: code
+}
+
+fun countryDisplayName(code: String, isEnglish: Boolean = false): String {
+    val clean = code.trim().uppercase()
+    return if (isEnglish) {
+        COUNTRY_ENGLISH_NAMES[clean] ?: clean
+    } else {
+        COUNTRY_CHINESE_NAMES[clean] ?: clean
+    }
 }
 
 @Composable

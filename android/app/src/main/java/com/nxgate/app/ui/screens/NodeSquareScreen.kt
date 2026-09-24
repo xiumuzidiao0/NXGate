@@ -91,7 +91,10 @@ import com.nxgate.app.ui.components.ConnectedChipGroup
 import com.nxgate.app.ui.components.GlobalServerSwitcherTitle
 import com.nxgate.app.ui.components.UnlockPill
 import com.nxgate.app.ui.components.countryChineseName
+import com.nxgate.app.ui.components.countryDisplayName
 import com.nxgate.app.ui.components.countryFlag
+import com.nxgate.app.util.AppStringsEn
+import com.nxgate.app.util.LocalAppStrings
 import kotlinx.coroutines.launch
 
 @Composable
@@ -105,6 +108,7 @@ fun FullNodeCard(
     onBlacklist: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val strings = LocalAppStrings.current
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
@@ -127,7 +131,7 @@ fun FullNodeCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    val displayName = node.countryLong.ifBlank { countryChineseName(node.countryShort) }
+                    val displayName = node.countryLong.ifBlank { countryDisplayName(node.countryShort, isEnglish = strings == AppStringsEn) }
                     Text(
                         text = "${countryFlag(node.countryShort)} $displayName",
                         style = MaterialTheme.typography.titleMedium,
@@ -148,7 +152,7 @@ fun FullNodeCard(
                             modifier = Modifier.padding(start = 6.dp)
                         ) {
                             Text(
-                                text = "主连",
+                                text = strings.currentMaster,
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -162,27 +166,27 @@ fun FullNodeCard(
                     node.latencyMs in 1..60 -> Triple(
                         MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
                         MaterialTheme.colorScheme.primary,
-                        "极速"
+                        strings.latencyFast
                     )
                     node.latencyMs in 61..130 -> Triple(
                         MaterialTheme.colorScheme.secondary.copy(alpha = 0.15f),
                         MaterialTheme.colorScheme.secondary,
-                        "良好"
+                        strings.latencyGood
                     )
                     node.latencyMs in 131..220 -> Triple(
                         MaterialTheme.colorScheme.tertiary.copy(alpha = 0.15f),
                         MaterialTheme.colorScheme.tertiary,
-                        "一般"
+                        strings.latencyFair
                     )
                     node.latencyMs > 220 -> Triple(
                         MaterialTheme.colorScheme.error.copy(alpha = 0.15f),
                         MaterialTheme.colorScheme.error,
-                        "偏高"
+                        strings.latencyHigh
                     )
                     else -> Triple(
                         MaterialTheme.colorScheme.surfaceContainerHigh,
                         MaterialTheme.colorScheme.onSurfaceVariant,
-                        "待测"
+                        strings.latencyPending
                     )
                 }
                 Surface(
@@ -285,25 +289,25 @@ fun FullNodeCard(
             ConnectedButtonGroup(
                 items = listOf(
                     ConnectedButtonItem(
-                        text = if (isMaster) "当前主连" else "设为主出口",
+                        text = if (isMaster) strings.currentMaster else strings.setMaster,
                         style = if (isMaster) ConnectedButtonStyle.Tonal else ConnectedButtonStyle.Filled,
                         icon = if (isMaster) Icons.Rounded.CheckCircle else Icons.Rounded.Lan,
                         onClick = onSetMaster
                     ),
                     ConnectedButtonItem(
-                        text = "拉起网卡",
+                        text = strings.startTunnel,
                         style = ConnectedButtonStyle.Tonal,
                         icon = Icons.Rounded.RocketLaunch,
                         onClick = onStartTunnel
                     ),
                     ConnectedButtonItem(
-                        text = if (isFavorite) "已收藏" else "收藏",
+                        text = if (isFavorite) strings.favorited else strings.favorite,
                         style = if (isFavorite) ConnectedButtonStyle.Filled else ConnectedButtonStyle.Tonal,
                         icon = if (isFavorite) Icons.Rounded.Bookmark else Icons.Rounded.BookmarkBorder,
                         onClick = onToggleFavorite
                     ),
                     ConnectedButtonItem(
-                        text = "屏蔽",
+                        text = strings.blacklist,
                         style = ConnectedButtonStyle.Outlined,
                         icon = Icons.Rounded.Block,
                         onClick = onBlacklist
@@ -330,6 +334,7 @@ fun NodeSquareScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val strings = LocalAppStrings.current
     val scope = rememberCoroutineScope()
     val haptic = LocalHapticFeedback.current
 
@@ -343,7 +348,14 @@ fun NodeSquareScreen(
 
     // Quick filter chips (包含我的收藏)
     var selectedChipIndex by remember { mutableIntStateOf(0) }
-    val chipList = listOf("全部", "我的收藏", "日本", "美国", "原生家宽", "三大AI全通")
+    val chipList = listOf(
+        strings.filterAll,
+        strings.filterFavorites,
+        strings.filterJapan,
+        strings.filterUS,
+        strings.filterResidential,
+        strings.filterTripleAI
+    )
 
     // Full nodes list from server (dynamically loaded)
     var allNodes by remember { mutableStateOf<List<NodeCandidate>>(emptyList()) }
@@ -356,13 +368,14 @@ fun NodeSquareScreen(
     val blacklistSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     // Dynamic country dropdown options calculated from allNodes (matching Web)
-    val countryOptions = remember(allNodes) {
+    val countryOptions = remember(allNodes, strings) {
         val countMap = allNodes.groupingBy { it.countryShort.uppercase() }.eachCount()
-        val list = mutableListOf(CountryFilterOption("", "全部国家/地区 (共 ${allNodes.size} 节点)"))
+        val allLabel = if (strings == AppStringsEn) "All Countries (${allNodes.size} nodes)" else "全部国家/地区 (共 ${allNodes.size} 节点)"
+        val list = mutableListOf(CountryFilterOption("", allLabel))
         countMap.entries.sortedByDescending { it.value }.forEach { (code, count) ->
             val flag = countryFlag(code)
             val rawName = allNodes.find { it.countryShort.equals(code, ignoreCase = true) }?.countryLong
-            val name = if (!rawName.isNullOrBlank()) rawName else countryChineseName(code)
+            val name = if (!rawName.isNullOrBlank() && strings != AppStringsEn) rawName else countryDisplayName(code, isEnglish = strings == AppStringsEn)
             list.add(CountryFilterOption(code, "$flag $name ($code · $count)"))
         }
         list
@@ -370,22 +383,22 @@ fun NodeSquareScreen(
     var selectedCountryOption by remember { mutableStateOf(countryOptions.first()) }
 
     // IP Type dropdown options (matching Web)
-    val ipTypeOptions = remember {
+    val ipTypeOptions = remember(strings) {
         listOf(
-            IpTypeFilterOption("all", "全部网络类型"),
-            IpTypeFilterOption("residential", "原生住宅宽带 (家宽)"),
-            IpTypeFilterOption("hosting", "机房/数据中心 IP")
+            IpTypeFilterOption("all", if (strings == AppStringsEn) "All Network Types" else "全部网络类型"),
+            IpTypeFilterOption("residential", if (strings == AppStringsEn) "Residential Broadband" else "原生住宅宽带 (家宽)"),
+            IpTypeFilterOption("hosting", if (strings == AppStringsEn) "Datacenter / Hosting" else "机房/数据中心 IP")
         )
     }
     var selectedIpTypeOption by remember { mutableStateOf(ipTypeOptions.first()) }
 
     // Sort dropdown options (matching Web)
-    val sortOptions = remember {
+    val sortOptions = remember(strings) {
         listOf(
-            SortFilterOption("default", "默认推荐 (综合排序)"),
-            SortFilterOption("latency_asc", "延迟优先 (从低到高)"),
-            SortFilterOption("speed_desc", "带宽优先 (从大到小)"),
-            SortFilterOption("score_desc", "稳定度优先 (评分最高)")
+            SortFilterOption("default", strings.sortDefault),
+            SortFilterOption("latency_asc", strings.sortLatencyAsc),
+            SortFilterOption("speed_desc", strings.sortSpeedDesc),
+            SortFilterOption("score_desc", strings.sortScoreDesc)
         )
     }
     var selectedSortOption by remember { mutableStateOf(sortOptions.first()) }
