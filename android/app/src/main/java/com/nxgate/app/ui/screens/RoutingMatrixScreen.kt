@@ -660,7 +660,7 @@ fun RoutingMatrixScreen(
                                             color = MaterialTheme.colorScheme.surfaceContainerLow
                                         ) {
                                             Text(
-                                                text = if (activeServer == null) "当前尚未纳管任何服务器，请前往「概览」或「设置」添加 VPS 网关。" else "当前服务器尚未创建边缘抗封锁入站节点，请点击下方「新建入站节点」创建。",
+                                                text = if (activeServer == null) "当前尚未纳管任何服务器，请前往「概览」或「设置」添加 VPS 网关。" else "当前服务器尚未创建 sing-box 节点，请点击下方「添加节点」创建。",
                                                 style = MaterialTheme.typography.bodyMedium,
                                                 color = MaterialTheme.colorScheme.onSurface,
                                                 modifier = Modifier.padding(20.dp)
@@ -1142,7 +1142,7 @@ fun RoutingMatrixScreen(
             onDismissRequest = { showAddInboundDialog = false },
             shape = RoundedCornerShape(28.dp),
             containerColor = MaterialTheme.colorScheme.surfaceContainer,
-            title = { Text("新建边缘抗封锁入站节点", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) },
+            title = { Text("添加 sing-box 节点", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) },
             text = {
                 Column(
                     modifier = Modifier.verticalScroll(rememberScrollState()),

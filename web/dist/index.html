@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="NXGate Linux 自适应多出口路由网关控制台">
+    <meta name="description" content="NXGate Linux 多出口智能路由网关控制台">
     <meta name="theme-color" content="#0a0e15">
     <meta property="og:title" content="NXGate 智能网关控制台">
-    <meta property="og:description" content="管理多出口隧道、动态自适应组、代理端口和边缘入站。">
+    <meta property="og:description" content="管理多出口隧道、动态出口组、代理端口和 sing-box 节点。">
     <meta property="og:type" content="website">
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
     <title>NXGate 智能网关控制台</title>
@@ -220,26 +220,26 @@
         </div>
         <!-- End View 1: Dashboard -->
 
-        <!-- View 2: 边缘入站 (sing-box) -->
+        <!-- View 2: sing-box 节点 (sing-box) -->
         <div id="view-singbox" class="view-page">
-        <!-- sing-box Edge Ingress & Chain Matrix Card -->
+        <!-- sing-box Inbound & Chain Proxy Card -->
         <div id="singbox-section" class="card">
             <div class="card-header card-header-wrap">
                 <div>
                     <div class="card-title">
                         <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></svg>
-                        边缘抗封锁入站 & 链式代理 (sing-box)
+                        sing-box 节点管理
                         <span id="sb-status-badge" class="badge disconnected ml-1" ><span class="status-dot"></span> 检查中</span>
                         <span id="sb-sub-badge" class="badge badge-accent hidden" hidden>订阅: 未开启</span>
                     </div>
                     <div  class="status-subtitle">
-                        客户端通过 VLESS-REALITY / Hysteria2 安全入站，服务端将流量经由 NXGate 住宅出口矩阵分流
+                        客户端通过 VLESS、Hysteria2 等协议入站，支持直连或经由网关出口分流
                     </div>
                 </div>
                 <div  class="row items-center gap-2 wrap">
                     <button id="btn-add-sb-node" class="btn" data-action="openAddSingBoxModal">
                         <svg aria-hidden="true" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                        新建抗封锁入站
+                        添加节点
                     </button>
                     <button class="btn btn-outline btn-sm"  data-action="batchSetSingBoxOutbound" data-args="[&quot;default&quot;]">
                         <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
@@ -436,7 +436,7 @@
                 <!-- Tab 2: Telegram -->
                 <div id="tab-content-tg" class="hidden">
                     <div  class="settings-note">
-                        配置后，网关在节点自动故障转移、自适应池全断线时自动推送告警；并支持在 TG 对话框使用 <code>/status</code>、<code>/tunnels</code>、<code>/rotate</code> 远程控制。
+                        配置后，网关在节点自动故障转移、出口组全断线时自动推送告警；并支持在 TG 对话框使用 <code>/status</code>、<code>/tunnels</code>、<code>/rotate</code> 远程控制。
                     </div>
                     <div class="form-group">
                         <label class="form-label">Telegram Bot Token (向 @BotFather 申请)</label>
@@ -529,22 +529,22 @@
         </div>
         <!-- End View 5: Settings -->
 
-        <!-- View 3: 多端口与分流矩阵 Matrix -->
+        <!-- View 3: 端口分流与出口组 Matrix -->
         <div id="view-matrix" class="view-page">
-        <!-- 2. 多端口与分流矩阵管理面板 (Tabbed) -->
+        <!-- 2. 端口分流与出口组管理面板 (Tabbed) -->
         <div id="port-matrix-modal" class="card">
             <div class="card-header mb-14" >
                 <div class="card-title">
                     <svg aria-hidden="true" viewBox="0 0 24 24"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>
-                    多端口代理与自适应分流矩阵
+                    端口分流与出口组
                 </div>
-                <button type="button" class="btn btn-outline btn-icon" data-action="closePortMatrixModal" aria-label="关闭分流矩阵">×</button>
+                <button type="button" class="btn btn-outline btn-icon" data-action="closePortMatrixModal" aria-label="关闭分流面板">×</button>
             </div>
 
             <!-- Modal Tab Navigation -->
             <div class="modal-tabs">
                 <button type="button" class="modal-tab-btn active" id="matrix-tab-ports" data-action="switchMatrixTab" data-args="[&quot;ports&quot;]">代理监听端口管理</button>
-                <button type="button" class="modal-tab-btn" id="matrix-tab-groups" data-action="switchMatrixTab" data-args="[&quot;groups&quot;]">动态自适应隧道组</button>
+                <button type="button" class="modal-tab-btn" id="matrix-tab-groups" data-action="switchMatrixTab" data-args="[&quot;groups&quot;]">动态出口组</button>
             </div>
 
             <!-- Tab 1: Proxy Ports -->
@@ -562,15 +562,15 @@
             <!-- Tab 2: Dynamic Pool Groups -->
             <div id="matrix-content-groups" class="hidden">
                 <div  class="section-toolbar">
-                    <div  class="text-note text-muted">全自动按国家、住宅/机房指标维持 Top N 出口，定时自适应轮换</div>
+                    <div  class="text-note text-muted">按国家与网络类型自动维持优质出口，支持定时轮换</div>
                     <div  class="row gap-1">
                         <button class="btn btn-outline btn-xs"  data-action="evaluateDynamicGroups">立即重评</button>
-                        <button class="btn btn-sm"  data-action="showAddDynamicGroupForm">+ 新建自适应组</button>
+                        <button class="btn btn-sm"  data-action="showAddDynamicGroupForm">+ 新建出口组</button>
                     </div>
                 </div>
 
                 <div id="dynamic-groups-container"  class="scroll-list groups">
-                    <div  class="loading-copy">加载自适应组中...</div>
+                    <div  class="loading-copy">加载出口组中...</div>
                 </div>
             </div>
 
@@ -610,22 +610,22 @@
     </div>
     <!-- End .app-layout -->
 
-    <!-- 3. 新建 sing-box 抗封锁入站模态弹窗 -->
+    <!-- 3. 新建 sing-box 节点模态弹窗 -->
     <div id="singbox-add-modal" class="modal-overlay">
         <div class="modal-card modal-xl" >
             <div class="card-header mb-4" >
                 <div class="card-title">
                     <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></svg>
-                    新建边缘抗封锁入站 (sing-box Inbound)
+                    添加 sing-box 节点
                 </div>
-                <button type="button" class="btn btn-outline btn-icon" data-action="closeAddSingBoxModal" aria-label="关闭新建入站">×</button>
+                <button type="button" class="btn btn-outline btn-icon" data-action="closeAddSingBoxModal" aria-label="关闭添加节点">×</button>
             </div>
 
             <form id="form-add-singbox" data-submit-action="submitAddSingBoxNode">
                 <!-- 协议选择卡片 Choice Cards -->
                 <div  class="mb-4">
                     <div class="row items-center justify-between mb-2">
-                        <label class="form-label mb-0">选择抗封锁/抗风险入站协议</label>
+                        <label class="form-label mb-0">选择入站协议</label>
                         <span class="text-xs text-muted">全套 22 种脚本原生协议</span>
                     </div>
 
@@ -642,15 +642,15 @@
                             <!-- 1. 推荐免域名 -->
                             <div class="choice-card selected" id="proto-card-reality" data-proto-cat="recommended" data-action="selectSingBoxProto" data-args="[&quot;reality&quot;]">
                                 <div class="choice-card-title">VLESS-REALITY <span class="badge badge-accent badge-mini">推荐</span></div>
-                                <div class="choice-card-desc">借用海外权威名站 TLS 指纹，顶级伪装免配域名</div>
+                                <div class="choice-card-desc">基于 TLS 伪装，免配置域名证书</div>
                             </div>
                             <div class="choice-card" id="proto-card-rh2" data-proto-cat="recommended" data-action="selectSingBoxProto" data-args="[&quot;rh2&quot;]">
                                 <div class="choice-card-title">VLESS-H2-REALITY <span class="badge badge-accent badge-mini">推荐</span></div>
                                 <div class="choice-card-desc">HTTP/2 多路复用 + REALITY，高并发免配域名</div>
                             </div>
                             <div class="choice-card" id="proto-card-hy2" data-proto-cat="recommended" data-action="selectSingBoxProto" data-args="[&quot;hy2&quot;]">
-                                <div class="choice-card-title">Hysteria2 <span class="badge badge-accent badge-mini">极速</span></div>
-                                <div class="choice-card-desc">基于定制 QUIC 协议，跨洋恶劣网络与丢包克星</div>
+                                <div class="choice-card-title">Hysteria2 <span class="badge badge-accent badge-mini">推荐</span></div>
+                                <div class="choice-card-desc">基于 QUIC 协议，适合高丢包弱网环境</div>
                             </div>
                             <div class="choice-card" id="proto-card-tuic" data-proto-cat="recommended" data-action="selectSingBoxProto" data-args="[&quot;tuic&quot;]">
                                 <div class="choice-card-title">TUIC v5 <span class="badge badge-accent badge-mini">低延迟</span></div>
@@ -668,7 +668,7 @@
                             </div>
                             <div class="choice-card" id="proto-card-anytls" data-proto-cat="popular" data-action="selectSingBoxProto" data-args="[&quot;anytls&quot;]">
                                 <div class="choice-card-title">AnyTLS</div>
-                                <div class="choice-card-desc">多路径自适应 TLS 传输，动态流量特征自愈</div>
+                                <div class="choice-card-desc">多路径 TLS 传输，具备抗阻断特性</div>
                             </div>
                             <div class="choice-card" id="proto-card-socks" data-proto-cat="popular" data-action="selectSingBoxProto" data-args="[&quot;socks&quot;]">
                                 <div class="choice-card-title">Socks5</div>
