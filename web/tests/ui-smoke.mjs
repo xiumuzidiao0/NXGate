@@ -217,6 +217,7 @@ try {
     });
     page.on("pageerror", (error) => errors.push(error.message));
     await page.route("**/api/**", mockAPI);
+    await page.route("**/create-qr-code/**", (route) => route.fulfill({ status: 200, contentType: "image/png", body: Buffer.from("") }));
     await page.goto(`${baseURL}/#matrix`, { waitUntil: "domcontentloaded" });
     await page.waitForTimeout(500);
     await page.locator('[data-action="showAddPortForm"]').click();
