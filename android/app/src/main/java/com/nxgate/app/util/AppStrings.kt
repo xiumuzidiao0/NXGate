@@ -360,7 +360,7 @@ val AppStringsZh = AppStrings(
     importBackupSuccess = "全量配置已成功恢复并生效！",
     importBackupDialogTitle = "导入配置包 (JSON)",
     importBackupDialogPrompt = "请在此粘贴此前导出的 nxgate-backup.json 文本内容：",
-    matrixTopologyTitle = "分流链路实时拓扑",
+    matrixTopologyTitle = "分流链路实时拓扑思维导图",
 
     serverName = "服务器名称",
     serverNamePlaceholder = "例如: 东京主网关",
@@ -557,7 +557,7 @@ val AppStringsEn = AppStrings(
     importBackupSuccess = "Configuration successfully restored and applied!",
     importBackupDialogTitle = "Import Backup Package (JSON)",
     importBackupDialogPrompt = "Paste the contents of your exported nxgate-backup.json here:",
-    matrixTopologyTitle = "Egress Routing Topology",
+    matrixTopologyTitle = "Egress Routing Mind Map",
 
     serverName = "Server Name",
     serverNamePlaceholder = "e.g. Tokyo Primary Gateway",

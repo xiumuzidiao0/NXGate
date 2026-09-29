@@ -289,7 +289,7 @@
                 'set.backup_import_title': '导入恢复配置包',
                 'set.backup_import_desc': '选择此前导出的备份文件，系统将全自动解析、恢复所有规则并立即热重评生效。',
                 'set.backup_import_btn': '选择文件并导入',
-                'matrix.topo_title': '分流链路实时拓扑 (Inbound ──▶ Egress Pipeline)',
+                'matrix.topo_title': '分流链路实时拓扑思维导图',
 
                 'sb.filter_sub': '定制订阅',
                 'sub_filter.title': '定制订阅导出中心',
@@ -597,7 +597,7 @@
                 'set.backup_import_title': 'Import & Restore Configuration',
                 'set.backup_import_desc': 'Upload a previous backup package to automatically restore all rules and apply dynamic re-evaluations immediately.',
                 'set.backup_import_btn': 'Select Backup File',
-                'matrix.topo_title': 'Real-Time Egress Routing Topology (Inbound ──▶ Egress Pipeline)',
+                'matrix.topo_title': 'Real-Time Egress Routing Mind Map',
 
                 'sb.filter_sub': 'Filter Sub',
                 'sub_filter.title': 'Customized Subscription Export',
@@ -1807,7 +1807,7 @@
             const defaultProxyPort = (st && st.settings && st.settings.proxy_port) || (st && st.proxy_addr ? parseInt(st.proxy_addr.split(':').pop()) : 7928);
             const tunnels = (st && st.tunnels) ? st.tunnels : [];
 
-            // 1. Primary default pipeline row
+            // 1. Primary default pipeline branch
             const sysGroup = (currentDynamicGroups || []).find(g => g.is_system || g.id === 'system-primary');
             const sysGroupName = sysGroup ? sysGroup.name : (isEn ? 'Primary Gateway Group' : '系统主出口网关组');
             const primaryDev = (st && st.primary && st.primary.dev_name) || 'tun0';
@@ -1815,28 +1815,23 @@
             const primaryCountry = (st && st.primary && st.primary.country) || '';
 
             const primaryExitBadge = primaryIp
-                ? `<span class="topo-exit-badge"><span class="status-dot"></span> ${escapeHtml(primaryDev)}: ${escapeHtml(primaryIp)} ${primaryCountry ? '(' + escapeHtml(primaryCountry) + ')' : ''}</span>`
-                : `<span class="text-xs text-muted">${isEn ? 'Connecting primary exit...' : '主出口正在连接中...'}</span>`;
+                ? `<div class="mindmap-leaf-node"><span class="status-dot connected"></span> ${escapeHtml(primaryDev)}: ${escapeHtml(primaryIp)} ${primaryCountry ? '(' + escapeHtml(primaryCountry) + ')' : ''}</div>`
+                : `<div class="mindmap-leaf-node"><span class="text-xs text-muted">${isEn ? 'Connecting primary exit...' : '主出口正在连接中...'}</span></div>`;
 
-            let rowsHtml = `
-                <div class="topo-pipeline-row">
-                    <div class="topo-col-inbound">
-                        <span class="badge badge-accent">PORT ${defaultProxyPort}</span>
-                        <span class="text-xs text-muted">${isEn ? 'Default' : '系统默认'}</span>
-                    </div>
-                    <div class="topo-arrow">──▶</div>
-                    <div class="topo-col-group">
-                        <strong class="text-sm">${escapeHtml(sysGroupName)}</strong>
-                        <span class="text-xs text-muted">${isEn ? 'Primary Egress (tun0)' : '主出海网卡'}</span>
-                    </div>
-                    <div class="topo-arrow">──▶</div>
-                    <div class="topo-col-exits">
-                        ${primaryExitBadge}
-                    </div>
-                </div>
-            `;
+            const branchesData = [];
 
-            // 2. Extra Multi-Port rules pipelines
+            // Branch 0: Default Port
+            branchesData.push({
+                port: defaultProxyPort,
+                portDesc: isEn ? 'Default' : '系统默认',
+                groupName: sysGroupName,
+                groupMeta: isEn ? 'Primary Egress (tun0)' : '主出海网卡 (tun0)',
+                isFallback: false,
+                fallbackReason: '',
+                leavesHtml: `<div class="mindmap-leaves-single">${primaryExitBadge}</div>`
+            });
+
+            // Extra Multi-Port rules branches
             if (currentPortRules && currentPortRules.length > 0) {
                 currentPortRules.forEach(rule => {
                     if (!rule.enabled) return;
@@ -1844,25 +1839,23 @@
                     if (rule.policy === 'random') policyLabel = isEn ? 'Random' : '随机分发';
                     else if (rule.policy === 'interval') policyLabel = `${rule.interval_seconds || 60}s ${isEn ? 'Rotation' : '轮换'}`;
 
-                    let groupColHtml = '';
-                    let exitsColHtml = '';
+                    let groupTitle = '';
+                    let groupMeta = '';
                     let isRowFallback = false;
+                    let fallbackReasonText = '';
+                    let leaves = [];
 
                     if (rule.bound_group_ids && rule.bound_group_ids.length > 0) {
                         const matchedGroups = (currentDynamicGroups || []).filter(g => rule.bound_group_ids.includes(g.id));
                         if (matchedGroups.length > 0) {
-                            const groupNames = matchedGroups.map(g => g.name).join(' / ');
-                            const anyFallback = matchedGroups.some(g => g.in_fallback);
-                            isRowFallback = anyFallback;
-                            const fbBadge = anyFallback ? `<span class="badge badge-warning badge-mini">${isEn ? 'Fallback' : '降级中'}</span>` : '';
-
-                            groupColHtml = `
-                                <div class="flex items-center gap-1">
-                                    <strong class="text-sm">${escapeHtml(groupNames)}</strong>
-                                    ${fbBadge}
-                                </div>
-                                <span class="text-xs text-muted">${policyLabel} · ${matchedGroups.reduce((acc, g) => acc + (g.target_count || 1), 0)} ${isEn ? 'NICs' : '网卡'}</span>
-                            `;
+                            groupTitle = matchedGroups.map(g => g.name).join(' / ');
+                            isRowFallback = matchedGroups.some(g => g.in_fallback);
+                            if (isRowFallback) {
+                                const fbGroup = matchedGroups.find(g => g.in_fallback);
+                                fallbackReasonText = fbGroup ? fbGroup.fallback_reason : '';
+                            }
+                            const totalTarget = matchedGroups.reduce((acc, g) => acc + (g.target_count || 1), 0);
+                            groupMeta = `${policyLabel} · ${totalTarget} ${isEn ? 'NICs' : '并发网卡'}`;
 
                             const allActiveTids = [];
                             matchedGroups.forEach(g => {
@@ -1871,58 +1864,99 @@
 
                             const activeTuns = tunnels.filter(t => allActiveTids.includes(t.id));
                             if (activeTuns.length > 0) {
-                                exitsColHtml = activeTuns.map(t => {
+                                leaves = activeTuns.map(t => {
                                     const ip = (t.node && t.node.ip) || (t.node && t.node.id) || t.dev_name;
                                     const c = (t.node && t.node.country_short) || '';
                                     const lat = t.latency_ms > 0 ? `${t.latency_ms}ms` : '';
-                                    return `<span class="topo-exit-badge"><span class="status-dot"></span> ${escapeHtml(t.dev_name)}: ${escapeHtml(ip)} ${c ? '(' + c + ')' : ''} ${lat ? '· ' + lat : ''}</span>`;
-                                }).join('');
+                                    return `<div class="mindmap-leaf-node"><span class="status-dot connected"></span> ${escapeHtml(t.dev_name)}: ${escapeHtml(ip)} ${c ? '(' + c + ')' : ''} ${lat ? '· ' + lat : ''}</div>`;
+                                });
                             } else {
-                                exitsColHtml = `<span class="text-xs text-muted">${isEn ? 'Scheduling tunnels...' : '等待调度拉起网卡...'}</span>`;
+                                leaves = [`<div class="mindmap-leaf-node"><span class="text-xs text-muted">${isEn ? 'Scheduling tunnels...' : '等待调度拉起网卡...'}</span></div>`];
                             }
                         }
                     } else if (rule.bound_tunnel_ids && rule.bound_tunnel_ids.length > 0) {
-                        groupColHtml = `
-                            <strong class="text-sm">${isEn ? 'Bound Tunnels' : '指定隧道出口'}</strong>
-                            <span class="text-xs text-muted">${rule.bound_tunnel_ids.length} ${isEn ? 'Tunnels' : '条隧道'}</span>
-                        `;
+                        groupTitle = isEn ? 'Bound Tunnels' : '指定隧道出口';
+                        groupMeta = `${rule.bound_tunnel_ids.length} ${isEn ? 'Tunnels' : '条隧道'}`;
                         const activeTuns = tunnels.filter(t => rule.bound_tunnel_ids.includes(t.id));
                         if (activeTuns.length > 0) {
-                            exitsColHtml = activeTuns.map(t => {
+                            leaves = activeTuns.map(t => {
                                 const ip = (t.node && t.node.ip) || t.dev_name;
-                                return `<span class="topo-exit-badge"><span class="status-dot"></span> ${escapeHtml(t.dev_name)}: ${escapeHtml(ip)}</span>`;
-                            }).join('');
+                                return `<div class="mindmap-leaf-node"><span class="status-dot connected"></span> ${escapeHtml(t.dev_name)}: ${escapeHtml(ip)}</div>`;
+                            });
                         } else {
-                            exitsColHtml = `<span class="text-xs text-muted">${isEn ? 'Tunnels offline' : '绑定的隧道离线'}</span>`;
+                            leaves = [`<div class="mindmap-leaf-node"><span class="text-xs text-muted">${isEn ? 'Tunnels offline' : '绑定的隧道离线'}</span></div>`];
                         }
                     } else {
-                        groupColHtml = `
-                            <strong class="text-sm">${isEn ? 'Direct / VPS Native' : '原生直连出口'}</strong>
-                            <span class="text-xs text-muted">${isEn ? 'No tunnel proxy' : '无隧道包装'}</span>
-                        `;
-                        exitsColHtml = `<span class="topo-exit-badge">${isEn ? 'VPS Local IP' : 'VPS 原生出网'}</span>`;
+                        groupTitle = isEn ? 'Direct / VPS Native' : '原生直连出口';
+                        groupMeta = isEn ? 'No tunnel proxy' : '无隧道包装';
+                        leaves = [`<div class="mindmap-leaf-node"><span class="status-dot connected"></span> ${isEn ? 'VPS Local IP' : 'VPS 原生出网'}</div>`];
                     }
 
-                    rowsHtml += `
-                        <div class="topo-pipeline-row ${isRowFallback ? 'is-fallback' : ''}">
-                            <div class="topo-col-inbound">
-                                <span class="badge badge-accent">PORT ${rule.port}</span>
-                                <span class="text-xs text-muted">${escapeHtml(rule.auth_mode === 'none' ? (isEn ? 'No Auth' : '免密') : (isEn ? 'Protected' : '加密'))}</span>
-                            </div>
-                            <div class="topo-arrow">──▶</div>
-                            <div class="topo-col-group">
-                                ${groupColHtml}
-                            </div>
-                            <div class="topo-arrow">──▶</div>
-                            <div class="topo-col-exits">
-                                ${exitsColHtml}
-                            </div>
-                        </div>
-                    `;
+                    let leavesContainer = '';
+                    if (leaves.length > 1) {
+                        leavesContainer = `<div class="mindmap-leaves-multi">${leaves.map(l => `<div class="mindmap-leaf-row">${l}</div>`).join('')}</div>`;
+                    } else {
+                        leavesContainer = `<div class="mindmap-leaves-single">${leaves[0]}</div>`;
+                    }
+
+                    const authText = rule.auth_mode === 'none' ? (isEn ? 'No Auth' : '免密') : (isEn ? 'Protected' : '加密');
+                    branchesData.push({
+                        port: rule.port,
+                        portDesc: authText,
+                        groupName: groupTitle || `PORT ${rule.port}`,
+                        groupMeta: groupMeta,
+                        isFallback: isRowFallback,
+                        fallbackReason: fallbackReasonText,
+                        leavesHtml: leavesContainer
+                    });
                 });
             }
 
-            container.innerHTML = rowsHtml;
+            const totalBranches = branchesData.length;
+            const branchesClass = totalBranches > 1 ? 'mindmap-branches has-trunk' : 'mindmap-branches single-branch';
+
+            const branchesHtml = branchesData.map(b => {
+                const fbBadge = b.isFallback ? `<span class="badge badge-warning badge-mini">${isEn ? 'Fallback' : '降级中'}</span>` : '';
+                const fbReasonHtml = (b.isFallback && b.fallbackReason) ? `<span class="text-xs text-warning mt-1">${escapeHtml(b.fallbackReason)}</span>` : '';
+
+                return `
+                    <div class="mindmap-branch-row">
+                        <div class="mindmap-node mindmap-port-node">
+                            <span class="badge badge-accent">PORT ${b.port}</span>
+                            <span class="text-xs text-muted">${escapeHtml(b.portDesc)}</span>
+                        </div>
+                        <div class="mindmap-stem-line"></div>
+                        <div class="mindmap-node mindmap-group-node ${b.isFallback ? 'is-fallback' : ''}">
+                            <div class="flex items-center gap-1">
+                                <strong class="text-sm">${escapeHtml(b.groupName)}</strong>
+                                ${fbBadge}
+                            </div>
+                            <span class="text-xs text-muted">${escapeHtml(b.groupMeta)}</span>
+                            ${fbReasonHtml}
+                        </div>
+                        <div class="mindmap-stem-line"></div>
+                        ${b.leavesHtml}
+                    </div>
+                `;
+            }).join('');
+
+            container.innerHTML = `
+                <div class="mindmap-tree">
+                    <div class="mindmap-root-wrap">
+                        <div class="mindmap-root-node">
+                            <div class="flex items-center gap-2">
+                                <span class="status-dot connected"></span>
+                                <strong class="text-sm font-semibold">${isEn ? 'NXGate Core Hub' : 'NXGate 分流中枢'}</strong>
+                            </div>
+                            <span class="text-xs text-muted">${isEn ? 'Intelligent Egress Router' : '网关流量调度中枢'}</span>
+                        </div>
+                        <div class="mindmap-root-stem"></div>
+                    </div>
+                    <div class="${branchesClass}">
+                        ${branchesHtml}
+                    </div>
+                </div>
+            `;
         }
 
         function downloadBackupPackage() {

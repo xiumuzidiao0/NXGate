@@ -7,13 +7,17 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -22,6 +26,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -70,10 +75,13 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.nxgate.app.NXGateApplication
@@ -110,6 +118,40 @@ data class GroupSortOption(val key: String, val label: String)
 data class GroupTargetCountOption(val count: Int, val label: String)
 data class GroupIntervalOption(val minutes: Int, val label: String)
 data class GroupFallbackOption(val key: String, val label: String)
+
+data class MindMapBranch(
+    val port: Int,
+    val authText: String,
+    val groupTitle: String,
+    val groupSub: String,
+    val isFallback: Boolean,
+    val exitLabel: String
+)
+
+@Composable
+fun MindMapTreeConnector(
+    isFirst: Boolean,
+    isLast: Boolean,
+    isSingle: Boolean,
+    modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.colorScheme.outlineVariant
+) {
+    Canvas(modifier = modifier) {
+        val stroke = 2.dp.toPx()
+        val midY = size.height / 2f
+        if (isSingle) {
+            drawLine(color, Offset(0f, midY), Offset(size.width, midY), strokeWidth = stroke)
+        } else {
+            if (!isFirst) {
+                drawLine(color, Offset(0f, 0f), Offset(0f, midY), strokeWidth = stroke)
+            }
+            if (!isLast) {
+                drawLine(color, Offset(0f, midY), Offset(0f, size.height), strokeWidth = stroke)
+            }
+            drawLine(color, Offset(0f, midY), Offset(size.width, midY), strokeWidth = stroke)
+        }
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -434,7 +476,33 @@ fun RoutingMatrixScreen(
                             // ==================== TAB 0: 多端口分流矩阵 (全增删改查) ====================
                             0 -> {
                                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                                    // 分流链路实时拓扑卡片 (Visual Egress Flow Topology)
+                                    // 分流链路实时拓扑思维导图卡片 (Visual Egress Routing Mind Map)
+                                    val defaultProxyPort = activeServer?.port ?: 7928
+                                    val defaultBranch = MindMapBranch(
+                                        port = defaultProxyPort,
+                                        authText = if (isEn) "Default" else "系统默认",
+                                        groupTitle = if (isEn) "Primary Gateway (tun0)" else "系统主出口网关 (tun0)",
+                                        groupSub = if (isEn) "Primary Egress" else "主出海网卡 (tun0)",
+                                        isFallback = false,
+                                        exitLabel = "tun0: " + (activeServer?.exitIp?.ifEmpty { if (isEn) "Connected" else "已连通" } ?: (if (isEn) "Connected" else "已连通"))
+                                    )
+                                    val ruleBranches = portRules.filter { it.enabled }.map { rule ->
+                                        val matchedGroup = dynamicGroups.find { g -> rule.boundGroupIds.contains(g.id) }
+                                        val isFallback = matchedGroup?.inFallback == true
+                                        val groupTitle = matchedGroup?.name ?: if (rule.boundTunnelIds.isNotEmpty()) (if (isEn) "Bound Tunnels (${rule.boundTunnelIds.size})" else "指定隧道 (${rule.boundTunnelIds.size})") else (if (isEn) "Direct Native" else "原生直连")
+                                        val groupSub = if (matchedGroup != null) "${rule.policyDisplay} · ${matchedGroup.targetCount} ${if (isEn) "NICs" else "并发网卡"}" else (if (isEn) "Direct Exit" else "原生网络")
+                                        val exitLabel = if (matchedGroup != null) "${matchedGroup.targetCount} ${if (isEn) "Exits" else "网卡出口"}" else if (rule.boundTunnelIds.isNotEmpty()) "${rule.boundTunnelIds.size} ${if (isEn) "Tunnels" else "条隧道"}" else (if (isEn) "VPS Native" else "VPS 原生")
+                                        MindMapBranch(
+                                            port = rule.port,
+                                            authText = rule.authDisplay,
+                                            groupTitle = groupTitle,
+                                            groupSub = groupSub,
+                                            isFallback = isFallback,
+                                            exitLabel = exitLabel
+                                        )
+                                    }
+                                    val allBranches = listOf(defaultBranch) + ruleBranches
+
                                     Card(
                                         modifier = Modifier.fillMaxWidth(),
                                         shape = RoundedCornerShape(20.dp),
@@ -445,24 +513,31 @@ fun RoutingMatrixScreen(
                                             modifier = Modifier
                                                 .fillMaxWidth()
                                                 .padding(16.dp),
-                                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                                            verticalArrangement = Arrangement.spacedBy(12.dp)
                                         ) {
                                             Row(
                                                 modifier = Modifier.fillMaxWidth(),
                                                 horizontalArrangement = Arrangement.SpaceBetween,
                                                 verticalAlignment = Alignment.CenterVertically
                                             ) {
-                                                Text(
-                                                    text = strings.matrixTopologyTitle,
-                                                    style = MaterialTheme.typography.titleSmall,
-                                                    fontWeight = FontWeight.Bold
-                                                )
+                                                Column {
+                                                    Text(
+                                                        text = strings.matrixTopologyTitle,
+                                                        style = MaterialTheme.typography.titleSmall,
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                    Text(
+                                                        text = if (isEn) "Inbound Ports ──▶ Egress Groups ──▶ Physical Outbound Exits" else "入站监听端口 ──▶ 调度出口组 ──▶ 物理出网网卡",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                }
                                                 Surface(
                                                     shape = RoundedCornerShape(6.dp),
                                                     color = MaterialTheme.colorScheme.primaryContainer
                                                 ) {
                                                     Text(
-                                                        text = if (isEn) "Topology Active" else "拓扑实时在线",
+                                                        text = if (isEn) "Mind Map" else "导图就绪",
                                                         style = MaterialTheme.typography.labelSmall,
                                                         color = MaterialTheme.colorScheme.onPrimaryContainer,
                                                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
@@ -470,97 +545,173 @@ fun RoutingMatrixScreen(
                                                 }
                                             }
 
-                                            // Default Gateway Pipeline (tun0)
-                                            Surface(
-                                                shape = RoundedCornerShape(12.dp),
-                                                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                                modifier = Modifier.fillMaxWidth()
+                                            // Horizontal scrollable mind-map canvas
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .horizontalScroll(rememberScrollState())
+                                                    .padding(vertical = 4.dp),
+                                                verticalAlignment = Alignment.CenterVertically
                                             ) {
-                                                Row(
-                                                    modifier = Modifier.padding(10.dp),
-                                                    verticalAlignment = Alignment.CenterVertically,
-                                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                // 1. Root Node (NXGate Hub)
+                                                Surface(
+                                                    shape = RoundedCornerShape(14.dp),
+                                                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f),
+                                                    border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary),
+                                                    shadowElevation = 2.dp
                                                 ) {
-                                                    Surface(
-                                                        shape = RoundedCornerShape(6.dp),
-                                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                                    Column(
+                                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                                                        verticalArrangement = Arrangement.spacedBy(2.dp)
                                                     ) {
+                                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                                            Box(
+                                                                modifier = Modifier
+                                                                    .size(8.dp)
+                                                                    .background(Color(0xFF22C55E), CircleShape)
+                                                            )
+                                                            Spacer(Modifier.width(6.dp))
+                                                            Text(
+                                                                text = if (isEn) "NXGate Hub" else "NXGate 分流中枢",
+                                                                style = MaterialTheme.typography.titleSmall,
+                                                                fontWeight = FontWeight.Bold,
+                                                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                                                            )
+                                                        }
                                                         Text(
-                                                            text = "PORT 7928",
+                                                            text = if (isEn) "Routing Core" else "网关调度中枢",
                                                             style = MaterialTheme.typography.labelSmall,
-                                                            fontWeight = FontWeight.Bold,
-                                                            color = MaterialTheme.colorScheme.primary,
-                                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                                        )
-                                                    }
-                                                    Text("▶", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                                    Column(modifier = Modifier.weight(1f)) {
-                                                        Text(
-                                                            text = if (isEn) "Primary Gateway (tun0)" else "系统主出口网关 (tun0)",
-                                                            style = MaterialTheme.typography.bodySmall,
-                                                            fontWeight = FontWeight.SemiBold
-                                                        )
-                                                        Text(
-                                                            text = activeServer?.exitIp?.ifEmpty { if (isEn) "Connected" else "已连通" } ?: (if (isEn) "Connected" else "已连通"),
-                                                            style = MaterialTheme.typography.labelSmall,
-                                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
                                                         )
                                                     }
                                                 }
-                                            }
 
-                                            // Port Rules Pipelines
-                                            portRules.forEach { rule ->
-                                                if (rule.enabled) {
-                                                    val matchedGroup = dynamicGroups.find { g -> rule.boundGroupIds.contains(g.id) }
-                                                    val groupTitle = matchedGroup?.name ?: if (rule.boundTunnelIds.isNotEmpty()) (if (isEn) "Bound Tunnels (${rule.boundTunnelIds.size})" else "指定隧道 (${rule.boundTunnelIds.size})") else (if (isEn) "Direct Native" else "原生直连")
-                                                    val isFallback = matchedGroup?.inFallback == true
+                                                // Stem from Root
+                                                HorizontalDivider(
+                                                    modifier = Modifier.width(24.dp).height(2.dp),
+                                                    color = MaterialTheme.colorScheme.outlineVariant
+                                                )
 
-                                                    Surface(
-                                                        shape = RoundedCornerShape(12.dp),
-                                                        color = if (isFallback) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f) else MaterialTheme.colorScheme.surfaceContainerHigh,
-                                                        modifier = Modifier.fillMaxWidth()
-                                                    ) {
+                                                // 2. Branches Column
+                                                Column(
+                                                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                                                ) {
+                                                    allBranches.forEachIndexed { index, branch ->
                                                         Row(
-                                                            modifier = Modifier.padding(10.dp),
-                                                            verticalAlignment = Alignment.CenterVertically,
-                                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                            modifier = Modifier.height(IntrinsicSize.Min),
+                                                            verticalAlignment = Alignment.CenterVertically
                                                         ) {
+                                                            MindMapTreeConnector(
+                                                                isFirst = index == 0,
+                                                                isLast = index == allBranches.size - 1,
+                                                                isSingle = allBranches.size == 1,
+                                                                modifier = Modifier.width(24.dp).fillMaxHeight()
+                                                            )
+
+                                                            // Inbound Port Node
                                                             Surface(
-                                                                shape = RoundedCornerShape(6.dp),
-                                                                color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.15f)
+                                                                shape = RoundedCornerShape(10.dp),
+                                                                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                                                             ) {
-                                                                Text(
-                                                                    text = "PORT ${rule.port}",
-                                                                    style = MaterialTheme.typography.labelSmall,
-                                                                    fontWeight = FontWeight.Bold,
-                                                                    color = MaterialTheme.colorScheme.secondary,
-                                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                                                )
-                                                            }
-                                                            Text("▶", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                                            Column(modifier = Modifier.weight(1f)) {
-                                                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                                                    Text(
-                                                                        text = groupTitle,
-                                                                        style = MaterialTheme.typography.bodySmall,
-                                                                        fontWeight = FontWeight.SemiBold
-                                                                    )
-                                                                    if (isFallback) {
-                                                                        Spacer(Modifier.width(4.dp))
+                                                                Row(
+                                                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                                                    verticalAlignment = Alignment.CenterVertically,
+                                                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                                                ) {
+                                                                    Surface(
+                                                                        shape = RoundedCornerShape(4.dp),
+                                                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                                                    ) {
                                                                         Text(
-                                                                            text = if (isEn) "Fallback" else "降级中",
+                                                                            text = "PORT ${branch.port}",
                                                                             style = MaterialTheme.typography.labelSmall,
-                                                                            color = MaterialTheme.colorScheme.error,
-                                                                            fontWeight = FontWeight.Bold
+                                                                            fontWeight = FontWeight.Bold,
+                                                                            color = MaterialTheme.colorScheme.primary,
+                                                                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
                                                                         )
                                                                     }
+                                                                    Text(
+                                                                        text = branch.authText,
+                                                                        style = MaterialTheme.typography.labelSmall,
+                                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                                    )
                                                                 }
-                                                                Text(
-                                                                    text = if (matchedGroup != null) "${matchedGroup.targetCount} ${if (isEn) "NICs" else "并发出口网卡"}" else (if (isEn) "Direct" else "原生网络"),
-                                                                    style = MaterialTheme.typography.labelSmall,
-                                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                            }
+
+                                                            // Stem to Group
+                                                            HorizontalDivider(
+                                                                modifier = Modifier.width(20.dp).height(2.dp),
+                                                                color = MaterialTheme.colorScheme.outlineVariant
+                                                            )
+
+                                                            // Group Node
+                                                            Surface(
+                                                                shape = RoundedCornerShape(10.dp),
+                                                                color = if (branch.isFallback) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f) else MaterialTheme.colorScheme.surfaceContainerHigh,
+                                                                border = BorderStroke(
+                                                                    1.dp,
+                                                                    if (branch.isFallback) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outlineVariant
                                                                 )
+                                                            ) {
+                                                                Column(
+                                                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                                                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                                                                ) {
+                                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                                        Text(
+                                                                            text = branch.groupTitle,
+                                                                            style = MaterialTheme.typography.bodySmall,
+                                                                            fontWeight = FontWeight.SemiBold,
+                                                                            color = MaterialTheme.colorScheme.onSurface
+                                                                        )
+                                                                        if (branch.isFallback) {
+                                                                            Spacer(Modifier.width(4.dp))
+                                                                            Text(
+                                                                                text = if (isEn) "Fallback" else "降级中",
+                                                                                style = MaterialTheme.typography.labelSmall,
+                                                                                color = MaterialTheme.colorScheme.error,
+                                                                                fontWeight = FontWeight.Bold
+                                                                            )
+                                                                        }
+                                                                    }
+                                                                    Text(
+                                                                        text = branch.groupSub,
+                                                                        style = MaterialTheme.typography.labelSmall,
+                                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                                    )
+                                                                }
+                                                            }
+
+                                                            // Stem to Exit
+                                                            HorizontalDivider(
+                                                                modifier = Modifier.width(20.dp).height(2.dp),
+                                                                color = MaterialTheme.colorScheme.outlineVariant
+                                                            )
+
+                                                            // Exit Leaf Node
+                                                            Surface(
+                                                                shape = RoundedCornerShape(8.dp),
+                                                                color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                                                            ) {
+                                                                Row(
+                                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                                                                    verticalAlignment = Alignment.CenterVertically,
+                                                                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                                                ) {
+                                                                    Box(
+                                                                        modifier = Modifier
+                                                                            .size(6.dp)
+                                                                            .background(Color(0xFF22C55E), CircleShape)
+                                                                    )
+                                                                    Text(
+                                                                        text = branch.exitLabel,
+                                                                        style = MaterialTheme.typography.labelSmall,
+                                                                        fontFamily = FontFamily.Monospace,
+                                                                        color = MaterialTheme.colorScheme.onSurface
+                                                                    )
+                                                                }
                                                             }
                                                         }
                                                     }

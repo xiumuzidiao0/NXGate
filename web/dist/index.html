@@ -23,7 +23,7 @@
                 </div>
                 <div class="brand-text">
                     <div class="brand-title">NXGate</div>
-                    <div class="brand-sub"><span data-i18n="brand.sub">多出口智能网关</span> <span class="version-trigger" data-action="openUpdateModal" title="点击检查系统更新"><span id="sidebar-version-badge" class="badge-ver">v2.5.9.5</span></span></div>
+                    <div class="brand-sub"><span data-i18n="brand.sub">多出口智能网关</span> <span class="version-trigger" data-action="openUpdateModal" title="点击检查系统更新"><span id="sidebar-version-badge" class="badge-ver">v2.5.9.6</span></span></div>
                 </div>
             </div>
 
@@ -79,7 +79,7 @@
                     </button>
                     <h1 id="page-title">运行概览</h1>
                     <span id="conn-badge" class="badge disconnected"><span class="status-dot"></span> 检查中</span>
-                    <span class="version-trigger" data-action="openUpdateModal" title="点击检查系统更新"><span id="app-version-badge" class="badge badge-accent">v2.5.9.5</span><span id="header-update-dot" class="badge-dot-pulse hidden" title="发现新版本"></span></span>
+                    <span class="version-trigger" data-action="openUpdateModal" title="点击检查系统更新"><span id="app-version-badge" class="badge badge-accent">v2.5.9.6</span><span id="header-update-dot" class="badge-dot-pulse hidden" title="发现新版本"></span></span>
                 </div>
 
                 <div class="header-actions">
@@ -566,14 +566,14 @@
                 <button type="button" class="btn btn-outline btn-icon" data-action="closePortMatrixModal" aria-label="关闭分流面板">×</button>
             </div>
 
-            <!-- 分流链路实时拓扑卡片 (Visual Egress Flow Topology) -->
+            <!-- 分流链路实时拓扑思维导图卡片 (Visual Egress Routing Mind Map) -->
             <div id="matrix-topology-card" class="card mb-4" style="background: var(--bg-card-sub); border: 1px solid var(--border);">
                 <div class="row items-center justify-between mb-2">
-                    <span class="text-xs font-semibold text-muted" data-i18n="matrix.topo_title">分流链路实时拓扑 (Inbound ──▶ Egress Pipeline)</span>
+                    <span class="text-xs font-semibold text-muted" data-i18n="matrix.topo_title">分流链路实时拓扑思维导图</span>
                     <span id="topo-summary-badge" class="badge badge-mini connected"><span class="status-dot"></span> 拓扑就绪</span>
                 </div>
-                <div id="matrix-topology-flow" class="topology-flow-container">
-                    <!-- Dynamic Pipeline Rows injected here -->
+                <div id="matrix-topology-flow" class="mindmap-canvas">
+                    <!-- Dynamic Mind Map Tree injected here -->
                 </div>
             </div>
 
