@@ -23,7 +23,7 @@
                 </div>
                 <div class="brand-text">
                     <div class="brand-title">NXGate</div>
-                    <div class="brand-sub"><span data-i18n="brand.sub">多出口智能网关</span> <span class="version-trigger" data-action="openUpdateModal" title="点击检查系统更新"><span id="sidebar-version-badge" class="badge-ver">v2.5.9.7</span></span></div>
+                    <div class="brand-sub"><span data-i18n="brand.sub">多出口智能网关</span> <span class="version-trigger" data-action="openUpdateModal" title="点击检查系统更新"><span id="sidebar-version-badge" class="badge-ver">v2.5.9.8</span></span></div>
                 </div>
             </div>
 
@@ -79,7 +79,7 @@
                     </button>
                     <h1 id="page-title">运行概览</h1>
                     <span id="conn-badge" class="badge disconnected"><span class="status-dot"></span> 检查中</span>
-                    <span class="version-trigger" data-action="openUpdateModal" title="点击检查系统更新"><span id="app-version-badge" class="badge badge-accent">v2.5.9.7</span><span id="header-update-dot" class="badge-dot-pulse hidden" title="发现新版本"></span></span>
+                    <span class="version-trigger" data-action="openUpdateModal" title="点击检查系统更新"><span id="app-version-badge" class="badge badge-accent">v2.5.9.8</span><span id="header-update-dot" class="badge-dot-pulse hidden" title="发现新版本"></span></span>
                 </div>
 
                 <div class="header-actions">
@@ -1175,6 +1175,7 @@
                         用户手动永久拉黑的节点与整机 IP。在节点列表中彻底隐藏，严禁建立连接，且绝对免疫探活与自动复活。
                     </div>
                     <div  class="row gap-2 wrap">
+                        <button class="btn btn-sm" data-action="promptAddCidrBlock" data-i18n="bl.add_cidr">+ 拉黑网段 (CIDR)</button>
                         <button class="btn btn-danger btn-sm"  data-action="clearPermBlacklist" data-i18n="bl.clear_perm">清空永久黑名单</button>
                         <button class="btn btn-outline btn-sm"  data-action="fetchBlacklist" data-args="[true]" data-i18n="common.refresh">刷新</button>
                     </div>

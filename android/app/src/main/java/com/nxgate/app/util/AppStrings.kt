@@ -208,6 +208,11 @@ data class AppStrings(
     val blockOptionPermanentDesc: String,
     val blockOptionTemporary: String,
     val blockOptionTemporaryDesc: String,
+    val blockOptionSubnet: String,
+    val blockOptionSubnetDesc: String,
+    val addCidrBlockBtn: String,
+    val addCidrDialogTitle: String,
+    val addCidrDialogPrompt: String,
     val favoritesPool: String,
     val favoritesGroupBadge: String
 )
@@ -405,6 +410,11 @@ val AppStringsZh = AppStrings(
     blockOptionPermanentDesc = "彻底隐藏并免疫探活复活，仅可在黑名单管理中手动解封",
     blockOptionTemporary = "临时隔离 24 小时 (仅在故障隔离池中观察)",
     blockOptionTemporaryDesc = "系统每 3 小时自动探活，连通正常后将自动复活回池",
+    blockOptionSubnet = "永久屏蔽整个 /24 网段 (动态规则，新节点均自动屏蔽)",
+    blockOptionSubnetDesc = "彻底拉黑并隐藏同网段所有节点，未来新发现的该网段节点也将自动被物理阻断",
+    addCidrBlockBtn = "添加网段屏蔽 (CIDR)",
+    addCidrDialogTitle = "永久屏蔽整个网段 (CIDR)",
+    addCidrDialogPrompt = "输入要永久封禁的目标网段 (例如 1.1.1.0/24)：\n\n该网段现有以及未来所有新节点都将被自动屏蔽并隐藏。",
     favoritesPool = "⭐ 我的收藏节点 (跨国收藏池)",
     favoritesGroupBadge = "收藏组"
 )
@@ -602,6 +612,11 @@ val AppStringsEn = AppStrings(
     blockOptionPermanentDesc = "Hidden from list and immune to auto-resurrection. Unblock manually in Blacklist.",
     blockOptionTemporary = "Temporary Quarantine (24 hours)",
     blockOptionTemporaryDesc = "System auto-probes every 3 hours and restores when healthy.",
+    blockOptionSubnet = "Permanent /24 Subnet Block (Dynamic rule, auto-blocks future nodes)",
+    blockOptionSubnetDesc = "Completely blocks and hides all nodes in this subnet; any newly discovered nodes in this CIDR will be auto-blocked.",
+    addCidrBlockBtn = "Add Subnet Block (CIDR)",
+    addCidrDialogTitle = "Block Subnet (CIDR)",
+    addCidrDialogPrompt = "Enter target subnet to permanently block (e.g. 1.1.1.0/24):\n\nAll existing and future nodes in this subnet will be automatically blocked and hidden.",
     favoritesPool = "⭐ My Favorites (Curated Pool)",
     favoritesGroupBadge = "Favorites"
 )

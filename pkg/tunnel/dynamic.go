@@ -291,7 +291,7 @@ func (m *DynamicGroupManager) filterCandidatesForGroup(allCandidates []*nodes.No
 	isFavoritesGroup := targetCountry == "FAVORITES"
 
 	for _, n := range allCandidates {
-		if m.nodePool.Blacklist().IsBlacklisted(n.ID) {
+		if m.nodePool.Blacklist().IsNodeBlocked(n.ID, n.IP) {
 			continue
 		}
 		if isFavoritesGroup {
@@ -536,7 +536,7 @@ func (m *DynamicGroupManager) EvaluateGroup(ctx context.Context, g *DynamicGroup
 			if usedNodeIDs[n.ID] || usedNodeIDs[n.IP] {
 				continue
 			}
-			if m.nodePool.Blacklist().IsBlacklisted(n.ID) {
+			if m.nodePool.Blacklist().IsNodeBlocked(n.ID, n.IP) {
 				continue
 			}
 			// Skip candidates that failed TCP connectivity probe

@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"testing"
 	"time"
+
+	"aimili-vpngate-go/pkg/config"
 )
 
 func TestBlacklistRevival(t *testing.T) {
@@ -305,5 +307,71 @@ func TestShadowProtocolProbing(t *testing.T) {
 
 	if !VerifyShadowProtocolResponsiveness("127.0.0.1", udpPort, "udp", 2*time.Second) {
 		t.Fatalf("expected responsive OpenVPN UDP listener to be verified as true")
+	}
+}
+
+func TestCIDRSubnetBlacklist(t *testing.T) {
+	dataDir := t.TempDir()
+	bm := NewBlacklistManager(dataDir)
+
+	// 1. Manually block entire subnet: 198.51.100.0/24
+	bm.MarkManualWithOptions("198.51.100.0/24", "198.51.100.0/24", "US", "Block rogue ASN subnet", 0, "cidr", true)
+
+	// 2. Test IP in subnet
+	if !bm.IsNodeBlocked("node-1", "198.51.100.1") {
+		t.Errorf("expected 198.51.100.1 to be blocked by CIDR 198.51.100.0/24")
+	}
+	if !bm.IsNodeBlocked("198.51.100.99:443", "198.51.100.99") {
+		t.Errorf("expected 198.51.100.99 to be blocked by CIDR 198.51.100.0/24")
+	}
+	if !bm.IsNodeBlocked("198.51.100.254:1194", "") {
+		t.Errorf("expected 198.51.100.254:1194 to be blocked by CIDR 198.51.100.0/24 via host:port ID")
+	}
+
+	// 3. Test IP outside subnet
+	if bm.IsNodeBlocked("node-outside", "198.51.101.1") {
+		t.Errorf("expected 198.51.101.1 NOT to be blocked")
+	}
+	if bm.IsNodeBlocked("203.0.113.5", "203.0.113.5") {
+		t.Errorf("expected 203.0.113.5 NOT to be blocked")
+	}
+
+	// 4. Test deriving /24 from single host IP with scope="cidr"
+	bm.MarkManualWithOptions("203.0.113.88", "203.0.113.88", "JP", "Block Tokyo hosting block", 0, "cidr", true)
+	if !bm.IsNodeBlocked("any-node", "203.0.113.1") {
+		t.Errorf("expected 203.0.113.1 to be blocked by derived /24")
+	}
+	if !bm.IsNodeBlocked("any-node", "203.0.113.200") {
+		t.Errorf("expected 203.0.113.200 to be blocked by derived /24")
+	}
+	if bm.IsNodeBlocked("any-node", "203.0.114.1") {
+		t.Errorf("expected 203.0.114.1 NOT to be blocked")
+	}
+
+	// 5. Test persistence & reload
+	bmReloaded := NewBlacklistManager(dataDir)
+	if !bmReloaded.IsNodeBlocked("reloaded-node", "198.51.100.42") {
+		t.Errorf("expected reloaded blacklist to retain CIDR block for 198.51.100.42")
+	}
+
+	// 6. Test NodePool integration: candidates in CIDR are filtered out dynamically
+	cfg := &config.Config{DataDir: dataDir}
+	pool := NewNodePool(cfg)
+	// Inject candidates
+	pool.SetCandidatesForTest([]*Node{
+		{ID: "node-ok", IP: "10.0.0.1", Ping: 10, Score: 100},
+		{ID: "node-blocked-cidr", IP: "198.51.100.22", Ping: 10, Score: 100},
+		{ID: "node-blocked-cidr2", IP: "203.0.113.9", Ping: 10, Score: 100},
+	})
+	pool.RebuildCandidates()
+	candidates := pool.GetCandidates()
+	if len(candidates) != 1 || candidates[0].ID != "node-ok" {
+		t.Errorf("expected only node-ok in candidates, got %d candidates", len(candidates))
+	}
+
+	// 7. Remove CIDR rule
+	bmReloaded.Remove("198.51.100.0/24")
+	if bmReloaded.IsNodeBlocked("reloaded-node", "198.51.100.42") {
+		t.Errorf("expected 198.51.100.42 to be unblocked after removing CIDR rule")
 	}
 }

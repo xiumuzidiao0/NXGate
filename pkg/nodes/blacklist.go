@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
@@ -29,13 +30,19 @@ type BlacklistEntry struct {
 	FailCount   int       `json:"fail_count"`
 	Level       string    `json:"level,omitempty"`        // "degraded" (降权), "quarantine" (隔离观察), "blacklist" (硬拉黑)
 	IsPermanent bool      `json:"is_permanent"`           // 是否为永久屏蔽 (Tombstone)
-	Scope       string    `json:"scope,omitempty"`        // "node" (单节点) 或 "ip" (整机IP屏蔽)
+	Scope       string    `json:"scope,omitempty"`        // "node" (单节点), "ip" (整机IP屏蔽), "cidr" (整网段屏蔽)
+}
+
+type cidrRule struct {
+	ipNet *net.IPNet
+	entry *BlacklistEntry
 }
 
 type BlacklistManager struct {
-	mu       sync.RWMutex
-	filePath string
-	entries  map[string]*BlacklistEntry
+	mu        sync.RWMutex
+	filePath  string
+	entries   map[string]*BlacklistEntry
+	cidrRules []*cidrRule
 }
 
 func NewBlacklistManager(dataDir string) *BlacklistManager {
@@ -45,6 +52,25 @@ func NewBlacklistManager(dataDir string) *BlacklistManager {
 	}
 	bm.load()
 	return bm
+}
+
+func (bm *BlacklistManager) rebuildCidrRulesLocked() {
+	var rules []*cidrRule
+	for _, entry := range bm.entries {
+		if entry == nil {
+			continue
+		}
+		if entry.Scope == "cidr" || strings.Contains(entry.IP, "/") {
+			_, ipNet, err := net.ParseCIDR(entry.IP)
+			if err == nil && ipNet != nil {
+				rules = append(rules, &cidrRule{
+					ipNet: ipNet,
+					entry: entry,
+				})
+			}
+		}
+	}
+	bm.cidrRules = rules
 }
 
 func (bm *BlacklistManager) load() {
@@ -69,6 +95,7 @@ func (bm *BlacklistManager) load() {
 		}
 	}
 	bm.entries = cleaned
+	bm.rebuildCidrRulesLocked()
 }
 
 func (bm *BlacklistManager) saveLocked() {
@@ -100,15 +127,20 @@ func (bm *BlacklistManager) IsNodeBlocked(nodeID, ip string) bool {
 		}
 	}
 
-	// 2. IP-level match (handles entire IP blocking regardless of port)
+	// 2. IP-level and CIDR match
 	targetIP := ip
 	if targetIP == "" && strings.Contains(nodeID, ":") {
 		if h, _, err := net.SplitHostPort(nodeID); err == nil {
 			targetIP = h
 		}
+	} else if targetIP == "" {
+		if net.ParseIP(nodeID) != nil {
+			targetIP = nodeID
+		}
 	}
 
 	if targetIP != "" {
+		// 2a. Direct single IP match
 		if entry, ok := bm.entries[targetIP]; ok {
 			if entry.IsPermanent || entry.Until.After(now) {
 				return true
@@ -118,6 +150,18 @@ func (bm *BlacklistManager) IsNodeBlocked(nodeID, ip string) bool {
 			if entry.Scope == "ip" && entry.IP == targetIP {
 				if entry.IsPermanent || entry.Until.After(now) {
 					return true
+				}
+			}
+		}
+
+		// 2b. CIDR subnet match (e.g. 1.1.1.0/24)
+		parsedIP := net.ParseIP(targetIP)
+		if parsedIP != nil {
+			for _, r := range bm.cidrRules {
+				if r.entry.IsPermanent || r.entry.Until.After(now) {
+					if r.ipNet.Contains(parsedIP) {
+						return true
+					}
 				}
 			}
 		}
@@ -221,6 +265,7 @@ func (bm *BlacklistManager) Reset(nodeID string) {
 	defer bm.mu.Unlock()
 
 	delete(bm.entries, nodeID)
+	bm.rebuildCidrRulesLocked()
 	bm.saveLocked()
 }
 
@@ -229,6 +274,7 @@ func (bm *BlacklistManager) Remove(nodeID string) {
 	defer bm.mu.Unlock()
 
 	delete(bm.entries, nodeID)
+	bm.rebuildCidrRulesLocked()
 	bm.saveLocked()
 }
 
@@ -251,6 +297,7 @@ func (bm *BlacklistManager) ClearWithOptions(includePermanent bool) {
 		}
 		bm.entries = newEntries
 	}
+	bm.rebuildCidrRulesLocked()
 	bm.saveLocked()
 }
 
@@ -265,6 +312,7 @@ func (bm *BlacklistManager) ClearPermanent() {
 		}
 	}
 	bm.entries = newEntries
+	bm.rebuildCidrRulesLocked()
 	bm.saveLocked()
 }
 
@@ -277,6 +325,76 @@ func (bm *BlacklistManager) MarkManualWithOptions(id, ip, country, reason string
 	defer bm.mu.Unlock()
 
 	now := time.Now()
+	cleanIP := strings.TrimSpace(ip)
+	cleanID := strings.TrimSpace(id)
+	if cleanIP == "" && cleanID != "" {
+		cleanIP = cleanID
+	}
+
+	// 1. Detect and handle CIDR subnet scope
+	if scope == "cidr" || strings.Contains(cleanIP, "/") || strings.Contains(cleanID, "/") {
+		targetCIDR := cleanIP
+		if !strings.Contains(targetCIDR, "/") && strings.Contains(cleanID, "/") {
+			targetCIDR = cleanID
+		}
+		// If user selected CIDR scope on a single host IP (e.g. "1.2.3.4" or "1.2.3.4:443"), derive /24 or /64
+		if !strings.Contains(targetCIDR, "/") {
+			host := targetCIDR
+			if strings.Contains(host, ":") {
+				if h, _, err := net.SplitHostPort(host); err == nil {
+					host = h
+				}
+			}
+			parsed := net.ParseIP(host)
+			if parsed != nil {
+				if parsed.To4() != nil {
+					mask := net.CIDRMask(24, 32)
+					targetCIDR = fmt.Sprintf("%s/24", parsed.Mask(mask).String())
+				} else {
+					mask := net.CIDRMask(64, 128)
+					targetCIDR = fmt.Sprintf("%s/64", parsed.Mask(mask).String())
+				}
+			}
+		}
+
+		_, ipNet, err := net.ParseCIDR(targetCIDR)
+		if err == nil && ipNet != nil {
+			cidrStr := ipNet.String()
+			if reason == "" {
+				if permanent {
+					reason = fmt.Sprintf("用户手动永久屏蔽网段 (%s)", cidrStr)
+				} else {
+					reason = fmt.Sprintf("用户临时隔离网段 (%s)", cidrStr)
+				}
+			}
+			var until time.Time
+			if permanent {
+				until = now.Add(100 * 365 * 24 * time.Hour)
+			} else {
+				if duration <= 0 {
+					duration = 24 * time.Hour
+				}
+				until = now.Add(duration)
+			}
+			bm.entries[cidrStr] = &BlacklistEntry{
+				ID:          cidrStr,
+				IP:          cidrStr,
+				Port:        0,
+				Country:     country,
+				Reason:      reason,
+				MarkedAt:    now,
+				Until:       until,
+				FailCount:   5,
+				Level:       "blacklist",
+				IsPermanent: permanent,
+				Scope:       "cidr",
+			}
+			bm.rebuildCidrRulesLocked()
+			bm.saveLocked()
+			return
+		}
+	}
+
 	if reason == "" {
 		if permanent {
 			reason = "用户手动永久屏蔽 (Tombstone)"
@@ -285,7 +403,6 @@ func (bm *BlacklistManager) MarkManualWithOptions(id, ip, country, reason string
 		}
 	}
 
-	cleanIP := ip
 	port := 0
 	if strings.Contains(id, ":") {
 		if h, pStr, err := net.SplitHostPort(id); err == nil {
@@ -339,6 +456,7 @@ func (bm *BlacklistManager) MarkManualWithOptions(id, ip, country, reason string
 		IsPermanent: permanent,
 		Scope:       scope,
 	}
+	bm.rebuildCidrRulesLocked()
 	bm.saveLocked()
 }
 
@@ -348,7 +466,7 @@ func (bm *BlacklistManager) ProbeAndRevive(ctx context.Context, fallbackPortFind
 	now := time.Now()
 	var candidates []*BlacklistEntry
 	for _, entry := range bm.entries {
-		if entry != nil && !entry.IsPermanent && entry.Until.After(now) {
+		if entry != nil && !entry.IsPermanent && entry.Scope != "cidr" && !strings.Contains(entry.IP, "/") && entry.Until.After(now) {
 			cp := *entry
 			candidates = append(candidates, &cp)
 		}
@@ -399,6 +517,7 @@ func (bm *BlacklistManager) ProbeAndRevive(ctx context.Context, fallbackPortFind
 		for _, r := range revived {
 			delete(bm.entries, r.ID)
 		}
+		bm.rebuildCidrRulesLocked()
 		bm.saveLocked()
 		bm.mu.Unlock()
 	}

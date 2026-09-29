@@ -271,9 +271,12 @@ func (s *Server) handleBlacklistClear(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleBlacklistAdd(w http.ResponseWriter, r *http.Request) {
 	var req BlacklistNodeReq
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.NodeID == "" {
-		s.writeError(w, http.StatusBadRequest, "缺少 node_id 参数")
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || (req.NodeID == "" && req.IP == "") {
+		s.writeError(w, http.StatusBadRequest, "缺少 node_id 或 ip 参数")
 		return
+	}
+	if req.NodeID == "" {
+		req.NodeID = req.IP
 	}
 	dur := time.Duration(req.DurationMinutes) * time.Minute
 	if dur <= 0 && !req.Permanent {
@@ -292,6 +295,8 @@ func (s *Server) handleBlacklistAdd(w http.ResponseWriter, r *http.Request) {
 	targetDesc := req.NodeID
 	if req.Scope == "ip" && req.IP != "" {
 		targetDesc = fmt.Sprintf("整机IP [%s]", req.IP)
+	} else if req.Scope == "cidr" {
+		targetDesc = fmt.Sprintf("网段 [%s]", req.IP)
 	}
 	stats.LogInfo("Server", "管理员手动将 %s (%s) 屏蔽 (永久=%v, 时长=%v): %s", targetDesc, req.Country, req.Permanent, dur, reason)
 	s.writeJSON(w, http.StatusOK, map[string]any{

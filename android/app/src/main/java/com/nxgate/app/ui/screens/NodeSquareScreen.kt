@@ -26,6 +26,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Sort
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Block
 import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.rounded.Bookmark
@@ -375,9 +376,11 @@ fun NodeSquareScreen(
     val blacklistSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     var blockCandidate by remember { mutableStateOf<NodeCandidate?>(null) }
-    var blockOptionSelected by remember { mutableIntStateOf(0) } // 0 = permanent, 1 = temporary 24h
+    var blockOptionSelected by remember { mutableIntStateOf(0) } // 0 = permanent, 1 = temporary 24h, 2 = permanent subnet /24
     var blacklistTab by remember { mutableIntStateOf(0) } // 0 = temp, 1 = perm
     var showClearPermConfirmDialog by remember { mutableStateOf(false) }
+    var showAddCidrDialog by remember { mutableStateOf(false) }
+    var cidrInputText by remember { mutableStateOf("") }
 
     // Dynamic country dropdown options calculated from allNodes (matching Web)
     val countryOptions = remember(allNodes, strings) {
@@ -858,9 +861,12 @@ fun NodeSquareScreen(
         }
     }
 
-    // 确认屏蔽节点弹窗 (支持永久屏蔽与临时隔离 24h)
+    // 确认屏蔽节点弹窗 (支持永久屏蔽、临时隔离 24h 与整网段 /24 动态拦截)
     if (blockCandidate != null) {
         val node = blockCandidate!!
+        val parts = node.ip.split(".")
+        val subnet24 = if (parts.size == 4) "${parts[0]}.${parts[1]}.${parts[2]}.0/24" else ""
+
         AlertDialog(
             onDismissRequest = { blockCandidate = null },
             shape = RoundedCornerShape(24.dp),
@@ -892,6 +898,26 @@ fun NodeSquareScreen(
                         }
                     }
 
+                    // Option 2: 永久屏蔽整个 /24 网段
+                    if (subnet24.isNotEmpty()) {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (blockOptionSelected == 2) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { blockOptionSelected = 2 }
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    RadioButton(selected = blockOptionSelected == 2, onClick = { blockOptionSelected = 2 })
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("${strings.blockOptionSubnet} [$subnet24]", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                                }
+                                Text(strings.blockOptionSubnetDesc, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 32.dp))
+                            }
+                        }
+                    }
+
                     // Option 1: 临时隔离 24 小时
                     Surface(
                         shape = RoundedCornerShape(12.dp),
@@ -914,25 +940,42 @@ fun NodeSquareScreen(
             confirmButton = {
                 Button(
                     onClick = {
+                        val isSubnet = blockOptionSelected == 2
                         val isPermanent = blockOptionSelected != 1
                         val dur = if (isPermanent) 0 else 1440
-                        val reasonStr = if (isPermanent) "用户手动永久屏蔽" else "用户临时隔离 24 小时"
+                        val scopeStr = if (isSubnet) "cidr" else "node"
+                        val targetNodeId = if (isSubnet && subnet24.isNotEmpty()) subnet24 else node.id
+                        val targetIp = if (isSubnet && subnet24.isNotEmpty()) subnet24 else node.ip
+                        val reasonStr = when (blockOptionSelected) {
+                            2 -> "用户手动永久屏蔽网段 ($subnet24)"
+                            1 -> "用户临时隔离 24 小时"
+                            else -> "用户手动永久屏蔽"
+                        }
                         if (activeServer != null) {
                             scope.launch {
                                 val res = NXGateApplication.instance.apiClient.addBlacklist(
                                     activeServer,
-                                    node.id,
-                                    node.ip,
+                                    targetNodeId,
+                                    targetIp,
                                     node.countryShort,
                                     permanent = isPermanent,
                                     durationMinutes = dur,
-                                    scope = "node",
+                                    scope = scopeStr,
                                     reason = reasonStr
                                 )
                                 if (res.isSuccess) {
                                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    allNodes = allNodes.filter { it.id != node.id }
-                                    val tip = if (isPermanent) (if (isEn) "Permanently blocked [${node.ip}] (hidden)" else "已永久屏蔽节点 [${node.ip}] (已彻底隐藏)") else (if (isEn) "Quarantined [${node.ip}] for 24h" else "已将节点 [${node.ip}] 移入 24 小时临时隔离池")
+                                    if (isSubnet && subnet24.isNotEmpty()) {
+                                        val prefix = "${parts[0]}.${parts[1]}.${parts[2]}."
+                                        allNodes = allNodes.filter { !it.ip.startsWith(prefix) }
+                                    } else {
+                                        allNodes = allNodes.filter { it.id != node.id }
+                                    }
+                                    val tip = when {
+                                        isSubnet -> if (isEn) "Permanently blocked subnet [$subnet24] (all nodes hidden)" else "已永久屏蔽网段 [$subnet24] (同网段全部隐藏)"
+                                        isPermanent -> if (isEn) "Permanently blocked [${node.ip}] (hidden)" else "已永久屏蔽节点 [${node.ip}] (已彻底隐藏)"
+                                        else -> if (isEn) "Quarantined [${node.ip}] for 24h" else "已将节点 [${node.ip}] 移入 24 小时临时隔离池"
+                                    }
                                     Toast.makeText(context, tip, Toast.LENGTH_SHORT).show()
                                     val blRes = NXGateApplication.instance.apiClient.fetchBlacklist(activeServer)
                                     if (blRes.isSuccess) {
@@ -986,6 +1029,66 @@ fun NodeSquareScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showClearPermConfirmDialog = false }) { Text(strings.cancel) }
+            }
+        )
+    }
+
+    // 手动添加网段屏蔽弹窗
+    if (showAddCidrDialog && activeServer != null) {
+        AlertDialog(
+            onDismissRequest = { showAddCidrDialog = false },
+            shape = RoundedCornerShape(24.dp),
+            containerColor = MaterialTheme.colorScheme.surfaceContainer,
+            title = { Text(strings.addCidrDialogTitle, fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(strings.addCidrDialogPrompt, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    OutlinedTextField(
+                        value = cidrInputText,
+                        onValueChange = { cidrInputText = it },
+                        label = { Text("CIDR") },
+                        placeholder = { Text("1.1.1.0/24") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val input = cidrInputText.trim()
+                        if (input.contains("/")) {
+                            showAddCidrDialog = false
+                            scope.launch {
+                                val res = NXGateApplication.instance.apiClient.addBlacklist(
+                                    activeServer,
+                                    nodeId = input,
+                                    ip = input,
+                                    country = "",
+                                    permanent = true,
+                                    scope = "cidr",
+                                    reason = if (isEn) "Manual subnet block ($input)" else "用户手动永久屏蔽网段 ($input)"
+                                )
+                                if (res.isSuccess) {
+                                    Toast.makeText(context, if (isEn) "Permanently blocked subnet [$input]!" else "已成功永久屏蔽网段 [$input]！", Toast.LENGTH_SHORT).show()
+                                    val blRes = NXGateApplication.instance.apiClient.fetchBlacklist(activeServer)
+                                    if (blRes.isSuccess) blacklistItems = blRes.getOrNull() ?: emptyList()
+                                    refreshAllNodes()
+                                } else {
+                                    Toast.makeText(context, "添加失败: ${res.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        } else {
+                            Toast.makeText(context, if (isEn) "Please enter valid CIDR format (e.g. 1.1.1.0/24)" else "请输入合法的 CIDR 网段格式 (如 1.1.1.0/24)", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text(if (isEn) "Block Subnet" else "确认拉黑网段")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddCidrDialog = false }) { Text(strings.cancel) }
             }
         )
     }
@@ -1156,6 +1259,15 @@ fun NodeSquareScreen(
                     ConnectedButtonGroup(
                         items = listOf(
                             ConnectedButtonItem(
+                                text = strings.addCidrBlockBtn,
+                                style = ConnectedButtonStyle.Filled,
+                                icon = Icons.Rounded.Add,
+                                onClick = {
+                                    cidrInputText = ""
+                                    showAddCidrDialog = true
+                                }
+                            ),
+                            ConnectedButtonItem(
                                 text = strings.clearPermanentBlacklist,
                                 style = ConnectedButtonStyle.Outlined,
                                 icon = Icons.Rounded.Delete,
@@ -1196,12 +1308,14 @@ fun NodeSquareScreen(
                                     ) {
                                         Column(modifier = Modifier.weight(1f)) {
                                             Row(verticalAlignment = Alignment.CenterVertically) {
+                                                val isCidr = item.scope == "cidr" || item.ip.contains("/")
+                                                val badgeText = if (isCidr) (if (isEn) "Subnet CIDR" else "网段动态") else (if (isEn) "Permanent" else "永久")
                                                 Surface(
                                                     shape = RoundedCornerShape(4.dp),
                                                     color = MaterialTheme.colorScheme.errorContainer
                                                 ) {
                                                     Text(
-                                                        text = if (isEn) "Permanent" else "永久",
+                                                        text = badgeText,
                                                         style = MaterialTheme.typography.labelSmall,
                                                         color = MaterialTheme.colorScheme.onErrorContainer,
                                                         fontWeight = FontWeight.Bold,
@@ -1210,7 +1324,7 @@ fun NodeSquareScreen(
                                                 }
                                                 Spacer(Modifier.width(6.dp))
                                                 Text(
-                                                    text = "${item.ip} (${item.country})",
+                                                    text = "${item.ip} ${if (item.country.isNotEmpty()) "(${item.country})" else ""}",
                                                     style = MaterialTheme.typography.bodyMedium,
                                                     fontWeight = FontWeight.SemiBold,
                                                     color = MaterialTheme.colorScheme.onSurface

@@ -229,6 +229,7 @@
                 'bl.tab_perm': '用户永久黑名单',
                 'bl.clear_temp': '清空临时隔离',
                 'bl.clear_perm': '清空永久黑名单',
+                'bl.add_cidr': '+ 拉黑网段 (CIDR)',
                 'bl.perm_desc': '用户手动永久拉黑的节点与整机 IP。在节点列表中彻底隐藏，严禁建立连接，且绝对免疫探活与自动复活。',
                 'bl.resurrect': '探活复活节点',
                 'bl.clear_all': '清空全部屏蔽',
@@ -537,6 +538,7 @@
                 'bl.tab_perm': 'Permanent Blacklist',
                 'bl.clear_temp': 'Clear Temporary',
                 'bl.clear_perm': 'Clear Permanent',
+                'bl.add_cidr': '+ Block Subnet (CIDR)',
                 'bl.perm_desc': 'Nodes and IPs manually blacklisted by user. Completely hidden from node list, never connected, and immune to auto-resurrection.',
                 'bl.resurrect': 'Probe & Resurrect',
                 'bl.clear_all': 'Clear All Blocked',
@@ -2169,7 +2171,10 @@
                             ${permItems.map(item => {
                                 const cCode = item.country || '';
                                 const flag = cCode ? getCountryFlagSVG(cCode) : '';
-                                const scopeBadge = item.scope === 'ip' ? `<span class="badge badge-accent badge-mini">${isEn ? 'Entire IP' : '整机IP永久拉黑'}</span>` : `<span class="badge unlock-blocked badge-mini">${isEn ? 'Permanent' : '永久屏蔽'}</span>`;
+                                const isCIDR = item.scope === 'cidr' || (item.ip && item.ip.includes('/'));
+                                const scopeBadge = isCIDR
+                                    ? `<span class="badge badge-accent badge-mini" style="background: rgba(220, 38, 38, 0.15); color: #ef4444; border: 1px solid rgba(220, 38, 38, 0.3);">${isEn ? 'Subnet (CIDR)' : '整网段动态拦截'}</span>`
+                                    : (item.scope === 'ip' ? `<span class="badge badge-accent badge-mini">${isEn ? 'Entire IP' : '整机IP永久拉黑'}</span>` : `<span class="badge unlock-blocked badge-mini">${isEn ? 'Permanent' : '永久屏蔽'}</span>`);
 
                                 return `
                                     <div class="blacklist-item">
@@ -2294,23 +2299,40 @@
         }
 
         async function addNodeToBlacklist(nodeId, ip, country) {
-            const promptZh = `请选择对节点 [${nodeId}] 的屏蔽方式：\n\n1 = 永久屏蔽此节点 (永不连接，从列表彻底隐藏) [推荐]\n2 = 临时隔离 24 小时 (仅在故障隔离池中观察)\n3 = 永久屏蔽整机 IP (${ip} 所有端口)\n\n请输入 1, 2 或 3:`;
-            const promptEn = `Choose blocking method for [${nodeId}]:\n\n1 = Permanent block (Never connect, hide from node list) [Recommended]\n2 = Temporary quarantine 24 hours\n3 = Permanent IP block (${ip} all ports)\n\nEnter 1, 2, or 3:`;
+            let derivedSubnet = '';
+            if (ip) {
+                const parts = ip.split('.');
+                if (parts.length === 4) {
+                    derivedSubnet = `${parts[0]}.${parts[1]}.${parts[2]}.0/24`;
+                }
+            }
+
+            const promptZh = `请选择对节点 [${nodeId}] 的屏蔽方式：\n\n1 = 永久屏蔽此节点 (单机，永不连接，从列表彻底隐藏) [推荐]\n2 = 永久屏蔽整个 /24 网段 (${derivedSubnet || ip + '/24'} 动态规则，未来该网段新节点均自动屏蔽)\n3 = 永久屏蔽整机 IP (${ip} 所有端口)\n4 = 临时隔离 24 小时 (仅在故障隔离池中观察)\n\n请输入 1, 2, 3 或 4:`;
+            const promptEn = `Choose blocking method for [${nodeId}]:\n\n1 = Permanent block (Single node, never connect, hidden) [Recommended]\n2 = Permanent /24 subnet block (${derivedSubnet || ip + '/24'} dynamic rule, auto-blocks future nodes)\n3 = Permanent IP block (${ip} all ports)\n4 = Temporary quarantine 24 hours\n\nEnter 1, 2, 3, or 4:`;
             const mode = tPrompt(promptZh, promptEn, "1");
             if (!mode) return;
 
             let dur = 1440;
             let permanent = true;
             let scope = 'node';
+            let targetNodeId = nodeId;
+            let targetIP = ip;
             let reason = '用户手动永久屏蔽 (从列表彻底隐藏)';
 
             if (mode === '2') {
-                permanent = false;
-                reason = '用户临时隔离 24 小时';
+                permanent = true;
+                scope = 'cidr';
+                targetIP = derivedSubnet || (ip + '/24');
+                targetNodeId = targetIP;
+                reason = `用户手动永久屏蔽整个网段 (${targetIP})`;
             } else if (mode === '3') {
                 permanent = true;
                 scope = 'ip';
+                targetNodeId = ip;
                 reason = `用户永久屏蔽整机 IP (${ip})`;
+            } else if (mode === '4') {
+                permanent = false;
+                reason = '用户临时隔离 24 小时';
             }
 
             try {
@@ -2318,8 +2340,8 @@
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        node_id: nodeId,
-                        ip: ip,
+                        node_id: targetNodeId,
+                        ip: targetIP,
                         country: country,
                         duration_minutes: dur,
                         permanent: permanent,
@@ -2332,14 +2354,61 @@
                     tAlert('屏蔽失败: ' + (ret.error || '未知错误'), 'Block failed: ' + (ret.error || 'Unknown error'));
                     return;
                 }
-                const msg = permanent ?
-                    (scope === 'ip' ? (getLanguage() === 'en' ? `Permanently blocked IP [${ip}]` : `已永久屏蔽整机 IP [${ip}]`) : (getLanguage() === 'en' ? `Permanently blocked [${nodeId}] (hidden)` : `已永久屏蔽节点 [${nodeId}] (已彻底隐藏)`)) :
-                    (getLanguage() === 'en' ? `Quarantined [${nodeId}] for 24h` : `已将节点 [${nodeId}] 临时隔离 24 小时`);
+                let msg = '';
+                if (permanent) {
+                    if (scope === 'cidr') {
+                        msg = getLanguage() === 'en' ? `Permanently blocked subnet [${targetIP}] (auto-blocks all future nodes)` : `已永久屏蔽网段 [${targetIP}] (同网段现有及新节点均自动屏蔽)`;
+                    } else if (scope === 'ip') {
+                        msg = getLanguage() === 'en' ? `Permanently blocked IP [${ip}]` : `已永久屏蔽整机 IP [${ip}]`;
+                    } else {
+                        msg = getLanguage() === 'en' ? `Permanently blocked [${nodeId}] (hidden)` : `已永久屏蔽节点 [${nodeId}] (已彻底隐藏)`;
+                    }
+                } else {
+                    msg = getLanguage() === 'en' ? `Quarantined [${nodeId}] for 24h` : `已将节点 [${nodeId}] 临时隔离 24 小时`;
+                }
                 showToast(msg);
                 fetchStatus();
                 fetchNodes();
             } catch (err) {
                 tAlert('请求失败: ' + err, 'Request failed: ' + err);
+            }
+        }
+
+        async function promptAddCidrBlock() {
+            const input = tPrompt(
+                '请输入要永久屏蔽的目标网段 (CIDR 格式，例如 1.1.1.0/24 或 198.51.100.0/24)：\n\n该网段现有及未来所有新节点都将自动被物理屏蔽与隐藏！',
+                'Enter target subnet to permanently block (CIDR format, e.g. 1.1.1.0/24 or 198.51.100.0/24):\n\nAll current and future nodes in this subnet will be blocked and hidden automatically!',
+                '1.1.1.0/24'
+            );
+            if (!input) return;
+            const cidr = input.trim();
+            if (!cidr.includes('/')) {
+                tAlert('请输入合法的 CIDR 网段格式，例如 1.1.1.0/24', 'Please enter a valid CIDR subnet, e.g. 1.1.1.0/24');
+                return;
+            }
+            try {
+                const res = await fetch('/api/blacklist/add', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        node_id: cidr,
+                        ip: cidr,
+                        permanent: true,
+                        scope: 'cidr',
+                        reason: `用户手动永久屏蔽网段 (${cidr})`
+                    })
+                });
+                const ret = await res.json();
+                if (!res.ok) {
+                    tAlert('添加网段屏蔽失败: ' + (ret.error || '未知错误'), 'Failed to block subnet: ' + (ret.error || 'Unknown error'));
+                    return;
+                }
+                showToast(getLanguage() === 'en' ? `Permanently blocked subnet [${cidr}]` : `已永久屏蔽网段 [${cidr}]`);
+                await fetchBlacklist();
+                fetchStatus();
+                fetchNodes();
+            } catch (e) {
+                tAlert('请求失败: ' + e, 'Request failed: ' + e);
             }
         }
 
@@ -3990,6 +4059,7 @@
             switchBlacklistTab,
             clearTempBlacklist,
             clearPermBlacklist,
+            promptAddCidrBlock,
             resurrectBlacklist,
             clearAllBlacklist,
             fetchBlacklist,
