@@ -257,19 +257,22 @@ data class DynamicGroupCard(
     val isSystem: Boolean = false,
     val country: String = "",
     val ipType: String = "all", // "all", "residential", "hosting"
-    val unlockFilter: String = "none", // "none", "ai", "streaming", "all"
+    val unlockFilter: String = "none", // "none", "connectivity", "ai", "streaming", "all"
     val sortBy: String = "latency", // "latency", "speed", "score"
     val targetCount: Int = 1,
     val intervalMinutes: Int = 30,
     val activeTunnelIds: List<String> = emptyList(),
-    val statusText: String = ""
+    val statusText: String = "",
+    val fallbackPolicy: String = "none",
+    val inFallback: Boolean = false,
+    val fallbackReason: String = ""
 ) {
     val title: String
         get() = name
 
     val description: String
         get() {
-            val c = if (country.isNotEmpty()) country else "全部国家"
+            val c = if (country.isNotEmpty()) (if (country.equals("FAVORITES", true)) "⭐ 我的收藏池" else country) else "全部国家"
             val ip = when (ipType) {
                 "residential" -> "住宅宽带"
                 "hosting" -> "机房托管"
@@ -277,11 +280,19 @@ data class DynamicGroupCard(
             }
             val ul = when (unlockFilter) {
                 "ai" -> "智能服务全通过"
+                "connectivity" -> "网页 204 真实连通"
                 "streaming" -> "流媒体全通过"
                 "all" -> "智能与流媒体全解"
                 else -> "不限"
             }
-            return "国家目标：$c\n网络类型：$ip\n解锁要求：$ul\n维持数量：$targetCount 个并发，评估周期：$intervalMinutes 分钟"
+            val fb = when (fallbackPolicy) {
+                "favorites" -> "⭐ 收藏组"
+                "auto_low_latency" -> "⚡ 最低延迟"
+                "auto_speed" -> "🚀 最高带宽"
+                "none" -> "关闭"
+                else -> fallbackPolicy
+            }
+            return "国家目标：$c\n网络类型：$ip\n解锁要求：$ul；兜底级联：$fb\n维持数量：$targetCount 个并发，评估周期：$intervalMinutes 分钟"
         }
 }
 
@@ -323,6 +334,8 @@ data class NodeCandidate(
     val openai: String = "unknown",
     val claude: String = "unknown",
     val gemini: String = "unknown",
+    val google: String = "unknown",
+    val cloudflare: String = "unknown",
     val netflix: String = "unknown"
 ) {
     val title: String

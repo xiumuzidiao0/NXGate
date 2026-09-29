@@ -271,6 +271,15 @@
                 'dg.count_label': '维持并发在线出口数 [1-10]',
                 'dg.interval_label': '自动重评与轮换周期',
                 'dg.save_group': '保存出口组',
+                'dg.fallback_label': '兜底级联策略 (候选枯竭时自动降级)',
+                'dg.fallback_none': '不启用兜底 (保持原状/无节点阻断)',
+                'dg.fallback_fav': '⭐ 级联降级至我的收藏节点 (推荐)',
+                'dg.fallback_latency': '⚡ 级联降级至全球最低延迟节点',
+                'dg.fallback_speed': '🚀 级联降级至全球最高带宽节点',
+                'dg.fallback_jp': '🇯🇵 级联降级至日本出口',
+                'dg.fallback_us': '🇺🇸 级联降级至美国出口',
+                'dg.unlock_connectivity': '真实网页连通 (Google/Cloudflare 204 校验)',
+                'dg.badge_fallback': '降级运行中',
 
                 'sb.filter_sub': '定制订阅',
                 'sub_filter.title': '定制订阅导出中心',
@@ -560,6 +569,15 @@
                 'dg.count_label': 'Concurrent Exit Tunnels [1-10]',
                 'dg.interval_label': 'Automatic Rotation Interval',
                 'dg.save_group': 'Save Exit Group',
+                'dg.fallback_label': 'Cascading Fallback Policy',
+                'dg.fallback_none': 'No Fallback (Block on node exhaustion)',
+                'dg.fallback_fav': '⭐ Fallback to My Favorites (Recommended)',
+                'dg.fallback_latency': '⚡ Fallback to Global Lowest Latency',
+                'dg.fallback_speed': '🚀 Fallback to Global Highest Bandwidth',
+                'dg.fallback_jp': '🇯🇵 Fallback to Japan Egress',
+                'dg.fallback_us': '🇺🇸 Fallback to US Egress',
+                'dg.unlock_connectivity': 'Genuine Web Connectivity (Google/CF 204)',
+                'dg.badge_fallback': 'Fallback Active',
 
                 'sb.filter_sub': 'Filter Sub',
                 'sub_filter.title': 'Customized Subscription Export',
@@ -815,6 +833,9 @@
 
             if (u.google === 'unlocked') badges.push(`<span class="badge unlock-badge text-accent" title="${isEn ? 'Google Clean Search' : 'Google Search 干净无验证码'}">${isEn ? 'Google OK' : 'Google 可用'}</span>`);
             else if (u.google === 'blocked') badges.push(`<span class="badge unlock-badge unlock-blocked" title="${isEn ? 'Google Captcha Required' : 'Google 出现验证码异常'}">${isEn ? 'Google Captcha' : 'Google 验证'}</span>`);
+
+            if (u.cloudflare === 'unlocked') badges.push(`<span class="badge unlock-badge text-accent" title="${isEn ? 'Cloudflare 204 OK' : 'Cloudflare 204 出海连通正常'}">${isEn ? 'CF OK' : 'CF 连通'}</span>`);
+            else if (u.cloudflare === 'blocked') badges.push(`<span class="badge unlock-badge unlock-blocked" title="${isEn ? 'Cloudflare WAF Blocked' : 'Cloudflare 遭遇风控阻断'}">${isEn ? 'CF Block' : 'CF 阻断'}</span>`);
 
             if (badges.length === 0) return `<span class="text-xs text-muted">${isEn ? 'Not Probed' : '未检测'}</span>`;
             const tag = u.is_probed ? `<span class="badge badge-system badge-mini" title="${isEn ? 'Probed via virtual NIC' : '经虚拟网卡物理流量实测'}">${isEn ? 'Probed' : '实测'}</span> ` : '';
@@ -1542,6 +1563,7 @@
 
                 let unlockText = '';
                 if (g.unlock_filter === 'ai') unlockText = `<span>${isEn ? 'Unlock: ' : '解锁: '}<strong class="unlock-ai">${isEn ? 'Triple AI (GPT+Claude+Gemini)' : '三大 AI (GPT+Claude+Gemini)'}</strong></span>`;
+                else if (g.unlock_filter === 'connectivity') unlockText = `<span>${isEn ? 'Unlock: ' : '解锁: '}<strong class="text-accent">${isEn ? 'Web 204 Verified' : '真实网页连通 (204)'}</strong></span>`;
                 else if (g.unlock_filter === 'streaming') unlockText = `<span>${isEn ? 'Unlock: ' : '解锁: '}<strong class="unlock-stream">${isEn ? 'Streaming Only' : '仅流媒体'}</strong></span>`;
                 else if (g.unlock_filter === 'full' || g.unlock_filter === 'all') unlockText = `<span>${isEn ? 'Unlock: ' : '解锁: '}<strong class="unlock-full">${isEn ? 'Full Unlock (AI+Streaming)' : '全解锁 (三大 AI+流媒体)'}</strong></span>`;
 
@@ -1554,26 +1576,41 @@
                 const statusClass = activeCount >= g.target_count ? 'connected' : (activeCount > 0 ? 'connecting' : 'disconnected');
                 const statusText = g.status_text || (isEn ? 'Normal' : '正常');
 
+                let fallbackInfo = '';
+                if (g.fallback_policy && g.fallback_policy !== 'none') {
+                    let fbLabel = g.fallback_policy;
+                    if (g.fallback_policy === 'favorites') fbLabel = isEn ? 'Favorites' : '我的收藏';
+                    else if (g.fallback_policy === 'auto_low_latency') fbLabel = isEn ? 'Lowest Latency' : '最低延迟';
+                    else if (g.fallback_policy === 'auto_speed') fbLabel = isEn ? 'Highest Speed' : '最高带宽';
+                    fallbackInfo = `<span>${isEn ? 'Fallback: ' : '兜底: '}<strong class="text-strong">${fbLabel}</strong></span>`;
+                }
+
+                const fallbackBadge = g.in_fallback ? `<span class="badge badge-warning" title="${escapeHtml(g.fallback_reason || '')}">${isEn ? 'Fallback Active' : '降级运行中'}</span>` : '';
+                const fallbackReasonDiv = (g.in_fallback && g.fallback_reason) ? `<div class="text-xs text-warning mt-1">${escapeHtml(g.fallback_reason)}</div>` : '';
+
                 const favBadge = `<span class="badge badge-accent">⭐ ${isEn ? 'Favorites' : '收藏组'}</span>`;
                 const sysBadge = isSys ? `<span class="badge badge-system">${isEn ? 'Primary Gateway (tun0)' : '系统主连网关 (tun0)'}</span>` : (g.country === 'FAVORITES' ? favBadge : `<span class="badge badge-accent">Top ${g.target_count} ${isEn ? 'Tunnels' : '隧道'}</span>`);
                 const deleteBtn = isSys ? '' : `<button class="btn btn-danger btn-xs" data-action="deleteDynamicGroup" data-args="${jsonAttr([g.id])}">${isEn ? 'Delete' : '删除'}</button>`;
                 const editLabel = isSys ? (isEn ? 'Configure Strategy' : '配置主连策略') : (isEn ? 'Edit' : '编辑');
 
                 return `
-                    <div class="dynamic-group-card ${isSys ? 'is-system' : ''}">
+                    <div class="dynamic-group-card ${isSys ? 'is-system' : ''} ${g.in_fallback ? 'is-fallback' : ''}">
                         <div>
                             <div class="dynamic-group-title-row">
                                 <span class="badge ${statusClass}"><span class="status-dot"></span> ${escapeHtml(statusText)}</span>
                                 <strong class="dynamic-group-name">${escapeHtml(g.name)}</strong>
                                 ${sysBadge}
+                                ${fallbackBadge}
                             </div>
                             <div class="dynamic-group-meta">
                                 <span>${isEn ? 'Target: ' : '目标: '}<strong class="text-strong">${escapeHtml(countryStr)}</strong></span>
                                 <span>${isEn ? 'Type: ' : '类型: '}<strong class="text-strong">${escapeHtml(ipTypeText)}</strong></span>
                                 ${unlockText}
+                                ${fallbackInfo}
                                 <span>${isEn ? 'Policy: ' : '指标: '}<strong class="dynamic-metric">${metricText}</strong></span>
                                 <span>${isEn ? 'Interval: ' : '周期: '}<strong class="text-strong">${g.interval_minutes}${isEn ? ' min' : '分钟'}</strong></span>
                             </div>
+                            ${fallbackReasonDiv}
                         </div>
                         <div class="row gap-1">
                             <button class="btn btn-outline btn-xs" data-action="editDynamicGroup" data-args="${jsonAttr([g.id])}">${editLabel}</button>
@@ -1592,6 +1629,8 @@
             document.getElementById('dg-iptype').value = 'residential';
             document.getElementById('dg-unlock').value = 'none';
             document.getElementById('dg-sortby').value = 'latency';
+            const fallbackEl = document.getElementById('dg-fallback');
+            if (fallbackEl) fallbackEl.value = 'none';
             document.getElementById('dg-count-container').classList.remove('hidden');
             document.getElementById('dg-count').value = 3;
             document.getElementById('dg-interval').value = 15;
@@ -1615,6 +1654,8 @@
             document.getElementById('dg-iptype').value = g.ip_type || 'all';
             document.getElementById('dg-unlock').value = g.unlock_filter || 'none';
             document.getElementById('dg-sortby').value = g.sort_by || 'latency';
+            const fallbackEl = document.getElementById('dg-fallback');
+            if (fallbackEl) fallbackEl.value = g.fallback_policy || 'none';
             document.getElementById('dg-count').value = g.target_count || (isSys ? 1 : 3);
             document.getElementById('dg-interval').value = g.interval_minutes || 15;
             openEditorDrawer('dynamic-group-edit-card');
@@ -1629,6 +1670,7 @@
             const ipType = document.getElementById('dg-iptype').value;
             const unlockFilter = document.getElementById('dg-unlock').value;
             const sortBy = document.getElementById('dg-sortby').value;
+            const fallbackPolicy = document.getElementById('dg-fallback')?.value || 'none';
             const count = parseInt(document.getElementById('dg-count').value) || 3;
             const interval = parseInt(document.getElementById('dg-interval').value) || 15;
 
@@ -1641,6 +1683,7 @@
                 ip_type: ipType,
                 unlock_filter: unlockFilter,
                 sort_by: sortBy,
+                fallback_policy: fallbackPolicy,
                 target_count: editingGroupId === 'system-primary' ? 1 : count,
                 interval_minutes: interval
             };

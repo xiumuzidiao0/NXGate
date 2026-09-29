@@ -36,6 +36,7 @@ import androidx.compose.material.icons.rounded.SwapHoriz
 import androidx.compose.material.icons.rounded.ToggleOff
 import androidx.compose.material.icons.rounded.ToggleOn
 import androidx.compose.material.icons.rounded.VpnKey
+import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -108,6 +109,7 @@ data class GroupUnlockOption(val key: String, val label: String)
 data class GroupSortOption(val key: String, val label: String)
 data class GroupTargetCountOption(val count: Int, val label: String)
 data class GroupIntervalOption(val minutes: Int, val label: String)
+data class GroupFallbackOption(val key: String, val label: String)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -227,12 +229,25 @@ fun RoutingMatrixScreen(
     val groupUnlockOptions = remember(isEn) {
         listOf(
             GroupUnlockOption("none", if (isEn) "Any Unlock Capability" else "不限解锁能力 (全量候选)"),
+            GroupUnlockOption("connectivity", if (isEn) "Web 204 Verified (Google/CF)" else "真实网页连通 (Google/CF 204)"),
             GroupUnlockOption("ai", if (isEn) "Triple AI (ChatGPT+Claude+Gemini)" else "必须支持三大 AI (ChatGPT+Claude+Gemini)"),
             GroupUnlockOption("streaming", if (isEn) "Streaming (Netflix/Google)" else "必须支持主流流媒体 (Netflix/Google)"),
             GroupUnlockOption("all", if (isEn) "Full Unlock (AI + Streaming)" else "全解锁 (三大 AI + 流媒体)")
         )
     }
     var selectedGroupUnlockOption by remember { mutableStateOf(groupUnlockOptions[1]) }
+
+    val groupFallbackOptions = remember(isEn) {
+        listOf(
+            GroupFallbackOption("none", if (isEn) "No Fallback (Block on exhaustion)" else "不启用兜底 (候选枯竭时阻断)"),
+            GroupFallbackOption("favorites", if (isEn) "⭐ Fallback to Favorites (Recommended)" else "⭐ 降级至我的收藏节点 (推荐)"),
+            GroupFallbackOption("auto_low_latency", if (isEn) "⚡ Fallback to Lowest Latency" else "⚡ 降级至全球最低延迟节点"),
+            GroupFallbackOption("auto_speed", if (isEn) "🚀 Fallback to Highest Speed" else "🚀 降级至全球最高带宽节点"),
+            GroupFallbackOption("JP", if (isEn) "🇯🇵 Fallback to Japan Egress" else "🇯🇵 降级至日本出口"),
+            GroupFallbackOption("US", if (isEn) "🇺🇸 Fallback to US Egress" else "🇺🇸 降级至美国出口")
+        )
+    }
+    var selectedGroupFallbackOption by remember { mutableStateOf(groupFallbackOptions[1]) }
 
     val groupSortOptions = remember(isEn) {
         listOf(
@@ -606,6 +621,33 @@ fun RoutingMatrixScreen(
                                                     color = MaterialTheme.colorScheme.onSurface,
                                                     lineHeight = MaterialTheme.typography.bodyMedium.lineHeight * 1.35f
                                                 )
+                                                if (group.inFallback) {
+                                                    Spacer(Modifier.height(6.dp))
+                                                    Surface(
+                                                        shape = RoundedCornerShape(8.dp),
+                                                        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.85f),
+                                                        modifier = Modifier.fillMaxWidth()
+                                                    ) {
+                                                        Row(
+                                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                                            verticalAlignment = Alignment.CenterVertically
+                                                        ) {
+                                                            Icon(
+                                                                Icons.Rounded.Warning,
+                                                                contentDescription = null,
+                                                                tint = MaterialTheme.colorScheme.error,
+                                                                modifier = Modifier.size(16.dp)
+                                                            )
+                                                            Spacer(Modifier.width(6.dp))
+                                                            Text(
+                                                                text = group.fallbackReason.ifEmpty { if (isEn) "Fallback Active" else "已触发级联降级策略运行中" },
+                                                                style = MaterialTheme.typography.labelSmall,
+                                                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                                                fontWeight = FontWeight.SemiBold
+                                                            )
+                                                        }
+                                                    }
+                                                }
                                                 Spacer(Modifier.height(12.dp))
                                                 Row(
                                                     modifier = Modifier.fillMaxWidth(),
@@ -619,6 +661,7 @@ fun RoutingMatrixScreen(
                                                             selectedGroupIpTypeOption = groupIpTypeOptions.find { it.key.equals(group.ipType, true) } ?: groupIpTypeOptions[1]
                                                             selectedGroupUnlockOption = groupUnlockOptions.find { it.key.equals(group.unlockFilter, true) } ?: groupUnlockOptions[1]
                                                             selectedGroupSortOption = groupSortOptions.find { it.key.equals(group.sortBy, true) } ?: groupSortOptions[0]
+                                                            selectedGroupFallbackOption = groupFallbackOptions.find { it.key.equals(group.fallbackPolicy, true) } ?: groupFallbackOptions[1]
                                                             selectedGroupTargetCountOption = groupTargetCountOptions.find { it.count == group.targetCount } ?: groupTargetCountOptions[2]
                                                             selectedGroupIntervalOption = groupIntervalOptions.find { it.minutes == group.intervalMinutes } ?: groupIntervalOptions[2]
                                                             showGroupDialog = true
@@ -663,6 +706,7 @@ fun RoutingMatrixScreen(
                                                     selectedGroupIpTypeOption = groupIpTypeOptions[1]
                                                     selectedGroupUnlockOption = groupUnlockOptions[1]
                                                     selectedGroupSortOption = groupSortOptions[0]
+                                                    selectedGroupFallbackOption = groupFallbackOptions[1]
                                                     selectedGroupTargetCountOption = groupTargetCountOptions[2]
                                                     selectedGroupIntervalOption = groupIntervalOptions[2]
                                                     showGroupDialog = true
@@ -1034,6 +1078,15 @@ fun RoutingMatrixScreen(
                         optionLabel = { it.label }
                     )
 
+                    // 兜底级联策略下拉框
+                    AppExposedDropdown(
+                        label = if (isEn) "Cascading Fallback Policy" else "兜底级联策略 (候选枯竭时自动降级)",
+                        options = groupFallbackOptions,
+                        selectedOption = selectedGroupFallbackOption,
+                        onOptionSelected = { selectedGroupFallbackOption = it },
+                        optionLabel = { it.label }
+                    )
+
                     // 维持并发数与周期下拉框
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         AppExposedDropdown(
@@ -1068,6 +1121,7 @@ fun RoutingMatrixScreen(
                             ipType = selectedGroupIpTypeOption.key,
                             unlockFilter = selectedGroupUnlockOption.key,
                             sortBy = selectedGroupSortOption.key,
+                            fallbackPolicy = selectedGroupFallbackOption.key,
                             isSystem = editGroupTarget?.isSystem ?: false
                         )
                         val updated = dynamicGroups.toMutableList()

@@ -32,6 +32,9 @@ type DynamicGroup struct {
 	ActiveTunnelIDs []string  `json:"active_tunnel_ids"` // 当前此组维护的隧道 ID 列表
 	LastEvaluatedAt time.Time `json:"last_evaluated_at"` // 上次重新评估并轮换的时间
 	StatusText      string    `json:"status_text"`       // 状态摘要
+	FallbackPolicy  string    `json:"fallback_policy,omitempty"` // "none", "favorites", "auto_low_latency", "auto_speed", 或国家代码如 "JP"
+	InFallback      bool      `json:"in_fallback,omitempty"`     // 是否处于兜底级联降级运行状态
+	FallbackReason  string    `json:"fallback_reason,omitempty"` // 级联降级原因与说明
 }
 
 type PrimaryConnector interface {
@@ -201,6 +204,9 @@ func (m *DynamicGroupManager) SaveGroup(g *DynamicGroup) error {
 	if g.UnlockFilter == "" {
 		g.UnlockFilter = "none"
 	}
+	if g.FallbackPolicy == "" {
+		g.FallbackPolicy = "none"
+	}
 
 	m.groups[g.ID] = g
 	m.saveLocked()
@@ -278,19 +284,10 @@ func (m *DynamicGroupManager) GetTunnelsForGroups(groupIDs []string) []*Tunnel {
 	return healthy
 }
 
-// EvaluateGroup evaluates candidates, probes metrics, and dynamically rotates tunnels for a group
-func (m *DynamicGroupManager) EvaluateGroup(ctx context.Context, g *DynamicGroup) {
-	m.evalMutex.Lock()
-	defer m.evalMutex.Unlock()
-
-	allCandidates := m.nodePool.GetCandidates()
-	if len(allCandidates) == 0 {
-		return
-	}
-
-	// 1. Filter candidates by country & IP type
+// filterCandidatesForGroup evaluates and filters candidates matching specific country, IP type and unlock filter
+func (m *DynamicGroupManager) filterCandidatesForGroup(allCandidates []*nodes.Node, country, ipType, unlockFilter string) []*nodes.Node {
 	var matched []*nodes.Node
-	targetCountry := strings.ToUpper(strings.TrimSpace(g.Country))
+	targetCountry := strings.ToUpper(strings.TrimSpace(country))
 	isFavoritesGroup := targetCountry == "FAVORITES"
 
 	for _, n := range allCandidates {
@@ -304,22 +301,96 @@ func (m *DynamicGroupManager) EvaluateGroup(ctx context.Context, g *DynamicGroup
 		} else if targetCountry != "" && targetCountry != "ALL" && n.CountryShort != targetCountry {
 			continue
 		}
-		if g.IPType != "" && g.IPType != "all" {
-			if n.IPType != g.IPType {
+		if ipType != "" && ipType != "all" {
+			if n.IPType != ipType {
 				continue
 			}
 		}
-		if g.UnlockFilter != "" && g.UnlockFilter != "none" {
+		if unlockFilter != "" && unlockFilter != "none" {
 			unlock := n.Unlock
 			if unlock == nil && m.pool.UnlockDetector() != nil {
 				unlock = m.pool.UnlockDetector().EvaluateNodeUnlock(n)
 			}
-			if !unlock.MatchFilter(g.UnlockFilter) {
+			if !unlock.MatchFilter(unlockFilter) {
 				continue
 			}
 		}
 		matched = append(matched, n)
 	}
+	return matched
+}
+
+// EvaluateGroup evaluates candidates, probes metrics, and dynamically rotates tunnels for a group
+func (m *DynamicGroupManager) EvaluateGroup(ctx context.Context, g *DynamicGroup) {
+	m.evalMutex.Lock()
+	defer m.evalMutex.Unlock()
+
+	allCandidates := m.nodePool.GetCandidates()
+	if len(allCandidates) == 0 {
+		return
+	}
+
+	// 1. Filter candidates by country & IP type
+	targetCountry := strings.ToUpper(strings.TrimSpace(g.Country))
+	isFavoritesGroup := targetCountry == "FAVORITES"
+
+	matched := m.filterCandidatesForGroup(allCandidates, g.Country, g.IPType, g.UnlockFilter)
+
+	inFallback := false
+	fallbackReason := ""
+
+	// 1.5 Cascading Fallback: if primary match yields 0 candidates and group has a fallback policy
+	if len(matched) == 0 && g.FallbackPolicy != "" && g.FallbackPolicy != "none" {
+		switch strings.ToLower(g.FallbackPolicy) {
+		case "favorites":
+			fb := m.filterCandidatesForGroup(allCandidates, "FAVORITES", g.IPType, g.UnlockFilter)
+			if len(fb) == 0 {
+				fb = m.filterCandidatesForGroup(allCandidates, "FAVORITES", "all", "none")
+			}
+			if len(fb) > 0 {
+				matched = fb
+				inFallback = true
+				fallbackReason = fmt.Sprintf("主目标 [%s] 候选枯竭，已自动级联降级至 [我的收藏组]", g.Country)
+			}
+		case "auto_low_latency", "latency":
+			fb := m.filterCandidatesForGroup(allCandidates, "ALL", g.IPType, g.UnlockFilter)
+			if len(fb) == 0 {
+				fb = m.filterCandidatesForGroup(allCandidates, "ALL", "all", "none")
+			}
+			if len(fb) > 0 {
+				matched = fb
+				inFallback = true
+				fallbackReason = fmt.Sprintf("主目标 [%s] 候选枯竭，已自动级联降级至 [全球低延迟组]", g.Country)
+			}
+		case "auto_speed", "speed":
+			fb := m.filterCandidatesForGroup(allCandidates, "ALL", g.IPType, g.UnlockFilter)
+			if len(fb) == 0 {
+				fb = m.filterCandidatesForGroup(allCandidates, "ALL", "all", "none")
+			}
+			if len(fb) > 0 {
+				matched = fb
+				inFallback = true
+				fallbackReason = fmt.Sprintf("主目标 [%s] 候选枯竭，已自动级联降级至 [全球高带宽组]", g.Country)
+			}
+		default:
+			cUpper := strings.ToUpper(g.FallbackPolicy)
+			fb := m.filterCandidatesForGroup(allCandidates, cUpper, g.IPType, g.UnlockFilter)
+			if len(fb) > 0 {
+				matched = fb
+				inFallback = true
+				fallbackReason = fmt.Sprintf("主目标 [%s] 候选枯竭，已自动级联降级至 [%s 备用组]", g.Country, cUpper)
+			}
+		}
+	}
+
+	g.InFallback = inFallback
+	g.FallbackReason = fallbackReason
+	m.mu.Lock()
+	if stored, ok := m.groups[g.ID]; ok {
+		stored.InFallback = inFallback
+		stored.FallbackReason = fallbackReason
+	}
+	m.mu.Unlock()
 
 	if len(matched) == 0 {
 		m.mu.Lock()
@@ -327,6 +398,9 @@ func (m *DynamicGroupManager) EvaluateGroup(ctx context.Context, g *DynamicGroup
 			g.StatusText = "无匹配收藏节点 (请在节点列表中添加收藏)"
 		} else {
 			g.StatusText = "无匹配候选节点"
+		}
+		if stored, ok := m.groups[g.ID]; ok {
+			stored.StatusText = g.StatusText
 		}
 		m.mu.Unlock()
 		return
@@ -548,10 +622,20 @@ func (m *DynamicGroupManager) EvaluateGroup(ctx context.Context, g *DynamicGroup
 	if stored, ok := m.groups[g.ID]; ok {
 		stored.ActiveTunnelIDs = chosenTunnelIDs
 		stored.LastEvaluatedAt = time.Now()
+		stored.InFallback = g.InFallback
+		stored.FallbackReason = g.FallbackReason
 		if len(chosenTunnelIDs) >= stored.TargetCount {
-			stored.StatusText = fmt.Sprintf("正常运行 (在网出口: %d/%d)", len(chosenTunnelIDs), stored.TargetCount)
+			if stored.InFallback {
+				stored.StatusText = fmt.Sprintf("降级运行中 (在网出口: %d/%d - %s)", len(chosenTunnelIDs), stored.TargetCount, stored.FallbackReason)
+			} else {
+				stored.StatusText = fmt.Sprintf("正常运行 (在网出口: %d/%d)", len(chosenTunnelIDs), stored.TargetCount)
+			}
 		} else {
-			stored.StatusText = fmt.Sprintf("部分就绪 (在网出口: %d/%d)", len(chosenTunnelIDs), stored.TargetCount)
+			if stored.InFallback {
+				stored.StatusText = fmt.Sprintf("降级部分就绪 (在网出口: %d/%d - %s)", len(chosenTunnelIDs), stored.TargetCount, stored.FallbackReason)
+			} else {
+				stored.StatusText = fmt.Sprintf("部分就绪 (在网出口: %d/%d)", len(chosenTunnelIDs), stored.TargetCount)
+			}
 		}
 		g.ActiveTunnelIDs = stored.ActiveTunnelIDs
 		g.LastEvaluatedAt = stored.LastEvaluatedAt

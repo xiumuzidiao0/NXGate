@@ -18,6 +18,7 @@ type UnlockResult struct {
 	Claude                ServiceUnlockStatus `json:"claude"`                   // Claude / Anthropic
 	Gemini                ServiceUnlockStatus `json:"gemini"`                   // Google Gemini
 	Google                ServiceUnlockStatus `json:"google"`                   // Google Search / 204
+	Cloudflare            ServiceUnlockStatus `json:"cloudflare"`               // Cloudflare 204 / CDN-CGI trace
 	Netflix               ServiceUnlockStatus `json:"netflix"`                  // Netflix
 	NetflixRegion         string              `json:"netflix_region"`           // 地区代码，如 "JP", "US"
 	IsProbed              bool                `json:"is_probed"`                // 是否经过物理虚拟网卡真实流量探测
@@ -62,6 +63,11 @@ func (u *UnlockResult) MatchFilter(filter string) bool {
 			return u.Netflix == StatusUnlocked || u.Google == StatusUnlocked
 		}
 		return u.Netflix != StatusBlocked || u.Google != StatusBlocked
+	case "connectivity", "web", "cloudflare", "204":
+		if u.IsProbed {
+			return u.ThroughputPassed && (u.Google == StatusUnlocked || u.Cloudflare == StatusUnlocked)
+		}
+		return u.Google != StatusBlocked && u.Cloudflare != StatusBlocked
 	case "netflix":
 		if u.IsProbed {
 			return u.Netflix == StatusUnlocked

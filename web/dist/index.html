@@ -23,7 +23,7 @@
                 </div>
                 <div class="brand-text">
                     <div class="brand-title">NXGate</div>
-                    <div class="brand-sub"><span data-i18n="brand.sub">多出口智能网关</span> <span class="version-trigger" data-action="openUpdateModal" title="点击检查系统更新"><span id="sidebar-version-badge" class="badge-ver">v2.5.9.3</span></span></div>
+                    <div class="brand-sub"><span data-i18n="brand.sub">多出口智能网关</span> <span class="version-trigger" data-action="openUpdateModal" title="点击检查系统更新"><span id="sidebar-version-badge" class="badge-ver">v2.5.9.4</span></span></div>
                 </div>
             </div>
 
@@ -79,7 +79,7 @@
                     </button>
                     <h1 id="page-title">运行概览</h1>
                     <span id="conn-badge" class="badge disconnected"><span class="status-dot"></span> 检查中</span>
-                    <span class="version-trigger" data-action="openUpdateModal" title="点击检查系统更新"><span id="app-version-badge" class="badge badge-accent">v2.5.9.3</span><span id="header-update-dot" class="badge-dot-pulse hidden" title="发现新版本"></span></span>
+                    <span class="version-trigger" data-action="openUpdateModal" title="点击检查系统更新"><span id="app-version-badge" class="badge badge-accent">v2.5.9.4</span><span id="header-update-dot" class="badge-dot-pulse hidden" title="发现新版本"></span></span>
                 </div>
 
                 <div class="header-actions">
@@ -1307,9 +1307,21 @@
                 <label class="form-label" data-i18n="dg.unlock_label">节点解锁能力要求</label>
                 <select id="dg-unlock" class="input-field w-full" >
                     <option value="none" selected>不限解锁能力</option>
+                    <option value="connectivity" data-i18n="dg.unlock_connectivity">真实网页连通 (Google/Cloudflare 204 校验)</option>
                     <option value="ai">必须支持三大 AI (ChatGPT + Claude + Gemini 全部解锁)</option>
                     <option value="streaming">必须支持流媒体 (Netflix / Google)</option>
                     <option value="full">全解锁 (三大 AI + 主流流媒体)</option>
+                </select>
+            </div>
+            <div>
+                <label class="form-label" data-i18n="dg.fallback_label">兜底级联策略 (候选枯竭时自动降级)</label>
+                <select id="dg-fallback" class="input-field w-full" >
+                    <option value="none" selected data-i18n="dg.fallback_none">不启用兜底 (保持原状/无节点阻断)</option>
+                    <option value="favorites" data-i18n="dg.fallback_fav">⭐ 级联降级至我的收藏节点 (推荐)</option>
+                    <option value="auto_low_latency" data-i18n="dg.fallback_latency">⚡ 级联降级至全球最低延迟节点</option>
+                    <option value="auto_speed" data-i18n="dg.fallback_speed">🚀 级联降级至全球最高带宽节点</option>
+                    <option value="JP" data-i18n="dg.fallback_jp">🇯🇵 级联降级至日本出口</option>
+                    <option value="US" data-i18n="dg.fallback_us">🇺🇸 级联降级至美国出口</option>
                 </select>
             </div>
             <div id="dg-count-container">

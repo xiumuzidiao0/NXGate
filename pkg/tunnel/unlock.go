@@ -134,6 +134,7 @@ func (d *UnlockDetector) EvaluateNodeUnlock(node *nodes.Node) *UnlockResult {
 		Claude:        StatusUnknown,
 		Gemini:        StatusUnknown,
 		Google:        StatusUnknown,
+		Cloudflare:    StatusUnknown,
 		Netflix:       StatusUnknown,
 		NetflixRegion: node.CountryShort,
 		IsProbed:      false,
@@ -145,9 +146,13 @@ func (d *UnlockDetector) EvaluateNodeUnlock(node *nodes.Node) *UnlockResult {
 	isClaudeOk := claudeSupportedCountries[c]
 	isGeminiOk := c != "CN" && c != "HK" && c != "IR" && c != "KP" && c != "RU"
 	isGoogleOk := c != "CN" && c != "IR" && c != "KP"
+	isCloudflareOk := c != "CN" && c != "IR" && c != "KP"
 	isNetflixOk := c != "" && c != "CN"
 
 	if node.LatencyMs > 0 {
+		if isCloudflareOk {
+			res.Cloudflare = StatusUnlocked
+		}
 		if node.IPType == "residential" {
 			// 住宅宽带初步推测：在官方支持国家内标记为预测可用
 			if isOpenAIOk {
@@ -226,6 +231,7 @@ func (d *UnlockDetector) ProbeTunnel(ctx context.Context, devName string, ip str
 		Claude:    StatusUnknown,
 		Gemini:    StatusUnknown,
 		Google:    StatusUnknown,
+		Cloudflare: StatusUnknown,
 		Netflix:   StatusUnknown,
 		IsProbed:  true,
 		CheckedAt: time.Now(),
@@ -234,7 +240,7 @@ func (d *UnlockDetector) ProbeTunnel(ctx context.Context, devName string, ip str
 	client := newTunnelHTTPClient(devName, 6*time.Second)
 
 	var wg sync.WaitGroup
-	wg.Add(5)
+	wg.Add(6)
 
 	// 1. OpenAI / ChatGPT
 	go func() {
@@ -423,6 +429,39 @@ func (d *UnlockDetector) ProbeTunnel(ctx context.Context, devName string, ip str
 		}
 	}()
 
+	// 6. Cloudflare (Generate 204 / CDN-CGI trace)
+	go func() {
+		defer wg.Done()
+		req, err := http.NewRequestWithContext(ctx, "GET", "https://cp.cloudflare.com/generate_204", nil)
+		if err == nil {
+			resp, err := client.Do(req)
+			if err == nil {
+				defer resp.Body.Close()
+				if resp.StatusCode == 204 || resp.StatusCode == 200 {
+					result.Cloudflare = StatusUnlocked
+					return
+				}
+				if resp.StatusCode == 403 {
+					result.Cloudflare = StatusBlocked
+					return
+				}
+			}
+		}
+		// Fallback check to 1.1.1.1 trace
+		reqTrace, errTrace := http.NewRequestWithContext(ctx, "GET", "https://1.1.1.1/cdn-cgi/trace", nil)
+		if errTrace == nil {
+			resp, err := client.Do(reqTrace)
+			if err == nil {
+				defer resp.Body.Close()
+				if resp.StatusCode == 200 {
+					result.Cloudflare = StatusUnlocked
+					return
+				}
+			}
+		}
+		result.Cloudflare = StatusBlocked
+	}()
+
 	wg.Wait()
 
 	// 🔥 Phase 4: Throughput check (freesub inspired)
@@ -438,6 +477,7 @@ func (d *UnlockDetector) ProbeTunnel(ctx context.Context, devName string, ip str
 		result.Claude = StatusBlocked
 		result.Gemini = StatusBlocked
 		result.Google = StatusBlocked
+		result.Cloudflare = StatusBlocked
 		result.Netflix = StatusBlocked
 	} else {
 		stats.LogInfo("UnlockDetector", "[%s:%s] 吞吐量检测通过: %s", devName, ip, throughputResult.String())
@@ -449,8 +489,8 @@ func (d *UnlockDetector) ProbeTunnel(ctx context.Context, devName string, ip str
 	d.saveLocked()
 	d.mu.Unlock()
 
-	stats.LogInfo("UnlockDetector", "[%s:%s] 实测解锁结果: ChatGPT=%s, Claude=%s, Gemini=%s, Google=%s, Netflix=%s, Throughput=%s",
-		devName, ip, result.OpenAI, result.Claude, result.Gemini, result.Google, result.Netflix, throughputResult.String())
+	stats.LogInfo("UnlockDetector", "[%s:%s] 实测解锁结果: ChatGPT=%s, Claude=%s, Gemini=%s, Google=%s, Cloudflare=%s, Netflix=%s, Throughput=%s",
+		devName, ip, result.OpenAI, result.Claude, result.Gemini, result.Google, result.Cloudflare, result.Netflix, throughputResult.String())
 
 	return result
 }

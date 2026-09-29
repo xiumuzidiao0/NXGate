@@ -484,7 +484,10 @@ class ApiClient {
                             sortBy = obj.optString("sort_by", "latency"),
                             targetCount = obj.optInt("target_count", 3),
                             intervalMinutes = obj.optInt("interval_minutes", 15),
-                            statusText = obj.optString("status_text", "")
+                            statusText = obj.optString("status_text", ""),
+                            fallbackPolicy = obj.optString("fallback_policy", "none"),
+                            inFallback = obj.optBoolean("in_fallback", false),
+                            fallbackReason = obj.optString("fallback_reason", "")
                         )
                     )
                 }
@@ -506,6 +509,7 @@ class ApiClient {
                 put("ip_type", group.ipType)
                 put("unlock_filter", group.unlockFilter)
                 put("sort_by", group.sortBy)
+                put("fallback_policy", group.fallbackPolicy)
                 put("target_count", group.targetCount)
                 put("interval_minutes", group.intervalMinutes)
             }
@@ -698,6 +702,8 @@ class ApiClient {
                     val openai = unlockObj?.optString("openai", "unknown") ?: "unknown"
                     val claude = unlockObj?.optString("claude", "unknown") ?: "unknown"
                     val gemini = unlockObj?.optString("gemini", "unknown") ?: "unknown"
+                    val google = unlockObj?.optString("google", "unknown") ?: "unknown"
+                    val cloudflare = unlockObj?.optString("cloudflare", "unknown") ?: "unknown"
                     val netflix = unlockObj?.optString("netflix", "unknown") ?: "unknown"
 
                     list.add(
@@ -716,6 +722,8 @@ class ApiClient {
                             openai = openai,
                             claude = claude,
                             gemini = gemini,
+                            google = google,
+                            cloudflare = cloudflare,
                             netflix = netflix
                         )
                     )

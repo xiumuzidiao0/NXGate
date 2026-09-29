@@ -2,6 +2,7 @@ package tunnel
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -201,5 +202,97 @@ func TestFavoritesDynamicGroupEvaluation(t *testing.T) {
 	// Should only pick favorite node even if unfavorite has higher score / lower latency
 	if favGroup.StatusText == "无匹配候选节点" || favGroup.StatusText == "无匹配收藏节点 (请在节点列表中添加收藏)" {
 		t.Fatalf("expected to match favorite node, got %s", favGroup.StatusText)
+	}
+}
+
+func TestCascadingFallbackAndConnectivityFilter(t *testing.T) {
+	// 1. Test 204 / Connectivity Unlock filter
+	probedGood := &nodes.UnlockResult{
+		Google:           nodes.StatusUnlocked,
+		Cloudflare:       nodes.StatusUnlocked,
+		ThroughputPassed: true,
+		IsProbed:         true,
+	}
+	if !probedGood.MatchFilter("204") || !probedGood.MatchFilter("connectivity") {
+		t.Errorf("expected probedGood to pass 204 & connectivity filter")
+	}
+
+	probedDeadThroughput := &nodes.UnlockResult{
+		Google:           nodes.StatusUnlocked,
+		Cloudflare:       nodes.StatusUnlocked,
+		ThroughputPassed: false,
+		IsProbed:         true,
+	}
+	if probedDeadThroughput.MatchFilter("204") || probedDeadThroughput.MatchFilter("connectivity") {
+		t.Errorf("expected dead throughput node to fail 204 & connectivity filter")
+	}
+
+	// 2. Test Dynamic Group Cascading Fallback
+	cfg := &config.Config{
+		DataDir: t.TempDir(),
+	}
+
+	np := nodes.NewNodePool(cfg)
+	favNode := &nodes.Node{
+		ID:           "node-fav-us",
+		IP:           "198.51.100.5",
+		CountryShort: "US",
+		Ping:         40,
+		Score:        800,
+	}
+	jpNode := &nodes.Node{
+		ID:           "node-jp",
+		IP:           "203.0.113.1",
+		CountryShort: "JP",
+		Ping:         60,
+		Score:        600,
+	}
+	np.SetCandidatesForTest([]*nodes.Node{favNode, jpNode})
+	np.Favorites().Add("node-fav-us")
+
+	pool := NewPool(cfg, np)
+	mgr := NewDynamicGroupManager(cfg, pool, np)
+
+	// Group targeting KR with fallback to favorites
+	fallbackGroup := &DynamicGroup{
+		ID:              "dg-kr",
+		Name:            "韩国出口组",
+		Enabled:         true,
+		Country:         "KR",
+		TargetCount:     1,
+		IntervalMinutes: 15,
+		FallbackPolicy:  "favorites",
+	}
+	_ = mgr.SaveGroup(fallbackGroup)
+
+	// Evaluate: KR has 0 nodes, should trigger fallback to favorites
+	mgr.EvaluateGroup(context.Background(), fallbackGroup)
+
+	g := mgr.GetGroup("dg-kr")
+	if !g.InFallback {
+		t.Fatalf("expected group to be in fallback mode when KR has 0 candidates")
+	}
+	if !strings.Contains(g.FallbackReason, "我的收藏组") {
+		t.Errorf("expected fallback reason to mention 我的收藏组, got: %s", g.FallbackReason)
+	}
+
+	// Now add a healthy KR candidate -> evaluation should automatically failback to primary!
+	krNode := &nodes.Node{
+		ID:           "node-kr",
+		IP:           "210.100.1.1",
+		CountryShort: "KR",
+		Ping:         45,
+		Score:        900,
+	}
+	np.SetCandidatesForTest([]*nodes.Node{favNode, jpNode, krNode})
+
+	mgr.EvaluateGroup(context.Background(), fallbackGroup)
+
+	gRecovered := mgr.GetGroup("dg-kr")
+	if gRecovered.InFallback {
+		t.Fatalf("expected group to recover and NOT be in fallback after KR node became available")
+	}
+	if gRecovered.FallbackReason != "" {
+		t.Errorf("expected empty fallback reason after recovery, got: %s", gRecovered.FallbackReason)
 	}
 }
