@@ -1824,6 +1824,8 @@
             branchesData.push({
                 port: defaultProxyPort,
                 portDesc: isEn ? 'Default' : '系统默认',
+                isDefault: true,
+                groupId: 'system-primary',
                 groupName: sysGroupName,
                 groupMeta: isEn ? 'Primary Egress (tun0)' : '主出海网卡 (tun0)',
                 isFallback: false,
@@ -1841,6 +1843,7 @@
 
                     let groupTitle = '';
                     let groupMeta = '';
+                    let firstGroupId = '';
                     let isRowFallback = false;
                     let fallbackReasonText = '';
                     let leaves = [];
@@ -1849,6 +1852,7 @@
                         const matchedGroups = (currentDynamicGroups || []).filter(g => rule.bound_group_ids.includes(g.id));
                         if (matchedGroups.length > 0) {
                             groupTitle = matchedGroups.map(g => g.name).join(' / ');
+                            firstGroupId = matchedGroups[0].id;
                             isRowFallback = matchedGroups.some(g => g.in_fallback);
                             if (isRowFallback) {
                                 const fbGroup = matchedGroups.find(g => g.in_fallback);
@@ -1903,6 +1907,8 @@
                     branchesData.push({
                         port: rule.port,
                         portDesc: authText,
+                        isDefault: false,
+                        groupId: firstGroupId,
                         groupName: groupTitle || `PORT ${rule.port}`,
                         groupMeta: groupMeta,
                         isFallback: isRowFallback,
@@ -1919,14 +1925,28 @@
                 const fbBadge = b.isFallback ? `<span class="badge badge-warning badge-mini">${isEn ? 'Fallback' : '降级中'}</span>` : '';
                 const fbReasonHtml = (b.isFallback && b.fallbackReason) ? `<span class="text-xs text-warning mt-1">${escapeHtml(b.fallbackReason)}</span>` : '';
 
+                const portAction = b.isDefault
+                    ? `data-action="switchView" data-args="[&quot;settings&quot;]"`
+                    : `data-action="editPortRule" data-args="[${b.port}]"`;
+                const portTitle = b.isDefault
+                    ? (isEn ? 'System Default Port (Configure in Settings)' : '系统默认代理端口 (点击前往系统设置配置)')
+                    : (isEn ? `Configure Port ${b.port}` : `点击编辑端口 ${b.port} 规则`);
+
+                const groupAction = b.groupId
+                    ? `data-action="editDynamicGroup" data-args="[&quot;${escapeHtml(b.groupId)}&quot;]"`
+                    : '';
+                const groupTitle = b.groupId
+                    ? (isEn ? `Configure Exit Group: ${b.groupName}` : `点击编辑出口组: ${b.groupName}`)
+                    : '';
+
                 return `
                     <div class="mindmap-branch-row">
-                        <div class="mindmap-node mindmap-port-node">
+                        <div class="mindmap-node mindmap-port-node is-clickable" ${portAction} title="${escapeHtml(portTitle)}" role="button" tabindex="0">
                             <span class="badge badge-accent">PORT ${b.port}</span>
                             <span class="text-xs text-muted">${escapeHtml(b.portDesc)}</span>
                         </div>
                         <div class="mindmap-stem-line"></div>
-                        <div class="mindmap-node mindmap-group-node ${b.isFallback ? 'is-fallback' : ''}">
+                        <div class="mindmap-node mindmap-group-node ${b.isFallback ? 'is-fallback' : ''} ${b.groupId ? 'is-clickable' : ''}" ${groupAction} title="${escapeHtml(groupTitle)}" ${b.groupId ? 'role="button" tabindex="0"' : ''}>
                             <div class="flex items-center gap-1">
                                 <strong class="text-sm">${escapeHtml(b.groupName)}</strong>
                                 ${fbBadge}
@@ -1941,9 +1961,9 @@
             }).join('');
 
             container.innerHTML = `
-                <div class="mindmap-tree">
+                <div class="mindmap-tree" role="tree" aria-label="${isEn ? 'Egress Routing Mind Map' : '分流链路实时拓扑思维导图'}">
                     <div class="mindmap-root-wrap">
-                        <div class="mindmap-root-node">
+                        <div class="mindmap-root-node is-clickable" data-action="switchView" data-args="[&quot;dashboard&quot;]" title="${isEn ? 'NXGate Core Hub (View Dashboard)' : 'NXGate 分流中枢 (点击前往运行概览)'}" role="button" tabindex="0">
                             <div class="flex items-center gap-2">
                                 <span class="status-dot connected"></span>
                                 <strong class="text-sm font-semibold">${isEn ? 'NXGate Core Hub' : 'NXGate 分流中枢'}</strong>

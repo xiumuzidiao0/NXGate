@@ -125,7 +125,9 @@ data class MindMapBranch(
     val groupTitle: String,
     val groupSub: String,
     val isFallback: Boolean,
-    val exitLabel: String
+    val exitLabel: String,
+    val rule: PortRuleItem? = null,
+    val group: DynamicGroupCard? = null
 )
 
 @Composable
@@ -149,6 +151,7 @@ fun MindMapTreeConnector(
                 drawLine(color, Offset(0f, midY), Offset(0f, size.height), strokeWidth = stroke)
             }
             drawLine(color, Offset(0f, midY), Offset(size.width, midY), strokeWidth = stroke)
+            drawCircle(color, radius = 3.dp.toPx(), center = Offset(0f, midY))
         }
     }
 }
@@ -478,13 +481,15 @@ fun RoutingMatrixScreen(
                                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                                     // 分流链路实时拓扑思维导图卡片 (Visual Egress Routing Mind Map)
                                     val defaultProxyPort = activeServer?.port ?: 7928
+                                    val sysPrimaryGroup = dynamicGroups.find { it.isSystem || it.id == "system-primary" }
                                     val defaultBranch = MindMapBranch(
                                         port = defaultProxyPort,
                                         authText = if (isEn) "Default" else "系统默认",
                                         groupTitle = if (isEn) "Primary Gateway (tun0)" else "系统主出口网关 (tun0)",
                                         groupSub = if (isEn) "Primary Egress" else "主出海网卡 (tun0)",
                                         isFallback = false,
-                                        exitLabel = "tun0: " + (activeServer?.exitIp?.ifEmpty { if (isEn) "Connected" else "已连通" } ?: (if (isEn) "Connected" else "已连通"))
+                                        exitLabel = "tun0: " + (activeServer?.exitIp?.ifEmpty { if (isEn) "Connected" else "已连通" } ?: (if (isEn) "Connected" else "已连通")),
+                                        group = sysPrimaryGroup
                                     )
                                     val ruleBranches = portRules.filter { it.enabled }.map { rule ->
                                         val matchedGroup = dynamicGroups.find { g -> rule.boundGroupIds.contains(g.id) }
@@ -498,7 +503,9 @@ fun RoutingMatrixScreen(
                                             groupTitle = groupTitle,
                                             groupSub = groupSub,
                                             isFallback = isFallback,
-                                            exitLabel = exitLabel
+                                            exitLabel = exitLabel,
+                                            rule = rule,
+                                            group = matchedGroup
                                         )
                                     }
                                     val allBranches = listOf(defaultBranch) + ruleBranches
@@ -558,7 +565,10 @@ fun RoutingMatrixScreen(
                                                     shape = RoundedCornerShape(14.dp),
                                                     color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f),
                                                     border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary),
-                                                    shadowElevation = 2.dp
+                                                    shadowElevation = 2.dp,
+                                                    modifier = Modifier.clickable {
+                                                        Toast.makeText(context, if (isEn) "NXGate Core Hub is online and dispatching exits" else "NXGate 分流中枢运行正常，各出口链路就绪", Toast.LENGTH_SHORT).show()
+                                                    }
                                                 ) {
                                                     Column(
                                                         modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
@@ -612,7 +622,24 @@ fun RoutingMatrixScreen(
                                                             Surface(
                                                                 shape = RoundedCornerShape(10.dp),
                                                                 color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                                                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                                                                modifier = Modifier.clickable {
+                                                                    val r = branch.rule
+                                                                    if (r != null) {
+                                                                        editPortRuleTarget = r
+                                                                        inputPortNum = r.port.toString()
+                                                                        selectedPortPolicyOption = portPolicyOptions.find { it.key == r.policy } ?: portPolicyOptions[0]
+                                                                        selectedPortIntervalOption = portIntervalOptions.find { it.seconds == r.intervalSeconds } ?: portIntervalOptions[1]
+                                                                        selectedPortAuthOption = portAuthOptions.find { it.key == r.authMode } ?: portAuthOptions[0]
+                                                                        inputAuthUser = r.authUser
+                                                                        inputAuthPass = r.authPass
+                                                                        bindAllTunnels = r.boundGroupIds.isEmpty() && r.boundTunnelIds.isEmpty()
+                                                                        selectedBoundGroups = r.boundGroupIds.toSet()
+                                                                        showPortDialog = true
+                                                                    } else {
+                                                                        Toast.makeText(context, if (isEn) "Default port 7928 can be adjusted in System Settings" else "系统默认代理端口 7928 可在「系统维护」设置中修改", Toast.LENGTH_SHORT).show()
+                                                                    }
+                                                                }
                                                             ) {
                                                                 Row(
                                                                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
@@ -652,7 +679,22 @@ fun RoutingMatrixScreen(
                                                                 border = BorderStroke(
                                                                     1.dp,
                                                                     if (branch.isFallback) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outlineVariant
-                                                                )
+                                                                ),
+                                                                modifier = Modifier.clickable {
+                                                                    val g = branch.group
+                                                                    if (g != null) {
+                                                                        editGroupTarget = g
+                                                                        groupNameInput = g.name
+                                                                        selectedGroupCountryOption = groupCountryOptions.find { it.code.equals(g.country, true) } ?: groupCountryOptions[1]
+                                                                        selectedGroupIpTypeOption = groupIpTypeOptions.find { it.key.equals(g.ipType, true) } ?: groupIpTypeOptions[1]
+                                                                        selectedGroupUnlockOption = groupUnlockOptions.find { it.key.equals(g.unlockFilter, true) } ?: groupUnlockOptions[1]
+                                                                        selectedGroupSortOption = groupSortOptions.find { it.key.equals(g.sortBy, true) } ?: groupSortOptions[0]
+                                                                        selectedGroupFallbackOption = groupFallbackOptions.find { it.key.equals(g.fallbackPolicy, true) } ?: groupFallbackOptions[1]
+                                                                        selectedGroupTargetCountOption = groupTargetCountOptions.find { it.count == g.targetCount } ?: groupTargetCountOptions[2]
+                                                                        selectedGroupIntervalOption = groupIntervalOptions.find { it.minutes == g.intervalMinutes } ?: groupIntervalOptions[2]
+                                                                        showGroupDialog = true
+                                                                    }
+                                                                }
                                                             ) {
                                                                 Column(
                                                                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),

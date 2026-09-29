@@ -2407,6 +2407,42 @@ button {
             width: 28px;
             height: 2px;
             background: var(--border);
+            transition: background 0.18s ease;
+        }
+        .mindmap-branches.has-trunk .mindmap-branch-row::after {
+            content: "";
+            position: absolute;
+            left: -31px;
+            top: calc(50% - 3px);
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--border);
+            transition: background 0.18s ease;
+        }
+        .mindmap-branch-row:hover::before,
+        .mindmap-branch-row:hover::after,
+        .mindmap-branch-row:hover .mindmap-stem-line,
+        .mindmap-branch-row:hover .mindmap-leaves-multi::before,
+        .mindmap-branch-row:hover .mindmap-leaves-multi .mindmap-leaf-row::before,
+        .mindmap-branch-row:hover .mindmap-leaves-multi .mindmap-leaf-row::after {
+            background: var(--accent);
+        }
+        .mindmap-node.is-clickable {
+            cursor: pointer;
+            transition: transform 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+        }
+        .mindmap-node.is-clickable:hover {
+            transform: translateY(-1.5px);
+            border-color: var(--accent);
+            box-shadow: 0 4px 14px rgba(37, 99, 235, 0.16);
+        }
+        .mindmap-node.is-clickable:active {
+            transform: scale(0.98);
+        }
+        .mindmap-node.is-clickable:focus-visible {
+            outline: 2px solid var(--accent);
+            outline-offset: 2px;
         }
         .mindmap-port-node {
             background: var(--bg-card-sub);
@@ -2424,6 +2460,7 @@ button {
             height: 2px;
             background: var(--border);
             flex-shrink: 0;
+            transition: background 0.18s ease;
         }
         .mindmap-group-node {
             background: var(--bg-card-sub);
