@@ -281,6 +281,16 @@
                 'dg.unlock_connectivity': '真实网页连通 (Google/Cloudflare 204 校验)',
                 'dg.badge_fallback': '降级运行中',
 
+                'set.tab_backup': '灾备与迁移',
+                'set.backup_note': 'NXGate 支持全量配置导出与一键导入迁移。配置包包含所有星标收藏、永久黑名单、多端口分流规则、动态出口组以及系统运行参数。换机或重装时可实现秒级恢复。',
+                'set.backup_export_title': '导出全量配置包',
+                'set.backup_export_desc': '一键打包下载包含当前所有分流、收藏、黑名单和系统设置的 JSON 备份文件。',
+                'set.backup_export_btn': '导出配置包 (JSON)',
+                'set.backup_import_title': '导入恢复配置包',
+                'set.backup_import_desc': '选择此前导出的备份文件，系统将全自动解析、恢复所有规则并立即热重评生效。',
+                'set.backup_import_btn': '选择文件并导入',
+                'matrix.topo_title': '分流链路实时拓扑 (Inbound ──▶ Egress Pipeline)',
+
                 'sb.filter_sub': '定制订阅',
                 'sub_filter.title': '定制订阅导出中心',
                 'sub_filter.subtitle': '支持按收藏出口组、国家、协议及延迟门槛过滤，生成个性化客户端订阅',
@@ -578,6 +588,16 @@
                 'dg.fallback_us': '🇺🇸 Fallback to US Egress',
                 'dg.unlock_connectivity': 'Genuine Web Connectivity (Google/CF 204)',
                 'dg.badge_fallback': 'Fallback Active',
+
+                'set.tab_backup': 'Backup & Migration',
+                'set.backup_note': 'NXGate supports full configuration export and seamless migration. The package bundles all favorites, permanent tombstones, multi-port routing rules, dynamic groups, and system settings for instant disaster recovery.',
+                'set.backup_export_title': 'Export Full Configuration',
+                'set.backup_export_desc': 'Download a complete JSON backup package containing all routing rules, favorites, blacklists, and system settings.',
+                'set.backup_export_btn': 'Export Backup (JSON)',
+                'set.backup_import_title': 'Import & Restore Configuration',
+                'set.backup_import_desc': 'Upload a previous backup package to automatically restore all rules and apply dynamic re-evaluations immediately.',
+                'set.backup_import_btn': 'Select Backup File',
+                'matrix.topo_title': 'Real-Time Egress Routing Topology (Inbound ──▶ Egress Pipeline)',
 
                 'sb.filter_sub': 'Filter Sub',
                 'sub_filter.title': 'Customized Subscription Export',
@@ -1314,7 +1334,7 @@
         // Settings Modal & Tabs
         function switchSettingsTab(tabKey) {
             document.querySelectorAll('#settings-modal .modal-tab-btn').forEach(b => b.classList.remove('active'));
-            ['base', 'tg', 'app', 'update'].forEach(k => {
+            ['base', 'tg', 'app', 'update', 'backup'].forEach(k => {
                 const el = document.getElementById('tab-content-' + k);
                 if (el) {
                     const isHidden = (k !== tabKey);
@@ -1526,6 +1546,7 @@
                 if (!res.ok) return;
                 currentPortRules = await res.json();
                 renderPortRules();
+                renderMatrixTopology();
             } catch (err) {
                 console.error("fetch port rules error:", err);
             }
@@ -1537,6 +1558,7 @@
                 if (!res.ok) return;
                 currentDynamicGroups = await res.json();
                 renderDynamicGroups();
+                renderMatrixTopology();
             } catch (err) {
                 console.error("fetch dynamic groups error:", err);
             }
@@ -1774,6 +1796,181 @@
                 document.body.removeChild(ta);
             }
             showToast(`已复制: ${label || text}`);
+        }
+
+        function renderMatrixTopology() {
+            const container = document.getElementById('matrix-topology-flow');
+            if (!container) return;
+            const isEn = getLanguage() === 'en';
+
+            const st = (typeof currentState !== 'undefined' && currentState) ? currentState : null;
+            const defaultProxyPort = (st && st.settings && st.settings.proxy_port) || (st && st.proxy_addr ? parseInt(st.proxy_addr.split(':').pop()) : 7928);
+            const tunnels = (st && st.tunnels) ? st.tunnels : [];
+
+            // 1. Primary default pipeline row
+            const sysGroup = (currentDynamicGroups || []).find(g => g.is_system || g.id === 'system-primary');
+            const sysGroupName = sysGroup ? sysGroup.name : (isEn ? 'Primary Gateway Group' : '系统主出口网关组');
+            const primaryDev = (st && st.primary && st.primary.dev_name) || 'tun0';
+            const primaryIp = (st && st.primary && st.primary.ip) || (st ? st.exit_ip : '');
+            const primaryCountry = (st && st.primary && st.primary.country) || '';
+
+            const primaryExitBadge = primaryIp
+                ? `<span class="topo-exit-badge"><span class="status-dot"></span> ${escapeHtml(primaryDev)}: ${escapeHtml(primaryIp)} ${primaryCountry ? '(' + escapeHtml(primaryCountry) + ')' : ''}</span>`
+                : `<span class="text-xs text-muted">${isEn ? 'Connecting primary exit...' : '主出口正在连接中...'}</span>`;
+
+            let rowsHtml = `
+                <div class="topo-pipeline-row">
+                    <div class="topo-col-inbound">
+                        <span class="badge badge-accent">PORT ${defaultProxyPort}</span>
+                        <span class="text-xs text-muted">${isEn ? 'Default' : '系统默认'}</span>
+                    </div>
+                    <div class="topo-arrow">──▶</div>
+                    <div class="topo-col-group">
+                        <strong class="text-sm">${escapeHtml(sysGroupName)}</strong>
+                        <span class="text-xs text-muted">${isEn ? 'Primary Egress (tun0)' : '主出海网卡'}</span>
+                    </div>
+                    <div class="topo-arrow">──▶</div>
+                    <div class="topo-col-exits">
+                        ${primaryExitBadge}
+                    </div>
+                </div>
+            `;
+
+            // 2. Extra Multi-Port rules pipelines
+            if (currentPortRules && currentPortRules.length > 0) {
+                currentPortRules.forEach(rule => {
+                    if (!rule.enabled) return;
+                    let policyLabel = isEn ? 'Round-Robin' : '轮询调度';
+                    if (rule.policy === 'random') policyLabel = isEn ? 'Random' : '随机分发';
+                    else if (rule.policy === 'interval') policyLabel = `${rule.interval_seconds || 60}s ${isEn ? 'Rotation' : '轮换'}`;
+
+                    let groupColHtml = '';
+                    let exitsColHtml = '';
+                    let isRowFallback = false;
+
+                    if (rule.bound_group_ids && rule.bound_group_ids.length > 0) {
+                        const matchedGroups = (currentDynamicGroups || []).filter(g => rule.bound_group_ids.includes(g.id));
+                        if (matchedGroups.length > 0) {
+                            const groupNames = matchedGroups.map(g => g.name).join(' / ');
+                            const anyFallback = matchedGroups.some(g => g.in_fallback);
+                            isRowFallback = anyFallback;
+                            const fbBadge = anyFallback ? `<span class="badge badge-warning badge-mini">${isEn ? 'Fallback' : '降级中'}</span>` : '';
+
+                            groupColHtml = `
+                                <div class="flex items-center gap-1">
+                                    <strong class="text-sm">${escapeHtml(groupNames)}</strong>
+                                    ${fbBadge}
+                                </div>
+                                <span class="text-xs text-muted">${policyLabel} · ${matchedGroups.reduce((acc, g) => acc + (g.target_count || 1), 0)} ${isEn ? 'NICs' : '网卡'}</span>
+                            `;
+
+                            const allActiveTids = [];
+                            matchedGroups.forEach(g => {
+                                if (g.active_tunnel_ids) allActiveTids.push(...g.active_tunnel_ids);
+                            });
+
+                            const activeTuns = tunnels.filter(t => allActiveTids.includes(t.id));
+                            if (activeTuns.length > 0) {
+                                exitsColHtml = activeTuns.map(t => {
+                                    const ip = (t.node && t.node.ip) || (t.node && t.node.id) || t.dev_name;
+                                    const c = (t.node && t.node.country_short) || '';
+                                    const lat = t.latency_ms > 0 ? `${t.latency_ms}ms` : '';
+                                    return `<span class="topo-exit-badge"><span class="status-dot"></span> ${escapeHtml(t.dev_name)}: ${escapeHtml(ip)} ${c ? '(' + c + ')' : ''} ${lat ? '· ' + lat : ''}</span>`;
+                                }).join('');
+                            } else {
+                                exitsColHtml = `<span class="text-xs text-muted">${isEn ? 'Scheduling tunnels...' : '等待调度拉起网卡...'}</span>`;
+                            }
+                        }
+                    } else if (rule.bound_tunnel_ids && rule.bound_tunnel_ids.length > 0) {
+                        groupColHtml = `
+                            <strong class="text-sm">${isEn ? 'Bound Tunnels' : '指定隧道出口'}</strong>
+                            <span class="text-xs text-muted">${rule.bound_tunnel_ids.length} ${isEn ? 'Tunnels' : '条隧道'}</span>
+                        `;
+                        const activeTuns = tunnels.filter(t => rule.bound_tunnel_ids.includes(t.id));
+                        if (activeTuns.length > 0) {
+                            exitsColHtml = activeTuns.map(t => {
+                                const ip = (t.node && t.node.ip) || t.dev_name;
+                                return `<span class="topo-exit-badge"><span class="status-dot"></span> ${escapeHtml(t.dev_name)}: ${escapeHtml(ip)}</span>`;
+                            }).join('');
+                        } else {
+                            exitsColHtml = `<span class="text-xs text-muted">${isEn ? 'Tunnels offline' : '绑定的隧道离线'}</span>`;
+                        }
+                    } else {
+                        groupColHtml = `
+                            <strong class="text-sm">${isEn ? 'Direct / VPS Native' : '原生直连出口'}</strong>
+                            <span class="text-xs text-muted">${isEn ? 'No tunnel proxy' : '无隧道包装'}</span>
+                        `;
+                        exitsColHtml = `<span class="topo-exit-badge">${isEn ? 'VPS Local IP' : 'VPS 原生出网'}</span>`;
+                    }
+
+                    rowsHtml += `
+                        <div class="topo-pipeline-row ${isRowFallback ? 'is-fallback' : ''}">
+                            <div class="topo-col-inbound">
+                                <span class="badge badge-accent">PORT ${rule.port}</span>
+                                <span class="text-xs text-muted">${escapeHtml(rule.auth_mode === 'none' ? (isEn ? 'No Auth' : '免密') : (isEn ? 'Protected' : '加密'))}</span>
+                            </div>
+                            <div class="topo-arrow">──▶</div>
+                            <div class="topo-col-group">
+                                ${groupColHtml}
+                            </div>
+                            <div class="topo-arrow">──▶</div>
+                            <div class="topo-col-exits">
+                                ${exitsColHtml}
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+
+            container.innerHTML = rowsHtml;
+        }
+
+        function downloadBackupPackage() {
+            const a = document.createElement('a');
+            a.href = '/api/system/backup/export';
+            a.download = `nxgate-backup-${new Date().toISOString().slice(0,10)}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            showToast(getLanguage() === 'en' ? 'Downloaded configuration backup' : '已触发下载全量备份文件 nxgate-backup.json');
+        }
+
+        function triggerBackupFileSelect() {
+            document.getElementById('backup-file-input')?.click();
+        }
+
+        async function onBackupFileSelected(event) {
+            const file = event.target?.files?.[0];
+            if (!file) return;
+
+            try {
+                const text = await file.text();
+                const pkg = JSON.parse(text);
+                const isConfirmed = await tConfirm(
+                    `确认从备份文件 [${file.name}] 导入恢复配置吗？\n将恢复 ${pkg.favorites?.length || 0} 个收藏、${pkg.blacklist?.length || 0} 条黑名单、${pkg.dynamic_groups?.length || 0} 个出口组及端口分流规则。`,
+                    `Restore configuration from [${file.name}]?\nThis will restore ${pkg.favorites?.length || 0} favorites, ${pkg.blacklist?.length || 0} blacklist rules, and ${pkg.dynamic_groups?.length || 0} dynamic groups.`
+                );
+                if (!isConfirmed) {
+                    event.target.value = '';
+                    return;
+                }
+
+                const res = await fetch('/api/system/backup/import', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: text
+                });
+                const ret = await res.json();
+                if (res.ok) {
+                    tAlert(`配置恢复成功！已恢复 ${ret.restored_items} 项系统配置规则并立即生效。`, `Configuration successfully restored! ${ret.restored_items} rule sets restored and applied.`);
+                    await Promise.all([fetchStatus(), fetchPortRules(), fetchDynamicGroups(), loadSettingsForm()]);
+                } else {
+                    tAlert('导入配置失败: ' + (ret.error || '解析错误'), 'Import failed: ' + (ret.error || 'Parsing error'));
+                }
+            } catch (err) {
+                tAlert('无效的 JSON 备份文件: ' + err.message, 'Invalid JSON backup file: ' + err.message);
+            }
+            event.target.value = '';
         }
 
         // ==========================================
@@ -3780,6 +3977,10 @@
             copyFilteredClashSub,
             downloadFilteredClash,
             showFilteredQR,
+            downloadBackupPackage,
+            triggerBackupFileSelect,
+            onBackupFileSelected,
+            renderMatrixTopology,
             openAgeKeyHelper,
             closeAgeKeyHelper,
             switchAgeType,

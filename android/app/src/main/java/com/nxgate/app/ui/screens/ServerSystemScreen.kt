@@ -3,6 +3,7 @@ package com.nxgate.app.ui.screens
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
@@ -29,6 +30,7 @@ import androidx.compose.material.icons.automirrored.rounded.Article
 import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.DeleteSweep
 import androidx.compose.material.icons.rounded.Dns
@@ -164,6 +166,10 @@ fun ServerSystemScreen(
     var systemLogs by remember { mutableStateOf<List<SystemLogEntry>>(emptyList()) }
     var isLoadingLogs by remember { mutableStateOf(false) }
     val logsSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    // Backup & Migration
+    var showImportBackupDialog by remember { mutableStateOf(false) }
+    var importBackupInputText by remember { mutableStateOf("") }
 
     fun copyToClipboard(label: String, text: String) {
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -1021,6 +1027,93 @@ fun ServerSystemScreen(
                         }
                     }
 
+                    // 6. 配置灾备与跨机迁移 (Backup & Migration Card)
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(24.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainer
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(20.dp),
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Dns,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Column {
+                                        Text(
+                                            text = strings.backupTitle,
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Text(
+                                            text = strings.backupSubtitle,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+
+                            ConnectedButtonGroup(
+                                items = listOf(
+                                    ConnectedButtonItem(
+                                        text = strings.exportBackupBtn,
+                                        style = ConnectedButtonStyle.Filled,
+                                        icon = Icons.Rounded.CloudDownload,
+                                        onClick = {
+                                            if (activeServer != null) {
+                                                scope.launch {
+                                                    val res = NXGateApplication.instance.apiClient.exportServerBackup(activeServer)
+                                                    if (res.isSuccess) {
+                                                        val jsonStr = res.getOrNull() ?: "{}"
+                                                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                                        clipboard.setPrimaryClip(ClipData.newPlainText("nxgate-backup.json", jsonStr))
+                                                        val sendIntent = Intent().apply {
+                                                            action = Intent.ACTION_SEND
+                                                            putExtra(Intent.EXTRA_TEXT, jsonStr)
+                                                            type = "application/json"
+                                                        }
+                                                        context.startActivity(Intent.createChooser(sendIntent, strings.backupTitle))
+                                                        Toast.makeText(context, strings.exportBackupSuccess, Toast.LENGTH_LONG).show()
+                                                    } else {
+                                                        Toast.makeText(context, "导出失败: ${res.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    ),
+                                    ConnectedButtonItem(
+                                        text = strings.importBackupBtn,
+                                        style = ConnectedButtonStyle.Tonal,
+                                        icon = Icons.Rounded.Sync,
+                                        onClick = {
+                                            importBackupInputText = ""
+                                            showImportBackupDialog = true
+                                        }
+                                    )
+                                ),
+                                height = 44.dp
+                            )
+                        }
+                    }
+
                     Spacer(Modifier.height(80.dp))
                 }
             }
@@ -1131,6 +1224,56 @@ fun ServerSystemScreen(
             confirmButton = {
                 TextButton(onClick = { showReleaseNotesDialog = false }) {
                     Text(if (isEn) "Close" else "关闭")
+                }
+            }
+        )
+    }
+
+    // ==========================================
+    // Import Backup Dialog
+    // ==========================================
+    if (showImportBackupDialog && activeServer != null) {
+        AlertDialog(
+            onDismissRequest = { showImportBackupDialog = false },
+            shape = RoundedCornerShape(24.dp),
+            title = {
+                Text(strings.importBackupDialogTitle, fontWeight = FontWeight.Bold)
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(strings.importBackupDialogPrompt, style = MaterialTheme.typography.bodySmall)
+                    OutlinedTextField(
+                        value = importBackupInputText,
+                        onValueChange = { importBackupInputText = it },
+                        modifier = Modifier.fillMaxWidth().height(160.dp),
+                        placeholder = { Text("{\n  \"version\": \"2.5.9.4\",\n  ...\n}") }
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val text = importBackupInputText.trim()
+                        if (text.isNotEmpty()) {
+                            scope.launch {
+                                val res = NXGateApplication.instance.apiClient.importServerBackup(activeServer, text)
+                                if (res.isSuccess) {
+                                    Toast.makeText(context, strings.importBackupSuccess, Toast.LENGTH_SHORT).show()
+                                    showImportBackupDialog = false
+                                    loadAllServerData()
+                                } else {
+                                    Toast.makeText(context, "导入失败: ${res.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
+                                }
+                            }
+                        }
+                    }
+                ) {
+                    Text(strings.confirm)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showImportBackupDialog = false }) {
+                    Text(strings.cancel)
                 }
             }
         )

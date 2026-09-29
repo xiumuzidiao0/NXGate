@@ -150,6 +150,17 @@ data class AppStrings(
     val subFilterJapanOnly: String,
     val subFilterUSOnly: String,
 
+    // Backup & Migration
+    val backupTitle: String,
+    val backupSubtitle: String,
+    val exportBackupBtn: String,
+    val importBackupBtn: String,
+    val exportBackupSuccess: String,
+    val importBackupSuccess: String,
+    val importBackupDialogTitle: String,
+    val importBackupDialogPrompt: String,
+    val matrixTopologyTitle: String,
+
     // Server Form & Actions
     val serverName: String,
     val serverNamePlaceholder: String,
@@ -341,6 +352,16 @@ val AppStringsZh = AppStrings(
     subFilterJapanOnly = "仅日本出口",
     subFilterUSOnly = "仅美国出口",
 
+    backupTitle = "网关配置灾备与跨机迁移",
+    backupSubtitle = "一键导出与导入全量规则包 (含收藏夹、永久黑名单、端口分流与动态出口组)",
+    exportBackupBtn = "导出配置包 (JSON)",
+    importBackupBtn = "导入恢复配置",
+    exportBackupSuccess = "配置包已导出！已自动复制到剪贴板，并可直接分享保存",
+    importBackupSuccess = "全量配置已成功恢复并生效！",
+    importBackupDialogTitle = "导入配置包 (JSON)",
+    importBackupDialogPrompt = "请在此粘贴此前导出的 nxgate-backup.json 文本内容：",
+    matrixTopologyTitle = "分流链路实时拓扑",
+
     serverName = "服务器名称",
     serverNamePlaceholder = "例如: 东京主网关",
     serverHost = "服务器主机 IP 或域名",
@@ -527,6 +548,16 @@ val AppStringsEn = AppStrings(
     subFilterFavoritesOnly = "Favorites Only",
     subFilterJapanOnly = "Japan Only",
     subFilterUSOnly = "US Only",
+
+    backupTitle = "Configuration Backup & Migration",
+    backupSubtitle = "Export and restore complete backup packages (favorites, blacklists, port rules, dynamic groups)",
+    exportBackupBtn = "Export Backup (JSON)",
+    importBackupBtn = "Import & Restore",
+    exportBackupSuccess = "Backup package exported! Copied to clipboard and ready to share",
+    importBackupSuccess = "Configuration successfully restored and applied!",
+    importBackupDialogTitle = "Import Backup Package (JSON)",
+    importBackupDialogPrompt = "Paste the contents of your exported nxgate-backup.json here:",
+    matrixTopologyTitle = "Egress Routing Topology",
 
     serverName = "Server Name",
     serverNamePlaceholder = "e.g. Tokyo Primary Gateway",

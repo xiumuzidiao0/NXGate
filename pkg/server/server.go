@@ -116,6 +116,10 @@ func (s *Server) Start(ctx context.Context) error {
 	mux.HandleFunc("POST /api/update/trigger", s.handleTriggerUpdate)
 	mux.HandleFunc("GET /api/update/status", s.handleGetUpdateStatus)
 
+	// Full Configuration Backup & Restore APIs
+	mux.HandleFunc("GET /api/system/backup/export", s.handleExportBackup)
+	mux.HandleFunc("POST /api/system/backup/import", s.handleImportBackup)
+
 	// Static UI file server
 	fileServer := http.FileServer(web.GetFileSystem())
 	mux.Handle("/", fileServer)

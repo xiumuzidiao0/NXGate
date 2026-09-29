@@ -2339,6 +2339,66 @@ button {
             background: #1d4ed8;
         }
 
+        /* Egress Routing Flow Topology */
+        .topology-flow-container {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-top: 6px;
+        }
+        .topo-pipeline-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 14px;
+            border-radius: 10px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            font-size: 13px;
+            flex-wrap: wrap;
+        }
+        .topo-pipeline-row.is-fallback {
+            border-color: rgba(245, 158, 11, 0.4);
+            background: rgba(245, 158, 11, 0.04);
+        }
+        .topo-col-inbound {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-width: 140px;
+        }
+        .topo-arrow {
+            display: flex;
+            align-items: center;
+            color: var(--text-muted);
+            opacity: 0.65;
+            font-size: 14px;
+        }
+        .topo-col-group {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            min-width: 180px;
+        }
+        .topo-col-exits {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+            flex: 1;
+        }
+        .topo-exit-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 3px 8px;
+            border-radius: 6px;
+            background: var(--bg-card-sub);
+            border: 1px solid var(--border-subtle);
+            font-size: 11px;
+            font-family: monospace;
+        }
+
         @media (prefers-reduced-motion: reduce) {
             html {
                 scroll-behavior: auto;

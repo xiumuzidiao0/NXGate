@@ -912,6 +912,29 @@ class ApiClient {
         }
     }
 
+    suspend fun exportServerBackup(profile: ServerProfile): Result<String> = withContext(Dispatchers.IO) {
+        try {
+            executeCall(profile, "/api/system/backup/export").use { resp ->
+                if (!resp.isSuccessful) return@withContext Result.failure(Exception("HTTP ${resp.code}: ${resp.message}"))
+                val text = resp.body?.string() ?: "{}"
+                Result.success(text)
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun importServerBackup(profile: ServerProfile, backupJson: String): Result<Boolean> = withContext(Dispatchers.IO) {
+        try {
+            executeCall(profile, "/api/system/backup/import", "POST", backupJson).use { resp ->
+                if (!resp.isSuccessful) return@withContext Result.failure(Exception("HTTP ${resp.code}: ${resp.message}"))
+                Result.success(true)
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     suspend fun fetchServerSettings(profile: ServerProfile): Result<ServerSettingsDTO> = withContext(Dispatchers.IO) {
         try {
             executeCall(profile, "/api/settings").use { resp ->

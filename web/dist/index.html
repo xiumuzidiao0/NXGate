@@ -23,7 +23,7 @@
                 </div>
                 <div class="brand-text">
                     <div class="brand-title">NXGate</div>
-                    <div class="brand-sub"><span data-i18n="brand.sub">多出口智能网关</span> <span class="version-trigger" data-action="openUpdateModal" title="点击检查系统更新"><span id="sidebar-version-badge" class="badge-ver">v2.5.9.4</span></span></div>
+                    <div class="brand-sub"><span data-i18n="brand.sub">多出口智能网关</span> <span class="version-trigger" data-action="openUpdateModal" title="点击检查系统更新"><span id="sidebar-version-badge" class="badge-ver">v2.5.9.5</span></span></div>
                 </div>
             </div>
 
@@ -79,7 +79,7 @@
                     </button>
                     <h1 id="page-title">运行概览</h1>
                     <span id="conn-badge" class="badge disconnected"><span class="status-dot"></span> 检查中</span>
-                    <span class="version-trigger" data-action="openUpdateModal" title="点击检查系统更新"><span id="app-version-badge" class="badge badge-accent">v2.5.9.4</span><span id="header-update-dot" class="badge-dot-pulse hidden" title="发现新版本"></span></span>
+                    <span class="version-trigger" data-action="openUpdateModal" title="点击检查系统更新"><span id="app-version-badge" class="badge badge-accent">v2.5.9.5</span><span id="header-update-dot" class="badge-dot-pulse hidden" title="发现新版本"></span></span>
                 </div>
 
                 <div class="header-actions">
@@ -390,6 +390,7 @@
                 <button type="button" class="modal-tab-btn" id="tab-btn-tg" data-action="switchSettingsTab" data-args="[&quot;tg&quot;]"><span data-i18n="set.tab_tg">Telegram 告警</span></button>
                 <button type="button" class="modal-tab-btn" id="tab-btn-app" data-action="switchSettingsTab" data-args="[&quot;app&quot;]"><span data-i18n="set.tab_app">移动端连接</span></button>
                 <button type="button" class="modal-tab-btn" id="tab-btn-update" data-action="switchSettingsTab" data-args="[&quot;update&quot;]"><span data-i18n="set.tab_update">系统更新</span> <span id="settings-update-badge" class="badge-new hidden">NEW</span></button>
+                <button type="button" class="modal-tab-btn" id="tab-btn-backup" data-action="switchSettingsTab" data-args="[&quot;backup&quot;]"><span data-i18n="set.tab_backup">灾备与迁移</span></button>
             </div>
 
             <form id="settings-form" data-submit-action="saveSettings">
@@ -524,6 +525,26 @@
                     </div>
                 </div>
 
+                <!-- Tab 5: Backup & Migration -->
+                <div id="tab-content-backup" class="hidden">
+                    <div class="settings-note" data-i18n="set.backup_note">
+                        NXGate 支持全量配置导出与一键导入迁移。配置包包含所有星标收藏、永久黑名单、多端口分流规则、动态出口组以及系统运行参数。换机或重装时可实现秒级恢复。
+                    </div>
+                    <div class="form-grid-auto mt-3">
+                        <div class="card p-4 text-center" style="background: var(--bg-card-sub); border: 1px solid var(--border);">
+                            <div class="text-base font-semibold mb-2" data-i18n="set.backup_export_title">导出全量配置包</div>
+                            <div class="text-sm text-muted mb-3" data-i18n="set.backup_export_desc">一键打包下载包含当前所有分流、收藏、黑名单和系统设置的 JSON 备份文件。</div>
+                            <button type="button" class="btn btn-sm" data-action="downloadBackupPackage" data-i18n="set.backup_export_btn">导出配置包 (JSON)</button>
+                        </div>
+                        <div class="card p-4 text-center" style="background: var(--bg-card-sub); border: 1px solid var(--border);">
+                            <div class="text-base font-semibold mb-2" data-i18n="set.backup_import_title">导入恢复配置包</div>
+                            <div class="text-sm text-muted mb-3" data-i18n="set.backup_import_desc">选择此前导出的备份文件，系统将全自动解析、恢复所有规则并立即热重评生效。</div>
+                            <input type="file" id="backup-file-input" accept=".json" class="hidden" data-change-action="onBackupFileSelected">
+                            <button type="button" class="btn btn-outline btn-sm" data-action="triggerBackupFileSelect" data-i18n="set.backup_import_btn">选择文件并导入</button>
+                        </div>
+                    </div>
+                </div>
+
                 <div  class="settings-actions">
                     <button type="button" class="btn btn-outline" data-action="switchView" data-args="[&quot;dashboard&quot;]" data-i18n="set.back_dash">返回概览</button>
                     <button type="submit" class="btn" data-i18n="set.save_apply">保存并生效</button>
@@ -543,6 +564,17 @@
                     端口分流与出口组
                 </div>
                 <button type="button" class="btn btn-outline btn-icon" data-action="closePortMatrixModal" aria-label="关闭分流面板">×</button>
+            </div>
+
+            <!-- 分流链路实时拓扑卡片 (Visual Egress Flow Topology) -->
+            <div id="matrix-topology-card" class="card mb-4" style="background: var(--bg-card-sub); border: 1px solid var(--border);">
+                <div class="row items-center justify-between mb-2">
+                    <span class="text-xs font-semibold text-muted" data-i18n="matrix.topo_title">分流链路实时拓扑 (Inbound ──▶ Egress Pipeline)</span>
+                    <span id="topo-summary-badge" class="badge badge-mini connected"><span class="status-dot"></span> 拓扑就绪</span>
+                </div>
+                <div id="matrix-topology-flow" class="topology-flow-container">
+                    <!-- Dynamic Pipeline Rows injected here -->
+                </div>
             </div>
 
             <!-- Modal Tab Navigation -->

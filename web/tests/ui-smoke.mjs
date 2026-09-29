@@ -224,6 +224,9 @@ try {
     const drawerOpen = await page.locator("#port-edit-card").evaluate((element) => element.classList.contains("open"));
     await page.locator("#port-edit-card [data-drawer-close]").click();
     await page.waitForTimeout(260);
+
+    const topoVisible = await page.locator("#matrix-topology-card").isVisible();
+    if (!topoVisible) failures.push(`${viewport}px: matrix topology card is not visible`);
     for (const view of ["dashboard", "singbox", "matrix", "settings", "nodes"]) {
       await page.evaluate((target) => {
         document.querySelector(`[data-view="${target}"]`).click();
@@ -247,6 +250,11 @@ try {
     await page.waitForTimeout(60);
     const appTabVisible = await page.locator("#tab-content-app").isVisible();
     if (!appTabVisible) failures.push(`${viewport}px: settings app tab is not visible`);
+
+    await page.locator('[data-action="switchSettingsTab"][data-args*="backup"]').click();
+    await page.waitForTimeout(60);
+    const backupTabVisible = await page.locator("#tab-content-backup").isVisible();
+    if (!backupTabVisible) failures.push(`${viewport}px: settings backup tab is not visible`);
 
     // Test Mobile App QR Modal
     await page.locator("#btn-open-mobile-app").click();
