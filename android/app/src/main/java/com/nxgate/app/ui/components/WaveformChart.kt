@@ -34,6 +34,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.nxgate.app.model.LiveTrafficInfo
 import com.nxgate.app.model.SpeedUnit
+import com.nxgate.app.util.AppStringsEn
+import com.nxgate.app.util.LocalAppStrings
 
 /**
  * 实时网速与流量总计监控卡片 (M3 Expressive)
@@ -51,6 +53,8 @@ fun TrafficStatsCard(
 ) {
     var unit by remember { mutableStateOf(SpeedUnit.MBPS) }
     val haptic = LocalHapticFeedback.current
+    val strings = LocalAppStrings.current
+    val isEn = strings == AppStringsEn
 
     val displayDown = if (downSpeedStr.isNotEmpty()) downSpeedStr else liveTraffic.formattedDownSpeed(unit)
     val displayUp = if (upSpeedStr.isNotEmpty()) upSpeedStr else liveTraffic.formattedUpSpeed(unit)
@@ -97,7 +101,7 @@ fun TrafficStatsCard(
                         modifier = Modifier.size(22.dp)
                     )
                     Text(
-                        text = "网速与流量实时监控",
+                        text = if (isEn) "Traffic & Speed Monitor" else "网速与流量实时监控",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -110,9 +114,9 @@ fun TrafficStatsCard(
                 ) {
                     Text(
                         text = when (unit) {
-                            SpeedUnit.MBPS -> "单位: Mb/s (点击切换)"
-                            SpeedUnit.MB_S -> "单位: MB/s (点击切换)"
-                            SpeedUnit.KB_S -> "单位: KB/s (点击切换)"
+                            SpeedUnit.MBPS -> if (isEn) "Unit: Mb/s (toggle)" else "单位: Mb/s (点击切换)"
+                            SpeedUnit.MB_S -> if (isEn) "Unit: MB/s (toggle)" else "单位: MB/s (点击切换)"
+                            SpeedUnit.KB_S -> if (isEn) "Unit: KB/s (toggle)" else "单位: KB/s (点击切换)"
                         },
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Medium,
@@ -145,12 +149,12 @@ fun TrafficStatsCard(
                         ) {
                             Icon(
                                 imageVector = Icons.Rounded.ArrowDownward,
-                                contentDescription = "下行",
+                                contentDescription = strings.downSpeed,
                                 tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(16.dp)
                             )
                             Text(
-                                text = "实时下载网速",
+                                text = strings.downSpeedLabel,
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -169,7 +173,7 @@ fun TrafficStatsCard(
 
                         // 下行累计流量
                         Text(
-                            text = "下行流量总计",
+                            text = strings.downTrafficTotal,
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -200,12 +204,12 @@ fun TrafficStatsCard(
                         ) {
                             Icon(
                                 imageVector = Icons.Rounded.ArrowUpward,
-                                contentDescription = "上行",
+                                contentDescription = strings.upSpeed,
                                 tint = MaterialTheme.colorScheme.tertiary,
                                 modifier = Modifier.size(16.dp)
                             )
                             Text(
-                                text = "实时上传网速",
+                                text = strings.upSpeedLabel,
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -224,7 +228,7 @@ fun TrafficStatsCard(
 
                         // 上行累计流量
                         Text(
-                            text = "上行流量总计",
+                            text = strings.upTrafficTotal,
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

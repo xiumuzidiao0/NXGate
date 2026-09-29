@@ -392,36 +392,36 @@
                 <!-- Tab 1: Base -->
                 <div id="tab-content-base">
                     <div class="form-group">
-                        <label class="form-label">Web 管理控制台端口 [1-65535]</label>
+                        <label class="form-label" data-i18n="set.web_port">Web 管理控制台端口 [1-65535]</label>
                         <input id="cfg-web-port" class="input-field w-full mono"  type="number" required>
                     </div>
                     <div class="form-group">
-                        <label class="form-label">后台安全访问路径 (无需斜杠)</label>
+                        <label class="form-label" data-i18n="set.web_path">后台安全访问路径 (无需斜杠)</label>
                         <div class="input-addon">
                             <input id="cfg-web-path" class="input-field mono"  type="text" required>
-                            <button type="button" class="btn btn-outline" data-action="randomPath">随机</button>
+                            <button type="button" class="btn btn-outline" data-action="randomPath" data-i18n="set.random">随机</button>
                         </div>
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Web 管理员账号</label>
+                        <label class="form-label" data-i18n="set.username">Web 管理员账号</label>
                         <input id="cfg-username" class="input-field w-full"  type="text" required>
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Web 管理员密码 (留空保持原密码不变)</label>
+                        <label class="form-label" data-i18n="set.password">Web 管理员密码 (留空保持原密码不变)</label>
                         <div class="input-addon">
-                            <input id="cfg-password" class="input-field" type="text" placeholder="留空保持原密码">
-                            <button type="button" class="btn btn-outline" data-action="randomPassword">随机密码</button>
+                            <input id="cfg-password" class="input-field" type="text" placeholder="留空保持原密码" data-i18n-placeholder="set.password_ph">
+                            <button type="button" class="btn btn-outline" data-action="randomPassword" data-i18n="set.random_pwd">随机密码</button>
                         </div>
                     </div>
                     <div class="form-group">
-                        <label class="form-label">默认本地代理端口 [1-65535]</label>
+                        <label class="form-label" data-i18n="set.proxy_port">默认本地代理端口 [1-65535]</label>
                         <input id="cfg-proxy-port" class="input-field w-full mono"  type="number" required>
                     </div>
                     <div class="form-group">
-                        <label class="form-label">age 订阅安全加密公钥 (选填，开启后加密订阅)</label>
+                        <label class="form-label" data-i18n="set.age_pubkey">age 订阅安全加密公钥 (选填，开启后加密订阅)</label>
                         <div class="input-addon">
-                            <input id="cfg-age-pubkey" class="input-field mono text-xs" type="text" placeholder="留空关闭加密，或填入 age1... / age1pq...">
-                            <button type="button" class="btn btn-outline" data-action="openAgeKeyHelper">密钥助手</button>
+                            <input id="cfg-age-pubkey" class="input-field mono text-xs" type="text" placeholder="留空关闭加密，或填入 age1... / age1pq..." data-i18n-placeholder="set.age_pubkey_ph">
+                            <button type="button" class="btn btn-outline" data-action="openAgeKeyHelper" data-i18n="set.key_helper">密钥助手</button>
                         </div>
                     </div>
                     <div class="form-group">
@@ -435,48 +435,48 @@
 
                 <!-- Tab 2: Telegram -->
                 <div id="tab-content-tg" class="hidden">
-                    <div  class="settings-note">
+                    <div  class="settings-note" data-i18n="set.tg_note">
                         配置后，网关在节点自动故障转移、出口组全断线时自动推送告警；并支持在 TG 对话框使用 <code>/status</code>、<code>/tunnels</code>、<code>/rotate</code> 远程控制。
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Telegram Bot Token (向 @BotFather 申请)</label>
-                        <input id="cfg-tg-token" class="input-field w-full mono"  type="text" placeholder="例如: 123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11">
+                        <label class="form-label" data-i18n="set.tg_token">Telegram Bot Token (向 @BotFather 申请)</label>
+                        <input id="cfg-tg-token" class="input-field w-full mono"  type="text" placeholder="例如: 123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11" data-i18n-placeholder="set.tg_token_ph">
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Telegram Chat ID (接收告警的个人或群组 ID)</label>
-                        <input id="cfg-tg-chatid" class="input-field w-full mono"  type="text" placeholder="例如: 987654321">
+                        <label class="form-label" data-i18n="set.tg_chatid">Telegram Chat ID (接收告警的个人或群组 ID)</label>
+                        <input id="cfg-tg-chatid" class="input-field w-full mono"  type="text" placeholder="例如: 987654321" data-i18n-placeholder="set.tg_chatid_ph">
                     </div>
                     <div  class="mt-2">
-                        <button type="button" class="btn btn-outline btn-sm"  data-action="testTelegramAlert">发送测试消息</button>
+                        <button type="button" class="btn btn-outline btn-sm"  data-action="testTelegramAlert" data-i18n="set.tg_test_btn">发送测试消息</button>
                     </div>
                 </div>
 
                 <!-- Tab 3: Mobile App -->
                 <div id="tab-content-app" class="hidden">
-                    <div class="settings-note">
+                    <div class="settings-note" data-i18n="set.app_note">
                         NXGate 支持通过安卓/移动端专属 App 实现多服务器集中远程控制与状态监控。使用现有 Web 管理账号与密码直接认证。
                     </div>
                     <div class="card p-4 text-center mt-3" style="background: var(--bg-card-sub); border: 1px dashed var(--border);">
-                        <div class="text-base font-semibold mb-2">一键生成移动端扫码导入凭据</div>
-                        <div class="text-sm text-muted mb-3">点击下方按钮打开高清二维码与导入专属链接 (URI/JSON)，在手机 App 端使用相机扫描即可秒级录入本服务器。</div>
-                        <button type="button" class="btn btn-sm" data-action="openMobileAppModal">打开扫码导入二维码面板</button>
+                        <div class="text-base font-semibold mb-2" data-i18n="set.app_card_title">一键生成移动端扫码导入凭据</div>
+                        <div class="text-sm text-muted mb-3" data-i18n="set.app_card_desc">点击下方按钮打开高清二维码与导入专属链接 (URI/JSON)，在手机 App 端使用相机扫描即可秒级录入本服务器。</div>
+                        <button type="button" class="btn btn-sm" data-action="openMobileAppModal" data-i18n="set.app_open_btn">打开扫码导入二维码面板</button>
                     </div>
                 </div>
 
                 <!-- Tab 4: System Update -->
                 <div id="tab-content-update" class="hidden">
-                    <div class="settings-note">
+                    <div class="settings-note" data-i18n="set.update_note">
                         NXGate 支持通过 GitHub 官方源及加速镜像实现全自动免停机热升级。更新将校验 SHA-256 哈希完整性并平滑重启守护进程。
                     </div>
                     <div class="card p-4 mt-3" style="background: var(--bg-card-sub); border: 1px solid var(--border);">
                         <div class="update-version-row">
                             <div class="update-ver-item">
-                                <span class="text-xs text-muted">当前已安装版本</span>
+                                <span class="text-xs text-muted" data-i18n="set.cur_ver">当前已安装版本</span>
                                 <strong id="update-cur-ver" class="mono text-base">v2.5.6</strong>
                             </div>
                             <div class="update-arrow">&rarr;</div>
                             <div class="update-ver-item">
-                                <span class="text-xs text-muted">远端最新版本</span>
+                                <span class="text-xs text-muted" data-i18n="set.latest_ver">远端最新版本</span>
                                 <strong id="update-latest-ver" class="mono text-base text-accent">检查中...</strong>
                             </div>
                             <div class="ml-auto flex items-center gap-2">
@@ -486,7 +486,7 @@
 
                         <div id="update-info-box" class="update-release-box mt-3 hidden">
                             <div class="text-xs text-muted mb-1 flex items-center justify-between">
-                                <span id="update-release-title" class="font-semibold text-white">版本说明</span>
+                                <span id="update-release-title" class="font-semibold text-white" data-i18n="up.release_notes">版本说明</span>
                                 <span id="update-release-date" class="text-muted"></span>
                             </div>
                             <div id="update-release-notes" class="update-notes-body text-xs text-muted"></div>
@@ -506,23 +506,23 @@
                             <div class="flex items-center gap-2">
                                 <button type="button" id="btn-check-update" class="btn btn-outline btn-sm" data-action="checkForUpdates">
                                     <svg aria-hidden="true" viewBox="0 0 24 24" class="icon-sm"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                                    检查新版本
+                                    <span data-i18n="set.check_update">检查新版本</span>
                                 </button>
-                                <button type="button" id="btn-force-update" class="btn btn-outline btn-xs" data-action="triggerForceUpdate" title="强制重新下载并重装当前版本构建">
+                                <button type="button" id="btn-force-update" class="btn btn-outline btn-xs" data-action="triggerForceUpdate" title="强制重新下载并重装当前版本构建" data-i18n="set.force_update">
                                     重新安装当前构建
                                 </button>
                             </div>
                             <button type="button" id="btn-do-update" class="btn btn-primary btn-sm hidden" data-action="triggerSystemUpdate">
                                 <svg aria-hidden="true" viewBox="0 0 24 24" class="icon-sm"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                                立即升级至最新版
+                                <span data-i18n="set.do_update">立即升级至最新版</span>
                             </button>
                         </div>
                     </div>
                 </div>
 
                 <div  class="settings-actions">
-                    <button type="button" class="btn btn-outline" data-action="switchView" data-args="[&quot;dashboard&quot;]">返回概览</button>
-                    <button type="submit" class="btn">保存并生效</button>
+                    <button type="button" class="btn btn-outline" data-action="switchView" data-args="[&quot;dashboard&quot;]" data-i18n="set.back_dash">返回概览</button>
+                    <button type="submit" class="btn" data-i18n="set.save_apply">保存并生效</button>
                 </div>
             </form>
         </div>
@@ -543,15 +543,15 @@
 
             <!-- Modal Tab Navigation -->
             <div class="modal-tabs">
-                <button type="button" class="modal-tab-btn active" id="matrix-tab-ports" data-action="switchMatrixTab" data-args="[&quot;ports&quot;]">代理监听端口管理</button>
-                <button type="button" class="modal-tab-btn" id="matrix-tab-groups" data-action="switchMatrixTab" data-args="[&quot;groups&quot;]">动态出口组</button>
+                <button type="button" class="modal-tab-btn active" id="matrix-tab-ports" data-action="switchMatrixTab" data-args="[&quot;ports&quot;]" data-i18n="matrix.ports_tab">端口分流规则</button>
+                <button type="button" class="modal-tab-btn" id="matrix-tab-groups" data-action="switchMatrixTab" data-args="[&quot;groups&quot;]" data-i18n="matrix.groups_tab">动态出口组</button>
             </div>
 
             <!-- Tab 1: Proxy Ports -->
             <div id="matrix-content-ports">
                 <div  class="section-toolbar">
-                    <div  class="text-note text-muted">配置多个出站代理监听端口，每个端口独立调度不同隧道出口</div>
-                    <button class="btn btn-sm"  data-action="showAddPortForm">+ 新增代理端口</button>
+                    <div  class="text-note text-muted" data-i18n="matrix.ports_desc">配置多个出站代理监听端口，每个端口独立调度不同隧道出口</div>
+                    <button class="btn btn-sm"  data-action="showAddPortForm" data-i18n="matrix.add_port">+ 新增代理端口</button>
                 </div>
 
                 <div id="port-rules-cards"  class="scroll-list ports">
@@ -562,10 +562,10 @@
             <!-- Tab 2: Dynamic Pool Groups -->
             <div id="matrix-content-groups" class="hidden">
                 <div  class="section-toolbar">
-                    <div  class="text-note text-muted">按国家与网络类型自动维持优质出口，支持定时轮换</div>
+                    <div  class="text-note text-muted" data-i18n="matrix.groups_desc">按国家与网络类型自动维持优质出口，支持定时轮换</div>
                     <div  class="row gap-1">
-                        <button class="btn btn-outline btn-xs"  data-action="evaluateDynamicGroups">立即重评</button>
-                        <button class="btn btn-sm"  data-action="showAddDynamicGroupForm">+ 新建出口组</button>
+                        <button class="btn btn-outline btn-xs"  data-action="evaluateDynamicGroups" data-i18n="matrix.evaluate">立即重评</button>
+                        <button class="btn btn-sm"  data-action="showAddDynamicGroupForm" data-i18n="matrix.add_group">+ 新建出口组</button>
                     </div>
                 </div>
 
@@ -575,7 +575,7 @@
             </div>
 
             <div  class="form-actions">
-                <button type="button" class="btn btn-outline" data-action="switchView" data-args="[&quot;dashboard&quot;]">返回概览</button>
+                <button type="button" class="btn btn-outline" data-action="switchView" data-args="[&quot;dashboard&quot;]" data-i18n="set.back_dash">返回概览</button>
             </div>
         </div>
         </div>
@@ -616,7 +616,7 @@
             <div class="card-header mb-4" >
                 <div class="card-title">
                     <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></svg>
-                    添加 sing-box 节点
+                    <span data-i18n="sb.modal_title">添加 sing-box 节点</span>
                 </div>
                 <button type="button" class="btn btn-outline btn-icon" data-action="closeAddSingBoxModal" aria-label="关闭添加节点">×</button>
             </div>
@@ -625,16 +625,16 @@
                 <!-- 协议选择卡片 Choice Cards -->
                 <div  class="mb-4">
                     <div class="row items-center justify-between mb-2">
-                        <label class="form-label mb-0">选择入站协议</label>
-                        <span class="text-xs text-muted">全套 22 种脚本原生协议</span>
+                        <label class="form-label mb-0" data-i18n="sb.select_proto">选择入站协议</label>
+                        <span class="text-xs text-muted" data-i18n="sb.proto_count">全套 22 种脚本原生协议</span>
                     </div>
 
                     <div class="proto-filter-bar">
-                        <button type="button" class="pill-btn active" data-action="filterProtoGrid" data-args="[&quot;all&quot;]">全部 (22)</button>
-                        <button type="button" class="pill-btn" data-action="filterProtoGrid" data-args="[&quot;recommended&quot;]">推荐免域名 (5)</button>
-                        <button type="button" class="pill-btn" data-action="filterProtoGrid" data-args="[&quot;popular&quot;]">经典穿透 (4)</button>
-                        <button type="button" class="pill-btn" data-action="filterProtoGrid" data-args="[&quot;cdn&quot;]">CDN/域名TLS (9)</button>
-                        <button type="button" class="pill-btn" data-action="filterProtoGrid" data-args="[&quot;raw&quot;]">原生传输 (4)</button>
+                        <button type="button" class="pill-btn active" data-action="filterProtoGrid" data-args="[&quot;all&quot;]" data-i18n="sb.cat_all">全部 (22)</button>
+                        <button type="button" class="pill-btn" data-action="filterProtoGrid" data-args="[&quot;recommended&quot;]" data-i18n="sb.cat_recommended">推荐免域名 (5)</button>
+                        <button type="button" class="pill-btn" data-action="filterProtoGrid" data-args="[&quot;popular&quot;]" data-i18n="sb.cat_popular">经典穿透 (4)</button>
+                        <button type="button" class="pill-btn" data-action="filterProtoGrid" data-args="[&quot;cdn&quot;]" data-i18n="sb.cat_cdn">CDN/域名TLS (9)</button>
+                        <button type="button" class="pill-btn" data-action="filterProtoGrid" data-args="[&quot;raw&quot;]" data-i18n="sb.cat_raw">原生传输 (4)</button>
                     </div>
 
                     <div class="proto-choice-container">
@@ -642,97 +642,97 @@
                             <!-- 1. 推荐免域名 -->
                             <div class="choice-card selected" id="proto-card-reality" data-proto-cat="recommended" data-action="selectSingBoxProto" data-args="[&quot;reality&quot;]">
                                 <div class="choice-card-title">VLESS-REALITY <span class="badge badge-accent badge-mini">推荐</span></div>
-                                <div class="choice-card-desc">基于 TLS 伪装，免配置域名证书</div>
+                                <div class="choice-card-desc" data-i18n="sb.proto.reality_desc">基于 TLS 伪装，免配置域名证书</div>
                             </div>
                             <div class="choice-card" id="proto-card-rh2" data-proto-cat="recommended" data-action="selectSingBoxProto" data-args="[&quot;rh2&quot;]">
                                 <div class="choice-card-title">VLESS-H2-REALITY <span class="badge badge-accent badge-mini">推荐</span></div>
-                                <div class="choice-card-desc">HTTP/2 多路复用 + REALITY，高并发免配域名</div>
+                                <div class="choice-card-desc" data-i18n="sb.proto.rh2_desc">HTTP/2 多路复用 + REALITY，高并发免配域名</div>
                             </div>
                             <div class="choice-card" id="proto-card-hy2" data-proto-cat="recommended" data-action="selectSingBoxProto" data-args="[&quot;hy2&quot;]">
                                 <div class="choice-card-title">Hysteria2 <span class="badge badge-accent badge-mini">推荐</span></div>
-                                <div class="choice-card-desc">基于 QUIC 协议，适合高丢包弱网环境</div>
+                                <div class="choice-card-desc" data-i18n="sb.proto.hy2_desc">基于 QUIC 协议，适合高丢包弱网环境</div>
                             </div>
                             <div class="choice-card" id="proto-card-tuic" data-proto-cat="recommended" data-action="selectSingBoxProto" data-args="[&quot;tuic&quot;]">
                                 <div class="choice-card-title">TUIC v5 <span class="badge badge-accent badge-mini">低延迟</span></div>
-                                <div class="choice-card-desc">基于 QUIC 拥塞控制 BBR 协议，低延迟抗抖动</div>
+                                <div class="choice-card-desc" data-i18n="sb.proto.tuic_desc">基于 QUIC 拥塞控制 BBR 协议，低延迟抗抖动</div>
                             </div>
                             <div class="choice-card" id="proto-card-ss" data-proto-cat="recommended" data-action="selectSingBoxProto" data-args="[&quot;ss&quot;]">
                                 <div class="choice-card-title">Shadowsocks 2022</div>
-                                <div class="choice-card-desc">现代轻量对称加密规范，开销极小客户端支持广</div>
+                                <div class="choice-card-desc" data-i18n="sb.proto.ss_desc">现代轻量对称加密规范，开销极小客户端支持广</div>
                             </div>
 
                             <!-- 2. 经典穿透 -->
                             <div class="choice-card" id="proto-card-trojan" data-proto-cat="popular" data-action="selectSingBoxProto" data-args="[&quot;trojan&quot;]">
                                 <div class="choice-card-title">Trojan</div>
-                                <div class="choice-card-desc">经典伪装 HTTPS 网页浏览，保真度高</div>
+                                <div class="choice-card-desc" data-i18n="sb.proto.trojan_desc">经典伪装 HTTPS 网页浏览，保真度高</div>
                             </div>
                             <div class="choice-card" id="proto-card-anytls" data-proto-cat="popular" data-action="selectSingBoxProto" data-args="[&quot;anytls&quot;]">
                                 <div class="choice-card-title">AnyTLS</div>
-                                <div class="choice-card-desc">多路径 TLS 传输，具备抗阻断特性</div>
+                                <div class="choice-card-desc" data-i18n="sb.proto.anytls_desc">多路径 TLS 传输，具备抗阻断特性</div>
                             </div>
                             <div class="choice-card" id="proto-card-socks" data-proto-cat="popular" data-action="selectSingBoxProto" data-args="[&quot;socks&quot;]">
                                 <div class="choice-card-title">Socks5</div>
-                                <div class="choice-card-desc">标准 Socks5 代理入站，局域网与前置分流首选</div>
+                                <div class="choice-card-desc" data-i18n="sb.proto.socks_desc">标准 Socks5 代理入站，局域网与前置分流首选</div>
                             </div>
                             <div class="choice-card" id="proto-card-direct" data-proto-cat="popular" data-action="selectSingBoxProto" data-args="[&quot;direct&quot;]">
                                 <div class="choice-card-title">Direct (端口转发)</div>
-                                <div class="choice-card-desc">透明 TCP 端口流量中继直通</div>
+                                <div class="choice-card-desc" data-i18n="sb.proto.direct_desc">透明 TCP 端口流量中继直通</div>
                             </div>
 
                             <!-- 3. CDN / 域名 TLS -->
                             <div class="choice-card" id="proto-card-vws" data-proto-cat="cdn" data-action="selectSingBoxProto" data-args="[&quot;vws&quot;]">
                                 <div class="choice-card-title">VLESS-WS-TLS</div>
-                                <div class="choice-card-desc">VLESS + WebSocket + TLS，支持 Cloudflare CDN 优选反代</div>
+                                <div class="choice-card-desc" data-i18n="sb.proto.vws_desc">VLESS + WebSocket + TLS，支持 Cloudflare CDN 优选反代</div>
                             </div>
                             <div class="choice-card" id="proto-card-wss" data-proto-cat="cdn" data-action="selectSingBoxProto" data-args="[&quot;wss&quot;]">
                                 <div class="choice-card-title">VMess-WS-TLS</div>
-                                <div class="choice-card-desc">VMess + WebSocket + TLS，经典 CDN 拯救被墙 IP 方案</div>
+                                <div class="choice-card-desc" data-i18n="sb.proto.wss_desc">VMess + WebSocket + TLS，经典 CDN 拯救被墙 IP 方案</div>
                             </div>
                             <div class="choice-card" id="proto-card-tws" data-proto-cat="cdn" data-action="selectSingBoxProto" data-args="[&quot;tws&quot;]">
                                 <div class="choice-card-title">Trojan-WS-TLS</div>
-                                <div class="choice-card-desc">Trojan + WebSocket + TLS，隐藏真实源站地址</div>
+                                <div class="choice-card-desc" data-i18n="sb.proto.tws_desc">Trojan + WebSocket + TLS，隐藏真实源站地址</div>
                             </div>
                             <div class="choice-card" id="proto-card-vhu" data-proto-cat="cdn" data-action="selectSingBoxProto" data-args="[&quot;vhu&quot;]">
                                 <div class="choice-card-title">VLESS-HTTPUpgrade-TLS</div>
-                                <div class="choice-card-desc">新一代 HTTPUpgrade 传输，性能优于传统 WS</div>
+                                <div class="choice-card-desc" data-i18n="sb.proto.vhu_desc">新一代 HTTPUpgrade 传输，性能优于传统 WS</div>
                             </div>
                             <div class="choice-card" id="proto-card-hu" data-proto-cat="cdn" data-action="selectSingBoxProto" data-args="[&quot;hu&quot;]">
                                 <div class="choice-card-title">VMess-HTTPUpgrade-TLS</div>
-                                <div class="choice-card-desc">VMess + HTTPUpgrade 现代化高性能传输</div>
+                                <div class="choice-card-desc" data-i18n="sb.proto.hu_desc">VMess + HTTPUpgrade 现代化高性能传输</div>
                             </div>
                             <div class="choice-card" id="proto-card-thu" data-proto-cat="cdn" data-action="selectSingBoxProto" data-args="[&quot;thu&quot;]">
                                 <div class="choice-card-title">Trojan-HTTPUpgrade-TLS</div>
-                                <div class="choice-card-desc">Trojan + HTTPUpgrade 现代化加密传输</div>
+                                <div class="choice-card-desc" data-i18n="sb.proto.thu_desc">Trojan + HTTPUpgrade 现代化加密传输</div>
                             </div>
                             <div class="choice-card" id="proto-card-vh2" data-proto-cat="cdn" data-action="selectSingBoxProto" data-args="[&quot;vh2&quot;]">
                                 <div class="choice-card-title">VLESS-H2-TLS</div>
-                                <div class="choice-card-desc">VLESS + HTTP/2 多路复用 + TLS</div>
+                                <div class="choice-card-desc" data-i18n="sb.proto.vh2_desc">VLESS + HTTP/2 多路复用 + TLS</div>
                             </div>
                             <div class="choice-card" id="proto-card-h2" data-proto-cat="cdn" data-action="selectSingBoxProto" data-args="[&quot;h2&quot;]">
                                 <div class="choice-card-title">VMess-H2-TLS</div>
-                                <div class="choice-card-desc">VMess + HTTP/2 多路复用 + TLS</div>
+                                <div class="choice-card-desc" data-i18n="sb.proto.h2_desc">VMess + HTTP/2 多路复用 + TLS</div>
                             </div>
                             <div class="choice-card" id="proto-card-th2" data-proto-cat="cdn" data-action="selectSingBoxProto" data-args="[&quot;th2&quot;]">
                                 <div class="choice-card-title">Trojan-H2-TLS</div>
-                                <div class="choice-card-desc">Trojan + HTTP/2 多路复用 + TLS</div>
+                                <div class="choice-card-desc" data-i18n="sb.proto.th2_desc">Trojan + HTTP/2 多路复用 + TLS</div>
                             </div>
 
                             <!-- 4. 原生 / 内网传输 -->
                             <div class="choice-card" id="proto-card-ws" data-proto-cat="raw" data-action="selectSingBoxProto" data-args="[&quot;ws&quot;]">
                                 <div class="choice-card-title">VMess-WS (明文)</div>
-                                <div class="choice-card-desc">纯 WebSocket 传输，便于前置 Nginx/Caddy 自建反代</div>
+                                <div class="choice-card-desc" data-i18n="sb.proto.ws_desc">纯 WebSocket 传输，便于前置 Nginx/Caddy 自建反代</div>
                             </div>
                             <div class="choice-card" id="proto-card-tcp" data-proto-cat="raw" data-action="selectSingBoxProto" data-args="[&quot;tcp&quot;]">
                                 <div class="choice-card-title">VMess-TCP</div>
-                                <div class="choice-card-desc">原生 TCP 传输，开销极低</div>
+                                <div class="choice-card-desc" data-i18n="sb.proto.tcp_desc">原生 TCP 传输，开销极低</div>
                             </div>
                             <div class="choice-card" id="proto-card-http" data-proto-cat="raw" data-action="selectSingBoxProto" data-args="[&quot;http&quot;]">
                                 <div class="choice-card-title">VMess-HTTP</div>
-                                <div class="choice-card-desc">伪装 HTTP/1.1 明文请求头</div>
+                                <div class="choice-card-desc" data-i18n="sb.proto.http_desc">伪装 HTTP/1.1 明文请求头</div>
                             </div>
                             <div class="choice-card" id="proto-card-quic" data-proto-cat="raw" data-action="selectSingBoxProto" data-args="[&quot;quic&quot;]">
                                 <div class="choice-card-title">VMess-QUIC</div>
-                                <div class="choice-card-desc">基于原生 UDP QUIC 协议传输</div>
+                                <div class="choice-card-desc" data-i18n="sb.proto.quic_desc">基于原生 UDP QUIC 协议传输</div>
                             </div>
                         </div>
                     </div>
@@ -740,47 +740,47 @@
 
                 <!-- 链式出口选择器 -->
                 <div class="form-group mb-4" >
-                    <label class="form-label">
+                    <label class="form-label" data-i18n="sb.bind_outbound">
                         绑定 NXGate 出口代理 (实现流量清洗与住宅 IP 接入)
                     </label>
                     <select id="sb-add-outbound" class="input-field w-full" >
                         <!-- Populated dynamically -->
                     </select>
-                    <div  class="field-help">
+                    <div  class="field-help" data-i18n="sb.bind_outbound_help">
                         选择将此入站接收的流量转发给哪个本地出口。推荐绑定默认出口 <code>127.0.0.1:7928</code>，即可直享日本/美国家宽住宅 IP。
                     </div>
                 </div>
 
                 <!-- 监听端口 -->
                 <div class="form-group mb-4" >
-                    <label class="form-label">监听端口 (Port)</label>
+                    <label class="form-label" data-i18n="sb.listen_port">监听端口 (Port)</label>
                     <div  class="row items-center gap-2">
-                        <input id="sb-add-port" class="input-field input-port mono"  type="text" placeholder="auto (自动分配可用端口)" value="auto">
-                        <button type="button" class="btn btn-outline btn-sm"  data-action="setSingBoxPortAuto">重置为 auto</button>
+                        <input id="sb-add-port" class="input-field input-port mono"  type="text" placeholder="auto (自动分配可用端口)" value="auto" data-i18n-placeholder="sb.port_ph">
+                        <button type="button" class="btn btn-outline btn-sm"  data-action="setSingBoxPortAuto" data-i18n="sb.port_reset">重置为 auto</button>
                     </div>
-                    <div  class="field-help">
+                    <div  class="field-help" data-i18n="sb.port_help">
                         留空或填 <code>auto</code> 时，系统会自动寻找 10000-65535 的未占用端口；也可指定如 <code>8443</code>。
                     </div>
                 </div>
 
                 <!-- 高级设置可折叠项 -->
                 <details  class="advanced-box">
-                    <summary  class="advanced-summary">高级参数设置 (可选，支持自动生成)</summary>
+                    <summary  class="advanced-summary" data-i18n="sb.adv_settings">高级参数设置 (可选，支持自动生成)</summary>
                     <div  class="advanced-grid">
                         <div>
-                            <label class="form-label" id="sb-sni-label">自定义 SNI 伪装域名 / 主机名</label>
-                            <input id="sb-add-sni" class="input-field w-full mono"  type="text" placeholder="auto (默认知名权威站，如 www.amazon.com)" value="auto">
+                            <label class="form-label" id="sb-sni-label" data-i18n="sb.sni_label">自定义 SNI 伪装域名 / 主机名</label>
+                            <input id="sb-add-sni" class="input-field w-full mono"  type="text" placeholder="auto (默认知名权威站，如 www.amazon.com)" value="auto" data-i18n-placeholder="sb.sni_ph">
                         </div>
                         <div>
-                            <label class="form-label" id="sb-cred-label">自定义 UUID 或连接密码 (留空自动生成)</label>
-                            <input id="sb-add-cred" class="input-field w-full mono"  type="text" placeholder="auto (自动生成标准安全凭据)" value="auto">
+                            <label class="form-label" id="sb-cred-label" data-i18n="sb.cred_label">自定义 UUID 或连接密码 (留空自动生成)</label>
+                            <input id="sb-add-cred" class="input-field w-full mono"  type="text" placeholder="auto (自动生成标准安全凭据)" value="auto" data-i18n-placeholder="sb.cred_ph">
                         </div>
                     </div>
                 </details>
 
                 <div  class="form-actions">
-                    <button type="button" class="btn btn-outline" data-action="closeAddSingBoxModal">取消</button>
-                    <button id="btn-submit-add-sb" type="submit" class="btn btn-primary" >立即创建并部署</button>
+                    <button type="button" class="btn btn-outline" data-action="closeAddSingBoxModal" data-i18n="common.cancel">取消</button>
+                    <button id="btn-submit-add-sb" type="submit" class="btn btn-primary" data-i18n="sb.submit_btn">立即创建并部署</button>
                 </div>
             </form>
         </div>
@@ -792,7 +792,7 @@
             <div class="card-header mb-4" >
                 <div class="card-title" id="sb-qr-title">
                     <svg aria-hidden="true" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-                    客户端配置链接与二维码
+                    <span data-i18n="qr.title">客户端配置链接与二维码</span>
                 </div>
                 <button type="button" class="btn btn-outline btn-icon" data-action="closeSingBoxQRModal" aria-label="关闭二维码">×</button>
             </div>
@@ -801,18 +801,18 @@
                 <div id="sb-qrcode-box"  class="qr-code-box">
                     <img id="sb-qr-img" src="" alt="QR Code"  class="qr-image">
                 </div>
-                <div  class="text-sm text-muted">
+                <div  class="text-sm text-muted" data-i18n="qr.desc">
                     支持 Shadowrocket (小火箭)、Clash、Sing-box、Surge 客户端扫码一键导入
                 </div>
                 <div  class="w-full text-left">
-                    <label class="form-label qr-label" >完整分享链接 (URL)</label>
+                    <label class="form-label qr-label" data-i18n="qr.url_label">完整分享链接 (URL)</label>
                     <textarea id="sb-qr-url-text" class="input-field qr-url mono"  readonly></textarea>
                 </div>
             </div>
 
             <div  class="form-actions">
-                <button type="button" class="btn btn-outline" data-action="copyFromElement" data-args="[&quot;sb-qr-url-text&quot;]">复制链接</button>
-                <button type="button" class="btn" data-action="closeSingBoxQRModal">完成</button>
+                <button type="button" class="btn btn-outline" data-action="copyFromElement" data-args="[&quot;sb-qr-url-text&quot;]" data-i18n="qr.copy_link">复制链接</button>
+                <button type="button" class="btn" data-action="closeSingBoxQRModal" data-i18n="common.done">完成</button>
             </div>
         </div>
     </div>
@@ -823,7 +823,7 @@
             <div class="card-header mb-4">
                 <div class="card-title">
                     <svg aria-hidden="true" viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
-                    移动端 App 扫码快速导入
+                    <span data-i18n="app.modal_title">移动端 App 扫码快速导入</span>
                 </div>
                 <button type="button" class="btn btn-outline btn-icon" data-action="closeMobileAppModal" aria-label="关闭二维码">×</button>
             </div>
@@ -832,7 +832,7 @@
                 <div id="app-qrcode-box" class="qr-code-box">
                     <img id="app-qr-img" src="" alt="App Connection QR Code" class="qr-image">
                 </div>
-                <div class="text-sm text-muted">
+                <div class="text-sm text-muted" data-i18n="app.modal_desc">
                     打开 NXGate 手机客户端，扫描上方二维码即可一键绑定此服务器进行远程管控
                 </div>
 
@@ -840,11 +840,11 @@
                 <div class="w-full text-left mt-2">
                     <div class="form-grid-auto mb-2">
                         <div>
-                            <label class="form-label qr-label">服务器名称 (客户端备注)</label>
-                            <input id="app-server-name" class="input-field w-full mono text-xs" type="text" placeholder="例如: 东京住宅网关" data-input-action="onAppProfileFieldChanged">
+                            <label class="form-label qr-label" data-i18n="app.server_name">服务器名称 (客户端备注)</label>
+                            <input id="app-server-name" class="input-field w-full mono text-xs" type="text" placeholder="例如: 东京住宅网关" data-i18n-placeholder="app.server_name_ph" data-input-action="onAppProfileFieldChanged">
                         </div>
                         <div>
-                            <label class="form-label qr-label">连接协议</label>
+                            <label class="form-label qr-label" data-i18n="app.protocol">连接协议</label>
                             <select id="app-server-protocol" class="input-field w-full text-xs" data-change-action="onAppProfileFieldChanged">
                                 <option value="http">HTTP</option>
                                 <option value="https">HTTPS (支持反代)</option>
@@ -854,25 +854,25 @@
 
                     <div class="form-grid-auto mb-2">
                         <div>
-                            <label class="form-label qr-label">服务器主机地址</label>
+                            <label class="form-label qr-label" data-i18n="app.host">服务器主机地址</label>
                             <input id="app-server-host" class="input-field w-full mono text-xs" type="text" data-input-action="onAppProfileFieldChanged">
                         </div>
                         <div>
-                            <label class="form-label qr-label">Web 访问端口</label>
+                            <label class="form-label qr-label" data-i18n="app.port">Web 访问端口</label>
                             <input id="app-server-port" class="input-field w-full mono text-xs" type="text" data-input-action="onAppProfileFieldChanged">
                         </div>
                     </div>
 
                     <div class="mb-2">
-                        <label class="form-label qr-label">一键导入专属链接 (URI)</label>
+                        <label class="form-label qr-label" data-i18n="app.uri_label">一键导入专属链接 (URI)</label>
                         <div class="flex gap-2">
                             <input id="app-connect-uri" class="input-field w-full mono text-xs" readonly>
-                            <button type="button" class="btn btn-outline btn-xs whitespace-nowrap" data-action="copyFromElement" data-args="[&quot;app-connect-uri&quot;]">复制 URI</button>
+                            <button type="button" class="btn btn-outline btn-xs whitespace-nowrap" data-action="copyFromElement" data-args="[&quot;app-connect-uri&quot;]" data-i18n="app.copy_uri">复制 URI</button>
                         </div>
                     </div>
 
                     <div class="mb-2">
-                        <label class="form-label qr-label">标准导入配置 (JSON)</label>
+                        <label class="form-label qr-label" data-i18n="app.json_label">标准导入配置 (JSON)</label>
                         <textarea id="app-connect-json" class="input-field qr-url mono text-xs" readonly></textarea>
                     </div>
 
@@ -881,9 +881,9 @@
             </div>
 
             <div class="form-actions">
-                <button type="button" class="btn btn-outline" data-action="copyFromElement" data-args="[&quot;app-connect-json&quot;]">复制 JSON</button>
-                <button type="button" class="btn btn-outline" data-action="testMobileApiConnectivity">测试 API 连通性</button>
-                <button type="button" class="btn" data-action="closeMobileAppModal">完成</button>
+                <button type="button" class="btn btn-outline" data-action="copyFromElement" data-args="[&quot;app-connect-json&quot;]" data-i18n="app.copy_json">复制 JSON</button>
+                <button type="button" class="btn btn-outline" data-action="testMobileApiConnectivity" data-i18n="app.test_api">测试 API 连通性</button>
+                <button type="button" class="btn" data-action="closeMobileAppModal" data-i18n="common.done">完成</button>
             </div>
         </div>
     </div>
@@ -896,8 +896,8 @@
             <!-- 开关控制 -->
             <div class="age-switch-row">
                 <div>
-                    <div class="age-switch-title">启用 age 订阅加密</div>
-                    <div class="age-switch-desc">开启后，下发的通用订阅与 Clash 订阅将使用 age 公钥加密保护</div>
+                    <div class="age-switch-title" data-i18n="age.switch_title">启用 age 订阅加密</div>
+                    <div class="age-switch-desc" data-i18n="age.switch_desc">开启后，下发的通用订阅与 Clash 订阅将使用 age 公钥加密保护</div>
                 </div>
                 <label class="age-toggle-switch">
                     <input type="checkbox" id="age-encrypt-enabled" data-change-action="onAgeToggleChanged">
@@ -907,7 +907,7 @@
 
             <!-- 类型切换 (X25519 vs MLKEM768-X25519) -->
             <div class="mb-4">
-                <div class="age-section-label">类型</div>
+                <div class="age-section-label" data-i18n="age.type_label">类型</div>
                 <div class="age-pill-row">
                     <button type="button" class="age-pill active" id="age-type-x25519" data-action="switchAgeType" data-args="[&quot;x25519&quot;]">X25519</button>
                     <button type="button" class="age-pill" id="age-type-pq" data-action="switchAgeType" data-args="[&quot;mlkem768-x25519&quot;]">MLKEM768-X25519</button>
@@ -917,36 +917,36 @@
             <!-- age 解密私钥 -->
             <div class="mb-4">
                 <div class="age-field-header">
-                    <label class="age-section-label mb-0" for="age-secret-key-input">age 解密私钥</label>
+                    <label class="age-section-label mb-0" for="age-secret-key-input" data-i18n="age.secret_label">age 解密私钥</label>
                     <div class="flex gap-2">
-                        <button type="button" class="age-btn-blue" data-action="generateAgeKey">一键生成</button>
-                        <button type="button" class="age-btn-grey" data-action="copyAgeSecretKey">复制</button>
+                        <button type="button" class="age-btn-blue" data-action="generateAgeKey" data-i18n="age.btn_generate">一键生成</button>
+                        <button type="button" class="age-btn-grey" data-action="copyAgeSecretKey" data-i18n="age.btn_copy">复制</button>
                     </div>
                 </div>
-                <textarea id="age-secret-key-input" class="age-textarea" placeholder="可粘贴 AGE-SECRET-KEY-1... 或 AGE-SECRET-KEY-PQ-1... 用于推导 age 加密公钥"></textarea>
+                <textarea id="age-secret-key-input" class="age-textarea" placeholder="可粘贴 AGE-SECRET-KEY-1... 或 AGE-SECRET-KEY-PQ-1... 用于推导 age 加密公钥" data-i18n-placeholder="age.secret_ph"></textarea>
             </div>
 
             <!-- age 加密公钥 -->
             <div class="mb-4">
                 <div class="age-field-header">
-                    <label class="age-section-label mb-0" for="age-public-key-input">age 加密公钥</label>
+                    <label class="age-section-label mb-0" for="age-public-key-input" data-i18n="age.public_label">age 加密公钥</label>
                     <div class="flex gap-2">
-                        <button type="button" class="age-btn-grey" data-action="deriveAgePublicKey">从私钥生成</button>
-                        <button type="button" class="age-btn-grey" data-action="copyAgePublicKey">复制</button>
-                        <button type="button" class="age-btn-blue" data-action="applyAgePublicKey">一键填入</button>
+                        <button type="button" class="age-btn-grey" data-action="deriveAgePublicKey" data-i18n="age.btn_derive">从私钥生成</button>
+                        <button type="button" class="age-btn-grey" data-action="copyAgePublicKey" data-i18n="age.btn_copy">复制</button>
+                        <button type="button" class="age-btn-blue" data-action="applyAgePublicKey" data-i18n="age.btn_apply">一键填入</button>
                     </div>
                 </div>
-                <textarea id="age-public-key-input" class="age-textarea" placeholder="请输入 age 加密公钥"></textarea>
+                <textarea id="age-public-key-input" class="age-textarea" placeholder="请输入 age 加密公钥" data-i18n-placeholder="age.public_ph"></textarea>
             </div>
 
             <!-- 提示说明 -->
-            <div class="age-disclaimer">
+            <div class="age-disclaimer" data-i18n="age.disclaimer">
                 只支持 age 原生 X25519 和 MLKEM768-X25519 key。生成的 age 解密私钥只在此弹窗显示，请妥善保存；age 加密公钥可写入配置字段用于加密最终输出。
             </div>
 
             <!-- 关闭按钮 -->
             <div class="text-center">
-                <button type="button" class="age-close-btn" data-action="closeAgeKeyHelper">关闭</button>
+                <button type="button" class="age-close-btn" data-action="closeAgeKeyHelper" data-i18n="common.close">关闭</button>
             </div>
         </div>
     </div>
@@ -957,7 +957,7 @@
             <div class="card-header mb-4">
                 <div class="card-title">
                     <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                    NXGate 系统版本与在线更新
+                    <span data-i18n="up.modal_title">NXGate 系统版本与在线更新</span>
                 </div>
                 <button type="button" class="btn btn-outline btn-icon" data-action="closeUpdateModal" aria-label="关闭更新窗口">×</button>
             </div>
@@ -965,12 +965,12 @@
             <div class="card p-4" style="background: var(--bg-card-sub); border: 1px solid var(--border);">
                 <div class="update-version-row">
                     <div class="update-ver-item">
-                        <span class="text-xs text-muted">当前版本</span>
+                        <span class="text-xs text-muted" data-i18n="set.cur_ver">当前已安装版本</span>
                         <strong id="modal-update-cur-ver" class="mono text-base">v2.5.6</strong>
                     </div>
                     <div class="update-arrow">&rarr;</div>
                     <div class="update-ver-item">
-                        <span class="text-xs text-muted">最新版本</span>
+                        <span class="text-xs text-muted" data-i18n="set.latest_ver">远端最新版本</span>
                         <strong id="modal-update-latest-ver" class="mono text-base text-accent">检查中...</strong>
                     </div>
                     <div class="ml-auto">
@@ -980,7 +980,7 @@
 
                 <div id="modal-update-info-box" class="update-release-box mt-3 hidden">
                     <div class="text-xs text-muted mb-1 flex items-center justify-between">
-                        <span id="modal-update-release-title" class="font-semibold text-white">发行说明</span>
+                        <span id="modal-update-release-title" class="font-semibold text-white" data-i18n="up.release_notes">发行说明</span>
                         <span id="modal-update-release-date" class="text-muted"></span>
                     </div>
                     <div id="modal-update-release-notes" class="update-notes-body text-xs text-muted"></div>
@@ -988,7 +988,7 @@
 
                 <div id="modal-update-progress-box" class="mt-3 hidden">
                     <div class="flex justify-between text-xs text-muted mb-1">
-                        <span id="modal-update-progress-step">正在处理...</span>
+                        <span id="modal-update-progress-step" data-i18n="up.processing">正在处理...</span>
                         <span id="modal-update-progress-timer"></span>
                     </div>
                     <div class="progress-track">
@@ -1001,17 +1001,17 @@
                 <div class="flex items-center gap-2">
                     <button type="button" class="btn btn-outline btn-sm" data-action="checkForUpdates">
                         <svg aria-hidden="true" viewBox="0 0 24 24" class="icon-sm"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                        检查更新
+                        <span data-i18n="set.check_update">检查新版本</span>
                     </button>
-                    <button type="button" class="btn btn-outline btn-xs" data-action="triggerForceUpdate" title="强制重新下载并重装当前版本构建">
+                    <button type="button" class="btn btn-outline btn-xs" data-action="triggerForceUpdate" title="强制重新下载并重装当前版本构建" data-i18n="up.reinstall">
                         重新安装
                     </button>
                 </div>
                 <div class="flex items-center gap-2">
-                    <button type="button" class="btn btn-outline" data-action="closeUpdateModal">关闭</button>
+                    <button type="button" class="btn btn-outline" data-action="closeUpdateModal" data-i18n="common.close">关闭</button>
                     <button type="button" id="modal-btn-do-update" class="btn btn-primary btn-sm hidden" data-action="triggerSystemUpdate">
                         <svg aria-hidden="true" viewBox="0 0 24 24" class="icon-sm"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                        立即更新
+                        <span data-i18n="up.upgrade_now">立即更新</span>
                     </button>
                 </div>
             </div>
@@ -1024,28 +1024,28 @@
             <div class="card-header mb-14" >
                 <div class="card-title">
                     <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
-                    屏蔽库与故障隔离管理 (Blacklist)
+                    <span data-i18n="bl.modal_title">屏蔽库与故障隔离管理 (Blacklist)</span>
                 </div>
                 <button type="button" class="btn btn-outline btn-icon" data-action="closeBlacklistModal" aria-label="关闭屏蔽库">×</button>
             </div>
 
             <div  class="section-toolbar">
-                <div  class="text-note text-muted">
+                <div  class="text-note text-muted" data-i18n="bl.modal_desc">
                     展示当前因握手无法连通被隔离的节点。系统每 3 小时自动探活复活，亦可随时手动探活或清空。
                 </div>
                 <div  class="row gap-2 wrap">
-                    <button id="btn-resurrect-bl" class="btn btn-sm"  data-action="resurrectBlacklist">探活复活节点</button>
-                    <button class="btn btn-danger btn-sm"  data-action="clearAllBlacklist">清空全部屏蔽</button>
-                    <button class="btn btn-outline btn-sm"  data-action="fetchBlacklist" data-args="[true]">刷新</button>
+                    <button id="btn-resurrect-bl" class="btn btn-sm"  data-action="resurrectBlacklist" data-i18n="bl.resurrect">探活复活节点</button>
+                    <button class="btn btn-danger btn-sm"  data-action="clearAllBlacklist" data-i18n="bl.clear_all">清空全部屏蔽</button>
+                    <button class="btn btn-outline btn-sm"  data-action="fetchBlacklist" data-args="[true]" data-i18n="common.refresh">刷新</button>
                 </div>
             </div>
 
             <div id="blacklist-items-container"  class="blacklist-list-container">
-                <div  class="empty-state">正在载入屏蔽库...</div>
+                <div  class="empty-state" data-i18n="bl.loading">正在载入屏蔽库...</div>
             </div>
 
             <div  class="form-actions">
-                <button type="button" class="btn btn-outline" data-action="closeBlacklistModal">关闭</button>
+                <button type="button" class="btn btn-outline" data-action="closeBlacklistModal" data-i18n="common.close">关闭</button>
             </div>
         </div>
     </div>
@@ -1058,11 +1058,11 @@
     <!-- Port Edit Drawer (Slide-over) -->
     <div id="port-edit-card" class="editor-drawer" hidden>
         <div class="drawer-header">
-            <div class="drawer-title" id="port-edit-title">新增/编辑端口分流规则</div>
+            <div class="drawer-title" id="port-edit-title" data-i18n="pe.title">新增/编辑端口分流规则</div>
             <button type="button" class="btn btn-outline btn-icon" data-drawer-close aria-label="关闭端口规则编辑">×</button>
         </div>
         <div class="form-group">
-            <label class="form-label">本地监听端口号 [1-65535]</label>
+            <label class="form-label" data-i18n="pe.port_label">本地监听端口号 [1-65535]</label>
             <div  class="row items-center gap-2">
                 <input id="rule-port" class="input-field input-port-sm mono"  type="number" placeholder="例如: 7928" required>
                 <button type="button" class="btn btn-outline btn-xs"  data-action="suggestNextPort">+1 建议</button>
@@ -1073,29 +1073,29 @@
         </div>
 
         <div class="form-group">
-            <label class="form-label">分流调度策略</label>
+            <label class="form-label" data-i18n="pe.policy_label">分流调度策略</label>
             <input type="hidden" id="rule-policy" value="round_robin">
             <div class="choice-grid">
                 <div id="card-policy-round_robin" class="choice-card selected" data-action="selectPolicy" data-args="[&quot;round_robin&quot;]">
-                    <div class="choice-card-title">单连接轮询 (Round-Robin)</div>
-                    <div class="choice-card-desc">每发起一次新连接自动交替使用不同绑定的出口节点</div>
+                    <div class="choice-card-title" data-i18n="pe.policy_rr">单连接轮询 (Round-Robin)</div>
+                    <div class="choice-card-desc" data-i18n="pe.policy_rr_desc">每发起一次新连接自动交替使用不同绑定的出口节点</div>
                 </div>
                 <div id="card-policy-random" class="choice-card" data-action="selectPolicy" data-args="[&quot;random&quot;]">
-                    <div class="choice-card-title">随机分发 (Random)</div>
-                    <div class="choice-card-desc">每次连接随机选取绑定的任一健康隧道出网</div>
+                    <div class="choice-card-title" data-i18n="pe.policy_rand">随机分发 (Random)</div>
+                    <div class="choice-card-desc" data-i18n="pe.policy_rand_desc">每次连接随机选取绑定的任一健康隧道出网</div>
                 </div>
                 <div id="card-policy-interval" class="choice-card" data-action="selectPolicy" data-args="[&quot;interval&quot;]">
-                    <div class="choice-card-title">定时锁定轮换 (Interval)</div>
-                    <div class="choice-card-desc">固定时间内走同一出口，到期后平滑切换到下一出口</div>
+                    <div class="choice-card-title" data-i18n="pe.policy_int">定时锁定轮换 (Interval)</div>
+                    <div class="choice-card-desc" data-i18n="pe.policy_int_desc">固定时间内走同一出口，到期后平滑切换到下一出口</div>
                 </div>
             </div>
         </div>
 
         <div class="form-group field-panel hidden" id="rule-interval-group" >
-            <label class="form-label">定时锁定轮换时间间隔</label>
+            <label class="form-label" data-i18n="pe.int_label">定时锁定轮换时间间隔</label>
             <div  class="row items-center gap-2 wrap">
                 <input id="rule-interval" class="input-field input-interval mono"  type="number" value="300">
-                <span  class="text-sm text-muted">秒</span>
+                <span  class="text-sm text-muted" data-i18n="pe.seconds">秒</span>
                 <button type="button" class="btn btn-outline btn-xs"  data-action="setIntervalVal" data-args="[60]">1分钟</button>
                 <button type="button" class="btn btn-outline btn-xs"  data-action="setIntervalVal" data-args="[300]">5分钟</button>
                 <button type="button" class="btn btn-outline btn-xs"  data-action="setIntervalVal" data-args="[900]">15分钟</button>
@@ -1104,66 +1104,66 @@
         </div>
 
         <div class="form-group">
-            <label class="form-label">代理账密鉴权设置</label>
+            <label class="form-label" data-i18n="pe.auth_label">代理账密鉴权设置</label>
             <input type="hidden" id="rule-auth-mode" value="random">
             <div class="choice-grid">
                 <div id="card-auth-random" class="choice-card selected" data-action="selectAuthMode" data-args="[&quot;random&quot;]">
-                    <div class="choice-card-title">系统随机账密 (推荐)</div>
-                    <div class="choice-card-desc">使用系统独立生成的安全随机账密，解耦防脱节</div>
+                    <div class="choice-card-title" data-i18n="pe.auth_rand">系统随机账密 (推荐)</div>
+                    <div class="choice-card-desc" data-i18n="pe.auth_rand_desc">使用系统独立生成的安全随机账密，解耦防脱节</div>
                 </div>
                 <div id="card-auth-none" class="choice-card" data-action="selectAuthMode" data-args="[&quot;none&quot;]">
-                    <div class="choice-card-title">免密直接连接</div>
-                    <div class="choice-card-desc">关闭认证，无需输入账号密码即可使用代理 (适合本地)</div>
+                    <div class="choice-card-title" data-i18n="pe.auth_none">免密直接连接</div>
+                    <div class="choice-card-desc" data-i18n="pe.auth_none_desc">关闭认证，无需输入账号密码即可使用代理 (适合本地)</div>
                 </div>
                 <div id="card-auth-custom" class="choice-card" data-action="selectAuthMode" data-args="[&quot;custom&quot;]">
-                    <div class="choice-card-title">自定义独立账密</div>
-                    <div class="choice-card-desc">为当前端口单独设置独立的专用账号与密码</div>
+                    <div class="choice-card-title" data-i18n="pe.auth_custom">自定义独立账密</div>
+                    <div class="choice-card-desc" data-i18n="pe.auth_custom_desc">为当前端口单独设置独立的专用账号与密码</div>
                 </div>
             </div>
         </div>
 
         <div id="rule-custom-auth-group"  class="auth-fields field-panel hidden">
             <div  class="flex-1">
-                <label class="form-label">代理用户名</label>
-                <input id="rule-auth-user" class="input-field w-full"  type="text" placeholder="设置代理账号">
+                <label class="form-label" data-i18n="pe.user_label">代理用户名</label>
+                <input id="rule-auth-user" class="input-field w-full"  type="text" placeholder="设置代理账号" data-i18n-placeholder="pe.user_ph">
             </div>
             <div  class="flex-1">
-                <label class="form-label">代理密码</label>
+                <label class="form-label" data-i18n="pe.pass_label">代理密码</label>
                 <div class="flex gap-2">
-                    <input id="rule-auth-pass" class="input-field w-full"  type="text" placeholder="设置代理密码">
-                    <button type="button" class="btn btn-outline btn-sm whitespace-nowrap" data-action="generateRandomPortAuth">随机生成</button>
+                    <input id="rule-auth-pass" class="input-field w-full"  type="text" placeholder="设置代理密码" data-i18n-placeholder="pe.pass_ph">
+                    <button type="button" class="btn btn-outline btn-sm whitespace-nowrap" data-action="generateRandomPortAuth" data-i18n="pe.random_gen">随机生成</button>
                 </div>
             </div>
         </div>
 
         <div class="form-group">
-            <label class="form-label">绑定出口隧道 (勾选此端口允许使用的出网出口或动态组)</label>
+            <label class="form-label" data-i18n="pe.tunnels_label">绑定出口隧道 (勾选此端口允许使用的出网出口或动态组)</label>
             <div id="rule-tunnels-checkboxes"  class="check-list">
                 <!-- Dynamic checkboxes -->
             </div>
         </div>
 
         <div  class="form-actions-sm">
-            <button type="button" class="btn btn-outline" data-action="hideEditPortForm">取消</button>
-            <button type="button" class="btn" data-action="savePortRule">确认保存规则</button>
+            <button type="button" class="btn btn-outline" data-action="hideEditPortForm" data-i18n="common.cancel">取消</button>
+            <button type="button" class="btn" data-action="savePortRule" data-i18n="pe.save_rule">确认保存规则</button>
         </div>
     </div>
 
     <!-- Dynamic Group Edit Drawer (Slide-over) -->
     <div id="dynamic-group-edit-card" class="editor-drawer" hidden>
         <div class="drawer-header">
-            <div class="drawer-title" id="dynamic-group-edit-title">新增动态出口组</div>
+            <div class="drawer-title" id="dynamic-group-edit-title" data-i18n="dg.title">新增动态出口组</div>
             <button type="button" class="btn btn-outline btn-icon" data-drawer-close aria-label="关闭出口组编辑">×</button>
         </div>
         <div  class="form-grid-auto">
             <div>
-                <label class="form-label">出口组名称</label>
-                <input id="dg-name" class="input-field w-full"  type="text" placeholder="例如: 日本Top3住宅组" required>
+                <label class="form-label" data-i18n="dg.name_label">出口组名称</label>
+                <input id="dg-name" class="input-field w-full"  type="text" placeholder="例如: 日本Top3住宅组" data-i18n-placeholder="dg.name_ph" required>
             </div>
             <div>
-                <label class="form-label">目标国家/地区</label>
+                <label class="form-label" data-i18n="dg.country_label">目标国家/地区</label>
                 <select id="dg-country" class="input-field w-full" >
-                    <option value="">全部国家/地区</option>
+                    <option value="" data-i18n="nodes.country_all">全部国家/地区</option>
                     <option value="JP" selected>日本 (JP)</option>
                     <option value="US">美国 (US)</option>
                     <option value="KR">韩国 (KR)</option>
@@ -1177,24 +1177,24 @@
                 </select>
             </div>
             <div>
-                <label class="form-label">目标网络类型</label>
+                <label class="form-label" data-i18n="dg.iptype_label">目标网络类型</label>
                 <select id="dg-iptype" class="input-field w-full" >
-                    <option value="all">不限类型</option>
-                    <option value="residential" selected>住宅宽带 IP (家宽)</option>
-                    <option value="hosting">机房/数据中心 IP</option>
+                    <option value="all" data-i18n="nodes.iptype_all">不限类型</option>
+                    <option value="residential" selected data-i18n="nodes.iptype_res">住宅宽带 IP (家宽)</option>
+                    <option value="hosting" data-i18n="nodes.iptype_host">机房/数据中心 IP</option>
                     <option value="mobile">移动蜂窝网络</option>
                 </select>
             </div>
             <div>
-                <label class="form-label">择优筛选指标</label>
+                <label class="form-label" data-i18n="dg.sortby_label">择优筛选指标</label>
                 <select id="dg-sortby" class="input-field w-full" >
-                    <option value="latency" selected>最低延迟优先 (TCP测速)</option>
-                    <option value="speed">最大带宽优先 (Mbps)</option>
-                    <option value="score">综合评分最高优先</option>
+                    <option value="latency" selected data-i18n="nodes.sort_latency">最低延迟优先 (TCP测速)</option>
+                    <option value="speed" data-i18n="nodes.sort_speed">最大带宽优先 (Mbps)</option>
+                    <option value="score" data-i18n="nodes.sort_score">综合评分最高优先</option>
                 </select>
             </div>
             <div>
-                <label class="form-label">节点解锁能力要求</label>
+                <label class="form-label" data-i18n="dg.unlock_label">节点解锁能力要求</label>
                 <select id="dg-unlock" class="input-field w-full" >
                     <option value="none" selected>不限解锁能力</option>
                     <option value="ai">必须支持三大 AI (ChatGPT + Claude + Gemini 全部解锁)</option>
@@ -1203,11 +1203,11 @@
                 </select>
             </div>
             <div id="dg-count-container">
-                <label class="form-label">维持并发在线出口数 [1-10]</label>
+                <label class="form-label" data-i18n="dg.count_label">维持并发在线出口数 [1-10]</label>
                 <input id="dg-count" class="input-field w-full"  type="number" min="1" max="10" value="3">
             </div>
             <div>
-                <label class="form-label">自动重评与轮换周期</label>
+                <label class="form-label" data-i18n="dg.interval_label">自动重评与轮换周期</label>
                 <select id="dg-interval" class="input-field w-full" >
                     <option value="0">关闭定时轮换 (保持固定连接)</option>
                     <option value="5">每 5 分钟重评轮换</option>
@@ -1220,8 +1220,8 @@
             </div>
         </div>
         <div  class="form-actions-sm">
-            <button type="button" class="btn btn-outline btn-sm"  data-action="hideDynamicGroupForm">取消</button>
-            <button type="button" class="btn btn-sm"  data-action="saveDynamicGroup">保存出口组</button>
+            <button type="button" class="btn btn-outline btn-sm"  data-action="hideDynamicGroupForm" data-i18n="common.cancel">取消</button>
+            <button type="button" class="btn btn-sm"  data-action="saveDynamicGroup" data-i18n="dg.save_group">保存出口组</button>
         </div>
     </div>
 

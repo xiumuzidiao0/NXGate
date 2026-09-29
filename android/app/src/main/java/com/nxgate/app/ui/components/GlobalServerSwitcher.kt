@@ -47,6 +47,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.nxgate.app.model.ServerProfile
+import com.nxgate.app.util.AppStringsEn
+import com.nxgate.app.util.LocalAppStrings
 import kotlinx.coroutines.launch
 
 /**
@@ -71,6 +73,9 @@ fun GlobalServerSwitcherTitle(
 
     var dragOffset by remember { mutableFloatStateOf(0f) }
     val dragThreshold = 70f
+
+    val strings = LocalAppStrings.current
+    val isEn = strings == AppStringsEn
 
     val draggableState = rememberDraggableState { delta ->
         dragOffset += delta
@@ -140,13 +145,13 @@ fun GlobalServerSwitcherTitle(
                     .padding(bottom = 32.dp)
             ) {
                 Text(
-                    text = "切换目标网关服务器",
+                    text = if (isEn) "Switch Gateway Server" else "切换目标网关服务器",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                    text = "选择后当前控制台将直接拉取该 VPS 的实时指标与策略",
+                    text = if (isEn) "Select a server to monitor its metrics and manage routing." else "选择后当前控制台将直接拉取该 VPS 的实时指标与策略",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurface
                 )
@@ -209,14 +214,14 @@ fun GlobalServerSwitcherTitle(
                                         )
                                         Spacer(Modifier.width(8.dp))
                                         Text(
-                                            text = if (server.isOnline && server.latencyMs > 0) "${server.latencyMs}ms" else "待测",
+                                            text = if (server.isOnline && server.latencyMs > 0) "${server.latencyMs}ms" else strings.latencyPending,
                                             style = MaterialTheme.typography.labelSmall,
                                             color = if (server.isOnline) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
                                         )
                                     }
-                                    val exitDesc = if (server.exitIp.isNotEmpty()) "${server.exitIp} (${server.ipType.ifEmpty { "出口" }})" else "待测"
+                                    val exitDesc = if (server.exitIp.isNotEmpty()) "${server.exitIp} (${server.ipType.ifEmpty { if (isEn) "Exit" else "出口" }})" else strings.latencyPending
                                     Text(
-                                        text = "${server.host}:${server.port} • 出口: $exitDesc",
+                                        text = "${server.host}:${server.port} • ${if (isEn) "Exit" else "出口"}: $exitDesc",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = if (isCurrent) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
                                     )

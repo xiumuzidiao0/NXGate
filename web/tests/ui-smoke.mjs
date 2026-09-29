@@ -286,6 +286,11 @@ try {
     const modalOpen = await page.locator("#singbox-add-modal").isVisible();
     if (!modalOpen) failures.push(`${viewport}px: singbox add modal did not open`);
 
+    const sbModalTitle = await page.locator("#singbox-add-modal .card-title").innerText();
+    if (!sbModalTitle.includes("添加 sing-box 节点")) {
+      failures.push(`${viewport}px: expected modal title '添加 sing-box 节点', got '${sbModalTitle}'`);
+    }
+
     const totalCards = await page.locator("#singbox-add-modal .choice-card").count();
     if (totalCards !== 22) failures.push(`${viewport}px: expected 22 protocol cards, got ${totalCards}`);
 
@@ -320,6 +325,10 @@ try {
     await page.waitForTimeout(60);
     const langEn = await page.evaluate(() => document.documentElement.lang);
     if (langEn !== "en") failures.push(`${viewport}px: expected lang to be 'en', got '${langEn}'`);
+    const sbModalTitleEn = await page.locator("#singbox-add-modal .card-title").innerText();
+    if (!sbModalTitleEn.includes("Add sing-box Node")) {
+      failures.push(`${viewport}px: expected English modal title 'Add sing-box Node', got '${sbModalTitleEn}'`);
+    }
     await page.locator("#btn-toggle-lang").click();
     await page.waitForTimeout(60);
     const langZh = await page.evaluate(() => document.documentElement.lang);

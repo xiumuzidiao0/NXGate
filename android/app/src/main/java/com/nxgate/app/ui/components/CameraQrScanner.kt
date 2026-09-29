@@ -65,6 +65,8 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.nxgate.app.data.ApiClient
 import com.nxgate.app.model.ServerProfile
+import com.nxgate.app.util.AppStringsEn
+import com.nxgate.app.util.LocalAppStrings
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.BinaryBitmap
 import com.google.zxing.DecodeHintType
@@ -133,6 +135,8 @@ fun CameraQrScannerDialog(
     onServerScanned: (ServerProfile) -> Unit
 ) {
     val context = LocalContext.current
+    val strings = LocalAppStrings.current
+    val isEn = strings == AppStringsEn
     val lifecycleOwner = LocalLifecycleOwner.current
 
     var hasCameraPermission by remember {
@@ -149,7 +153,7 @@ fun CameraQrScannerDialog(
     ) { isGranted ->
         hasCameraPermission = isGranted
         if (!isGranted) {
-            Toast.makeText(context, "相机权限未授予，可手动粘贴配置链接", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, strings.cameraPermissionRequired, Toast.LENGTH_SHORT).show()
             showManualMode = true
         }
     }
@@ -204,14 +208,14 @@ fun CameraQrScannerDialog(
                         }
                         Spacer(Modifier.width(10.dp))
                         Text(
-                            text = if (showManualMode) "手动导入服务端" else "相机扫码添加",
+                            text = if (showManualMode) strings.manualImport else strings.scanQrCode,
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                     }
                     IconButton(onClick = onDismiss) {
-                        Icon(Icons.Rounded.Close, contentDescription = "关闭")
+                        Icon(Icons.Rounded.Close, contentDescription = strings.close)
                     }
                 }
 
@@ -222,7 +226,7 @@ fun CameraQrScannerDialog(
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Text(
-                            text = "请粘贴来自 Web 控制台顶栏「手机 App 绑定」生成的 nxgate:// 链接：",
+                            text = strings.pasteLinkPrompt,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -230,7 +234,7 @@ fun CameraQrScannerDialog(
                         OutlinedTextField(
                             value = manualInput,
                             onValueChange = { manualInput = it },
-                            label = { Text("nxgate://server 导入链接") },
+                            label = { Text("nxgate://server " + (if (isEn) "Import URI" else "导入链接")) },
                             placeholder = { Text("nxgate://server?host=...&port=8787...") },
                             singleLine = false,
                             maxLines = 4,
@@ -250,7 +254,7 @@ fun CameraQrScannerDialog(
                                 ) {
                                     Icon(Icons.Rounded.CameraAlt, contentDescription = null, modifier = Modifier.size(16.dp))
                                     Spacer(Modifier.width(4.dp))
-                                    Text("授予相机")
+                                    Text(strings.grantCamera)
                                 }
                             } else {
                                 OutlinedButton(
@@ -260,7 +264,7 @@ fun CameraQrScannerDialog(
                                 ) {
                                     Icon(Icons.Rounded.CameraAlt, contentDescription = null, modifier = Modifier.size(16.dp))
                                     Spacer(Modifier.width(4.dp))
-                                    Text("切换相机")
+                                    Text(strings.switchCamera)
                                 }
                             }
 
@@ -270,7 +274,7 @@ fun CameraQrScannerDialog(
                                     if (parsed != null) {
                                         onServerScanned(parsed)
                                     } else {
-                                        Toast.makeText(context, "无效的 nxgate://server 导入协议", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, strings.invalidImportUri, Toast.LENGTH_SHORT).show()
                                     }
                                 },
                                 modifier = Modifier.weight(1f),
@@ -282,7 +286,7 @@ fun CameraQrScannerDialog(
                             ) {
                                 Icon(Icons.Rounded.ContentPaste, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(Modifier.width(4.dp))
-                                Text("解析导入")
+                                Text(strings.parseImport)
                             }
                         }
                     }
@@ -357,7 +361,7 @@ fun CameraQrScannerDialog(
                         )
 
                         Text(
-                            text = "将镜头对准 Web 控制台的二维码",
+                            text = if (isEn) "Point camera at Web Console QR code" else "将镜头对准 Web 控制台的二维码",
                             style = MaterialTheme.typography.labelSmall,
                             color = Color.White.copy(alpha = 0.85f),
                             modifier = Modifier
@@ -367,7 +371,7 @@ fun CameraQrScannerDialog(
                     }
 
                     TextButton(onClick = { showManualMode = true }) {
-                        Text("无法识别？点击切换手动粘贴", style = MaterialTheme.typography.labelMedium)
+                        Text(if (isEn) "Having trouble? Switch to manual paste" else "无法识别？点击切换手动粘贴", style = MaterialTheme.typography.labelMedium)
                     }
                 }
             }

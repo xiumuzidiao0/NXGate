@@ -34,17 +34,23 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.nxgate.app.util.AppStringsEn
+import com.nxgate.app.util.LocalAppStrings
 
 @Composable
 fun AppPermissionRationaleDialog(
     title: String,
     description: String,
     icon: ImageVector = Icons.Rounded.Security,
-    confirmText: String = "确定授权",
-    dismissText: String = "暂不授权",
+    confirmText: String? = null,
+    dismissText: String? = null,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val strings = LocalAppStrings.current
+    val isEn = strings == AppStringsEn
+    val actualConfirm = confirmText ?: (if (isEn) "Grant Permission" else "确定授权")
+    val actualDismiss = dismissText ?: (if (isEn) "Not Now" else "暂不授权")
     AlertDialog(
         onDismissRequest = onDismiss,
         shape = RoundedCornerShape(28.dp),
@@ -90,7 +96,7 @@ fun AppPermissionRationaleDialog(
                     contentColor = MaterialTheme.colorScheme.onPrimary
                 )
             ) {
-                Text(confirmText, fontWeight = FontWeight.Bold)
+                Text(actualConfirm, fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
@@ -98,7 +104,7 @@ fun AppPermissionRationaleDialog(
                 onClick = onDismiss,
                 shape = RoundedCornerShape(50)
             ) {
-                Text(dismissText)
+                Text(actualDismiss)
             }
         }
     )

@@ -121,7 +121,7 @@ fun SubscriptionDialog(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    text = "网关目标: ${server.name} (${server.host}:${server.port})",
+                    text = "${if (strings == AppStringsEn) "Gateway: " else "网关目标: "}${server.name} (${server.host}:${server.port})",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -229,14 +229,14 @@ fun SubscriptionDialog(
                                             }
                                             context.startActivity(intent)
                                             launched = true
-                                            Toast.makeText(context, "已唤起客户端导入订阅", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(context, if (strings == AppStringsEn) "Launched proxy client to import subscription" else "已唤起客户端导入订阅", Toast.LENGTH_SHORT).show()
                                             onDismissRequest()
                                             break
                                         } catch (_: Exception) {}
                                     }
                                     if (!launched) {
                                         clipboardManager.setText(AnnotatedString(genericUrl))
-                                        Toast.makeText(context, "未检测到已安装的通用代理客户端，已复制链接", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, if (strings == AppStringsEn) "Proxy client not found, subscription link copied" else "未检测到已安装的通用代理客户端，已复制链接", Toast.LENGTH_SHORT).show()
                                     }
                                 },
                                 modifier = Modifier.size(36.dp)
@@ -337,11 +337,11 @@ fun SubscriptionDialog(
                                             flags = Intent.FLAG_ACTIVITY_NEW_TASK
                                         }
                                         context.startActivity(intent)
-                                        Toast.makeText(context, "已唤起 Clash 客户端导入配置", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, if (strings == AppStringsEn) "Launched Clash client to import configuration" else "已唤起 Clash 客户端导入配置", Toast.LENGTH_SHORT).show()
                                         onDismissRequest()
                                     } catch (e: Exception) {
                                         clipboardManager.setText(AnnotatedString(clashUrl))
-                                        Toast.makeText(context, "未检测到已安装的 Clash 客户端，已复制链接", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, if (strings == AppStringsEn) "Clash client not found, configuration link copied" else "未检测到已安装的 Clash 客户端，已复制链接", Toast.LENGTH_SHORT).show()
                                     }
                                 },
                                 modifier = Modifier.size(36.dp)

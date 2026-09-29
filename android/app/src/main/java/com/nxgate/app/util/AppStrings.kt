@@ -144,7 +144,43 @@ data class AppStrings(
     val clashSubTitle: String,
     val clashSubDesc: String,
     val importToClient: String,
-    val importToClash: String
+    val importToClash: String,
+
+    // Server Form & Actions
+    val serverName: String,
+    val serverNamePlaceholder: String,
+    val serverHost: String,
+    val serverHostPlaceholder: String,
+    val serverPort: String,
+    val serverPath: String,
+    val serverUsername: String,
+    val serverPassword: String,
+    val serverPasswordPlaceholder: String,
+    val allowInsecureTlsLabel: String,
+    val testConnection: String,
+    val deleteServer: String,
+    val saveServerConfig: String,
+    val scanQrCode: String,
+    val manualAdd: String,
+    val deleteConfirmTitle: String,
+    val deleteConfirmMsg: String,
+
+    // Scanner & Biometric
+    val biometricPromptTitle: String,
+    val biometricPromptDesc: String,
+    val cameraPermissionRequired: String,
+    val manualImport: String,
+    val pasteLinkPrompt: String,
+    val grantCamera: String,
+    val switchCamera: String,
+    val invalidImportUri: String,
+    val parseImport: String,
+
+    // Waveform & Units
+    val downSpeedLabel: String,
+    val downTrafficTotal: String,
+    val upSpeedLabel: String,
+    val upTrafficTotal: String
 )
 
 val AppStringsZh = AppStrings(
@@ -281,7 +317,40 @@ val AppStringsZh = AppStrings(
     clashSubTitle = "Clash Meta / Mihomo (YAML)",
     clashSubDesc = "Clash Verge / Mihomo Party / Stash 专属分流配置",
     importToClient = "导入客户端",
-    importToClash = "导入 Clash"
+    importToClash = "导入 Clash",
+
+    serverName = "服务器名称",
+    serverNamePlaceholder = "例如: 东京主网关",
+    serverHost = "服务器主机 IP 或域名",
+    serverHostPlaceholder = "1.2.3.4 或 vps.example.com",
+    serverPort = "Web 控制台访问端口",
+    serverPath = "安全访问路径",
+    serverUsername = "管理员用户名",
+    serverPassword = "管理员密码",
+    serverPasswordPlaceholder = "密码",
+    allowInsecureTlsLabel = "允许自签名/不安全 TLS 证书",
+    testConnection = "测试连通性",
+    deleteServer = "删除服务器",
+    saveServerConfig = "保存网关配置",
+    scanQrCode = "扫码添加",
+    manualAdd = "手动添加",
+    deleteConfirmTitle = "确认删除服务器？",
+    deleteConfirmMsg = "确定要从控制台移除该服务器配置吗？移除后可通过备份或再次扫码恢复。",
+
+    biometricPromptTitle = "生物识别安全验证",
+    biometricPromptDesc = "请验证指纹、面容或系统安全锁以解锁 NXGate",
+    cameraPermissionRequired = "相机权限未授予，可手动粘贴配置链接",
+    manualImport = "手动导入服务端",
+    pasteLinkPrompt = "请粘贴来自 Web 控制台顶栏「手机 App 绑定」生成的 nxgate:// 链接：",
+    grantCamera = "授予相机权限",
+    switchCamera = "切换相机",
+    invalidImportUri = "无效的 nxgate://server 导入协议",
+    parseImport = "解析导入",
+
+    downSpeedLabel = "实时下载网速",
+    downTrafficTotal = "下行流量总计",
+    upSpeedLabel = "实时上传网速",
+    upTrafficTotal = "上行流量总计"
 )
 
 val AppStringsEn = AppStrings(
@@ -418,7 +487,40 @@ val AppStringsEn = AppStrings(
     clashSubTitle = "Clash Meta / Mihomo (YAML)",
     clashSubDesc = "Clash Verge / Mihomo Party / Stash routing config",
     importToClient = "Import Client",
-    importToClash = "Import Clash"
+    importToClash = "Import Clash",
+
+    serverName = "Server Name",
+    serverNamePlaceholder = "e.g. Tokyo Primary Gateway",
+    serverHost = "Server Host IP or Domain",
+    serverHostPlaceholder = "1.2.3.4 or vps.example.com",
+    serverPort = "Web Console Port",
+    serverPath = "Secret Access Path",
+    serverUsername = "Admin Username",
+    serverPassword = "Admin Password",
+    serverPasswordPlaceholder = "Password",
+    allowInsecureTlsLabel = "Allow Self-Signed / Insecure TLS",
+    testConnection = "Test Connection",
+    deleteServer = "Delete Server",
+    saveServerConfig = "Save Configuration",
+    scanQrCode = "Scan QR Code",
+    manualAdd = "Manual Add",
+    deleteConfirmTitle = "Delete Server?",
+    deleteConfirmMsg = "Are you sure you want to remove this server? You can restore it later via backup or QR code.",
+
+    biometricPromptTitle = "Biometric Authentication",
+    biometricPromptDesc = "Verify fingerprint, face, or lock screen to unlock NXGate",
+    cameraPermissionRequired = "Camera permission required, or paste configuration link manually",
+    manualImport = "Manual Import",
+    pasteLinkPrompt = "Paste the nxgate:// pairing link generated from the Web console:",
+    grantCamera = "Grant Camera Permission",
+    switchCamera = "Switch Camera",
+    invalidImportUri = "Invalid nxgate://server URI protocol",
+    parseImport = "Parse & Import",
+
+    downSpeedLabel = "Live Download Speed",
+    downTrafficTotal = "Total Downloaded",
+    upSpeedLabel = "Live Upload Speed",
+    upTrafficTotal = "Total Uploaded"
 )
 
 val LocalAppStrings = staticCompositionLocalOf<AppStrings> { AppStringsZh }

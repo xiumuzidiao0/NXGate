@@ -33,12 +33,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.nxgate.app.util.AppStringsEn
+import com.nxgate.app.util.LocalAppStrings
 
 @Composable
 fun BiometricLockOverlay(
     isLocked: Boolean,
     onUnlockRequested: () -> Unit
 ) {
+    val strings = LocalAppStrings.current
+    val isEn = strings == AppStringsEn
+
     // 锁定状态出现时，自动直接调用安卓系统生物识别弹窗，无需用户先手动点按钮
     LaunchedEffect(isLocked) {
         if (isLocked) {
@@ -85,7 +90,7 @@ fun BiometricLockOverlay(
                     Spacer(Modifier.height(24.dp))
 
                     Text(
-                        text = "生物识别安全锁",
+                        text = strings.biometricLock,
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -94,7 +99,7 @@ fun BiometricLockOverlay(
                     Spacer(Modifier.height(8.dp))
 
                     Text(
-                        text = "为了保障 VPS 网关与隧道连接凭据安全，已锁定控制台。\n请使用指纹、面容或系统安全凭据验证身份以继续使用。",
+                        text = if (isEn) "Gateway console is locked to protect credentials.\nPlease authenticate with fingerprint, face, or PIN to continue." else "为了保障 VPS 网关与隧道连接凭据安全，已锁定控制台。\n请使用指纹、面容或系统安全凭据验证身份以继续使用。",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center,
@@ -121,7 +126,7 @@ fun BiometricLockOverlay(
                         )
                         Spacer(Modifier.width(8.dp))
                         Text(
-                            text = "验证身份以解锁",
+                            text = if (isEn) "Authenticate to Unlock" else "验证身份以解锁",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )

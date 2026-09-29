@@ -108,8 +108,169 @@
                 'set.tab_tg': 'Telegram 告警',
                 'set.tab_app': '移动端连接',
                 'set.tab_update': '系统更新',
+                'matrix.groups_desc': '按国家与网络类型自动维持优质出口，支持定时轮换',
+                'sb.proto.reality_desc': '基于 TLS 伪装，免配置域名证书',
+                'sb.proto.rh2_desc': 'HTTP/2 多路复用 + REALITY，高并发免配域名',
+                'sb.proto.hy2_desc': '基于 QUIC 协议，适合高丢包弱网环境',
+                'sb.proto.tuic_desc': '基于 QUIC 拥塞控制 BBR 协议，低延迟抗抖动',
+                'sb.proto.ss_desc': '现代轻量对称加密规范，开销极小客户端支持广',
+                'sb.proto.trojan_desc': '经典伪装 HTTPS 网页浏览，保真度高',
+                'sb.proto.anytls_desc': '多路径 TLS 传输，具备抗阻断特性',
+                'sb.proto.socks_desc': '标准 Socks5 代理入站，局域网与前置分流首选',
+                'sb.proto.direct_desc': '透明 TCP 端口流量中继直通',
+                'sb.proto.vws_desc': 'VLESS + WebSocket + TLS，支持 Cloudflare CDN 优选反代',
+                'sb.proto.wss_desc': 'VMess + WebSocket + TLS，经典 CDN 拯救被墙 IP 方案',
+                'sb.proto.tws_desc': 'Trojan + WebSocket + TLS，隐藏真实源站地址',
+                'sb.proto.vhu_desc': '新一代 HTTPUpgrade 传输，性能优于传统 WS',
+                'sb.proto.hu_desc': 'VMess + HTTPUpgrade 现代化高性能传输',
+                'sb.proto.thu_desc': 'Trojan + HTTPUpgrade 现代化加密传输',
+                'sb.proto.vh2_desc': 'VLESS + HTTP/2 多路复用 + TLS',
+                'sb.proto.h2_desc': 'VMess + HTTP/2 多路复用 + TLS',
+                'sb.proto.th2_desc': 'Trojan + HTTP/2 多路复用 + TLS',
+                'sb.proto.ws_desc': '纯 WebSocket 传输，便于前置 Nginx/Caddy 自建反代',
+                'sb.proto.tcp_desc': '原生 TCP 传输，开销极低',
+                'sb.proto.http_desc': '伪装 HTTP/1.1 明文请求头',
+                'sb.proto.quic_desc': '基于原生 UDP QUIC 协议传输',
+                'matrix.ports_desc': '配置多个出站代理监听端口，每个端口独立调度不同隧道出口',
+                'set.tab_update': '系统更新',
                 'set.lang': '界面语言 / Language',
                 'set.save_btn': '保存全部设置',
+                'set.web_port': 'Web 管理控制台端口 [1-65535]',
+                'set.web_path': '后台安全访问路径 (无需斜杠)',
+                'set.random': '随机',
+                'set.username': 'Web 管理员账号',
+                'set.password': 'Web 管理员密码 (留空保持原密码不变)',
+                'set.password_ph': '留空保持原密码',
+                'set.random_pwd': '随机密码',
+                'set.proxy_port': '默认本地代理端口 [1-65535]',
+                'set.age_pubkey': 'age 订阅安全加密公钥 (选填，开启后加密订阅)',
+                'set.age_pubkey_ph': '留空关闭加密，或填入 age1... / age1pq...',
+                'set.key_helper': '密钥助手',
+                'set.tg_note': '配置后，网关在节点自动故障转移、出口组全断线时自动推送告警；并支持在 TG 对话框使用 /status、/tunnels、/rotate 远程控制。',
+                'set.tg_token': 'Telegram Bot Token (向 @BotFather 申请)',
+                'set.tg_token_ph': '例如: 123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11',
+                'set.tg_chatid': 'Telegram Chat ID (接收告警的个人或群组 ID)',
+                'set.tg_chatid_ph': '例如: 987654321',
+                'set.tg_test_btn': '发送测试消息',
+                'set.app_note': 'NXGate 支持通过安卓/移动端专属 App 实现多服务器集中远程控制与状态监控。使用现有 Web 管理账号与密码直接认证。',
+                'set.app_card_title': '一键生成移动端扫码导入凭据',
+                'set.app_card_desc': '点击下方按钮打开高清二维码与导入专属链接 (URI/JSON)，在手机 App 端使用相机扫描即可秒级录入本服务器。',
+                'set.app_open_btn': '打开扫码导入二维码面板',
+                'set.update_note': 'NXGate 支持通过 GitHub 官方源及加速镜像实现全自动免停机热升级。更新将校验 SHA-256 哈希完整性并平滑重启守护进程。',
+                'set.cur_ver': '当前已安装版本',
+                'set.latest_ver': '远端最新版本',
+                'set.check_update': '检查新版本',
+                'set.force_update': '重新安装当前构建',
+                'set.do_update': '立即升级至最新版',
+                'set.back_dash': '返回概览',
+                'set.save_apply': '保存并生效',
+
+                'sb.modal_title': '添加 sing-box 节点',
+                'sb.select_proto': '选择入站协议',
+                'sb.proto_count': '全套 22 种脚本原生协议',
+                'sb.cat_all': '全部 (22)',
+                'sb.cat_recommended': '推荐免域名 (5)',
+                'sb.cat_popular': '经典穿透 (4)',
+                'sb.cat_cdn': 'CDN/域名TLS (9)',
+                'sb.cat_raw': '原生传输 (4)',
+                'sb.bind_outbound': '绑定 NXGate 出口代理 (实现流量清洗与住宅 IP 接入)',
+                'sb.bind_outbound_help': '选择将此入站接收的流量转发给哪个本地出口。推荐绑定默认出口 127.0.0.1:7928，即可直享日本/美国家宽住宅 IP。',
+                'sb.listen_port': '监听端口 (Port)',
+                'sb.port_ph': 'auto (自动分配可用端口)',
+                'sb.port_reset': '重置为 auto',
+                'sb.port_help': '留空或填 auto 时，系统会自动寻找 10000-65535 的未占用端口；也可指定如 8443。',
+                'sb.adv_settings': '高级参数设置 (可选，支持自动生成)',
+                'sb.sni_label': '自定义 SNI 伪装域名 / 主机名',
+                'sb.sni_ph': 'auto (默认知名权威站，如 www.amazon.com)',
+                'sb.cred_label': '自定义 UUID 或连接密码 (留空自动生成)',
+                'sb.cred_ph': 'auto (自动生成标准安全凭据)',
+                'sb.submit_btn': '立即创建并部署',
+
+                'qr.title': '客户端配置链接与二维码',
+                'qr.desc': '支持 Shadowrocket (小火箭)、Clash、Sing-box、Surge 客户端扫码一键导入',
+                'qr.url_label': '完整分享链接 (URL)',
+                'qr.copy_link': '复制链接',
+
+                'app.modal_title': '移动端 App 扫码快速导入',
+                'app.modal_desc': '打开 NXGate 手机客户端，扫描上方二维码即可一键绑定此服务器进行远程管控',
+                'app.server_name': '服务器名称 (客户端备注)',
+                'app.server_name_ph': '例如: 东京住宅网关',
+                'app.protocol': '连接协议',
+                'app.host': '服务器主机地址',
+                'app.port': 'Web 访问端口',
+                'app.uri_label': '一键导入专属链接 (URI)',
+                'app.copy_uri': '复制 URI',
+                'app.json_label': '标准导入配置 (JSON)',
+                'app.copy_json': '复制 JSON',
+                'app.test_api': '测试 API 连通性',
+
+                'age.switch_title': '启用 age 订阅加密',
+                'age.switch_desc': '开启后，下发的通用订阅与 Clash 订阅将使用 age 公钥加密保护',
+                'age.type_label': '类型',
+                'age.secret_label': 'age 解密私钥',
+                'age.secret_ph': '可粘贴 AGE-SECRET-KEY-1... 或 AGE-SECRET-KEY-PQ-1... 用于推导 age 加密公钥',
+                'age.btn_generate': '一键生成',
+                'age.btn_copy': '复制',
+                'age.public_label': 'age 加密公钥',
+                'age.public_ph': '请输入 age 加密公钥',
+                'age.btn_derive': '从私钥生成',
+                'age.btn_apply': '一键填入',
+                'age.disclaimer': '只支持 age 原生 X25519 和 MLKEM768-X25519 key。生成的 age 解密私钥只在此弹窗显示，请妥善保存；age 加密公钥可写入配置字段用于加密最终输出。',
+
+                'up.modal_title': 'NXGate 系统版本与在线更新',
+                'up.release_notes': '发行说明',
+                'up.processing': '正在处理...',
+                'up.reinstall': '重新安装',
+                'up.upgrade_now': '立即更新',
+
+                'bl.modal_title': '屏蔽库与故障隔离管理 (Blacklist)',
+                'bl.modal_desc': '展示当前因握手无法连通被隔离的节点。系统每 3 小时自动探活复活，亦可随时手动探活或清空。',
+                'bl.resurrect': '探活复活节点',
+                'bl.clear_all': '清空全部屏蔽',
+                'bl.loading': '正在载入屏蔽库...',
+
+                'pe.title': '新增/编辑端口分流规则',
+                'pe.port_label': '本地监听端口号 [1-65535]',
+                'pe.policy_label': '分流调度策略',
+                'pe.policy_rr': '单连接轮询 (Round-Robin)',
+                'pe.policy_rr_desc': '每发起一次新连接自动交替使用不同绑定的出口节点',
+                'pe.policy_rand': '随机分发 (Random)',
+                'pe.policy_rand_desc': '每次连接随机选取绑定的任一健康隧道出网',
+                'pe.policy_int': '定时锁定轮换 (Interval)',
+                'pe.policy_int_desc': '固定时间内走同一出口，到期后平滑切换到下一出口',
+                'pe.int_label': '定时锁定轮换时间间隔',
+                'pe.seconds': '秒',
+                'pe.auth_label': '代理账密鉴权设置',
+                'pe.auth_rand': '系统随机账密 (推荐)',
+                'pe.auth_rand_desc': '使用系统独立生成的安全随机账密，解耦防脱节',
+                'pe.auth_none': '免密直接连接',
+                'pe.auth_none_desc': '关闭认证，无需输入账号密码即可使用代理 (适合本地)',
+                'pe.auth_custom': '自定义独立账密',
+                'pe.auth_custom_desc': '为当前端口单独设置独立的专用账号与密码',
+                'pe.user_label': '代理用户名',
+                'pe.user_ph': '设置代理账号',
+                'pe.pass_label': '代理密码',
+                'pe.pass_ph': '设置代理密码',
+                'pe.random_gen': '随机生成',
+                'pe.tunnels_label': '绑定出口隧道 (勾选此端口允许使用的出网出口或动态组)',
+                'pe.save_rule': '确认保存规则',
+
+                'dg.title': '新增动态出口组',
+                'dg.name_label': '出口组名称',
+                'dg.name_ph': '例如: 日本Top3住宅组',
+                'dg.country_label': '目标国家/地区',
+                'dg.iptype_label': '目标网络类型',
+                'dg.sortby_label': '择优筛选指标',
+                'dg.unlock_label': '节点解锁能力要求',
+                'dg.count_label': '维持并发在线出口数 [1-10]',
+                'dg.interval_label': '自动重评与轮换周期',
+                'dg.save_group': '保存出口组',
+
+                'common.cancel': '取消',
+                'common.close': '关闭',
+                'common.done': '完成',
+                'common.copy': '复制',
+                'common.refresh': '刷新',
                 'dash.conn_status': '连接状态',
                 'dash.node_ip': '活跃节点 IP',
                 'dash.node_type': '网络类型 / ISP',
@@ -204,8 +365,169 @@
                 'set.tab_tg': 'Telegram Alerts',
                 'set.tab_app': 'Mobile App',
                 'set.tab_update': 'System Update',
+                'matrix.groups_desc': 'Automatically maintain optimal egress exits by country and network type with timed rotation.',
+                'sb.proto.reality_desc': 'TLS masquerade, no domain or certificate configuration needed.',
+                'sb.proto.rh2_desc': 'HTTP/2 multiplexing with REALITY, high-concurrency without domain.',
+                'sb.proto.hy2_desc': 'QUIC-based protocol, resilient in high packet-loss environments.',
+                'sb.proto.tuic_desc': 'QUIC with BBR congestion control, low latency and low jitter.',
+                'sb.proto.ss_desc': 'Modern lightweight symmetric AEAD encryption with broad client support.',
+                'sb.proto.trojan_desc': 'Classic HTTPS browsing masquerade with high fidelity.',
+                'sb.proto.anytls_desc': 'Multipath TLS transport with anti-blocking features.',
+                'sb.proto.socks_desc': 'Standard SOCKS5 inbound, ideal for LAN and local upstreaming.',
+                'sb.proto.direct_desc': 'Transparent TCP port traffic relay and direct forwarding.',
+                'sb.proto.vws_desc': 'VLESS + WebSocket + TLS, compatible with Cloudflare CDN reverse proxy.',
+                'sb.proto.wss_desc': 'VMess + WebSocket + TLS, classic CDN configuration for blocked IPs.',
+                'sb.proto.tws_desc': 'Trojan + WebSocket + TLS, hides origin server address.',
+                'sb.proto.vhu_desc': 'Next-gen HTTPUpgrade transport, superior performance over standard WS.',
+                'sb.proto.hu_desc': 'VMess + HTTPUpgrade modern high-performance transport.',
+                'sb.proto.thu_desc': 'Trojan + HTTPUpgrade modern encrypted transport.',
+                'sb.proto.vh2_desc': 'VLESS + HTTP/2 multiplexing + TLS.',
+                'sb.proto.h2_desc': 'VMess + HTTP/2 multiplexing + TLS.',
+                'sb.proto.th2_desc': 'Trojan + HTTP/2 multiplexing + TLS.',
+                'sb.proto.ws_desc': 'Plain WebSocket transport, convenient for Nginx/Caddy fronting.',
+                'sb.proto.tcp_desc': 'Raw TCP transport with minimal overhead.',
+                'sb.proto.http_desc': 'Disguised HTTP/1.1 plain request headers.',
+                'sb.proto.quic_desc': 'Native UDP QUIC protocol transport.',
+                'matrix.ports_desc': 'Configure multiple proxy listen ports, each routing to distinct egress tunnels.',
+                'set.tab_update': 'System Update',
                 'set.lang': 'Language / 界面语言',
                 'set.save_btn': 'Save All Settings',
+                'set.web_port': 'Web Console Port [1-65535]',
+                'set.web_path': 'Secret URL Path (without slashes)',
+                'set.random': 'Random',
+                'set.username': 'Admin Username',
+                'set.password': 'Admin Password (leave blank to keep current)',
+                'set.password_ph': 'Leave blank to keep current',
+                'set.random_pwd': 'Random Password',
+                'set.proxy_port': 'Default Local Proxy Port [1-65535]',
+                'set.age_pubkey': 'age Recipient Public Key (Optional, for encrypted sub)',
+                'set.age_pubkey_ph': 'Leave blank or enter age1... / age1pq...',
+                'set.key_helper': 'Key Helper',
+                'set.tg_note': 'Configure Telegram bot to receive failover alerts and control gateway via /status, /tunnels, /rotate.',
+                'set.tg_token': 'Telegram Bot Token (from @BotFather)',
+                'set.tg_token_ph': 'e.g. 123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11',
+                'set.tg_chatid': 'Telegram Chat ID (User or Group ID)',
+                'set.tg_chatid_ph': 'e.g. 987654321',
+                'set.tg_test_btn': 'Send Test Alert',
+                'set.app_note': 'NXGate supports remote management and status monitoring via Android App using web credentials.',
+                'set.app_card_title': 'Generate Mobile Pairing QR Code',
+                'set.app_card_desc': 'Click below to view the QR code and URI/JSON credentials to import this gateway into your mobile app.',
+                'set.app_open_btn': 'Open Mobile Pairing Modal',
+                'set.update_note': 'Supports non-disruptive hot updates from GitHub releases with SHA-256 integrity verification.',
+                'set.cur_ver': 'Installed Version',
+                'set.latest_ver': 'Latest Version',
+                'set.check_update': 'Check for Updates',
+                'set.force_update': 'Reinstall Current Build',
+                'set.do_update': 'Upgrade to Latest',
+                'set.back_dash': 'Back to Dashboard',
+                'set.save_apply': 'Save & Apply',
+
+                'sb.modal_title': 'Add sing-box Node',
+                'sb.select_proto': 'Select Inbound Protocol',
+                'sb.proto_count': 'All 22 Native Protocols',
+                'sb.cat_all': 'All (22)',
+                'sb.cat_recommended': 'Recommended (5)',
+                'sb.cat_popular': 'Direct / Popular (4)',
+                'sb.cat_cdn': 'CDN / TLS (9)',
+                'sb.cat_raw': 'Raw Transport (4)',
+                'sb.bind_outbound': 'Bind NXGate Egress Exit (Traffic scrubbing & Residential IP)',
+                'sb.bind_outbound_help': 'Select the egress exit for incoming traffic. Binding default exit 127.0.0.1:7928 routes traffic via residential IP.',
+                'sb.listen_port': 'Listen Port',
+                'sb.port_ph': 'auto (auto-assign available port)',
+                'sb.port_reset': 'Reset to auto',
+                'sb.port_help': 'Leave empty or "auto" to auto-assign 10000-65535, or specify a custom port like 8443.',
+                'sb.adv_settings': 'Advanced Parameters (Optional, auto-generated)',
+                'sb.sni_label': 'Custom SNI Camouflage / Hostname',
+                'sb.sni_ph': 'auto (e.g. www.amazon.com)',
+                'sb.cred_label': 'Custom UUID or Password (auto-generated if blank)',
+                'sb.cred_ph': 'auto (auto-generated credentials)',
+                'sb.submit_btn': 'Create & Deploy Inbound',
+
+                'qr.title': 'Client Configuration & QR Code',
+                'qr.desc': 'Supports one-click import into Shadowrocket, Clash, sing-box, and Surge clients',
+                'qr.url_label': 'Share Link (URL)',
+                'qr.copy_link': 'Copy Link',
+
+                'app.modal_title': 'Mobile App Pairing QR',
+                'app.modal_desc': 'Open the NXGate Android App and scan the QR code to pair this gateway for remote management.',
+                'app.server_name': 'Server Name (App Label)',
+                'app.server_name_ph': 'e.g. Tokyo Residential Gateway',
+                'app.protocol': 'Protocol',
+                'app.host': 'Server Host / IP',
+                'app.port': 'Web Port',
+                'app.uri_label': 'Import URI',
+                'app.copy_uri': 'Copy URI',
+                'app.json_label': 'Configuration (JSON)',
+                'app.copy_json': 'Copy JSON',
+                'app.test_api': 'Test API Connectivity',
+
+                'age.switch_title': 'Enable age Subscription Encryption',
+                'age.switch_desc': 'When enabled, universal and Clash subscriptions will be encrypted with the age public key.',
+                'age.type_label': 'Key Type',
+                'age.secret_label': 'age Identity Secret Key',
+                'age.secret_ph': 'Paste AGE-SECRET-KEY-1... or AGE-SECRET-KEY-PQ-1... to derive recipient public key',
+                'age.btn_generate': 'Generate',
+                'age.btn_copy': 'Copy',
+                'age.public_label': 'age Recipient Public Key',
+                'age.public_ph': 'Enter age recipient public key',
+                'age.btn_derive': 'Derive from Secret Key',
+                'age.btn_apply': 'Fill into Settings',
+                'age.disclaimer': 'Supports standard X25519 and MLKEM768-X25519 age keys. Secret keys are only shown here, please store securely.',
+
+                'up.modal_title': 'System Version & Online Updates',
+                'up.release_notes': 'Release Notes',
+                'up.processing': 'Processing...',
+                'up.reinstall': 'Reinstall',
+                'up.upgrade_now': 'Upgrade Now',
+
+                'bl.modal_title': 'Blacklist & Quarantine Management',
+                'bl.modal_desc': 'Displays quarantined unreachable nodes. The system probes and resurrects recovered nodes automatically.',
+                'bl.resurrect': 'Probe & Resurrect',
+                'bl.clear_all': 'Clear All Blocked',
+                'bl.loading': 'Loading blacklist...',
+
+                'pe.title': 'Add / Edit Port Routing Rule',
+                'pe.port_label': 'Local Listen Port [1-65535]',
+                'pe.policy_label': 'Routing Policy',
+                'pe.policy_rr': 'Round-Robin Load Balancing',
+                'pe.policy_rr_desc': 'Rotates through bound egress exits sequentially for every new connection',
+                'pe.policy_rand': 'Dynamic Random',
+                'pe.policy_rand_desc': 'Randomly picks a healthy bound exit tunnel for each connection',
+                'pe.policy_int': 'Timed Rotation (Interval)',
+                'pe.policy_int_desc': 'Pins connections to one egress for a duration, then smoothly rotates',
+                'pe.int_label': 'Rotation Time Interval',
+                'pe.seconds': 'seconds',
+                'pe.auth_label': 'Proxy Authentication',
+                'pe.auth_rand': 'Random Credentials (Recommended)',
+                'pe.auth_rand_desc': 'Uses system-generated random credentials for security isolation',
+                'pe.auth_none': 'No Auth (Direct)',
+                'pe.auth_none_desc': 'Disables authentication (recommended for local loopback)',
+                'pe.auth_custom': 'Custom Credentials',
+                'pe.auth_custom_desc': 'Configure custom username and password for this port',
+                'pe.user_label': 'Proxy Username',
+                'pe.user_ph': 'Set proxy username',
+                'pe.pass_label': 'Proxy Password',
+                'pe.pass_ph': 'Set proxy password',
+                'pe.random_gen': 'Generate Random',
+                'pe.tunnels_label': 'Bound Egress Exits (Check exits or dynamic groups for this port)',
+                'pe.save_rule': 'Save Rule',
+
+                'dg.title': 'New Dynamic Exit Group',
+                'dg.name_label': 'Exit Group Name',
+                'dg.name_ph': 'e.g. Japan Top 3 Residential',
+                'dg.country_label': 'Target Country / Region',
+                'dg.iptype_label': 'Target Network Type',
+                'dg.sortby_label': 'Ranking Metric',
+                'dg.unlock_label': 'Unlock Capability Requirement',
+                'dg.count_label': 'Concurrent Exit Tunnels [1-10]',
+                'dg.interval_label': 'Automatic Rotation Interval',
+                'dg.save_group': 'Save Exit Group',
+
+                'common.cancel': 'Cancel',
+                'common.close': 'Close',
+                'common.done': 'Done',
+                'common.copy': 'Copy',
+                'common.refresh': 'Refresh',
                 'dash.conn_status': 'Connection Status',
                 'dash.node_ip': 'Active Node IP',
                 'dash.node_type': 'Network Type / ISP',
@@ -248,6 +570,18 @@
                 return I18N.zh[key];
             }
             return fallback !== undefined ? fallback : key;
+        }
+
+        function tAlert(zhMsg, enMsg) {
+            alert(getLanguage() === 'en' ? enMsg : zhMsg);
+        }
+
+        function tConfirm(zhMsg, enMsg) {
+            return confirm(getLanguage() === 'en' ? enMsg : zhMsg);
+        }
+
+        function tPrompt(zhMsg, enMsg, defaultVal) {
+            return prompt(getLanguage() === 'en' ? enMsg : zhMsg, defaultVal);
         }
 
         function applyLanguage(lang = getLanguage(), container = document) {
@@ -446,7 +780,7 @@
                     fetchStatus();
                 }, 3500);
             } catch(err) {
-                alert('探测请求失败: ' + err);
+                tAlert('探测请求失败: ' + err, 'Probe request failed: ' + err);
             }
         }
 
@@ -454,8 +788,8 @@
             try {
                 const res = await fetch('/api/telegram/test', { method: 'POST' });
                 const ret = await res.json();
-                if (res.ok) alert(ret.message || '测试消息发送成功！');
-                else alert('测试失败: ' + (ret.error || '未知错误'));
+                if (res.ok) tAlert(ret.message || '测试消息发送成功！', ret.message || 'Test alert sent successfully!');
+                else tAlert('测试失败: ' + (ret.error || '未知错误'), 'Test alert failed: ' + (ret.error || 'Unknown error'));
             } catch(err) {
                 alert('请求失败: ' + err);
             }
@@ -833,7 +1167,7 @@
 
             const ids = filtered.map(n => n.id);
             if (ids.length === 0) {
-                alert('当前筛选条件下没有节点');
+                tAlert('当前筛选条件下没有节点', 'No nodes match the selected criteria');
                 return;
             }
 
@@ -965,7 +1299,7 @@
             const proxyPort = parseInt(document.getElementById('cfg-proxy-port').value);
 
             if (webPort === proxyPort) {
-                alert('错误: Web 管理端口不能与本地代理端口相同！');
+                tAlert('错误: Web 管理端口不能与本地代理端口相同！', 'Error: Web console port cannot be identical to proxy port!');
                 return;
             }
 
@@ -993,17 +1327,17 @@
                 });
                 const ret = await res.json();
                 if (!res.ok) {
-                    alert('保存失败: ' + (ret.error || '未知错误'));
+                    tAlert('保存失败: ' + (ret.error || '未知错误'), 'Save failed: ' + (ret.error || 'Unknown error'));
                     return;
                 }
 
-                alert('配置修改成功并已生效！');
+                tAlert('配置修改成功并已生效！', 'Configuration updated and applied successfully!');
                 closeSettingsModal();
 
                 const curPort = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
                 if (webPort.toString() !== curPort || !window.location.pathname.includes(webPath)) {
                     const newUrl = `${window.location.protocol}//${window.location.hostname}:${webPort}/${webPath}`;
-                    alert(`Web 访问入口已变更，即将跳转至新地址:\n${newUrl}`);
+                    tAlert(`Web 访问入口已变更，即将跳转至新地址:\n${newUrl}`, `Web console URL changed. Redirecting to new address:\n${newUrl}`);
                     window.location.href = newUrl;
                 } else {
                     fetchStatus();
@@ -1071,7 +1405,7 @@
                 });
                 const ret = await res.json();
                 if (!res.ok) {
-                    alert('启动并发隧道失败: ' + (ret.error || '未知错误'));
+                    tAlert('启动并发隧道失败: ' + (ret.error || '未知错误'), 'Failed to launch concurrent tunnel: ' + (ret.error || 'Unknown error'));
                 } else {
                     appendLog({ level: 'INFO', module: 'Tunnel', message: `新隧道启动成功: ${ret.tunnel.id} (${ret.tunnel.dev_name})` });
                     fetchStatus();
@@ -1082,7 +1416,7 @@
         }
 
         async function stopTunnel(tunnelId) {
-            if (!confirm('确认断开并释放该并发隧道吗？')) return;
+            if (!tConfirm('确认断开并释放该并发隧道吗？', 'Are you sure you want to disconnect and release this exit tunnel?')) return;
             try {
                 await fetch('/api/tunnels/stop', {
                     method: 'POST',
@@ -1222,7 +1556,7 @@
 
         async function saveDynamicGroup() {
             const name = document.getElementById('dg-name').value.trim();
-            if (!name) { alert('请输入出口组名称'); return; }
+            if (!name) { tAlert('请输入出口组名称', 'Please enter an exit group name'); return; }
             const country = document.getElementById('dg-country').value;
             const ipType = document.getElementById('dg-iptype').value;
             const unlockFilter = document.getElementById('dg-unlock').value;
@@ -1250,7 +1584,7 @@
                     body: JSON.stringify(payload)
                 });
                 const ret = await res.json();
-                if (!res.ok) { alert('保存失败: ' + (ret.error || '未知错误')); return; }
+                if (!res.ok) { tAlert('保存失败: ' + (ret.error || '未知错误'), 'Save failed: ' + (ret.error || 'Unknown error')); return; }
                 hideDynamicGroupForm();
                 appendLog({ level: 'INFO', module: 'Action', message: `动态出口组 [${name}] 已成功保存！` });
                 await fetchDynamicGroups();
@@ -1262,15 +1596,15 @@
         }
 
         async function deleteDynamicGroup(id) {
-            if (!confirm('确认删除该动态出口组吗？其维护的隧道将被安全释放。')) return;
+            if (!tConfirm('确认删除该动态出口组吗？其维护的隧道将被安全释放。', 'Are you sure you want to delete this exit group? Maintained tunnels will be safely released.')) return;
             try {
                 const res = await fetch(`/api/tunnel-groups?id=${id}`, { method: 'DELETE' });
                 const ret = await res.json();
-                if (!res.ok) { alert('删除失败: ' + (ret.error || '未知错误')); return; }
+                if (!res.ok) { tAlert('删除失败: ' + (ret.error || '未知错误'), 'Delete failed: ' + (ret.error || 'Unknown error')); return; }
                 await fetchDynamicGroups();
                 fetchStatus();
             } catch(err) {
-                alert('请求异常: ' + err);
+                tAlert('请求异常: ' + err, 'Request exception: ' + err);
             }
         }
 
@@ -1298,8 +1632,8 @@
         }
 
         function alert(message) {
-            const text = String(message ?? '操作未完成');
-            const type = /失败|错误|异常|无法|不能|不存在|请输入|未安装|尚未|暂无/.test(text) ? 'error' : 'info';
+            const text = String(message ?? (getLanguage() === 'en' ? 'Action incomplete' : '操作未完成'));
+            const type = /失败|错误|异常|无法|不能|不存在|请输入|未安装|尚未|暂无|fail|error|cannot|invalid|not|missing/i.test(text) ? 'error' : 'info';
             showToast(text, type, type === 'error' ? 5000 : 3200);
         }
 
@@ -1447,7 +1781,7 @@
         }
 
         async function clearAllBlacklist() {
-            if (!confirm('确定清空整个屏蔽库吗？所有被隔离的节点将被立即释放回候选池。')) return;
+            if (!tConfirm('确定清空整个屏蔽库吗？所有被隔离的节点将被立即释放回候选池。', 'Are you sure you want to clear the blacklist? Quarantined nodes will be released back to candidate pool.')) return;
             try {
                 const res = await fetch('/api/blacklist/clear', { method: 'POST' });
                 const ret = await res.json();
@@ -1497,7 +1831,9 @@
         }
 
         async function addNodeToBlacklist(nodeId, ip, country) {
-            const mode = prompt(`请选择对节点 [${nodeId}] 的屏蔽方式：\n\n1 = 临时屏蔽 24 小时\n2 = 永久屏蔽此节点 (Tombstone 永不收录)\n3 = 永久屏蔽整机 IP (${ip} 所有端口)\n\n请输入 1, 2 或 3:`, "1");
+            const promptZh = `请选择对节点 [${nodeId}] 的屏蔽方式：\n\n1 = 临时屏蔽 24 小时\n2 = 永久屏蔽此节点 (Tombstone 永不收录)\n3 = 永久屏蔽整机 IP (${ip} 所有端口)\n\n请输入 1, 2 或 3:`;
+            const promptEn = `Choose blacklist option for [${nodeId}]:\n\n1 = Temporary 24 hours\n2 = Permanent Tombstone (Never include)\n3 = Permanent IP Blacklist (${ip} all ports)\n\nEnter 1, 2, or 3:`;
+            const mode = tPrompt(promptZh, promptEn, "1");
             if (!mode) return;
 
             let dur = 1440;
@@ -1798,7 +2134,7 @@
         async function savePortRule() {
             const port = parseInt(document.getElementById('rule-port').value);
             if (!port || port < 1 || port > 65535) {
-                alert('请输入有效的端口号 (1-65535)');
+                tAlert('请输入有效的端口号 (1-65535)', 'Please enter a valid port number (1-65535)');
                 return;
             }
 
@@ -1810,7 +2146,7 @@
 
             if (authMode === 'custom') {
                 if (!authUser || !authPass) {
-                    alert('自定义认证模式必须同时填写用户名和密码，或选择免密模式！');
+                    tAlert('自定义认证模式必须同时填写用户名和密码，或选择免密模式！', 'Custom auth mode requires both username and password, or choose No Auth mode!');
                     return;
                 }
             }
@@ -1848,13 +2184,13 @@
                 });
                 const ret = await res.json();
                 if (!res.ok) {
-                    alert('保存端口规则失败: ' + (ret.error || '未知错误'));
+                    tAlert('保存端口规则失败: ' + (ret.error || '未知错误'), 'Failed to save port rule: ' + (ret.error || 'Unknown error'));
                     return;
                 }
                 currentPortRules = ret.rules || updatedRules;
                 renderPortRules();
                 hideEditPortForm();
-                alert(`端口 [${port}] 规则已保存并实时生效！`);
+                tAlert(`端口 [${port}] 规则已保存并实时生效！`, `Port [${port}] rule saved and active!`);
                 fetchStatus();
             } catch (err) {
                 alert('请求异常: ' + err);
@@ -1862,7 +2198,7 @@
         }
 
         async function deletePortRule(port) {
-            if (!confirm(`确认删除并停止代理端口 [${port}] 吗？`)) return;
+            if (!tConfirm(`确认删除并停止代理端口 [${port}] 吗？`, `Are you sure you want to delete and stop proxy port [${port}]?`)) return;
             const updatedRules = currentPortRules.filter(r => r.port !== port);
             try {
                 const res = await fetch('/api/proxy/ports', {
@@ -1871,12 +2207,12 @@
                     body: JSON.stringify({ rules: updatedRules })
                 });
                 const ret = await res.json();
-                if (!res.ok) { alert('删除失败: ' + (ret.error || '未知错误')); return; }
+                if (!res.ok) { tAlert('删除失败: ' + (ret.error || '未知错误'), 'Delete failed: ' + (ret.error || 'Unknown error')); return; }
                 currentPortRules = ret.rules || updatedRules;
                 renderPortRules();
                 fetchStatus();
             } catch (err) {
-                alert('请求异常: ' + err);
+                tAlert('请求异常: ' + err, 'Request exception: ' + err);
             }
         }
 
@@ -2252,7 +2588,7 @@
 
         function openAddSingBoxModal() {
             if (!singBoxOverview || !singBoxOverview.installed) {
-                alert('系统尚未安装 sing-box 服务端，请先在终端执行一键安装！');
+                tAlert('系统尚未安装 sing-box 服务端，请先在终端执行一键安装！', 'sing-box service not installed. Please install it on the VPS terminal first!');
                 return;
             }
             // 填充出口选择器
@@ -2374,7 +2710,7 @@
                 });
                 const ret = await res.json();
                 if (!res.ok) {
-                    alert('创建节点失败: ' + (ret.error || '未知错误'));
+                    tAlert('创建节点失败: ' + (ret.error || '未知错误'), 'Failed to create node: ' + (ret.error || 'Unknown error'));
                     return;
                 }
                 closeAddSingBoxModal();
@@ -2416,7 +2752,7 @@
 
         async function batchSetSingBoxOutbound(targetType) {
             if (!singBoxOverview || !singBoxOverview.installed || !singBoxOverview.nodes || singBoxOverview.nodes.length === 0) {
-                alert('当前没有活跃的 sing-box 节点可供操作');
+                tAlert('当前没有活跃的 sing-box 节点可供操作', 'No active sing-box nodes available');
                 return;
             }
 
@@ -2428,7 +2764,7 @@
                 label = `NXGate 默认住宅出口 (${targetOutbound})`;
             }
 
-            if (!confirm(`确定将所有 sing-box 入站节点批量切换至【${label}】吗？`)) return;
+            if (!tConfirm(`确定将所有 sing-box 入站节点批量切换至【${label}】吗？`, `Switch all sing-box inbound nodes to [${label}]?`)) return;
 
             try {
                 const res = await fetch('/api/singbox/nodes/outbound', {
@@ -2438,7 +2774,7 @@
                 });
                 const ret = await res.json();
                 if (!res.ok) {
-                    alert('批量修改出口失败: ' + (ret.error || '未知错误'));
+                    tAlert('批量修改出口失败: ' + (ret.error || '未知错误'), 'Batch egress update failed: ' + (ret.error || 'Unknown error'));
                     return;
                 }
                 showToast(`已成功将 ${ret.updated_count || '全部'} 个节点切换至: ${targetOutbound}`);
@@ -2449,7 +2785,7 @@
         }
 
         async function deleteSingBoxNode(nodeName) {
-            if (!confirm(`确认彻底删除 sing-box 入站配置 [${nodeName}] 吗？`)) return;
+            if (!tConfirm(`确认彻底删除 sing-box 入站配置 [${nodeName}] 吗？`, `Are you sure you want to delete sing-box inbound [${nodeName}]?`)) return;
             try {
                 const res = await fetch(`/api/singbox/nodes?target=${encodeURIComponent(nodeName)}`, {
                     method: 'DELETE'
@@ -2486,7 +2822,7 @@
 
         async function copySingBoxSubURL() {
             if (!singBoxOverview || !singBoxOverview.installed) {
-                alert('sing-box 未安装，无法获取远程订阅');
+                tAlert('sing-box 未安装，无法获取远程订阅', 'sing-box not installed; cannot fetch remote subscription');
                 return;
             }
             const url = getGenericSubURL();
@@ -2505,7 +2841,7 @@
 
         function copyClashSubURL() {
             if (!singBoxOverview || !singBoxOverview.installed) {
-                alert('sing-box 未安装，无法获取 Clash 订阅');
+                tAlert('sing-box 未安装，无法获取 Clash 订阅', 'sing-box not installed; cannot fetch Clash subscription');
                 return;
             }
             const url = getClashSubURL();
@@ -2533,7 +2869,7 @@
         function copyNodeShareLink(url, proto) {
             url = sanitizeShareURL(url);
             if (!url) {
-                alert('该节点暂无有效客户端分享链接');
+                tAlert('该节点暂无有效客户端分享链接', 'No valid client share link for this node');
                 return;
             }
             copyText(url, `${proto || '代理'} 客户端分享链接`);
@@ -2542,7 +2878,7 @@
         function showNodeQRCode(url, title) {
             url = sanitizeShareURL(url);
             if (!url) {
-                alert('暂无分享链接');
+                tAlert('暂无分享链接', 'No share link available');
                 return;
             }
             document.getElementById('sb-qr-title').innerText = title || '客户端配置链接与二维码';
@@ -2599,7 +2935,7 @@
                 });
                 const data = await res.json();
                 if (!res.ok || !data.ok) {
-                    alert('生成密钥失败: ' + (data.error || '未知错误'));
+                    tAlert('生成密钥失败: ' + (data.error || '未知错误'), 'Key generation failed: ' + (data.error || 'Unknown error'));
                     return;
                 }
                 document.getElementById('age-secret-key-input').value = data.secret_key;
@@ -2613,7 +2949,7 @@
         function copyAgeSecretKey() {
             const sec = document.getElementById('age-secret-key-input').value.trim();
             if (!sec) {
-                alert('请先输入或生成 age 解密私钥');
+                tAlert('请先输入或生成 age 解密私钥', 'Please enter or generate an age secret key first');
                 return;
             }
             copyText(sec, 'age 解密私钥');
@@ -2622,7 +2958,7 @@
         async function deriveAgePublicKey() {
             const sec = document.getElementById('age-secret-key-input').value.trim();
             if (!sec) {
-                alert('请先在私钥框中粘贴或生成 age 解密私钥');
+                tAlert('请先在私钥框中粘贴或生成 age 解密私钥', 'Please paste or generate an age secret key in the textarea first');
                 return;
             }
             try {
@@ -2633,7 +2969,7 @@
                 });
                 const data = await res.json();
                 if (!res.ok || !data.ok) {
-                    alert('从私钥推导公钥失败: ' + (data.error || '未知错误'));
+                    tAlert('从私钥推导公钥失败: ' + (data.error || '未知错误'), 'Deriving public key failed: ' + (data.error || 'Unknown error'));
                     return;
                 }
                 document.getElementById('age-public-key-input').value = data.public_key;
@@ -2651,7 +2987,7 @@
         function copyAgePublicKey() {
             const pub = document.getElementById('age-public-key-input').value.trim();
             if (!pub) {
-                alert('请先输入或生成 age 加密公钥');
+                tAlert('请先输入或生成 age 加密公钥', 'Please enter or generate an age public key first');
                 return;
             }
             copyText(pub, 'age 加密公钥');
@@ -2660,7 +2996,7 @@
         async function applyAgePublicKey() {
             const pub = document.getElementById('age-public-key-input').value.trim();
             if (!pub) {
-                alert('请先生成或输入 age 加密公钥');
+                tAlert('请先生成或输入 age 加密公钥', 'Please generate or enter an age public key first');
                 return;
             }
             const toggleEl = document.getElementById('age-encrypt-enabled');
@@ -2694,7 +3030,7 @@
             const pub = document.getElementById('age-public-key-input').value.trim();
 
             if (isEnabled && !pub) {
-                alert('请先在下方输入或一键生成 age 加密公钥，再开启加密功能！');
+                tAlert('请先在下方输入或一键生成 age 加密公钥，再开启加密功能！', 'Please enter or generate an age public key before enabling encryption!');
                 toggleEl.checked = false;
                 return;
             }
@@ -2991,7 +3327,7 @@
         async function triggerSystemUpdate(force = false) {
             if (isUpdating) return;
             const actionDesc = force ? '强制重新安装当前最新构建' : '升级至最新版本';
-            if (!confirm(`确认立即执行系统更新（${actionDesc}）并重启服务吗？`)) return;
+            if (!tConfirm(`确认立即执行系统更新（${actionDesc}）并重启服务吗？`, `Proceed with system update (${actionDesc}) and restart service?`)) return;
 
             isUpdating = true;
             const progressBoxes = [
@@ -3025,7 +3361,7 @@
                     isUpdating = false;
                     updateBtns.forEach(b => b && (b.disabled = false));
                     progressSteps.forEach(s => s && (s.textContent = `${ret.error || '更新失败'}`));
-                    alert('系统更新失败: ' + (ret.error || '未知错误'));
+                    tAlert('系统更新失败: ' + (ret.error || '未知错误'), 'System update failed: ' + (ret.error || 'Unknown error'));
                     return;
                 }
 

@@ -116,6 +116,7 @@ fun SettingsSecurityScreen(
 ) {
     val context = LocalContext.current
     val strings = LocalAppStrings.current
+    val isEn = strings == AppStringsEn
     val haptic = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
     val scrollState = rememberScrollState()
@@ -175,26 +176,26 @@ fun SettingsSecurityScreen(
             )
             when (canAuth) {
                 BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED -> {
-                    Toast.makeText(context, "系统尚未录入指纹或锁屏密码，正在跳转系统设置...", Toast.LENGTH_LONG).show()
+                    Toast.makeText(context, if (isEn) "No fingerprint or lock screen PIN set. Opening settings..." else "系统尚未录入指纹或锁屏密码，正在跳转系统设置...", Toast.LENGTH_LONG).show()
                     openSecuritySettings(context)
                 }
                 BiometricManager.BIOMETRIC_ERROR_NO_HARDWARE -> {
-                    Toast.makeText(context, "当前设备未配备指纹或面容硬件，无法开启安全锁", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, if (isEn) "Device lacks biometric hardware" else "当前设备未配备指纹或面容硬件，无法开启安全锁", Toast.LENGTH_SHORT).show()
                 }
                 else -> {
                     MainActivity.instance?.showBiometricPrompt(
                         onSuccess = {
                             biometricEnabled = true
                             NXGateApplication.instance.serverStore.setBiometricEnabled(true)
-                            Toast.makeText(context, "生物识别安全锁已开启，切出后台与冷启动时将验证", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, if (isEn) "Biometric lock enabled" else "生物识别安全锁已开启，切出后台与冷启动时将验证", Toast.LENGTH_SHORT).show()
                         },
                         onError = { err ->
-                            Toast.makeText(context, "指纹/面容验证未通过: $err", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "${if (isEn) "Biometric error: " else "指纹/面容验证未通过: "}$err", Toast.LENGTH_SHORT).show()
                         }
                     ) ?: run {
                         biometricEnabled = true
                         NXGateApplication.instance.serverStore.setBiometricEnabled(true)
-                        Toast.makeText(context, "生物识别安全锁已开启", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, if (isEn) "Biometric lock enabled" else "生物识别安全锁已开启", Toast.LENGTH_SHORT).show()
                     }
                 }
             }
@@ -203,15 +204,15 @@ fun SettingsSecurityScreen(
                 onSuccess = {
                     biometricEnabled = false
                     NXGateApplication.instance.serverStore.setBiometricEnabled(false)
-                    Toast.makeText(context, "生物识别安全锁已解除", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, if (isEn) "Biometric lock disabled" else "生物识别安全锁已解除", Toast.LENGTH_SHORT).show()
                 },
                 onError = { err ->
-                    Toast.makeText(context, "验证未通过，未能关闭安全锁: $err", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "${if (isEn) "Failed to disable lock: " else "验证未通过，未能关闭安全锁: "}$err", Toast.LENGTH_SHORT).show()
                 }
             ) ?: run {
                 biometricEnabled = false
                 NXGateApplication.instance.serverStore.setBiometricEnabled(false)
-                Toast.makeText(context, "生物识别安全锁已关闭", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, if (isEn) "Biometric lock disabled" else "生物识别安全锁已关闭", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -222,7 +223,7 @@ fun SettingsSecurityScreen(
             TopAppBar(
                 title = {
                     Text(
-                        text = "配置与安全",
+                        text = strings.settingsTitle,
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -232,7 +233,7 @@ fun SettingsSecurityScreen(
                     IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-                            contentDescription = "返回",
+                            contentDescription = if (isEn) "Back" else "返回",
                             tint = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.size(24.dp)
                         )
@@ -245,7 +246,7 @@ fun SettingsSecurityScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Rounded.CloudSync,
-                            contentDescription = "集群备份与还原",
+                            contentDescription = strings.clusterBackup,
                             tint = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.size(24.dp)
                         )
@@ -256,7 +257,7 @@ fun SettingsSecurityScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Rounded.QrCodeScanner,
-                            contentDescription = "扫描二维码",
+                            contentDescription = strings.scanQrCode,
                             tint = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.size(24.dp)
                         )
@@ -271,14 +272,14 @@ fun SettingsSecurityScreen(
             FloatingActionButton(
                 onClick = {
                     editingServerId = null
-                    inputName = "新服务器网关"
+                    inputName = if (isEn) "New Gateway" else "新服务器网关"
                     inputHost = ""
                     inputPort = "8787"
                     inputPath = "enter"
                     inputUser = "admin"
                     inputPass = ""
                     allowInsecureTls = false
-                    Toast.makeText(context, "已切换为新增模式，可在右/下方表单填写或扫码导入！", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, if (isEn) "Switched to Add Server mode" else "已切换为新增模式，可在右/下方表单填写或扫码导入！", Toast.LENGTH_SHORT).show()
                 },
                 shape = RoundedCornerShape(16.dp),
                 containerColor = MaterialTheme.colorScheme.primary,
@@ -288,7 +289,7 @@ fun SettingsSecurityScreen(
             ) {
                 Icon(
                     imageVector = Icons.Rounded.Add,
-                    contentDescription = "新增服务器",
+                    contentDescription = strings.addServer,
                     modifier = Modifier.size(24.dp)
                 )
             }
@@ -323,7 +324,7 @@ fun SettingsSecurityScreen(
                             verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             Text(
-                                text = "已纳管网关列表 (${servers.size} 台)",
+                                text = "${strings.serverList} (${servers.size})",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
@@ -336,7 +337,7 @@ fun SettingsSecurityScreen(
                                     color = MaterialTheme.colorScheme.surfaceContainerLow
                                 ) {
                                     Text(
-                                        text = "暂无已纳管的 VPS，请在右侧表单填写或右上角扫码添加。",
+                                        text = if (isEn) "No servers configured yet. Fill the form on the right or scan QR code to add one." else "暂无已纳管的 VPS，请在右侧表单填写或右上角扫码添加。",
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         modifier = Modifier.padding(16.dp)
@@ -349,7 +350,7 @@ fun SettingsSecurityScreen(
                                             index = index,
                                             total = servers.size,
                                             headline = server.name,
-                                            supportingText = "地址 ${server.host}:${server.port}，${if (server.isOnline) "连通 (${server.latencyMs}ms)" else "待测"}",
+                                            supportingText = "${if (isEn) "Address" else "地址"} ${server.host}:${server.port}，${if (server.isOnline) "${if (isEn) "Online" else "连通"} (${server.latencyMs}ms)" else strings.latencyPending}",
                                             leadingIcon = Icons.Rounded.Dns,
                                             trailingContent = {
                                                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -360,19 +361,19 @@ fun SettingsSecurityScreen(
                                                                 val updated = res.getOrNull() ?: server
                                                                 NXGateApplication.instance.serverStore.updateServer(updated)
                                                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                                Toast.makeText(context, "[${updated.name}] 测活通过！延迟: ${updated.latencyMs}ms", Toast.LENGTH_SHORT).show()
+                                                                Toast.makeText(context, "[${updated.name}] ${if (isEn) "Connected! Latency: " else "测活通过！延迟: "}${updated.latencyMs}ms", Toast.LENGTH_SHORT).show()
                                                             } else {
                                                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                                Toast.makeText(context, "[${server.name}] 测活失败: ${res.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
+                                                                Toast.makeText(context, "[${server.name}] ${if (isEn) "Connection failed: " else "测活失败: "}${res.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
                                                             }
                                                         }
                                                     }) {
-                                                        Icon(Icons.Rounded.NetworkPing, contentDescription = "测试连通性", tint = MaterialTheme.colorScheme.primary)
+                                                        Icon(Icons.Rounded.NetworkPing, contentDescription = strings.testConnection, tint = MaterialTheme.colorScheme.primary)
                                                     }
                                                     IconButton(onClick = {
                                                         deleteCandidate = server
                                                     }) {
-                                                        Icon(Icons.Rounded.Delete, contentDescription = "删除服务器", tint = MaterialTheme.colorScheme.error)
+                                                        Icon(Icons.Rounded.Delete, contentDescription = strings.deleteServer, tint = MaterialTheme.colorScheme.error)
                                                     }
                                                 }
                                             },
@@ -386,7 +387,7 @@ fun SettingsSecurityScreen(
                                                 inputPass = server.password
                                                 selectedProtocolChipIndex = if (server.isTls) 1 else 0
                                                 allowInsecureTls = server.allowInsecureTls
-                                                Toast.makeText(context, "已载入 [${server.name}] 至右侧表单", Toast.LENGTH_SHORT).show()
+                                                Toast.makeText(context, if (isEn) "Loaded [${server.name}] into editor" else "已载入 [${server.name}] 至右侧表单", Toast.LENGTH_SHORT).show()
                                             }
                                         )
                                     }
@@ -400,7 +401,7 @@ fun SettingsSecurityScreen(
                             verticalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
                             Text(
-                                text = if (editingServerId != null) "编辑服务器参数" else "新增服务器参数",
+                                text = if (editingServerId != null) (if (isEn) "Edit Server Parameters" else "编辑服务器参数") else (if (isEn) "Add Server Parameters" else "新增服务器参数"),
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
@@ -409,7 +410,8 @@ fun SettingsSecurityScreen(
                             OutlinedTextField(
                                 value = inputName,
                                 onValueChange = { inputName = it },
-                                label = { Text("服务器备注名称") },
+                                label = { Text(strings.serverName) },
+                                placeholder = { Text(strings.serverNamePlaceholder) },
                                 singleLine = true,
                                 shape = RoundedCornerShape(16.dp),
                                 modifier = Modifier.fillMaxWidth()
@@ -418,7 +420,8 @@ fun SettingsSecurityScreen(
                                 OutlinedTextField(
                                     value = inputHost,
                                     onValueChange = { inputHost = it },
-                                    label = { Text("主机地址或域名") },
+                                    label = { Text(strings.serverHost) },
+                                    placeholder = { Text(strings.serverHostPlaceholder) },
                                     singleLine = true,
                                     shape = RoundedCornerShape(16.dp),
                                     modifier = Modifier.weight(2f)
@@ -426,7 +429,7 @@ fun SettingsSecurityScreen(
                                 OutlinedTextField(
                                     value = inputPort,
                                     onValueChange = { inputPort = it },
-                                    label = { Text("Web 端口") },
+                                    label = { Text(strings.serverPort) },
                                     singleLine = true,
                                     shape = RoundedCornerShape(16.dp),
                                     modifier = Modifier.weight(1f)
@@ -436,7 +439,7 @@ fun SettingsSecurityScreen(
                                 OutlinedTextField(
                                     value = inputPath,
                                     onValueChange = { inputPath = it },
-                                    label = { Text("安全访问路径") },
+                                    label = { Text(strings.serverPath) },
                                     singleLine = true,
                                     shape = RoundedCornerShape(16.dp),
                                     modifier = Modifier.weight(1f)
@@ -444,7 +447,7 @@ fun SettingsSecurityScreen(
                                 OutlinedTextField(
                                     value = inputUser,
                                     onValueChange = { inputUser = it },
-                                    label = { Text("Web 管理账号") },
+                                    label = { Text(strings.serverUsername) },
                                     singleLine = true,
                                     shape = RoundedCornerShape(16.dp),
                                     modifier = Modifier.weight(1f)
@@ -453,7 +456,8 @@ fun SettingsSecurityScreen(
                             OutlinedTextField(
                                 value = inputPass,
                                 onValueChange = { inputPass = it },
-                                label = { Text("Web 管理密码") },
+                                label = { Text(strings.serverPassword) },
+                                placeholder = { Text(strings.serverPasswordPlaceholder) },
                                 visualTransformation = PasswordVisualTransformation(),
                                 singleLine = true,
                                 shape = RoundedCornerShape(16.dp),
@@ -481,13 +485,13 @@ fun SettingsSecurityScreen(
                                     ) {
                                         Column(modifier = Modifier.weight(1f)) {
                                             Text(
-                                                text = "跳过自签证书与域名校验",
+                                                text = strings.allowInsecureTlsLabel,
                                                 style = MaterialTheme.typography.bodyMedium,
                                                 fontWeight = FontWeight.SemiBold,
                                                 color = MaterialTheme.colorScheme.onSurface
                                             )
                                             Text(
-                                                text = "允许 IP 直连私有自签证书或内网 HTTPS 网关",
+                                                text = if (isEn) "Allow direct IP connection with self-signed certificate or internal HTTPS" else "允许 IP 直连私有自签证书或内网 HTTPS 网关",
                                                 style = MaterialTheme.typography.bodySmall,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
@@ -519,7 +523,7 @@ fun SettingsSecurityScreen(
                                         )
                                         Spacer(Modifier.width(6.dp))
                                         Text(
-                                            text = "HTTP 连接提示：通信未经 HTTPS 加密，请仅在受信任私网中使用。",
+                                            text = if (isEn) "HTTP Warning: Communication is not encrypted via TLS. Use only in trusted networks." else "HTTP 连接提示：通信未经 HTTPS 加密，请仅在受信任私网中使用。",
                                             style = MaterialTheme.typography.labelSmall,
                                             color = MaterialTheme.colorScheme.onErrorContainer
                                         )
@@ -533,7 +537,7 @@ fun SettingsSecurityScreen(
                                     val targetId = editingServerId ?: UUID.randomUUID().toString()
                                     val newServer = ServerProfile(
                                         id = targetId,
-                                        name = inputName.trim().ifEmpty { "NXGate 网关" },
+                                        name = inputName.trim().ifEmpty { if (isEn) "NXGate Gateway" else "NXGate 网关" },
                                         host = inputHost.trim().ifEmpty { "127.0.0.1" },
                                         port = inputPort.toIntOrNull() ?: 8787,
                                         path = inputPath.trim().trim('/'),
@@ -549,22 +553,22 @@ fun SettingsSecurityScreen(
                                             val profileToSave = res.getOrNull() ?: newServer
                                             if (editingServerId != null && servers.any { it.id == editingServerId }) {
                                                 NXGateApplication.instance.serverStore.updateServer(profileToSave)
-                                                Toast.makeText(context, "[${profileToSave.name}] 测活通过 (${profileToSave.latencyMs}ms)，配置已更新", Toast.LENGTH_SHORT).show()
+                                                Toast.makeText(context, "[${profileToSave.name}] ${if (isEn) "Connected (${profileToSave.latencyMs}ms), config updated" else "测活通过 (${profileToSave.latencyMs}ms)，配置已更新"}", Toast.LENGTH_SHORT).show()
                                             } else {
                                                 NXGateApplication.instance.serverStore.addServer(profileToSave)
                                                 editingServerId = profileToSave.id
-                                                Toast.makeText(context, "[${profileToSave.name}] 连通测试通过 (${profileToSave.latencyMs}ms)，新网关已添加", Toast.LENGTH_SHORT).show()
+                                                Toast.makeText(context, "[${profileToSave.name}] ${if (isEn) "Connected (${profileToSave.latencyMs}ms), new gateway added" else "连通测试通过 (${profileToSave.latencyMs}ms)，新网关已添加"}", Toast.LENGTH_SHORT).show()
                                             }
                                         } else {
                                             val offlineServer = newServer.copy(isOnline = false, latencyMs = 0)
-                                            val errMsg = res.exceptionOrNull()?.message ?: "连接超时"
+                                            val errMsg = res.exceptionOrNull()?.message ?: (if (isEn) "Timeout" else "连接超时")
                                             if (editingServerId != null && servers.any { it.id == editingServerId }) {
                                                 NXGateApplication.instance.serverStore.updateServer(offlineServer)
-                                                Toast.makeText(context, "警告: 连通失败 ($errMsg)，已离线保存配置", Toast.LENGTH_LONG).show()
+                                                Toast.makeText(context, "${if (isEn) "Warning: Connection failed ($errMsg), saved offline" else "警告: 连通失败 ($errMsg)，已离线保存配置"}", Toast.LENGTH_LONG).show()
                                             } else {
                                                 NXGateApplication.instance.serverStore.addServer(offlineServer)
                                                 editingServerId = offlineServer.id
-                                                Toast.makeText(context, "警告: 连通失败 ($errMsg)，已离线添加网关", Toast.LENGTH_LONG).show()
+                                                Toast.makeText(context, "${if (isEn) "Warning: Connection failed ($errMsg), added offline" else "警告: 连通失败 ($errMsg)，已离线添加网关"}", Toast.LENGTH_LONG).show()
                                             }
                                         }
                                     }
@@ -581,7 +585,7 @@ fun SettingsSecurityScreen(
                                 Icon(Icons.Rounded.CheckCircle, contentDescription = null, modifier = Modifier.size(20.dp))
                                 Spacer(Modifier.width(8.dp))
                                 Text(
-                                    text = if (isTestingConnection) "正在测试连通性..." else "连通性测试并保存",
+                                    text = if (isTestingConnection) (if (isEn) "Testing connection..." else "正在测试连通性...") else (if (isEn) "Test Connection & Save" else "连通性测试并保存"),
                                     style = MaterialTheme.typography.labelLarge,
                                     fontWeight = FontWeight.Bold
                                 )
@@ -698,7 +702,7 @@ fun SettingsSecurityScreen(
                             color = MaterialTheme.colorScheme.surfaceContainerLow
                         ) {
                             Text(
-                                text = "暂无已纳管的 VPS，请点击下方表单或右上角二维码扫码添加服务器",
+                                text = if (isEn) "No servers configured yet. Fill the form below or scan QR code to add a VPS gateway." else "暂无已纳管的 VPS，请点击下方表单或右上角二维码扫码添加服务器",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(16.dp)
@@ -711,7 +715,7 @@ fun SettingsSecurityScreen(
                                     index = index,
                                     total = servers.size,
                                     headline = server.name,
-                                    supportingText = "地址 ${server.host}，端口 ${server.port}，${if (server.isOnline) "连通正常 (${server.latencyMs}ms)" else "离线/待测"}",
+                                    supportingText = "${if (isEn) "Address" else "地址"} ${server.host}:${server.port}，${if (server.isOnline) "${if (isEn) "Online" else "连通正常"} (${server.latencyMs}ms)" else strings.latencyPending}",
                                     leadingIcon = Icons.Rounded.Dns,
                                     trailingContent = {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -722,19 +726,19 @@ fun SettingsSecurityScreen(
                                                         val updated = res.getOrNull() ?: server
                                                         NXGateApplication.instance.serverStore.updateServer(updated)
                                                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                        Toast.makeText(context, "[${updated.name}] 测活通过！延迟: ${updated.latencyMs}ms", Toast.LENGTH_SHORT).show()
+                                                        Toast.makeText(context, "[${updated.name}] ${if (isEn) "Connected! Latency: " else "测活通过！延迟: "}${updated.latencyMs}ms", Toast.LENGTH_SHORT).show()
                                                     } else {
                                                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                        Toast.makeText(context, "[${server.name}] 测活失败: ${res.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
+                                                        Toast.makeText(context, "[${server.name}] ${if (isEn) "Connection failed: " else "测活失败: "}${res.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
                                                     }
                                                 }
                                             }) {
-                                                Icon(Icons.Rounded.NetworkPing, contentDescription = "测试连通性", tint = MaterialTheme.colorScheme.primary)
+                                                Icon(Icons.Rounded.NetworkPing, contentDescription = strings.testConnection, tint = MaterialTheme.colorScheme.primary)
                                             }
                                             IconButton(onClick = {
                                                 deleteCandidate = server
                                             }) {
-                                                Icon(Icons.Rounded.Delete, contentDescription = "删除服务器", tint = MaterialTheme.colorScheme.error)
+                                                Icon(Icons.Rounded.Delete, contentDescription = strings.deleteServer, tint = MaterialTheme.colorScheme.error)
                                             }
                                         }
                                     },
@@ -748,7 +752,7 @@ fun SettingsSecurityScreen(
                                         inputPass = server.password
                                         selectedProtocolChipIndex = if (server.isTls) 1 else 0
                                         allowInsecureTls = server.allowInsecureTls
-                                        Toast.makeText(context, "已载入 [${server.name}] 参数至下方表单，可直接修改或保存", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, if (isEn) "Loaded [${server.name}] into editor" else "已载入 [${server.name}] 参数至下方表单，可直接修改或保存", Toast.LENGTH_SHORT).show()
                                     }
                                 )
                             }
@@ -758,10 +762,10 @@ fun SettingsSecurityScreen(
                     // 2. 4个横向相连的描边按钮组
                     ConnectedButtonGroup(
                         items = listOf(
-                            ConnectedButtonItem("服务器备注", ConnectedButtonStyle.Outlined) {},
-                            ConnectedButtonItem("主机地址", ConnectedButtonStyle.Outlined) {},
-                            ConnectedButtonItem("网页端口", ConnectedButtonStyle.Outlined) {},
-                            ConnectedButtonItem("安全路径", ConnectedButtonStyle.Outlined) {}
+                            ConnectedButtonItem(if (isEn) "Name" else "服务器备注", ConnectedButtonStyle.Outlined) {},
+                            ConnectedButtonItem(if (isEn) "Host" else "主机地址", ConnectedButtonStyle.Outlined) {},
+                            ConnectedButtonItem(if (isEn) "Port" else "网页端口", ConnectedButtonStyle.Outlined) {},
+                            ConnectedButtonItem(if (isEn) "Path" else "安全路径", ConnectedButtonStyle.Outlined) {}
                         )
                     )
 
@@ -770,7 +774,8 @@ fun SettingsSecurityScreen(
                         OutlinedTextField(
                             value = inputName,
                             onValueChange = { inputName = it },
-                            label = { Text("服务器备注名称") },
+                            label = { Text(strings.serverName) },
+                            placeholder = { Text(strings.serverNamePlaceholder) },
                             singleLine = true,
                             shape = RoundedCornerShape(16.dp),
                             modifier = Modifier.fillMaxWidth()
@@ -779,7 +784,8 @@ fun SettingsSecurityScreen(
                             OutlinedTextField(
                                 value = inputHost,
                                 onValueChange = { inputHost = it },
-                                label = { Text("主机地址或域名") },
+                                label = { Text(strings.serverHost) },
+                                placeholder = { Text(strings.serverHostPlaceholder) },
                                 singleLine = true,
                                 shape = RoundedCornerShape(16.dp),
                                 modifier = Modifier.weight(2f)
@@ -787,7 +793,7 @@ fun SettingsSecurityScreen(
                             OutlinedTextField(
                                 value = inputPort,
                                 onValueChange = { inputPort = it },
-                                label = { Text("Web 端口") },
+                                label = { Text(strings.serverPort) },
                                 singleLine = true,
                                 shape = RoundedCornerShape(16.dp),
                                 modifier = Modifier.weight(1f)
@@ -797,7 +803,7 @@ fun SettingsSecurityScreen(
                             OutlinedTextField(
                                 value = inputPath,
                                 onValueChange = { inputPath = it },
-                                label = { Text("安全访问路径") },
+                                label = { Text(strings.serverPath) },
                                 singleLine = true,
                                 shape = RoundedCornerShape(16.dp),
                                 modifier = Modifier.weight(1f)
@@ -805,7 +811,7 @@ fun SettingsSecurityScreen(
                             OutlinedTextField(
                                 value = inputUser,
                                 onValueChange = { inputUser = it },
-                                label = { Text("Web 管理账号") },
+                                label = { Text(strings.serverUsername) },
                                 singleLine = true,
                                 shape = RoundedCornerShape(16.dp),
                                 modifier = Modifier.weight(1f)
@@ -814,7 +820,8 @@ fun SettingsSecurityScreen(
                         OutlinedTextField(
                             value = inputPass,
                             onValueChange = { inputPass = it },
-                            label = { Text("Web 管理密码") },
+                            label = { Text(strings.serverPassword) },
+                            placeholder = { Text(strings.serverPasswordPlaceholder) },
                             visualTransformation = PasswordVisualTransformation(),
                             singleLine = true,
                             shape = RoundedCornerShape(16.dp),
@@ -844,13 +851,13 @@ fun SettingsSecurityScreen(
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = "跳过自签证书与域名校验",
+                                        text = strings.allowInsecureTlsLabel,
                                         style = MaterialTheme.typography.bodyMedium,
                                         fontWeight = FontWeight.SemiBold,
                                         color = MaterialTheme.colorScheme.onSurface
                                     )
                                     Text(
-                                        text = "允许 IP 直连私有自签证书或内网 HTTPS 网关",
+                                        text = if (isEn) "Allow direct IP connection with self-signed certificate or internal HTTPS" else "允许 IP 直连私有自签证书或内网 HTTPS 网关",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -882,7 +889,7 @@ fun SettingsSecurityScreen(
                                 )
                                 Spacer(Modifier.width(6.dp))
                                 Text(
-                                    text = "明文传输警告：HTTP 通信未经 TLS 加密，请仅在受信任私网中使用。",
+                                    text = if (isEn) "HTTP Warning: Communication is not encrypted via TLS. Use only in trusted networks." else "明文传输警告：HTTP 通信未经 TLS 加密，请仅在受信任私网中使用。",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onErrorContainer
                                 )
@@ -901,7 +908,7 @@ fun SettingsSecurityScreen(
                                 val targetId = editingServerId ?: UUID.randomUUID().toString()
                                 val newServer = ServerProfile(
                                     id = targetId,
-                                    name = inputName.trim().ifEmpty { "NXGate 网关" },
+                                    name = inputName.trim().ifEmpty { if (isEn) "NXGate Gateway" else "NXGate 网关" },
                                     host = inputHost.trim().ifEmpty { "127.0.0.1" },
                                     port = inputPort.toIntOrNull() ?: 8787,
                                     path = inputPath.trim().trim('/'),
@@ -917,22 +924,22 @@ fun SettingsSecurityScreen(
                                         val profileToSave = res.getOrNull() ?: newServer
                                         if (editingServerId != null && servers.any { it.id == editingServerId }) {
                                             NXGateApplication.instance.serverStore.updateServer(profileToSave)
-                                            Toast.makeText(context, "[${profileToSave.name}] 测活通过 (${profileToSave.latencyMs}ms)，配置已更新", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(context, "[${profileToSave.name}] ${if (isEn) "Connected (${profileToSave.latencyMs}ms), config updated" else "测活通过 (${profileToSave.latencyMs}ms)，配置已更新"}", Toast.LENGTH_SHORT).show()
                                         } else {
                                             NXGateApplication.instance.serverStore.addServer(profileToSave)
                                             editingServerId = profileToSave.id
-                                            Toast.makeText(context, "[${profileToSave.name}] 连通测试通过 (${profileToSave.latencyMs}ms)，新网关已添加", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(context, "[${profileToSave.name}] ${if (isEn) "Connected (${profileToSave.latencyMs}ms), new gateway added" else "连通测试通过 (${profileToSave.latencyMs}ms)，新网关已添加"}", Toast.LENGTH_SHORT).show()
                                         }
                                     } else {
                                         val offlineServer = newServer.copy(isOnline = false, latencyMs = 0)
-                                        val errMsg = res.exceptionOrNull()?.message ?: "连接超时"
+                                        val errMsg = res.exceptionOrNull()?.message ?: (if (isEn) "Timeout" else "连接超时")
                                         if (editingServerId != null && servers.any { it.id == editingServerId }) {
                                             NXGateApplication.instance.serverStore.updateServer(offlineServer)
-                                            Toast.makeText(context, "警告: 连通失败 ($errMsg)，已离线保存配置", Toast.LENGTH_LONG).show()
+                                            Toast.makeText(context, "${if (isEn) "Warning: Connection failed ($errMsg), saved offline" else "警告: 连通失败 ($errMsg)，已离线保存配置"}", Toast.LENGTH_LONG).show()
                                         } else {
                                             NXGateApplication.instance.serverStore.addServer(offlineServer)
                                             editingServerId = offlineServer.id
-                                            Toast.makeText(context, "警告: 连通失败 ($errMsg)，已离线添加网关", Toast.LENGTH_LONG).show()
+                                            Toast.makeText(context, "${if (isEn) "Warning: Connection failed ($errMsg), added offline" else "警告: 连通失败 ($errMsg)，已离线添加网关"}", Toast.LENGTH_LONG).show()
                                         }
                                     }
                                 }
@@ -954,7 +961,7 @@ fun SettingsSecurityScreen(
                             )
                             Spacer(Modifier.width(8.dp))
                             Text(
-                                text = if (isTestingConnection) "正在测试连通性..." else "连通性测试并保存",
+                                text = if (isTestingConnection) (if (isEn) "Testing connection..." else "正在测试连通性...") else (if (isEn) "Test Connection & Save" else "连通性测试并保存"),
                                 style = MaterialTheme.typography.labelLarge,
                                 fontWeight = FontWeight.Bold
                             )
@@ -1078,11 +1085,11 @@ fun SettingsSecurityScreen(
             shape = RoundedCornerShape(28.dp),
             containerColor = MaterialTheme.colorScheme.surfaceContainer,
             title = {
-                Text("确认移除服务器？", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text(strings.deleteConfirmTitle, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             },
             text = {
                 Text(
-                    "服务器 [${server.name}] (${server.host}:${server.port}) 将从应用纳管列表中彻底删除，确定要移除吗？",
+                    if (isEn) "Server [${server.name}] (${server.host}:${server.port}) will be completely removed from your gateway list. Confirm?" else "服务器 [${server.name}] (${server.host}:${server.port}) 将从应用纳管列表中彻底删除，确定要移除吗？",
                     style = MaterialTheme.typography.bodyMedium
                 )
             },
@@ -1095,15 +1102,15 @@ fun SettingsSecurityScreen(
                             editingServerId = null
                         }
                         deleteCandidate = null
-                        Toast.makeText(context, "已成功移除服务器 [${server.name}]", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "${if (isEn) "Removed server: " else "已成功移除服务器 "}[${server.name}]", Toast.LENGTH_SHORT).show()
                     }
                 ) {
-                    Text("确认删除", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+                    Text(if (isEn) "Delete" else "确认删除", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { deleteCandidate = null }) {
-                    Text("取消")
+                    Text(strings.cancel)
                 }
             }
         )
@@ -1128,9 +1135,9 @@ fun SettingsSecurityScreen(
                     val profileToSave = res.getOrNull() ?: parsed.copy(isOnline = false, latencyMs = 0)
                     NXGateApplication.instance.serverStore.addServer(profileToSave)
                     if (res.isSuccess) {
-                        Toast.makeText(context, "已成功扫码录入并测活网关 [${profileToSave.name}] (${profileToSave.latencyMs}ms)", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "${if (isEn) "Imported and connected to " else "已成功扫码录入并测活网关 "}[${profileToSave.name}] (${profileToSave.latencyMs}ms)", Toast.LENGTH_SHORT).show()
                     } else {
-                        Toast.makeText(context, "已扫码录入网关 [${profileToSave.name}]，但连通测试未通过: ${res.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
+                        Toast.makeText(context, "${if (isEn) "Imported server [${profileToSave.name}], but test failed: " else "已扫码录入网关 [${profileToSave.name}]，但连通测试未通过: "}${res.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
                     }
                 }
             }
@@ -1240,7 +1247,7 @@ fun SettingsSecurityScreen(
                         modifier = Modifier.size(24.dp)
                     )
                     Text(
-                        text = "后台锁定等待时间",
+                        text = strings.backgroundTimeout,
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
@@ -1252,7 +1259,7 @@ fun SettingsSecurityScreen(
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Text(
-                        text = "应用切入后台后，等待多久重新打开时触发生物识别验证：",
+                        text = if (isEn) "How long after app enters background to require biometric unlock:" else "应用切入后台后，等待多久重新打开时触发生物识别验证：",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -1266,7 +1273,8 @@ fun SettingsSecurityScreen(
                                 .fillMaxWidth()
                                 .clickable {
                                     NXGateApplication.instance.serverStore.setBiometricTimeoutSeconds(sec)
-                                    Toast.makeText(context, "已设置后台锁定时间: ${formatBiometricTimeout(sec)}", Toast.LENGTH_SHORT).show()
+                                    val formatted = if (isEn) "${sec}s" else formatBiometricTimeout(sec)
+                                    Toast.makeText(context, "${if (isEn) "Lock timeout set to: " else "已设置后台锁定时间: "}$formatted", Toast.LENGTH_SHORT).show()
                                     showBiometricTimeoutDialog = false
                                 }
                         ) {
@@ -1278,7 +1286,18 @@ fun SettingsSecurityScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Text(
-                                    text = formatBiometricTimeout(sec),
+                                    text = if (isEn) {
+                                        when (sec) {
+                                            0 -> "Immediately (on background)"
+                                            15 -> "15 seconds"
+                                            30 -> "30 seconds"
+                                            60 -> "1 minute (Recommended)"
+                                            120 -> "2 minutes"
+                                            300 -> "5 minutes"
+                                            600 -> "10 minutes"
+                                            else -> "${sec} seconds"
+                                        }
+                                    } else formatBiometricTimeout(sec),
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                                     color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
@@ -1298,7 +1317,7 @@ fun SettingsSecurityScreen(
             },
             confirmButton = {
                 TextButton(onClick = { showBiometricTimeoutDialog = false }) {
-                    Text("取消")
+                    Text(strings.cancel)
                 }
             }
         )
@@ -1320,14 +1339,14 @@ fun SettingsSecurityScreen(
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(24.dp)
                     )
-                    Text("集群备份与还原", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Text(strings.clusterBackup, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                 }
             },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     // Tab 切换: 导出备份 / 导入还原
                     ConnectedChipGroup(
-                        chips = listOf("导出集群备份", "导入集群配置"),
+                        chips = listOf(strings.exportCluster, strings.importCluster),
                         selectedIndex = clusterBackupTab,
                         onSelected = { clusterBackupTab = it }
                     )
@@ -1335,7 +1354,7 @@ fun SettingsSecurityScreen(
                     if (clusterBackupTab == 0) {
                         // ================= 导出模块 =================
                         Text(
-                            text = "当前已纳管 ${servers.size} 台网关服务器配置，点击下方按钮将生成全量标准 JSON 备份。",
+                            text = if (isEn) "Currently managing ${servers.size} servers. Tap below to export a full JSON backup." else "当前已纳管 ${servers.size} 台网关服务器配置，点击下方按钮将生成全量标准 JSON 备份。",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -1345,7 +1364,7 @@ fun SettingsSecurityScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("备份中包含连接密码", style = MaterialTheme.typography.bodyMedium)
+                            Text(if (isEn) "Include passwords in backup" else "备份中包含连接密码", style = MaterialTheme.typography.bodyMedium)
                             Switch(
                                 checked = exportIncludePassword,
                                 onCheckedChange = { exportIncludePassword = it }
@@ -1362,14 +1381,14 @@ fun SettingsSecurityScreen(
                                     val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                                     cm.setPrimaryClip(ClipData.newPlainText("NXGate Cluster Backup", json))
                                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    Toast.makeText(context, "全量集群备份 JSON 已成功复制到剪贴板！", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, if (isEn) "Cluster JSON backup copied to clipboard!" else "全量集群备份 JSON 已成功复制到剪贴板！", Toast.LENGTH_SHORT).show()
                                 },
                                 modifier = Modifier.weight(1f),
                                 shape = RoundedCornerShape(12.dp)
                             ) {
                                 Icon(Icons.Rounded.ContentCopy, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(Modifier.width(6.dp))
-                                Text("复制 JSON")
+                                Text(if (isEn) "Copy JSON" else "复制 JSON")
                             }
 
                             Button(
@@ -1380,7 +1399,7 @@ fun SettingsSecurityScreen(
                                         putExtra(Intent.EXTRA_TEXT, json)
                                         type = "text/plain"
                                     }
-                                    val shareIntent = Intent.createChooser(sendIntent, "分享或导出 NXGate 集群备份")
+                                    val shareIntent = Intent.createChooser(sendIntent, if (isEn) "Share NXGate Backup" else "分享或导出 NXGate 集群备份")
                                     context.startActivity(shareIntent)
                                 },
                                 modifier = Modifier.weight(1f),
@@ -1391,13 +1410,13 @@ fun SettingsSecurityScreen(
                             ) {
                                 Icon(Icons.Rounded.Share, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(Modifier.width(6.dp))
-                                Text("系统分享")
+                                Text(if (isEn) "Share" else "系统分享")
                             }
                         }
                     } else {
                         // ================= 导入模块 =================
                         Text(
-                            text = "请粘贴 NXGate 备份 JSON 文本，系统将自动识别并合并导入至当前网关列表：",
+                            text = if (isEn) "Paste NXGate backup JSON to import and merge into your gateway list:" else "请粘贴 NXGate 备份 JSON 文本，系统将自动识别并合并导入至当前网关列表：",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -1405,7 +1424,7 @@ fun SettingsSecurityScreen(
                         OutlinedTextField(
                             value = importJsonInput,
                             onValueChange = { importJsonInput = it },
-                            placeholder = { Text("粘贴备份 JSON 文本，包含 { \"servers\": [...] } 或 [...]") },
+                            placeholder = { Text(if (isEn) "Paste JSON with { \"servers\": [...] } or [...]" else "粘贴备份 JSON 文本，包含 { \"servers\": [...] } 或 [...]") },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(120.dp),
@@ -1424,39 +1443,39 @@ fun SettingsSecurityScreen(
                                     val clipText = cm.primaryClip?.getItemAt(0)?.text?.toString() ?: ""
                                     if (clipText.isNotEmpty()) {
                                         importJsonInput = clipText
-                                        Toast.makeText(context, "已从剪贴板粘贴文本", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, if (isEn) "Pasted from clipboard" else "已从剪贴板粘贴文本", Toast.LENGTH_SHORT).show()
                                     } else {
-                                        Toast.makeText(context, "剪贴板为空", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, if (isEn) "Clipboard is empty" else "剪贴板为空", Toast.LENGTH_SHORT).show()
                                     }
                                 }
                             ) {
                                 Icon(Icons.Rounded.ContentPaste, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(Modifier.width(4.dp))
-                                Text("从剪贴板粘贴")
+                                Text(if (isEn) "Paste Clipboard" else "从剪贴板粘贴")
                             }
 
                             Button(
                                 onClick = {
                                     if (importJsonInput.isBlank()) {
-                                        Toast.makeText(context, "请先输入或粘贴备份内容", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, if (isEn) "Please paste backup content first" else "请先输入或粘贴备份内容", Toast.LENGTH_SHORT).show()
                                         return@Button
                                     }
                                     val res = NXGateApplication.instance.serverStore.importClusterJson(importJsonInput)
                                     if (res.isSuccess) {
                                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                         val count = res.getOrDefault(0)
-                                        Toast.makeText(context, "成功导入并合并 $count 台网关节点！", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, "${if (isEn) "Successfully imported $count servers!" else "成功导入并合并 $count 台网关节点！"}", Toast.LENGTH_SHORT).show()
                                         showClusterBackupDialog = false
                                         importJsonInput = ""
                                     } else {
-                                        Toast.makeText(context, "导入失败: ${res.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
+                                        Toast.makeText(context, "${if (isEn) "Import failed: " else "导入失败: "}${res.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
                                     }
                                 },
                                 shape = RoundedCornerShape(12.dp)
                             ) {
                                 Icon(Icons.Rounded.FileUpload, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(Modifier.width(4.dp))
-                                Text("确认导入")
+                                Text(if (isEn) "Confirm Import" else "确认导入")
                             }
                         }
                     }
@@ -1464,7 +1483,7 @@ fun SettingsSecurityScreen(
             },
             confirmButton = {
                 TextButton(onClick = { showClusterBackupDialog = false }) {
-                    Text("关闭")
+                    Text(strings.close)
                 }
             }
         )
@@ -1474,6 +1493,8 @@ fun SettingsSecurityScreen(
 @Composable
 fun ThemeAppearanceSettingsSection(modifier: Modifier = Modifier) {
     val context = LocalContext.current
+    val strings = LocalAppStrings.current
+    val isEn = strings == AppStringsEn
     val serverStore = NXGateApplication.instance.serverStore
     val themeMode by serverStore.themeMode.collectAsState()
     val themePalette by serverStore.themePalette.collectAsState()
@@ -1513,13 +1534,13 @@ fun ThemeAppearanceSettingsSection(modifier: Modifier = Modifier) {
                 Spacer(Modifier.width(12.dp))
                 Column {
                     Text(
-                        text = "外观与调色板",
+                        text = strings.themeAndAppearance,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "参考 Google Pixel 桌面标准：强调色与基准底色解耦混色",
+                        text = if (isEn) "Decoupled accent color and base tone palette" else "参考 Google Pixel 桌面标准：强调色与基准底色解耦混色",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface
                     )
@@ -1528,7 +1549,7 @@ fun ThemeAppearanceSettingsSection(modifier: Modifier = Modifier) {
 
             // 1. 深浅明暗模式
             ConnectedChipGroup(
-                chips = listOf("跟随系统", "浅色模式", "深色模式"),
+                chips = listOf(if (isEn) "System" else "跟随系统", if (isEn) "Light" else "浅色模式", if (isEn) "Dark" else "深色模式"),
                 selectedIndex = when (themeMode) {
                     "light" -> 1
                     "dark" -> 2
@@ -1545,7 +1566,7 @@ fun ThemeAppearanceSettingsSection(modifier: Modifier = Modifier) {
             )
 
             // 2. 主题调色架构模式切换
-            val themeModeChips = listOf("Pixel 自由混色", "壁纸莫奈动态", "小米澎湃")
+            val themeModeChips = listOf(if (isEn) "Pixel Mixed" else "Pixel 自由混色", if (isEn) "Monet Dynamic" else "壁纸莫奈动态", if (isEn) "HyperOS" else "小米澎湃")
             val selectedPaletteChipIdx = when (themePalette) {
                 "monet" -> 1
                 "miuix" -> 2
@@ -1570,7 +1591,7 @@ fun ThemeAppearanceSettingsSection(modifier: Modifier = Modifier) {
                 // 2.1 强调色区域 (用于主按钮、开关与高光交互)
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
-                        text = "强调色 (用于主按钮、开关与交互高光)",
+                        text = if (isEn) "Accent Color (Primary buttons & toggles)" else "强调色 (用于主按钮、开关与交互高光)",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.Bold
@@ -1589,7 +1610,7 @@ fun ThemeAppearanceSettingsSection(modifier: Modifier = Modifier) {
                                     .clickable {
                                         serverStore.setThemeAccent(acc.id)
                                         serverStore.setThemePalette("pixel")
-                                        Toast.makeText(context, "强调色已设为「${acc.name}」", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, "${if (isEn) "Accent color set to " else "强调色已设为「"}${acc.name}${if (isEn) "" else "」"}", Toast.LENGTH_SHORT).show()
                                     },
                                 shape = CircleShape,
                                 color = acc.lightPrimary,
@@ -1613,7 +1634,7 @@ fun ThemeAppearanceSettingsSection(modifier: Modifier = Modifier) {
                 // 2.2 基准色区域 (用于卡片底色、页面背景与边框灰阶)
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
-                        text = "基准底色 (用于卡片底色、页面背景与边框灰阶)",
+                        text = if (isEn) "Base Background Tone (Cards & surfaces)" else "基准底色 (用于卡片底色、页面背景与边框灰阶)",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurface,
                         fontWeight = FontWeight.Bold
@@ -1632,7 +1653,7 @@ fun ThemeAppearanceSettingsSection(modifier: Modifier = Modifier) {
                                     .clickable {
                                         serverStore.setThemeBase(baseOpt.id)
                                         serverStore.setThemePalette("pixel")
-                                        Toast.makeText(context, "基准色已设为「${baseOpt.name}」", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, "${if (isEn) "Base tone set to " else "基准色已设为「"}${baseOpt.name}${if (isEn) "" else "」"}", Toast.LENGTH_SHORT).show()
                                     },
                                 shape = RoundedCornerShape(12.dp),
                                 color = if (isSelected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainer,
@@ -1676,7 +1697,7 @@ fun ThemeAppearanceSettingsSection(modifier: Modifier = Modifier) {
                             ) {}
                             Spacer(Modifier.width(6.dp))
                             Text(
-                                text = "强调色: ${currentAccent.name}",
+                                text = "${if (isEn) "Accent: " else "强调色: "}${currentAccent.name}",
                                 style = MaterialTheme.typography.bodySmall,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurface
@@ -1691,7 +1712,7 @@ fun ThemeAppearanceSettingsSection(modifier: Modifier = Modifier) {
                             ) {}
                             Spacer(Modifier.width(6.dp))
                             Text(
-                                text = "基准底色: ${currentBase.name}",
+                                text = "${if (isEn) "Base: " else "基准底色: "}${currentBase.name}",
                                 style = MaterialTheme.typography.bodySmall,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurface
@@ -1706,7 +1727,7 @@ fun ThemeAppearanceSettingsSection(modifier: Modifier = Modifier) {
                     color = MaterialTheme.colorScheme.surfaceContainerLow
                 ) {
                     Text(
-                        text = "正在从当前系统壁纸提取动态色彩 (Monet)。基准底色与强调色均由系统壁纸自动生成。",
+                        text = if (isEn) "Extracting dynamic colors from system wallpaper (Monet). Base and accent tones are automatically generated." else "正在从当前系统壁纸提取动态色彩 (Monet)。基准底色与强调色均由系统壁纸自动生成。",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.padding(14.dp)
@@ -1719,7 +1740,7 @@ fun ThemeAppearanceSettingsSection(modifier: Modifier = Modifier) {
                     color = MaterialTheme.colorScheme.surfaceContainerLow
                 ) {
                     Text(
-                        text = "正在使用小米澎湃 (HyperOS · MIUIX) 主题。基准色为纯黑/纯白双层悬浮卡片，强调色为经典超凡蔚蓝。",
+                        text = if (isEn) "Using Xiaomi HyperOS (MIUIX) theme with floating card layers and oceanic blue accents." else "正在使用小米澎湃 (HyperOS · MIUIX) 主题。基准色为纯黑/纯白双层悬浮卡片，强调色为经典超凡蔚蓝。",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.padding(14.dp)
