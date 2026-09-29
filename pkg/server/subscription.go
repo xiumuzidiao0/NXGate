@@ -1,13 +1,410 @@
 package server
 
 import (
+	"context"
 	"encoding/base64"
 	"fmt"
+	"net"
+	"net/http"
 	"net/url"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"aimili-vpngate-go/pkg/singbox"
+	"aimili-vpngate-go/pkg/tunnel"
 )
+
+var reLeadingGroup = regexp.MustCompile(`^\[[^\]]+\]\s*`)
+
+// isEnglishRequest checks if the incoming HTTP request explicitly or implicitly prefers English.
+func isEnglishRequest(r *http.Request) bool {
+	if r == nil {
+		return false
+	}
+	if r.URL != nil && r.URL.Query().Get("lang") == "en" {
+		return true
+	}
+	al := strings.ToLower(r.Header.Get("Accept-Language"))
+	return strings.HasPrefix(al, "en")
+}
+
+// prepareSubscriptionNodes filters and decorates sing-box nodes for client subscription generation.
+func (s *Server) prepareSubscriptionNodes(ctx context.Context, r *http.Request) ([]singbox.Node, error) {
+	if s.singboxClient == nil {
+		s.singboxClient = singbox.NewClient()
+	}
+
+	nodes, err := s.singboxClient.ListNodes(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var q url.Values
+	if r != nil && r.URL != nil {
+		q = r.URL.Query()
+	}
+
+	filtered := s.FilterSubscriptionNodes(nodes, q)
+	decorated := s.DecorateSubscriptionNodes(filtered, isEnglishRequest(r))
+	return decorated, nil
+}
+
+// FilterSubscriptionNodes applies multi-dimensional filtering to sing-box nodes based on URL query parameters:
+// - filter=favorites (or favorites=1/true): only nodes bound to favorites dynamic group
+// - countries=JP,US (or country=JP): only nodes bound to dynamic groups matching target countries
+// - group=dg-1 (or group_id=xxx): only nodes bound to a specific dynamic group ID or name
+// - protocols=vless,hy2 (or protocol=reality): only nodes matching specified protocols
+// - max_ping=150 (or max_latency=150): only nodes whose bound dynamic group has active latency <= max_ping ms
+// - min_speed=50: only nodes whose bound dynamic group has active speed >= min_speed Mbps
+func (s *Server) FilterSubscriptionNodes(nodes []singbox.Node, q url.Values) []singbox.Node {
+	if len(nodes) == 0 || len(q) == 0 {
+		return nodes
+	}
+
+	filterFav := strings.EqualFold(q.Get("filter"), "favorites") ||
+		strings.EqualFold(q.Get("favorites"), "1") ||
+		strings.EqualFold(q.Get("favorites"), "true")
+
+	countriesRaw := q.Get("countries")
+	if countriesRaw == "" {
+		countriesRaw = q.Get("country")
+	}
+	var targetCountries []string
+	if countriesRaw != "" {
+		for _, c := range strings.Split(countriesRaw, ",") {
+			c = strings.TrimSpace(strings.ToUpper(c))
+			if c != "" {
+				targetCountries = append(targetCountries, c)
+			}
+		}
+	}
+
+	targetGroup := strings.TrimSpace(q.Get("group"))
+	if targetGroup == "" {
+		targetGroup = strings.TrimSpace(q.Get("group_id"))
+	}
+
+	protocolsRaw := q.Get("protocols")
+	if protocolsRaw == "" {
+		protocolsRaw = q.Get("protocol")
+	}
+	var targetProtocols []string
+	if protocolsRaw != "" {
+		for _, p := range strings.Split(protocolsRaw, ",") {
+			p = strings.TrimSpace(strings.ToLower(p))
+			if p != "" {
+				targetProtocols = append(targetProtocols, p)
+			}
+		}
+	}
+
+	maxPing := 0
+	if mpStr := q.Get("max_ping"); mpStr != "" {
+		maxPing, _ = strconv.Atoi(mpStr)
+	} else if mlStr := q.Get("max_latency"); mlStr != "" {
+		maxPing, _ = strconv.Atoi(mlStr)
+	}
+
+	minSpeed := 0
+	if msStr := q.Get("min_speed"); msStr != "" {
+		minSpeed, _ = strconv.Atoi(msStr)
+	}
+
+	// If no effective filters active, return nodes as is
+	if !filterFav && len(targetCountries) == 0 && targetGroup == "" && len(targetProtocols) == 0 && maxPing <= 0 && minSpeed <= 0 {
+		return nodes
+	}
+
+	var res []singbox.Node
+
+	for _, n := range nodes {
+		// 1. Protocol filter
+		if len(targetProtocols) > 0 {
+			proto := strings.ToLower(n.Protocol)
+			rawProto := strings.ToLower(n.RawProtocol)
+			matched := false
+			for _, tp := range targetProtocols {
+				if strings.Contains(proto, tp) || strings.Contains(rawProto, tp) {
+					matched = true
+					break
+				}
+			}
+			if !matched {
+				continue
+			}
+		}
+
+		// Determine outbound port and associated groups
+		outboundRaw := strings.TrimSpace(n.Outbound)
+		outboundPort := n.OutboundPort
+		if outboundPort <= 0 && outboundRaw != "" && !strings.EqualFold(outboundRaw, "direct") && !strings.EqualFold(outboundRaw, "none") {
+			if u, err := url.Parse(outboundRaw); err == nil && u.Port() != "" {
+				outboundPort, _ = strconv.Atoi(u.Port())
+			}
+		}
+
+		isDirect := outboundRaw == "direct" || outboundRaw == "none" || (outboundRaw == "" && outboundPort <= 0)
+
+		// Collect groups associated with this node
+		var boundGroups []*tunnel.DynamicGroup
+		if outboundPort > 0 {
+			defaultPort := 7928
+			if s.cfg != nil && s.cfg.ProxyPort > 0 {
+				defaultPort = s.cfg.ProxyPort
+			}
+
+			if outboundPort == defaultPort && s.dynamicMgr != nil {
+				if sysGroup := s.dynamicMgr.GetGroup(tunnel.SystemPrimaryGroupID); sysGroup != nil {
+					boundGroups = append(boundGroups, sysGroup)
+				}
+			} else if s.portMgr != nil {
+				if rule := s.portMgr.GetRule(outboundPort); rule != nil && s.dynamicMgr != nil {
+					for _, gid := range rule.BoundGroupIDs {
+						if grp := s.dynamicMgr.GetGroup(gid); grp != nil {
+							boundGroups = append(boundGroups, grp)
+						}
+					}
+				}
+			}
+		}
+
+		// 2. Favorites filter
+		if filterFav {
+			matched := false
+			for _, bg := range boundGroups {
+				if bg.Country == "FAVORITES" || strings.Contains(bg.Name, "收藏") || bg.ID == "dg-favorites" {
+					matched = true
+					break
+				}
+			}
+			if !matched {
+				continue
+			}
+		}
+
+		// 3. Country filter
+		if len(targetCountries) > 0 {
+			matched := false
+			if isDirect {
+				for _, tc := range targetCountries {
+					if tc == "DIRECT" {
+						matched = true
+						break
+					}
+				}
+			} else {
+				for _, tc := range targetCountries {
+					for _, bg := range boundGroups {
+						if strings.EqualFold(bg.Country, tc) {
+							matched = true
+							break
+						}
+						// If dynamic group is FAVORITES or ANY, check active tunnel nodes
+						if (bg.Country == "FAVORITES" || bg.Country == "") && s.tunnelPool != nil {
+							for _, tid := range bg.ActiveTunnelIDs {
+								if tun := s.tunnelPool.GetTunnel(tid); tun != nil && tun.Node != nil {
+									if strings.EqualFold(tun.Node.CountryShort, tc) {
+										matched = true
+										break
+									}
+								}
+							}
+						}
+					}
+					if matched {
+						break
+					}
+				}
+			}
+			if !matched {
+				continue
+			}
+		}
+
+		// 4. Group filter
+		if targetGroup != "" {
+			matched := false
+			for _, bg := range boundGroups {
+				if strings.EqualFold(bg.ID, targetGroup) || strings.EqualFold(bg.Name, targetGroup) {
+					matched = true
+					break
+				}
+			}
+			if !matched {
+				continue
+			}
+		}
+
+		// 5. Ping filter (maxPing ms)
+		if maxPing > 0 && !isDirect {
+			matched := false
+			if s.tunnelPool != nil {
+				for _, bg := range boundGroups {
+					for _, tid := range bg.ActiveTunnelIDs {
+						if tun := s.tunnelPool.GetTunnel(tid); tun != nil {
+							p := tun.LatencyMs
+							if p <= 0 && tun.Node != nil {
+								p = tun.Node.Ping
+							}
+							if p > 0 && p <= maxPing {
+								matched = true
+								break
+							}
+						}
+					}
+					if matched {
+						break
+					}
+				}
+			}
+			if !matched && len(boundGroups) > 0 {
+				continue
+			}
+		}
+
+		// 6. Speed filter (minSpeed Mbps)
+		if minSpeed > 0 && !isDirect {
+			matched := false
+			minBps := int64(minSpeed) * 1_000_000
+			if s.tunnelPool != nil {
+				for _, bg := range boundGroups {
+					for _, tid := range bg.ActiveTunnelIDs {
+						if tun := s.tunnelPool.GetTunnel(tid); tun != nil && tun.Node != nil {
+							if tun.Node.Speed >= minBps {
+								matched = true
+								break
+							}
+						}
+					}
+					if matched {
+						break
+					}
+				}
+			}
+			if !matched && len(boundGroups) > 0 {
+				continue
+			}
+		}
+
+		res = append(res, n)
+	}
+
+	return res
+}
+
+// DecorateSubscriptionNodes dynamically prepends the bound exit group name (e.g. [日本Top3住宅出口组])
+// to the front of sing-box node names and URL fragments for presentation in client subscriptions.
+// Underlying sing-box configuration files and daemon tags remain strictly unmodified.
+func (s *Server) DecorateSubscriptionNodes(nodes []singbox.Node, isEnglish bool) []singbox.Node {
+	if len(nodes) == 0 {
+		return nodes
+	}
+
+	decorated := make([]singbox.Node, len(nodes))
+	for i, n := range nodes {
+		decorated[i] = n
+
+		cleanName := strings.TrimSpace(n.Name)
+		if cleanName == "" {
+			cleanName = strings.TrimSpace(n.Tag)
+		}
+		cleanName = strings.TrimSuffix(cleanName, ".json")
+		cleanName = reLeadingGroup.ReplaceAllString(cleanName, "")
+		cleanName = strings.TrimSpace(cleanName)
+		if cleanName == "" {
+			cleanName = fmt.Sprintf("Node-%s-%d", n.Protocol, n.Port)
+		}
+
+		outboundRaw := strings.TrimSpace(n.Outbound)
+		outboundPort := n.OutboundPort
+		if outboundPort <= 0 && outboundRaw != "" && !strings.EqualFold(outboundRaw, "direct") && !strings.EqualFold(outboundRaw, "none") {
+			if u, err := url.Parse(outboundRaw); err == nil && u.Port() != "" {
+				outboundPort, _ = strconv.Atoi(u.Port())
+			} else if strings.Contains(outboundRaw, ":") {
+				_, pStr, err := net.SplitHostPort(outboundRaw)
+				if err == nil {
+					outboundPort, _ = strconv.Atoi(pStr)
+				}
+			}
+		}
+
+		groupLabel := ""
+		if outboundRaw == "direct" || outboundRaw == "none" || (outboundRaw == "" && outboundPort <= 0) {
+			if isEnglish {
+				groupLabel = "Direct"
+			} else {
+				groupLabel = "直连"
+			}
+		} else if outboundPort > 0 {
+			defaultPort := 7928
+			if s.cfg != nil && s.cfg.ProxyPort > 0 {
+				defaultPort = s.cfg.ProxyPort
+			}
+
+			if outboundPort == defaultPort {
+				if s.dynamicMgr != nil {
+					if sysGroup := s.dynamicMgr.GetGroup(tunnel.SystemPrimaryGroupID); sysGroup != nil && sysGroup.Name != "" {
+						groupLabel = sysGroup.Name
+					}
+				}
+				if groupLabel == "" {
+					if isEnglish {
+						groupLabel = "Default Gateway"
+					} else {
+						groupLabel = "默认出口"
+					}
+				}
+			} else if s.portMgr != nil {
+				if rule := s.portMgr.GetRule(outboundPort); rule != nil {
+					if len(rule.BoundGroupIDs) > 0 && s.dynamicMgr != nil {
+						var gNames []string
+						for _, gid := range rule.BoundGroupIDs {
+							if grp := s.dynamicMgr.GetGroup(gid); grp != nil && grp.Name != "" {
+								gNames = append(gNames, grp.Name)
+							}
+						}
+						if len(gNames) > 0 {
+							groupLabel = strings.Join(gNames, "/")
+						}
+					}
+					if groupLabel == "" && len(rule.BoundTunnelIDs) > 0 {
+						if isEnglish {
+							groupLabel = fmt.Sprintf("Tunnel Exit (%d)", len(rule.BoundTunnelIDs))
+						} else {
+							groupLabel = fmt.Sprintf("指定隧道出口 (%d)", len(rule.BoundTunnelIDs))
+						}
+					}
+				}
+				if groupLabel == "" {
+					groupLabel = fmt.Sprintf("PORT %d", outboundPort)
+				}
+			} else {
+				groupLabel = fmt.Sprintf("PORT %d", outboundPort)
+			}
+		}
+
+		var finalName string
+		if groupLabel != "" {
+			finalName = fmt.Sprintf("[%s] %s", groupLabel, cleanName)
+		} else {
+			finalName = cleanName
+		}
+
+		decorated[i].Name = finalName
+		decorated[i].Tag = finalName
+
+		if decorated[i].URL != "" {
+			if hashIdx := strings.Index(decorated[i].URL, "#"); hashIdx != -1 {
+				decorated[i].URL = decorated[i].URL[:hashIdx+1] + url.PathEscape(finalName)
+			} else {
+				decorated[i].URL = decorated[i].URL + "#" + url.PathEscape(finalName)
+			}
+		}
+	}
+
+	return decorated
+}
 
 // GenerateRawSubscription converts sing-box nodes into a slice of standard proxy URLs (e.g. vless://, hysteria2://, tuic://).
 // It replaces any "auto" placeholder in the address or URL with the actual defaultServerHost.

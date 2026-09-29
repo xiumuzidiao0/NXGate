@@ -145,6 +145,10 @@ data class AppStrings(
     val clashSubDesc: String,
     val importToClient: String,
     val importToClash: String,
+    val subFilterScope: String,
+    val subFilterFavoritesOnly: String,
+    val subFilterJapanOnly: String,
+    val subFilterUSOnly: String,
 
     // Server Form & Actions
     val serverName: String,
@@ -332,6 +336,10 @@ val AppStringsZh = AppStrings(
     clashSubDesc = "Clash Verge / Mihomo Party / Stash 专属分流配置",
     importToClient = "导入客户端",
     importToClash = "导入 Clash",
+    subFilterScope = "订阅导出范围",
+    subFilterFavoritesOnly = "仅收藏组",
+    subFilterJapanOnly = "仅日本出口",
+    subFilterUSOnly = "仅美国出口",
 
     serverName = "服务器名称",
     serverNamePlaceholder = "例如: 东京主网关",
@@ -515,6 +523,10 @@ val AppStringsEn = AppStrings(
     clashSubDesc = "Clash Verge / Mihomo Party / Stash routing config",
     importToClient = "Import Client",
     importToClash = "Import Clash",
+    subFilterScope = "Subscription Scope",
+    subFilterFavoritesOnly = "Favorites Only",
+    subFilterJapanOnly = "Japan Only",
+    subFilterUSOnly = "US Only",
 
     serverName = "Server Name",
     serverNamePlaceholder = "e.g. Tokyo Primary Gateway",

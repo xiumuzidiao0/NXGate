@@ -4,6 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.AltRoute
@@ -65,6 +67,25 @@ fun SubscriptionDialog(
     var nodeCount by remember { mutableIntStateOf(0) }
     var isAgeEnabled by remember { mutableStateOf(false) }
     var agePublicKey by remember { mutableStateOf("") }
+
+    var selectedFilterIndex by remember { mutableIntStateOf(0) }
+    val filterOptions = listOf(
+        "" to strings.filterAll,
+        "filter=favorites" to strings.subFilterFavoritesOnly,
+        "countries=JP" to strings.subFilterJapanOnly,
+        "countries=US" to strings.subFilterUSOnly,
+        "protocol=reality" to "Reality",
+        "protocol=hy2" to "Hy2"
+    )
+
+    fun appendQuery(base: String, queryParam: String): String {
+        if (queryParam.isBlank()) return base
+        return if (base.contains("?")) "$base&$queryParam" else "$base?$queryParam"
+    }
+
+    val activeQuery = filterOptions[selectedFilterIndex].first
+    val effectiveGenericUrl = remember(genericUrl, activeQuery) { appendQuery(genericUrl, activeQuery) }
+    val effectiveClashUrl = remember(clashUrl, activeQuery) { appendQuery(clashUrl, activeQuery) }
 
     LaunchedEffect(server) {
         isLoading = true
@@ -163,6 +184,26 @@ fun SubscriptionDialog(
                         CircularProgressIndicator(modifier = Modifier.size(32.dp))
                     }
                 } else {
+                    // 订阅过滤条件选择
+                    Text(
+                        text = strings.subFilterScope,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState())
+                    ) {
+                        ConnectedChipGroup(
+                            chips = filterOptions.map { it.second },
+                            selectedIndex = selectedFilterIndex,
+                            onSelected = { selectedFilterIndex = it }
+                        )
+                    }
+
                     // 1. 通用全量订阅卡片
                     Surface(
                         shape = RoundedCornerShape(18.dp),
@@ -170,7 +211,7 @@ fun SubscriptionDialog(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
-                                clipboardManager.setText(AnnotatedString(genericUrl))
+                                clipboardManager.setText(AnnotatedString(effectiveGenericUrl))
                                 val tip = if (strings == AppStringsEn) {
                                     if (isAgeEnabled) "Copied age-encrypted universal subscription!" else "Copied universal subscription link!"
                                 } else {
@@ -217,7 +258,7 @@ fun SubscriptionDialog(
                             }
                             IconButton(
                                 onClick = {
-                                    val encodedUrl = Uri.encode(genericUrl)
+                                    val encodedUrl = Uri.encode(effectiveGenericUrl)
                                     val profileName = Uri.encode("NXGate-${server.name}")
                                     val singBoxUri = "sing-box://import-remote-profile?url=$encodedUrl#$profileName"
                                     val v2rayUri = "v2rayng://install-sub?url=$encodedUrl&name=$profileName"
@@ -235,7 +276,7 @@ fun SubscriptionDialog(
                                         } catch (_: Exception) {}
                                     }
                                     if (!launched) {
-                                        clipboardManager.setText(AnnotatedString(genericUrl))
+                                        clipboardManager.setText(AnnotatedString(effectiveGenericUrl))
                                         Toast.makeText(context, if (strings == AppStringsEn) "Proxy client not found, subscription link copied" else "未检测到已安装的通用代理客户端，已复制链接", Toast.LENGTH_SHORT).show()
                                     }
                                 },
@@ -252,7 +293,7 @@ fun SubscriptionDialog(
                                 onClick = {
                                     val sendIntent = Intent().apply {
                                         action = Intent.ACTION_SEND
-                                        putExtra(Intent.EXTRA_TEXT, genericUrl)
+                                        putExtra(Intent.EXTRA_TEXT, effectiveGenericUrl)
                                         type = "text/plain"
                                     }
                                     context.startActivity(Intent.createChooser(sendIntent, if (strings == AppStringsEn) "Share Universal Subscription" else "分享通用订阅链接"))
@@ -282,7 +323,7 @@ fun SubscriptionDialog(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
-                                clipboardManager.setText(AnnotatedString(clashUrl))
+                                clipboardManager.setText(AnnotatedString(effectiveClashUrl))
                                 val tip = if (strings == AppStringsEn) {
                                     if (isAgeEnabled) "Copied age-encrypted Clash subscription!" else "Copied Clash Meta / Mihomo subscription!"
                                 } else {
@@ -329,7 +370,7 @@ fun SubscriptionDialog(
                             }
                             IconButton(
                                 onClick = {
-                                    val encodedUrl = Uri.encode(clashUrl)
+                                    val encodedUrl = Uri.encode(effectiveClashUrl)
                                     val profileName = Uri.encode("NXGate-${server.name}")
                                     val clashUri = "clash://install-config?url=$encodedUrl&name=$profileName"
                                     try {
@@ -340,7 +381,7 @@ fun SubscriptionDialog(
                                         Toast.makeText(context, if (strings == AppStringsEn) "Launched Clash client to import configuration" else "已唤起 Clash 客户端导入配置", Toast.LENGTH_SHORT).show()
                                         onDismissRequest()
                                     } catch (e: Exception) {
-                                        clipboardManager.setText(AnnotatedString(clashUrl))
+                                        clipboardManager.setText(AnnotatedString(effectiveClashUrl))
                                         Toast.makeText(context, if (strings == AppStringsEn) "Clash client not found, configuration link copied" else "未检测到已安装的 Clash 客户端，已复制链接", Toast.LENGTH_SHORT).show()
                                     }
                                 },
@@ -357,7 +398,7 @@ fun SubscriptionDialog(
                                 onClick = {
                                     val sendIntent = Intent().apply {
                                         action = Intent.ACTION_SEND
-                                        putExtra(Intent.EXTRA_TEXT, clashUrl)
+                                        putExtra(Intent.EXTRA_TEXT, effectiveClashUrl)
                                         type = "text/plain"
                                     }
                                     context.startActivity(Intent.createChooser(sendIntent, if (strings == AppStringsEn) "Share Clash Subscription" else "分享 Clash 订阅链接"))

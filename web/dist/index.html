@@ -23,7 +23,7 @@
                 </div>
                 <div class="brand-text">
                     <div class="brand-title">NXGate</div>
-                    <div class="brand-sub"><span data-i18n="brand.sub">多出口智能网关</span> <span class="version-trigger" data-action="openUpdateModal" title="点击检查系统更新"><span id="sidebar-version-badge" class="badge-ver">v2.5.9.2</span></span></div>
+                    <div class="brand-sub"><span data-i18n="brand.sub">多出口智能网关</span> <span class="version-trigger" data-action="openUpdateModal" title="点击检查系统更新"><span id="sidebar-version-badge" class="badge-ver">v2.5.9.3</span></span></div>
                 </div>
             </div>
 
@@ -79,7 +79,7 @@
                     </button>
                     <h1 id="page-title">运行概览</h1>
                     <span id="conn-badge" class="badge disconnected"><span class="status-dot"></span> 检查中</span>
-                    <span class="version-trigger" data-action="openUpdateModal" title="点击检查系统更新"><span id="app-version-badge" class="badge badge-accent">v2.5.9.2</span><span id="header-update-dot" class="badge-dot-pulse hidden" title="发现新版本"></span></span>
+                    <span class="version-trigger" data-action="openUpdateModal" title="点击检查系统更新"><span id="app-version-badge" class="badge badge-accent">v2.5.9.3</span><span id="header-update-dot" class="badge-dot-pulse hidden" title="发现新版本"></span></span>
                 </div>
 
                 <div class="header-actions">
@@ -256,6 +256,10 @@
                     <button id="btn-copy-clash" class="btn btn-outline btn-sm btn-accent-outline"  data-action="copyClashSubURL" title="复制适配 Clash Meta / Mihomo 的 YAML 订阅地址">
                         <svg aria-hidden="true" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 7h10"/><path d="M7 12h10"/><path d="M7 17h6"/></svg>
                         复制 Clash 订阅
+                    </button>
+                    <button id="btn-sub-filter" class="btn btn-outline btn-sm" data-action="openSubFilterModal" title="定制订阅导出 (过滤收藏/指定国家/协议)">
+                        <svg aria-hidden="true" viewBox="0 0 24 24"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+                        <span data-i18n="sb.filter_sub">定制订阅</span>
                     </button>
                     <button id="btn-age-helper" class="btn btn-outline btn-sm" data-action="openAgeKeyHelper" title="配置 age 订阅端到端加密与密钥助手">
                         <svg aria-hidden="true" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
@@ -947,6 +951,83 @@
             <!-- 关闭按钮 -->
             <div class="text-center">
                 <button type="button" class="age-close-btn" data-action="closeAgeKeyHelper" data-i18n="common.close">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 5.5 定制订阅导出模态弹窗 -->
+    <div id="sub-filter-modal" class="modal-overlay">
+        <div class="modal-card modal-lg">
+            <div class="card-header mb-4">
+                <div class="card-title">
+                    <svg aria-hidden="true" viewBox="0 0 24 24"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+                    <span data-i18n="sub_filter.title">定制订阅导出中心</span>
+                </div>
+                <button type="button" class="btn btn-outline btn-icon" data-action="closeSubFilterModal" aria-label="关闭定制订阅">×</button>
+            </div>
+
+            <div class="text-xs text-muted mb-4" data-i18n="sub_filter.subtitle">
+                支持按收藏出口组、国家、协议及延迟门槛过滤，生成个性化客户端订阅
+            </div>
+
+            <div class="form-grid-auto mb-4">
+                <div>
+                    <label class="form-label qr-label" data-i18n="sub_filter.scope_label">出口范围过滤</label>
+                    <select id="sub-filter-scope" class="input-field w-full text-xs" data-change-action="updateSubFilterPreview">
+                        <option value="" data-i18n="sub_filter.scope_all">全部节点 (默认全量导出)</option>
+                        <option value="favorites" data-i18n="sub_filter.scope_fav">⭐ 仅我的收藏出口组 (filter=favorites)</option>
+                        <option value="JP" data-i18n="sub_filter.scope_jp">🇯🇵 日本出口组 (countries=JP)</option>
+                        <option value="US" data-i18n="sub_filter.scope_us">🇺🇸 美国出口组 (countries=US)</option>
+                        <option value="DIRECT" data-i18n="sub_filter.scope_direct">🌐 原生直连出口 (countries=DIRECT)</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="form-label qr-label" data-i18n="sub_filter.proto_label">入站协议筛选</label>
+                    <select id="sub-filter-proto" class="input-field w-full text-xs" data-change-action="updateSubFilterPreview">
+                        <option value="" data-i18n="sub_filter.proto_all">全部协议</option>
+                        <option value="reality">VLESS-REALITY</option>
+                        <option value="hy2">Hysteria2</option>
+                        <option value="tuic">TUIC</option>
+                        <option value="ss">Shadowsocks</option>
+                        <option value="trojan">Trojan</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-grid-auto mb-4">
+                <div>
+                    <label class="form-label qr-label" data-i18n="sub_filter.ping_label">最大允许延迟</label>
+                    <select id="sub-filter-ping" class="input-field w-full text-xs" data-change-action="updateSubFilterPreview">
+                        <option value="" data-i18n="sub_filter.ping_none">不限制延迟</option>
+                        <option value="120" data-i18n="sub_filter.ping_120">&lt; 120 ms (极速低延迟)</option>
+                        <option value="180" data-i18n="sub_filter.ping_180">&lt; 180 ms (优质体验)</option>
+                        <option value="250" data-i18n="sub_filter.ping_250">&lt; 250 ms (标准跨洋)</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="form-label qr-label" data-i18n="sub_filter.custom_country">指定国家代码 (可选)</label>
+                    <input id="sub-filter-custom-country" type="text" class="input-field w-full mono text-xs" placeholder="例如: JP,SG,KR" data-i18n-placeholder="sub_filter.custom_country_ph" data-input-action="updateSubFilterPreview">
+                </div>
+            </div>
+
+            <div class="card p-3 mb-4" style="background: var(--bg-card-sub); border: 1px solid var(--border);">
+                <div class="text-xs text-muted mb-2" data-i18n="sub_filter.preview_label">动态生成的定制订阅地址 (点击输入框直接全选复制):</div>
+                <div class="mb-3">
+                    <div class="text-xs font-semibold mb-1" data-i18n="sub_filter.universal_sub">通用全量订阅 (Base64/Raw):</div>
+                    <input id="sub-filter-preview-generic" type="text" class="input-field w-full mono text-xs" readonly data-action="copyFromElement" data-args="[&quot;sub-filter-preview-generic&quot;]">
+                </div>
+                <div>
+                    <div class="text-xs font-semibold mb-1" data-i18n="sub_filter.clash_sub">Clash Meta / Mihomo 专属订阅:</div>
+                    <input id="sub-filter-preview-clash" type="text" class="input-field w-full mono text-xs" readonly data-action="copyFromElement" data-args="[&quot;sub-filter-preview-clash&quot;]">
+                </div>
+            </div>
+
+            <div class="form-actions">
+                <button type="button" class="btn btn-outline" data-action="copyFilteredGenericSub" data-i18n="sub_filter.copy_generic">复制通用订阅</button>
+                <button type="button" class="btn btn-primary" data-action="copyFilteredClashSub" data-i18n="sub_filter.copy_clash">复制 Clash 订阅</button>
+                <button type="button" class="btn btn-outline" data-action="downloadFilteredClash" data-i18n="sub_filter.download_yaml">下载定制 YAML</button>
+                <button type="button" class="btn btn-outline" data-action="showFilteredQR" data-i18n="sub_filter.show_qr">二维码</button>
+                <button type="button" class="btn" data-action="closeSubFilterModal" data-i18n="common.close">关闭</button>
             </div>
         </div>
     </div>

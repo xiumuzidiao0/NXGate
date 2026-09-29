@@ -272,6 +272,32 @@
                 'dg.interval_label': '自动重评与轮换周期',
                 'dg.save_group': '保存出口组',
 
+                'sb.filter_sub': '定制订阅',
+                'sub_filter.title': '定制订阅导出中心',
+                'sub_filter.subtitle': '支持按收藏出口组、国家、协议及延迟门槛过滤，生成个性化客户端订阅',
+                'sub_filter.scope_label': '出口范围过滤',
+                'sub_filter.scope_all': '全部节点 (默认全量导出)',
+                'sub_filter.scope_fav': '⭐ 仅我的收藏出口组 (filter=favorites)',
+                'sub_filter.scope_jp': '🇯🇵 日本出口组 (countries=JP)',
+                'sub_filter.scope_us': '🇺🇸 美国出口组 (countries=US)',
+                'sub_filter.scope_direct': '🌐 原生直连出口 (countries=DIRECT)',
+                'sub_filter.proto_label': '入站协议筛选',
+                'sub_filter.proto_all': '全部协议',
+                'sub_filter.ping_label': '最大允许延迟',
+                'sub_filter.ping_none': '不限制延迟',
+                'sub_filter.ping_120': '< 120 ms (极速低延迟)',
+                'sub_filter.ping_180': '< 180 ms (优质体验)',
+                'sub_filter.ping_250': '< 250 ms (标准跨洋)',
+                'sub_filter.custom_country': '指定国家代码 (可选)',
+                'sub_filter.custom_country_ph': '例如: JP,SG,KR',
+                'sub_filter.preview_label': '动态生成的定制订阅地址 (点击输入框直接全选复制):',
+                'sub_filter.universal_sub': '通用全量订阅 (Base64/Raw):',
+                'sub_filter.clash_sub': 'Clash Meta / Mihomo 专属订阅:',
+                'sub_filter.copy_generic': '复制通用订阅',
+                'sub_filter.copy_clash': '复制 Clash 订阅',
+                'sub_filter.download_yaml': '下载定制 YAML',
+                'sub_filter.show_qr': '二维码',
+
                 'common.cancel': '取消',
                 'common.close': '关闭',
                 'common.done': '完成',
@@ -534,6 +560,32 @@
                 'dg.count_label': 'Concurrent Exit Tunnels [1-10]',
                 'dg.interval_label': 'Automatic Rotation Interval',
                 'dg.save_group': 'Save Exit Group',
+
+                'sb.filter_sub': 'Filter Sub',
+                'sub_filter.title': 'Customized Subscription Export',
+                'sub_filter.subtitle': 'Filter by favorites, countries, protocols, and latency threshold to generate personalized client subscriptions',
+                'sub_filter.scope_label': 'Egress Scope Filter',
+                'sub_filter.scope_all': 'All Nodes (Default Full Export)',
+                'sub_filter.scope_fav': '⭐ My Favorites Only (filter=favorites)',
+                'sub_filter.scope_jp': '🇯🇵 Japan Egress (countries=JP)',
+                'sub_filter.scope_us': '🇺🇸 US Egress (countries=US)',
+                'sub_filter.scope_direct': '🌐 Direct Native Egress (countries=DIRECT)',
+                'sub_filter.proto_label': 'Inbound Protocol',
+                'sub_filter.proto_all': 'All Protocols',
+                'sub_filter.ping_label': 'Maximum Latency',
+                'sub_filter.ping_none': 'No Latency Limit',
+                'sub_filter.ping_120': '< 120 ms (Ultra Low Latency)',
+                'sub_filter.ping_180': '< 180 ms (Fast & Responsive)',
+                'sub_filter.ping_250': '< 250 ms (Standard Transoceanic)',
+                'sub_filter.custom_country': 'Specific Country Code (Optional)',
+                'sub_filter.custom_country_ph': 'e.g. JP,SG,KR',
+                'sub_filter.preview_label': 'Dynamically Generated Subscription URLs (Click to select & copy):',
+                'sub_filter.universal_sub': 'Universal Subscription (Base64/Raw):',
+                'sub_filter.clash_sub': 'Clash Meta / Mihomo Subscription:',
+                'sub_filter.copy_generic': 'Copy Universal Sub',
+                'sub_filter.copy_clash': 'Copy Clash Sub',
+                'sub_filter.download_yaml': 'Download Filtered YAML',
+                'sub_filter.show_qr': 'QR Code',
 
                 'common.cancel': 'Cancel',
                 'common.close': 'Close',
@@ -3007,6 +3059,90 @@
             document.getElementById('singbox-qr-modal').classList.add('open');
         }
 
+        function buildFilteredSubParams() {
+            const scope = document.getElementById('sub-filter-scope')?.value || '';
+            const proto = document.getElementById('sub-filter-proto')?.value || '';
+            const ping = document.getElementById('sub-filter-ping')?.value || '';
+            const customCountry = (document.getElementById('sub-filter-custom-country')?.value || '').trim();
+
+            const params = new URLSearchParams();
+            if (scope === 'favorites') {
+                params.set('filter', 'favorites');
+            } else if (scope) {
+                params.set('countries', scope);
+            }
+            if (customCountry) {
+                params.set('countries', customCountry);
+            }
+            if (proto) {
+                params.set('protocol', proto);
+            }
+            if (ping) {
+                params.set('max_ping', ping);
+            }
+            return params.toString();
+        }
+
+        function getFilteredGenericSubURL() {
+            const base = getGenericSubURL();
+            const qs = buildFilteredSubParams();
+            if (!qs) return base;
+            return base.includes('?') ? `${base}&${qs}` : `${base}?${qs}`;
+        }
+
+        function getFilteredClashSubURL() {
+            const base = getClashSubURL();
+            const qs = buildFilteredSubParams();
+            if (!qs) return base;
+            return base.includes('?') ? `${base}&${qs}` : `${base}?${qs}`;
+        }
+
+        function updateSubFilterPreview() {
+            const genInput = document.getElementById('sub-filter-preview-generic');
+            const clashInput = document.getElementById('sub-filter-preview-clash');
+            if (genInput) genInput.value = getFilteredGenericSubURL();
+            if (clashInput) clashInput.value = getFilteredClashSubURL();
+        }
+
+        function openSubFilterModal() {
+            if (!singBoxOverview || !singBoxOverview.installed) {
+                tAlert('sing-box 未安装，无法生成定制订阅', 'sing-box not installed; cannot generate customized subscription');
+                return;
+            }
+            updateSubFilterPreview();
+            document.getElementById('sub-filter-modal')?.classList.add('open');
+        }
+
+        function closeSubFilterModal() {
+            document.getElementById('sub-filter-modal')?.classList.remove('open');
+        }
+
+        function copyFilteredGenericSub() {
+            const url = getFilteredGenericSubURL();
+            copyText(url, '定制通用订阅链接 (Base64/Raw)');
+        }
+
+        function copyFilteredClashSub() {
+            const url = getFilteredClashSubURL();
+            copyText(url, '定制 Clash Meta 订阅链接');
+        }
+
+        function downloadFilteredClash() {
+            const url = getFilteredClashSubURL();
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'singbox-clash-filtered.yaml';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            showToast('已触发下载定制 singbox-clash-filtered.yaml');
+        }
+
+        function showFilteredQR() {
+            const url = getFilteredGenericSubURL();
+            showNodeQRCode(url, '定制订阅链接与二维码');
+        }
+
         let currentAgeType = 'x25519';
 
         async function openAgeKeyHelper() {
@@ -3594,6 +3730,13 @@
             checkForUpdates,
             triggerSystemUpdate,
             triggerForceUpdate,
+            openSubFilterModal,
+            closeSubFilterModal,
+            updateSubFilterPreview,
+            copyFilteredGenericSub,
+            copyFilteredClashSub,
+            downloadFilteredClash,
+            showFilteredQR,
             openAgeKeyHelper,
             closeAgeKeyHelper,
             switchAgeType,

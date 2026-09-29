@@ -533,6 +533,30 @@ func (s *Server) getAgeRecipient(r *http.Request) string {
 	return ""
 }
 
+func appendFilterParams(baseURL string, r *http.Request) string {
+	if r == nil || r.URL == nil {
+		return baseURL
+	}
+	q := r.URL.Query()
+	filteredQ := url.Values{}
+	for k, vals := range q {
+		if k == "format" || k == "token" || k == "age_recipient" {
+			continue
+		}
+		for _, v := range vals {
+			filteredQ.Add(k, v)
+		}
+	}
+	encoded := filteredQ.Encode()
+	if encoded == "" {
+		return baseURL
+	}
+	if strings.Contains(baseURL, "?") {
+		return baseURL + "&" + encoded
+	}
+	return baseURL + "?" + encoded
+}
+
 func (s *Server) buildGenericSubURL(r *http.Request) string {
 	scheme := "http"
 	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
@@ -547,10 +571,13 @@ func (s *Server) buildGenericSubURL(r *http.Request) string {
 		host = net.JoinHostPort(uiHost, fmt.Sprintf("%d", s.cfg.UIPort))
 	}
 	token := s.getSubscriptionToken()
+	var base string
 	if token != "" {
-		return fmt.Sprintf("%s://%s/%s/api/singbox/subscription", scheme, host, token)
+		base = fmt.Sprintf("%s://%s/%s/api/singbox/subscription", scheme, host, token)
+	} else {
+		base = fmt.Sprintf("%s://%s/api/singbox/subscription", scheme, host)
 	}
-	return fmt.Sprintf("%s://%s/api/singbox/subscription", scheme, host)
+	return appendFilterParams(base, r)
 }
 
 func (s *Server) buildClashSubURL(r *http.Request) string {
@@ -567,18 +594,17 @@ func (s *Server) buildClashSubURL(r *http.Request) string {
 		host = net.JoinHostPort(uiHost, fmt.Sprintf("%d", s.cfg.UIPort))
 	}
 	token := s.getSubscriptionToken()
+	var base string
 	if token != "" {
-		return fmt.Sprintf("%s://%s/%s/api/singbox/subscription/clash", scheme, host, token)
+		base = fmt.Sprintf("%s://%s/%s/api/singbox/subscription/clash", scheme, host, token)
+	} else {
+		base = fmt.Sprintf("%s://%s/api/singbox/subscription/clash", scheme, host)
 	}
-	return fmt.Sprintf("%s://%s/api/singbox/subscription/clash", scheme, host)
+	return appendFilterParams(base, r)
 }
 
 func (s *Server) handleSingBoxRawSub(w http.ResponseWriter, r *http.Request) {
-	if s.singboxClient == nil {
-		s.singboxClient = singbox.NewClient()
-	}
-
-	nodes, err := s.singboxClient.ListNodes(r.Context())
+	nodes, err := s.prepareSubscriptionNodes(r.Context(), r)
 	if err != nil {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusInternalServerError)
@@ -611,11 +637,7 @@ func (s *Server) handleSingBoxRawSub(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleSingBoxClashSub(w http.ResponseWriter, r *http.Request) {
-	if s.singboxClient == nil {
-		s.singboxClient = singbox.NewClient()
-	}
-
-	nodes, err := s.singboxClient.ListNodes(r.Context())
+	nodes, err := s.prepareSubscriptionNodes(r.Context(), r)
 	if err != nil {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusInternalServerError)
@@ -653,11 +675,7 @@ func (s *Server) handleSingBoxGetSub(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if s.singboxClient == nil {
-		s.singboxClient = singbox.NewClient()
-	}
-
-	nodes, err := s.singboxClient.ListNodes(r.Context())
+	nodes, err := s.prepareSubscriptionNodes(r.Context(), r)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)

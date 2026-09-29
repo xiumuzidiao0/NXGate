@@ -322,6 +322,18 @@ try {
     await page.locator('[data-action="closeAddSingBoxModal"]').first().click();
     await page.waitForTimeout(100);
 
+    // Test Customized Subscription Filter Modal
+    await page.locator('#btn-sub-filter').click();
+    await page.waitForTimeout(100);
+    const subModalOpen = await page.locator('#sub-filter-modal').isVisible();
+    if (!subModalOpen) failures.push(`${viewport}px: sub filter modal did not open`);
+    const subFilterTitle = await page.locator('#sub-filter-modal .card-title').innerText();
+    if (!subFilterTitle.includes("定制订阅导出中心")) {
+      failures.push(`${viewport}px: expected modal title '定制订阅导出中心', got '${subFilterTitle}'`);
+    }
+    await page.locator('[data-action="closeSubFilterModal"]').first().click();
+    await page.waitForTimeout(100);
+
     const select = page.locator('.sb-chain-select');
     if (await select.count() > 0) {
       await select.selectOption("socks5://127.0.0.1:7928");

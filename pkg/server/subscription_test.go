@@ -5,11 +5,14 @@ import (
 	"encoding/base64"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
 	"aimili-vpngate-go/pkg/config"
+	"aimili-vpngate-go/pkg/proxy"
 	"aimili-vpngate-go/pkg/singbox"
+	"aimili-vpngate-go/pkg/tunnel"
 )
 
 func TestGenerateRawAndBase64Subscription(t *testing.T) {
@@ -297,3 +300,143 @@ func TestAgeSubscriptionToggleAndEncryption(t *testing.T) {
 		t.Fatalf("decrypted hybrid content mismatch with original clash content")
 	}
 }
+
+func TestSubscriptionGroupPrefixAndFiltering(t *testing.T) {
+	cfg := &config.Config{
+		DataDir:   t.TempDir(),
+		ProxyPort: 7928,
+		UIHost:    "127.0.0.1",
+		UIPort:    8787,
+	}
+
+	dm := tunnel.NewDynamicGroupManager(cfg, nil, nil)
+	pm := proxy.NewMultiPortManager(cfg, nil, dm)
+
+	// Create dynamic groups
+	_ = dm.SaveGroup(&tunnel.DynamicGroup{
+		ID:      "dg-japan",
+		Name:    "日本高速专线",
+		Enabled: true,
+		Country: "JP",
+	})
+	_ = dm.SaveGroup(&tunnel.DynamicGroup{
+		ID:      "dg-fav",
+		Name:    "我的收藏出口组",
+		Enabled: true,
+		Country: "FAVORITES",
+	})
+
+	// Bind ports
+	_ = pm.ApplyRules([]proxy.PortRule{
+		{Port: 1081, Enabled: true, BoundGroupIDs: []string{"dg-japan"}},
+		{Port: 1082, Enabled: true, BoundGroupIDs: []string{"dg-fav"}},
+	})
+
+	s := &Server{
+		cfg:        cfg,
+		portMgr:    pm,
+		dynamicMgr: dm,
+	}
+
+	testNodes := []singbox.Node{
+		{
+			Name:         "[旧分组] reality-443.json",
+			Protocol:     "VLESS-REALITY",
+			RawProtocol:  "vless",
+			Port:         443,
+			Outbound:     "socks5://127.0.0.1:1081",
+			OutboundPort: 1081,
+			URL:          "vless://uuid@auto:443?type=tcp#[旧分组] reality-443",
+		},
+		{
+			Name:         "hy2-8443.json",
+			Protocol:     "Hysteria2",
+			RawProtocol:  "hysteria2",
+			Port:         8443,
+			Outbound:     "socks5://127.0.0.1:1082",
+			OutboundPort: 1082,
+			URL:          "hysteria2://pass@auto:8443#hy2-8443",
+		},
+		{
+			Name:         "direct-node.json",
+			Protocol:     "Trojan",
+			RawProtocol:  "trojan",
+			Port:         4443,
+			Outbound:     "direct",
+			OutboundPort: 0,
+		},
+	}
+
+	// 1. Test Node Decoration
+	decNodes := s.DecorateSubscriptionNodes(testNodes, false)
+	if len(decNodes) != 3 {
+		t.Fatalf("expected 3 decorated nodes, got %d", len(decNodes))
+	}
+
+	// First node: bound to dg-japan -> [日本高速专线] reality-443
+	if decNodes[0].Name != "[日本高速专线] reality-443" {
+		t.Errorf("expected [日本高速专线] reality-443, got %s", decNodes[0].Name)
+	}
+	if !strings.Contains(decNodes[0].URL, "%5B%E6%97%A5%E6%9C%AC%E9%AB%98%E9%80%9F%E4%B8%93%E7%BA%BF%5D") {
+		t.Errorf("expected decorated URL fragment in node 0, got %s", decNodes[0].URL)
+	}
+
+	// Second node: bound to dg-fav -> [我的收藏出口组] hy2-8443
+	if decNodes[1].Name != "[我的收藏出口组] hy2-8443" {
+		t.Errorf("expected [我的收藏出口组] hy2-8443, got %s", decNodes[1].Name)
+	}
+
+	// Third node: direct -> [直连] direct-node
+	if decNodes[2].Name != "[直连] direct-node" {
+		t.Errorf("expected [直连] direct-node, got %s", decNodes[2].Name)
+	}
+
+	// Test English decoration
+	decNodesEn := s.DecorateSubscriptionNodes(testNodes, true)
+	if decNodesEn[2].Name != "[Direct] direct-node" {
+		t.Errorf("expected [Direct] direct-node in English, got %s", decNodesEn[2].Name)
+	}
+
+	// 2. Test Clash YAML Generation with decorated nodes
+	clashYaml := GenerateClashYAML(decNodes, "198.51.100.1")
+	if !strings.Contains(clashYaml, "name: \"[日本高速专线] reality-443\"") {
+		t.Errorf("Clash YAML missing decorated reality proxy name: %s", clashYaml)
+	}
+	if !strings.Contains(clashYaml, "- \"[日本高速专线] reality-443\"") {
+		t.Errorf("Clash YAML proxy groups missing decorated reality proxy name: %s", clashYaml)
+	}
+
+	// 3. Test Filtering
+	// 3a. Filter by favorites
+	qFav := url.Values{"filter": []string{"favorites"}}
+	filteredFav := s.FilterSubscriptionNodes(testNodes, qFav)
+	if len(filteredFav) != 1 || filteredFav[0].Port != 8443 {
+		t.Errorf("expected only hy2-8443 for favorites filter, got %d nodes", len(filteredFav))
+	}
+
+	// 3b. Filter by country JP
+	qJP := url.Values{"countries": []string{"JP"}}
+	filteredJP := s.FilterSubscriptionNodes(testNodes, qJP)
+	if len(filteredJP) != 1 || filteredJP[0].Port != 443 {
+		t.Errorf("expected only reality-443 for JP filter, got %d nodes", len(filteredJP))
+	}
+
+	// 3c. Filter by protocol
+	qProto := url.Values{"protocol": []string{"trojan"}}
+	filteredProto := s.FilterSubscriptionNodes(testNodes, qProto)
+	if len(filteredProto) != 1 || filteredProto[0].Port != 4443 {
+		t.Errorf("expected only trojan for protocol filter, got %d nodes", len(filteredProto))
+	}
+
+	// 4. Test URL filter query propagation in buildGenericSubURL and buildClashSubURL
+	reqWithFav := httptest.NewRequest("GET", "/api/singbox/subscription?format=json&filter=favorites", nil)
+	genURL := s.buildGenericSubURL(reqWithFav)
+	if !strings.Contains(genURL, "filter=favorites") {
+		t.Errorf("expected filter=favorites in generated generic URL, got %s", genURL)
+	}
+	clashSubURL := s.buildClashSubURL(reqWithFav)
+	if !strings.Contains(clashSubURL, "filter=favorites") {
+		t.Errorf("expected filter=favorites in generated clash URL, got %s", clashSubURL)
+	}
+}
+
