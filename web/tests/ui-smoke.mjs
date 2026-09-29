@@ -256,6 +256,22 @@ try {
     await page.locator('[data-action="closeMobileAppModal"]').first().click();
     await page.waitForTimeout(80);
 
+    // Test Blacklist modal and double tabs
+    await page.evaluate(() => document.querySelector('[data-view="dashboard"]').click());
+    await page.waitForTimeout(60);
+    await page.locator('[data-action="openBlacklistModal"]').first().click();
+    await page.waitForTimeout(100);
+    const blOpen = await page.locator("#blacklist-modal").isVisible();
+    if (!blOpen) failures.push(`${viewport}px: blacklist modal did not open`);
+    await page.locator('[data-action="switchBlacklistTab"][data-args*="perm"]').click();
+    await page.waitForTimeout(60);
+    const blPermVisible = await page.locator("#bl-content-perm").isVisible();
+    if (!blPermVisible) failures.push(`${viewport}px: blacklist perm content not visible`);
+    await page.locator('[data-action="switchBlacklistTab"][data-args*="temp"]').click();
+    await page.waitForTimeout(60);
+    await page.locator('[data-action="closeBlacklistModal"]').first().click();
+    await page.waitForTimeout(80);
+
     // Test Matrix & Dynamic Groups visibility
     await page.evaluate(() => document.querySelector('[data-view="matrix"]').click());
     await page.waitForTimeout(100);

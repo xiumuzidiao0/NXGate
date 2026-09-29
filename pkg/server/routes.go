@@ -225,6 +225,7 @@ func (s *Server) handleBlacklistRemove(w http.ResponseWriter, r *http.Request) {
 	if req.IP != "" {
 		s.pool.Blacklist().Remove(req.IP)
 	}
+	s.pool.RebuildCandidates()
 	stats.LogInfo("Server", "管理员解除了对节点/IP [%s] 的屏蔽", req.NodeID)
 	s.writeJSON(w, http.StatusOK, map[string]any{
 		"ok":      true,
@@ -233,12 +234,38 @@ func (s *Server) handleBlacklistRemove(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+type BlacklistClearReq struct {
+	Type string `json:"type,omitempty"` // "all", "temporary", "permanent"
+}
+
 func (s *Server) handleBlacklistClear(w http.ResponseWriter, r *http.Request) {
-	s.pool.Blacklist().Clear()
-	stats.LogInfo("Server", "管理员一键清空了全部屏蔽库")
+	clearType := r.URL.Query().Get("type")
+	if clearType == "" && r.Body != nil {
+		var req BlacklistClearReq
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		clearType = req.Type
+	}
+	if clearType == "" {
+		clearType = "temporary"
+	}
+
+	switch clearType {
+	case "all":
+		s.pool.Blacklist().ClearWithOptions(true)
+		stats.LogInfo("Server", "管理员一键清空了全部屏蔽库 (包括永久与临时)")
+	case "permanent":
+		s.pool.Blacklist().ClearPermanent()
+		stats.LogInfo("Server", "管理员清空了用户永久黑名单库")
+	default:
+		s.pool.Blacklist().ClearWithOptions(false)
+		stats.LogInfo("Server", "管理员清空了临时故障隔离库")
+	}
+	s.pool.RebuildCandidates()
+
 	s.writeJSON(w, http.StatusOK, map[string]any{
 		"ok":      true,
-		"message": "已清空全部屏蔽节点",
+		"type":    clearType,
+		"message": "已清空对应屏蔽库",
 	})
 }
 
@@ -261,6 +288,7 @@ func (s *Server) handleBlacklistAdd(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s.pool.Blacklist().MarkManualWithOptions(req.NodeID, req.IP, req.Country, reason, dur, req.Scope, req.Permanent)
+	s.pool.RebuildCandidates()
 	targetDesc := req.NodeID
 	if req.Scope == "ip" && req.IP != "" {
 		targetDesc = fmt.Sprintf("整机IP [%s]", req.IP)

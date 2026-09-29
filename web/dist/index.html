@@ -23,7 +23,7 @@
                 </div>
                 <div class="brand-text">
                     <div class="brand-title">NXGate</div>
-                    <div class="brand-sub"><span data-i18n="brand.sub">多出口智能网关</span> <span class="version-trigger" data-action="openUpdateModal" title="点击检查系统更新"><span id="sidebar-version-badge" class="badge-ver">v2.5.9.1</span></span></div>
+                    <div class="brand-sub"><span data-i18n="brand.sub">多出口智能网关</span> <span class="version-trigger" data-action="openUpdateModal" title="点击检查系统更新"><span id="sidebar-version-badge" class="badge-ver">v2.5.9.2</span></span></div>
                 </div>
             </div>
 
@@ -79,7 +79,7 @@
                     </button>
                     <h1 id="page-title">运行概览</h1>
                     <span id="conn-badge" class="badge disconnected"><span class="status-dot"></span> 检查中</span>
-                    <span class="version-trigger" data-action="openUpdateModal" title="点击检查系统更新"><span id="app-version-badge" class="badge badge-accent">v2.5.9.1</span><span id="header-update-dot" class="badge-dot-pulse hidden" title="发现新版本"></span></span>
+                    <span class="version-trigger" data-action="openUpdateModal" title="点击检查系统更新"><span id="app-version-badge" class="badge badge-accent">v2.5.9.2</span><span id="header-update-dot" class="badge-dot-pulse hidden" title="发现新版本"></span></span>
                 </div>
 
                 <div class="header-actions">
@@ -1029,19 +1029,47 @@
                 <button type="button" class="btn btn-outline btn-icon" data-action="closeBlacklistModal" aria-label="关闭屏蔽库">×</button>
             </div>
 
-            <div  class="section-toolbar">
-                <div  class="text-note text-muted" data-i18n="bl.modal_desc">
-                    展示当前因握手无法连通被隔离的节点。系统每 3 小时自动探活复活，亦可随时手动探活或清空。
+            <!-- Double tabs: 临时故障隔离池 vs 用户永久黑名单 -->
+            <div class="modal-tabs">
+                <button type="button" class="modal-tab-btn active" id="bl-tab-temp" data-action="switchBlacklistTab" data-args="[&quot;temp&quot;]">
+                    <span data-i18n="bl.tab_temp">临时故障隔离</span> (<span id="bl-temp-count">0</span>)
+                </button>
+                <button type="button" class="modal-tab-btn" id="bl-tab-perm" data-action="switchBlacklistTab" data-args="[&quot;perm&quot;]">
+                    <span data-i18n="bl.tab_perm">用户永久黑名单</span> (<span id="bl-perm-count">0</span>)
+                </button>
+            </div>
+
+            <div id="bl-content-temp">
+                <div  class="section-toolbar">
+                    <div  class="text-note text-muted" data-i18n="bl.modal_desc">
+                        展示当前因握手无法连通被系统自动隔离的节点。每 3 小时自动探活复活，亦可随时手动探活或清空。
+                    </div>
+                    <div  class="row gap-2 wrap">
+                        <button id="btn-resurrect-bl" class="btn btn-sm"  data-action="resurrectBlacklist" data-i18n="bl.resurrect">探活复活节点</button>
+                        <button class="btn btn-danger btn-sm"  data-action="clearTempBlacklist" data-i18n="bl.clear_temp">清空临时隔离</button>
+                        <button class="btn btn-outline btn-sm"  data-action="fetchBlacklist" data-args="[true]" data-i18n="common.refresh">刷新</button>
+                    </div>
                 </div>
-                <div  class="row gap-2 wrap">
-                    <button id="btn-resurrect-bl" class="btn btn-sm"  data-action="resurrectBlacklist" data-i18n="bl.resurrect">探活复活节点</button>
-                    <button class="btn btn-danger btn-sm"  data-action="clearAllBlacklist" data-i18n="bl.clear_all">清空全部屏蔽</button>
-                    <button class="btn btn-outline btn-sm"  data-action="fetchBlacklist" data-args="[true]" data-i18n="common.refresh">刷新</button>
+
+                <div id="blacklist-temp-container"  class="blacklist-list-container">
+                    <div  class="empty-state" data-i18n="bl.loading">正在载入屏蔽库...</div>
                 </div>
             </div>
 
-            <div id="blacklist-items-container"  class="blacklist-list-container">
-                <div  class="empty-state" data-i18n="bl.loading">正在载入屏蔽库...</div>
+            <div id="bl-content-perm" class="hidden">
+                <div  class="section-toolbar">
+                    <div  class="text-note text-muted" data-i18n="bl.perm_desc">
+                        用户手动永久拉黑的节点与整机 IP。在节点列表中彻底隐藏，严禁建立连接，且绝对免疫探活与自动复活。
+                    </div>
+                    <div  class="row gap-2 wrap">
+                        <button class="btn btn-danger btn-sm"  data-action="clearPermBlacklist" data-i18n="bl.clear_perm">清空永久黑名单</button>
+                        <button class="btn btn-outline btn-sm"  data-action="fetchBlacklist" data-args="[true]" data-i18n="common.refresh">刷新</button>
+                    </div>
+                </div>
+
+                <div id="blacklist-perm-container"  class="blacklist-list-container">
+                    <div  class="empty-state" data-i18n="bl.loading">正在载入屏蔽库...</div>
+                </div>
             </div>
 
             <div  class="form-actions">
@@ -1164,6 +1192,7 @@
                 <label class="form-label" data-i18n="dg.country_label">目标国家/地区</label>
                 <select id="dg-country" class="input-field w-full" >
                     <option value="" data-i18n="nodes.country_all">全部国家/地区</option>
+                    <option value="FAVORITES" data-i18n="dg.target_favorites">⭐ 我的收藏节点 (跨国收藏池)</option>
                     <option value="JP" selected>日本 (JP)</option>
                     <option value="US">美国 (US)</option>
                     <option value="KR">韩国 (KR)</option>

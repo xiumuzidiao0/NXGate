@@ -180,7 +180,21 @@ data class AppStrings(
     val downSpeedLabel: String,
     val downTrafficTotal: String,
     val upSpeedLabel: String,
-    val upTrafficTotal: String
+    val upTrafficTotal: String,
+
+    // Blacklist & Favorites
+    val blacklistTabTemporary: String,
+    val blacklistTabPermanent: String,
+    val clearTemporaryBlacklist: String,
+    val clearPermanentBlacklist: String,
+    val unblockNode: String,
+    val blockConfirmTitle: String,
+    val blockOptionPermanent: String,
+    val blockOptionPermanentDesc: String,
+    val blockOptionTemporary: String,
+    val blockOptionTemporaryDesc: String,
+    val favoritesPool: String,
+    val favoritesGroupBadge: String
 )
 
 val AppStringsZh = AppStrings(
@@ -350,7 +364,20 @@ val AppStringsZh = AppStrings(
     downSpeedLabel = "实时下载网速",
     downTrafficTotal = "下行流量总计",
     upSpeedLabel = "实时上传网速",
-    upTrafficTotal = "上行流量总计"
+    upTrafficTotal = "上行流量总计",
+
+    blacklistTabTemporary = "临时故障隔离",
+    blacklistTabPermanent = "用户永久黑名单",
+    clearTemporaryBlacklist = "清空临时隔离",
+    clearPermanentBlacklist = "清空永久黑名单",
+    unblockNode = "解除屏蔽",
+    blockConfirmTitle = "屏蔽节点选项",
+    blockOptionPermanent = "永久屏蔽此节点 (从列表彻底隐藏，永不连接)",
+    blockOptionPermanentDesc = "彻底隐藏并免疫探活复活，仅可在黑名单管理中手动解封",
+    blockOptionTemporary = "临时隔离 24 小时 (仅在故障隔离池中观察)",
+    blockOptionTemporaryDesc = "系统每 3 小时自动探活，连通正常后将自动复活回池",
+    favoritesPool = "⭐ 我的收藏节点 (跨国收藏池)",
+    favoritesGroupBadge = "收藏组"
 )
 
 val AppStringsEn = AppStrings(
@@ -520,7 +547,20 @@ val AppStringsEn = AppStrings(
     downSpeedLabel = "Live Download Speed",
     downTrafficTotal = "Total Downloaded",
     upSpeedLabel = "Live Upload Speed",
-    upTrafficTotal = "Total Uploaded"
+    upTrafficTotal = "Total Uploaded",
+
+    blacklistTabTemporary = "Temporary Quarantine",
+    blacklistTabPermanent = "Permanent Blacklist",
+    clearTemporaryBlacklist = "Clear Temporary",
+    clearPermanentBlacklist = "Clear Permanent",
+    unblockNode = "Unblock",
+    blockConfirmTitle = "Block Node Options",
+    blockOptionPermanent = "Permanent Block (Hide & never connect)",
+    blockOptionPermanentDesc = "Hidden from list and immune to auto-resurrection. Unblock manually in Blacklist.",
+    blockOptionTemporary = "Temporary Quarantine (24 hours)",
+    blockOptionTemporaryDesc = "System auto-probes every 3 hours and restores when healthy.",
+    favoritesPool = "⭐ My Favorites (Curated Pool)",
+    favoritesGroupBadge = "Favorites"
 )
 
 val LocalAppStrings = staticCompositionLocalOf<AppStrings> { AppStringsZh }

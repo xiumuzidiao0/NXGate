@@ -65,6 +65,20 @@ func (fm *FavoritesManager) IsFavorite(nodeID string) bool {
 	return fm.set[nodeID]
 }
 
+func (fm *FavoritesManager) Add(nodeID string) {
+	fm.mu.Lock()
+	defer fm.mu.Unlock()
+	fm.set[nodeID] = true
+	fm.saveLocked()
+}
+
+func (fm *FavoritesManager) Remove(nodeID string) {
+	fm.mu.Lock()
+	defer fm.mu.Unlock()
+	delete(fm.set, nodeID)
+	fm.saveLocked()
+}
+
 func (fm *FavoritesManager) Toggle(nodeID string) bool {
 	fm.mu.Lock()
 	defer fm.mu.Unlock()

@@ -224,10 +224,16 @@
                 'up.upgrade_now': '立即更新',
 
                 'bl.modal_title': '屏蔽库与故障隔离管理 (Blacklist)',
-                'bl.modal_desc': '展示当前因握手无法连通被隔离的节点。系统每 3 小时自动探活复活，亦可随时手动探活或清空。',
+                'bl.modal_desc': '展示当前因握手无法连通被系统自动隔离的节点。每 3 小时自动探活复活，亦可随时手动探活或清空。',
+                'bl.tab_temp': '临时故障隔离',
+                'bl.tab_perm': '用户永久黑名单',
+                'bl.clear_temp': '清空临时隔离',
+                'bl.clear_perm': '清空永久黑名单',
+                'bl.perm_desc': '用户手动永久拉黑的节点与整机 IP。在节点列表中彻底隐藏，严禁建立连接，且绝对免疫探活与自动复活。',
                 'bl.resurrect': '探活复活节点',
                 'bl.clear_all': '清空全部屏蔽',
                 'bl.loading': '正在载入屏蔽库...',
+                'dg.target_favorites': '⭐ 我的收藏节点 (跨国收藏池)',
 
                 'pe.title': '新增/编辑端口分流规则',
                 'pe.port_label': '本地监听端口号 [1-65535]',
@@ -482,9 +488,15 @@
 
                 'bl.modal_title': 'Blacklist & Quarantine Management',
                 'bl.modal_desc': 'Displays quarantined unreachable nodes. The system probes and resurrects recovered nodes automatically.',
+                'bl.tab_temp': 'Temporary Quarantine',
+                'bl.tab_perm': 'Permanent Blacklist',
+                'bl.clear_temp': 'Clear Temporary',
+                'bl.clear_perm': 'Clear Permanent',
+                'bl.perm_desc': 'Nodes and IPs manually blacklisted by user. Completely hidden from node list, never connected, and immune to auto-resurrection.',
                 'bl.resurrect': 'Probe & Resurrect',
                 'bl.clear_all': 'Clear All Blocked',
                 'bl.loading': 'Loading blacklist...',
+                'dg.target_favorites': '⭐ My Favorites (Curated Pool)',
 
                 'pe.title': 'Add / Edit Port Routing Rule',
                 'pe.port_label': 'Local Listen Port [1-65535]',
@@ -1482,14 +1494,18 @@
                 else if (g.unlock_filter === 'full' || g.unlock_filter === 'all') unlockText = `<span>${isEn ? 'Unlock: ' : '解锁: '}<strong class="unlock-full">${isEn ? 'Full Unlock (AI+Streaming)' : '全解锁 (三大 AI+流媒体)'}</strong></span>`;
 
                 const isSys = g.is_system || g.id === 'system-primary';
-                const sysBadge = isSys ? `<span class="badge badge-system">${isEn ? 'Primary Gateway (tun0)' : '系统主连网关 (tun0)'}</span>` : `<span class="badge badge-accent">Top ${g.target_count} ${isEn ? 'Tunnels' : '隧道'}</span>`;
-                const deleteBtn = isSys ? '' : `<button class="btn btn-danger btn-xs" data-action="deleteDynamicGroup" data-args="${jsonAttr([g.id])}">${isEn ? 'Delete' : '删除'}</button>`;
-                const editLabel = isSys ? (isEn ? 'Configure Strategy' : '配置主连策略') : (isEn ? 'Edit' : '编辑');
-
-                const countryStr = g.country ? `${getCountryName(g.country)} (${g.country})` : (isEn ? 'All Countries / Regions' : '全部国家/地区');
+                let countryStr = g.country ? `${getCountryName(g.country)} (${g.country})` : (isEn ? 'All Countries / Regions' : '全部国家/地区');
+                if (g.country === 'FAVORITES') {
+                    countryStr = isEn ? '⭐ My Favorites (Cross-Country Pool)' : '⭐ 我的收藏节点 (跨国收藏池)';
+                }
                 const activeCount = (g.active_tunnel_ids || []).length;
                 const statusClass = activeCount >= g.target_count ? 'connected' : (activeCount > 0 ? 'connecting' : 'disconnected');
                 const statusText = g.status_text || (isEn ? 'Normal' : '正常');
+
+                const favBadge = `<span class="badge badge-accent">⭐ ${isEn ? 'Favorites' : '收藏组'}</span>`;
+                const sysBadge = isSys ? `<span class="badge badge-system">${isEn ? 'Primary Gateway (tun0)' : '系统主连网关 (tun0)'}</span>` : (g.country === 'FAVORITES' ? favBadge : `<span class="badge badge-accent">Top ${g.target_count} ${isEn ? 'Tunnels' : '隧道'}</span>`);
+                const deleteBtn = isSys ? '' : `<button class="btn btn-danger btn-xs" data-action="deleteDynamicGroup" data-args="${jsonAttr([g.id])}">${isEn ? 'Delete' : '删除'}</button>`;
+                const editLabel = isSys ? (isEn ? 'Configure Strategy' : '配置主连策略') : (isEn ? 'Edit' : '编辑');
 
                 return `
                     <div class="dynamic-group-card ${isSys ? 'is-system' : ''}">
@@ -1680,83 +1696,162 @@
         }
 
         async function fetchBlacklist(showNotice = false) {
-            const container = document.getElementById('blacklist-items-container');
-            if (!container) return;
             try {
                 const res = await fetch('/api/blacklist');
                 if (!res.ok) return;
                 currentBlacklist = await res.json() || [];
                 renderBlacklist(currentBlacklist);
                 if (showNotice) {
-                    showToast('屏蔽库列表已刷新');
+                    showToast(getLanguage() === 'en' ? 'Blacklist updated' : '屏蔽库列表已刷新');
                 }
             } catch (err) {
-                container.innerHTML = '<div class="list-error">加载屏蔽库失败: ' + escapeHtml(err && err.message ? err.message : err) + '</div>';
+                console.error("fetch blacklist error:", err);
+            }
+        }
+
+        let activeBlacklistTab = 'temp';
+
+        function switchBlacklistTab(tab) {
+            activeBlacklistTab = tab;
+            const btnTemp = document.getElementById('bl-tab-temp');
+            const btnPerm = document.getElementById('bl-tab-perm');
+            const contentTemp = document.getElementById('bl-content-temp');
+            const contentPerm = document.getElementById('bl-content-perm');
+            if (btnTemp && btnPerm && contentTemp && contentPerm) {
+                if (tab === 'temp') {
+                    btnTemp.classList.add('active');
+                    btnPerm.classList.remove('active');
+                    contentTemp.classList.remove('hidden');
+                    contentPerm.classList.add('hidden');
+                } else {
+                    btnPerm.classList.add('active');
+                    btnTemp.classList.remove('active');
+                    contentPerm.classList.remove('hidden');
+                    contentTemp.classList.add('hidden');
+                }
             }
         }
 
         function renderBlacklist(items) {
-            const container = document.getElementById('blacklist-items-container');
-            if (!container) return;
+            const isEn = getLanguage() === 'en';
+            const tempContainer = document.getElementById('blacklist-temp-container');
+            const permContainer = document.getElementById('blacklist-perm-container');
+            const tempCountEl = document.getElementById('bl-temp-count');
+            const permCountEl = document.getElementById('bl-perm-count');
 
-            if (!items || items.length === 0) {
-                container.innerHTML = `
-                    <div class="blacklist-empty">
-                        <div class="blacklist-empty-title">当前无任何被隔离屏蔽的节点</div>
-                        <div class="blacklist-empty-copy">
-                            当节点在连接时发生多次超时、认证拒绝或异常断线时，系统会自动临时隔离；目前所有节点运行正常。
-                        </div>
-                    </div>
-                `;
-                return;
-            }
+            const allItems = items || [];
+            const tempItems = allItems.filter(i => !i.is_permanent);
+            const permItems = allItems.filter(i => i.is_permanent);
+
+            if (tempCountEl) tempCountEl.innerText = tempItems.length;
+            if (permCountEl) permCountEl.innerText = permItems.length;
 
             const now = Date.now();
-            container.innerHTML = `
-                <div class="blacklist-list">
-                    ${items.map(item => {
-                        const untilTime = new Date(item.until).getTime();
-                        const diffSec = Math.max(0, Math.floor((untilTime - now) / 1000));
-                        let leftStr = '即将解封';
-                        if (item.is_permanent) {
-                            leftStr = '<span class="text-danger font-medium">永久屏蔽 (Tombstone)</span>';
-                        } else if (diffSec > 3600) {
-                            leftStr = `${Math.floor(diffSec / 3600)}小时${Math.floor((diffSec % 3600) / 60)}分后解封`;
-                        } else if (diffSec > 0) {
-                            leftStr = `${Math.floor(diffSec / 60)}分${diffSec % 60}秒后解封`;
-                        }
 
-                        const cCode = item.country || '';
-                        const flag = cCode ? getCountryFlagSVG(cCode) : '';
-                        const scopeBadge = item.scope === 'ip' ? `<span class="badge badge-accent badge-mini">整机IP屏蔽</span>` : '';
-                        const failBadge = item.fail_count > 1 ? `<span class="badge unlock-blocked badge-mini">失败 ${item.fail_count} 次</span>` : '';
+            // 1. Render Temporary Quarantine
+            if (tempContainer) {
+                if (tempItems.length === 0) {
+                    tempContainer.innerHTML = `
+                        <div class="blacklist-empty">
+                            <div class="blacklist-empty-title">${isEn ? 'No Temporary Quarantined Nodes' : '当前无临时故障隔离节点'}</div>
+                            <div class="blacklist-empty-copy">
+                                ${isEn ? 'Nodes that fail handshakes or drop throughput are automatically quarantined temporarily. All nodes healthy.' : '当节点在连接时发生多次超时、认证拒绝或异常断线时，系统会自动临时隔离；目前所有节点运行正常。'}
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    tempContainer.innerHTML = `
+                        <div class="blacklist-list">
+                            ${tempItems.map(item => {
+                                const untilTime = new Date(item.until).getTime();
+                                const diffSec = Math.max(0, Math.floor((untilTime - now) / 1000));
+                                let leftStr = isEn ? 'Expiring soon' : '即将解封';
+                                if (diffSec > 3600) {
+                                    leftStr = isEn ? `${Math.floor(diffSec / 3600)}h ${Math.floor((diffSec % 3600) / 60)}m left` : `${Math.floor(diffSec / 3600)}小时${Math.floor((diffSec % 3600) / 60)}分后解封`;
+                                } else if (diffSec > 0) {
+                                    leftStr = isEn ? `${Math.floor(diffSec / 60)}m ${diffSec % 60}s left` : `${Math.floor(diffSec / 60)}分${diffSec % 60}秒后解封`;
+                                }
 
-                        return `
-                            <div class="blacklist-item">
-                                <div class="blacklist-main">
-                                    <span class="flag-box">${flag}</span>
-                                    <div>
-                                        <div class="blacklist-id">
-                                            ${escapeHtml(item.id || item.ip)} ${scopeBadge}
+                                const cCode = item.country || '';
+                                const flag = cCode ? getCountryFlagSVG(cCode) : '';
+                                const scopeBadge = item.scope === 'ip' ? `<span class="badge badge-accent badge-mini">${isEn ? 'Entire IP' : '整机IP隔离'}</span>` : '';
+                                const failBadge = item.fail_count > 1 ? `<span class="badge unlock-blocked badge-mini">${isEn ? 'Failed ' : '失败 '}${item.fail_count}${isEn ? 'x' : ' 次'}</span>` : '';
+
+                                return `
+                                    <div class="blacklist-item">
+                                        <div class="blacklist-main">
+                                            <span class="flag-box">${flag}</span>
+                                            <div>
+                                                <div class="blacklist-id">
+                                                    ${escapeHtml(item.id || item.ip)} ${scopeBadge}
+                                                </div>
+                                                <div class="blacklist-meta">
+                                                    <span>${isEn ? 'Reason: ' : '原因: '}<strong class="blacklist-reason">${escapeHtml(item.reason || (isEn ? 'Connection Failed' : '故障断线'))}</strong></span>
+                                                    <span>·</span>
+                                                    <span>${isEn ? 'Status: ' : '状态: '}<span class="blacklist-expiry">${leftStr}</span></span>
+                                                    ${failBadge}
+                                                </div>
+                                            </div>
                                         </div>
-                                        <div class="blacklist-meta">
-                                            <span>原因: <strong class="blacklist-reason">${escapeHtml(item.reason || '故障断线')}</strong></span>
-                                            <span>·</span>
-                                            <span>状态: <span class="blacklist-expiry">${leftStr}</span></span>
-                                            ${failBadge}
+                                        <div>
+                                            <button class="btn btn-outline btn-xs" data-action="removeNodeFromBlacklist" data-args="${jsonAttr([item.id, item.ip])}">
+                                                ${isEn ? 'Unblock' : '解除隔离'}
+                                            </button>
                                         </div>
                                     </div>
-                                </div>
-                                <div>
-                                    <button class="btn btn-outline btn-xs" data-action="removeNodeFromBlacklist" data-args="${jsonAttr([item.id, item.ip])}">
-                                        解除屏蔽
-                                    </button>
-                                </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    `;
+                }
+            }
+
+            // 2. Render Permanent Blacklist
+            if (permContainer) {
+                if (permItems.length === 0) {
+                    permContainer.innerHTML = `
+                        <div class="blacklist-empty">
+                            <div class="blacklist-empty-title">${isEn ? 'No Permanently Blocked Nodes' : '当前无用户永久屏蔽节点'}</div>
+                            <div class="blacklist-empty-copy">
+                                ${isEn ? 'Nodes permanently blocked from the node list appear here. Completely hidden and never connected.' : '在节点列表中手动选择「永久屏蔽」的节点在此存放。永久屏蔽的节点在列表中彻底隐藏，严禁建立连接，且免疫探活复活。'}
                             </div>
-                        `;
-                    }).join('')}
-                </div>
-            `;
+                        </div>
+                    `;
+                } else {
+                    permContainer.innerHTML = `
+                        <div class="blacklist-list">
+                            ${permItems.map(item => {
+                                const cCode = item.country || '';
+                                const flag = cCode ? getCountryFlagSVG(cCode) : '';
+                                const scopeBadge = item.scope === 'ip' ? `<span class="badge badge-accent badge-mini">${isEn ? 'Entire IP' : '整机IP永久拉黑'}</span>` : `<span class="badge unlock-blocked badge-mini">${isEn ? 'Permanent' : '永久屏蔽'}</span>`;
+
+                                return `
+                                    <div class="blacklist-item">
+                                        <div class="blacklist-main">
+                                            <span class="flag-box">${flag}</span>
+                                            <div>
+                                                <div class="blacklist-id">
+                                                    ${escapeHtml(item.id || item.ip)} ${scopeBadge}
+                                                </div>
+                                                <div class="blacklist-meta">
+                                                    <span>${isEn ? 'Reason: ' : '原因: '}<strong class="blacklist-reason">${escapeHtml(item.reason || (isEn ? 'Manual Permanent Block' : '用户手动永久屏蔽'))}</strong></span>
+                                                    <span>·</span>
+                                                    <span><strong class="text-danger">${isEn ? 'Tombstone (Never Connect)' : '永久封禁 (永不连接)'}</strong></span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <button class="btn btn-outline btn-xs" data-action="removeNodeFromBlacklist" data-args="${jsonAttr([item.id, item.ip])}">
+                                                ${isEn ? 'Remove from Blacklist' : '移出黑名单/解封'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    `;
+                }
+            }
         }
 
         async function removeNodeFromBlacklist(nodeId, ip) {
@@ -1768,86 +1863,108 @@
                 });
                 const ret = await res.json();
                 if (!res.ok) {
-                    alert('解除失败: ' + (ret.error || '未知错误'));
+                    tAlert('解除失败: ' + (ret.error || '未知错误'), 'Unblock failed: ' + (ret.error || 'Unknown error'));
                     return;
                 }
-                showToast(`已成功解除屏蔽 [${nodeId}]`);
+                showToast(getLanguage() === 'en' ? `Unblocked [${nodeId}]` : `已成功解除屏蔽 [${nodeId}]`);
                 await fetchBlacklist();
                 fetchStatus();
                 fetchNodes();
             } catch (err) {
-                alert('请求失败: ' + err);
+                tAlert('请求失败: ' + err, 'Request failed: ' + err);
+            }
+        }
+
+        async function clearTempBlacklist() {
+            if (!tConfirm('确定清空临时故障隔离池吗？隔离节点将立即放回可用候选池重测。', 'Clear temporary quarantine? Nodes will return to candidate pool for probing.')) return;
+            try {
+                const res = await fetch('/api/blacklist/clear?type=temporary', { method: 'POST' });
+                const ret = await res.json();
+                if (!res.ok) {
+                    tAlert('清空失败: ' + (ret.error || '未知错误'), 'Clear failed: ' + (ret.error || 'Unknown error'));
+                    return;
+                }
+                showToast(getLanguage() === 'en' ? 'Cleared temporary quarantine' : '已清空临时故障隔离库');
+                await fetchBlacklist();
+                fetchStatus();
+                fetchNodes();
+            } catch (err) {
+                tAlert('请求失败: ' + err, 'Request failed: ' + err);
+            }
+        }
+
+        async function clearPermBlacklist() {
+            if (!tConfirm('确定清空所有用户永久黑名单吗？被拉黑的节点将重新在节点列表中显示。', 'Are you sure you want to clear all permanent blacklisted nodes? They will reappear in the node list.')) return;
+            try {
+                const res = await fetch('/api/blacklist/clear?type=permanent', { method: 'POST' });
+                const ret = await res.json();
+                if (!res.ok) {
+                    tAlert('清空失败: ' + (ret.error || '未知错误'), 'Clear failed: ' + (ret.error || 'Unknown error'));
+                    return;
+                }
+                showToast(getLanguage() === 'en' ? 'Cleared permanent blacklist' : '已清空用户永久黑名单');
+                await fetchBlacklist();
+                fetchStatus();
+                fetchNodes();
+            } catch (err) {
+                tAlert('请求失败: ' + err, 'Request failed: ' + err);
             }
         }
 
         async function clearAllBlacklist() {
-            if (!tConfirm('确定清空整个屏蔽库吗？所有被隔离的节点将被立即释放回候选池。', 'Are you sure you want to clear the blacklist? Quarantined nodes will be released back to candidate pool.')) return;
-            try {
-                const res = await fetch('/api/blacklist/clear', { method: 'POST' });
-                const ret = await res.json();
-                if (!res.ok) {
-                    alert('清空失败: ' + (ret.error || '未知错误'));
-                    return;
-                }
-                showToast('已清空全部屏蔽节点');
-                await fetchBlacklist();
-                fetchStatus();
-                fetchNodes();
-            } catch (err) {
-                alert('请求失败: ' + err);
-            }
+            await clearTempBlacklist();
         }
 
         async function resurrectBlacklist() {
             const btn = document.getElementById('btn-resurrect-bl');
             if (btn) {
                 btn.disabled = true;
-                btn.innerText = '正在探活复活...';
+                btn.innerText = getLanguage() === 'en' ? 'Probing...' : '正在探活复活...';
             }
             try {
                 const res = await fetch('/api/blacklist/resurrect', { method: 'POST' });
                 const ret = await res.json();
                 if (!res.ok) {
-                    alert('探活检测失败: ' + (ret.error || '未知错误'));
+                    tAlert('探活检测失败: ' + (ret.error || '未知错误'), 'Probe & resurrect failed: ' + (ret.error || 'Unknown error'));
                     return;
                 }
                 const revivedCount = ret.revived_count || 0;
                 if (revivedCount > 0) {
-                    showToast(`探活成功！已复活并释放 ${revivedCount} 个节点`);
+                    showToast(getLanguage() === 'en' ? `Resurrected ${revivedCount} nodes!` : `探活成功！已复活并释放 ${revivedCount} 个节点`);
                 } else {
-                    showToast('探活完成：当前被屏蔽节点均未响应，暂无复活');
+                    showToast(getLanguage() === 'en' ? 'Probing complete: no temporary nodes revived' : '探活完成：当前临时隔离节点均未响应，暂无复活');
                 }
                 await fetchBlacklist();
                 fetchStatus();
                 fetchNodes();
             } catch (err) {
-                alert('请求失败: ' + err);
+                tAlert('请求失败: ' + err, 'Request failed: ' + err);
             } finally {
                 if (btn) {
                     btn.disabled = false;
-                    btn.innerText = '立即探活复活节点';
+                    btn.innerText = getLanguage() === 'en' ? 'Probe & Resurrect' : '立即探活复活节点';
                 }
             }
         }
 
         async function addNodeToBlacklist(nodeId, ip, country) {
-            const promptZh = `请选择对节点 [${nodeId}] 的屏蔽方式：\n\n1 = 临时屏蔽 24 小时\n2 = 永久屏蔽此节点 (Tombstone 永不收录)\n3 = 永久屏蔽整机 IP (${ip} 所有端口)\n\n请输入 1, 2 或 3:`;
-            const promptEn = `Choose blacklist option for [${nodeId}]:\n\n1 = Temporary 24 hours\n2 = Permanent Tombstone (Never include)\n3 = Permanent IP Blacklist (${ip} all ports)\n\nEnter 1, 2, or 3:`;
+            const promptZh = `请选择对节点 [${nodeId}] 的屏蔽方式：\n\n1 = 永久屏蔽此节点 (永不连接，从列表彻底隐藏) [推荐]\n2 = 临时隔离 24 小时 (仅在故障隔离池中观察)\n3 = 永久屏蔽整机 IP (${ip} 所有端口)\n\n请输入 1, 2 或 3:`;
+            const promptEn = `Choose blocking method for [${nodeId}]:\n\n1 = Permanent block (Never connect, hide from node list) [Recommended]\n2 = Temporary quarantine 24 hours\n3 = Permanent IP block (${ip} all ports)\n\nEnter 1, 2, or 3:`;
             const mode = tPrompt(promptZh, promptEn, "1");
             if (!mode) return;
 
             let dur = 1440;
-            let permanent = false;
+            let permanent = true;
             let scope = 'node';
-            let reason = '用户手动屏蔽';
+            let reason = '用户手动永久屏蔽 (从列表彻底隐藏)';
 
             if (mode === '2') {
-                permanent = true;
-                reason = '用户永久屏蔽节点 (Tombstone)';
+                permanent = false;
+                reason = '用户临时隔离 24 小时';
             } else if (mode === '3') {
                 permanent = true;
                 scope = 'ip';
-                reason = `用户永久屏蔽整机IP (${ip})`;
+                reason = `用户永久屏蔽整机 IP (${ip})`;
             }
 
             try {
@@ -1866,15 +1983,17 @@
                 });
                 const ret = await res.json();
                 if (!res.ok) {
-                    alert('屏蔽失败: ' + (ret.error || '未知错误'));
+                    tAlert('屏蔽失败: ' + (ret.error || '未知错误'), 'Block failed: ' + (ret.error || 'Unknown error'));
                     return;
                 }
-                const msg = permanent ? (scope === 'ip' ? `已永久屏蔽整机 IP [${ip}]` : `已永久屏蔽节点 [${nodeId}]`) : `已将节点 [${nodeId}] 屏蔽 24 小时`;
+                const msg = permanent ?
+                    (scope === 'ip' ? (getLanguage() === 'en' ? `Permanently blocked IP [${ip}]` : `已永久屏蔽整机 IP [${ip}]`) : (getLanguage() === 'en' ? `Permanently blocked [${nodeId}] (hidden)` : `已永久屏蔽节点 [${nodeId}] (已彻底隐藏)`)) :
+                    (getLanguage() === 'en' ? `Quarantined [${nodeId}] for 24h` : `已将节点 [${nodeId}] 临时隔离 24 小时`);
                 showToast(msg);
                 fetchStatus();
                 fetchNodes();
             } catch (err) {
-                alert('请求失败: ' + err);
+                tAlert('请求失败: ' + err, 'Request failed: ' + err);
             }
         }
 
@@ -3438,6 +3557,9 @@
             closeSingBoxQRModal,
             copyFromElement,
             closeBlacklistModal,
+            switchBlacklistTab,
+            clearTempBlacklist,
+            clearPermBlacklist,
             resurrectBlacklist,
             clearAllBlacklist,
             fetchBlacklist,

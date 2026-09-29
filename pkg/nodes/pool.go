@@ -768,6 +768,12 @@ func (np *NodePool) SelectBest() *Node {
 	return np.selectBestLocked()
 }
 
+func (np *NodePool) RebuildCandidates() {
+	np.mu.Lock()
+	defer np.mu.Unlock()
+	np.rebuildCandidatesLocked()
+}
+
 func (np *NodePool) Blacklist() *BlacklistManager {
 	return np.blacklist
 }

@@ -28,7 +28,7 @@ type BlacklistEntry struct {
 	Until       time.Time `json:"until"`
 	FailCount   int       `json:"fail_count"`
 	Level       string    `json:"level,omitempty"`        // "degraded" (降权), "quarantine" (隔离观察), "blacklist" (硬拉黑)
-	IsPermanent bool      `json:"is_permanent,omitempty"` // 是否为永久屏蔽 (Tombstone)
+	IsPermanent bool      `json:"is_permanent"`           // 是否为永久屏蔽 (Tombstone)
 	Scope       string    `json:"scope,omitempty"`        // "node" (单节点) 或 "ip" (整机IP屏蔽)
 }
 
@@ -233,10 +233,38 @@ func (bm *BlacklistManager) Remove(nodeID string) {
 }
 
 func (bm *BlacklistManager) Clear() {
+	bm.ClearWithOptions(false)
+}
+
+func (bm *BlacklistManager) ClearWithOptions(includePermanent bool) {
 	bm.mu.Lock()
 	defer bm.mu.Unlock()
 
-	bm.entries = make(map[string]*BlacklistEntry)
+	if includePermanent {
+		bm.entries = make(map[string]*BlacklistEntry)
+	} else {
+		newEntries := make(map[string]*BlacklistEntry)
+		for k, v := range bm.entries {
+			if v != nil && v.IsPermanent {
+				newEntries[k] = v
+			}
+		}
+		bm.entries = newEntries
+	}
+	bm.saveLocked()
+}
+
+func (bm *BlacklistManager) ClearPermanent() {
+	bm.mu.Lock()
+	defer bm.mu.Unlock()
+
+	newEntries := make(map[string]*BlacklistEntry)
+	for k, v := range bm.entries {
+		if v != nil && !v.IsPermanent {
+			newEntries[k] = v
+		}
+	}
+	bm.entries = newEntries
 	bm.saveLocked()
 }
 

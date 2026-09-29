@@ -291,12 +291,17 @@ func (m *DynamicGroupManager) EvaluateGroup(ctx context.Context, g *DynamicGroup
 	// 1. Filter candidates by country & IP type
 	var matched []*nodes.Node
 	targetCountry := strings.ToUpper(strings.TrimSpace(g.Country))
+	isFavoritesGroup := targetCountry == "FAVORITES"
 
 	for _, n := range allCandidates {
 		if m.nodePool.Blacklist().IsBlacklisted(n.ID) {
 			continue
 		}
-		if targetCountry != "" && n.CountryShort != targetCountry {
+		if isFavoritesGroup {
+			if m.nodePool.Favorites() == nil || !m.nodePool.Favorites().IsFavorite(n.ID) {
+				continue
+			}
+		} else if targetCountry != "" && targetCountry != "ALL" && n.CountryShort != targetCountry {
 			continue
 		}
 		if g.IPType != "" && g.IPType != "all" {
@@ -318,7 +323,11 @@ func (m *DynamicGroupManager) EvaluateGroup(ctx context.Context, g *DynamicGroup
 
 	if len(matched) == 0 {
 		m.mu.Lock()
-		g.StatusText = "无匹配候选节点"
+		if isFavoritesGroup {
+			g.StatusText = "无匹配收藏节点 (请在节点列表中添加收藏)"
+		} else {
+			g.StatusText = "无匹配候选节点"
+		}
 		m.mu.Unlock()
 		return
 	}

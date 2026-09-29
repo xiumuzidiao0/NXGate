@@ -153,3 +153,53 @@ func TestSystemPrimaryGroupEvaluation(t *testing.T) {
 		t.Fatalf("expected node-jp-stream, got %s", mockPC.connectedNode.ID)
 	}
 }
+
+func TestFavoritesDynamicGroupEvaluation(t *testing.T) {
+	cfg := &config.Config{
+		DataDir: t.TempDir(),
+	}
+	pool := NewPool(cfg, nil)
+	np := nodes.NewNodePool(cfg)
+	mgr := NewDynamicGroupManager(cfg, pool, np)
+
+	// Inject candidate nodes
+	np.SetCandidatesForTest([]*nodes.Node{
+		{
+			ID:           "node-fast-unfavorite",
+			IP:           "1.1.1.1",
+			CountryShort: "JP",
+			Score:        9999,
+			LatencyMs:    10,
+		},
+		{
+			ID:           "node-favorite-1",
+			IP:           "2.2.2.2",
+			CountryShort: "US",
+			Score:        5000,
+			LatencyMs:    50,
+		},
+	})
+
+	// Add node-favorite-1 to favorites
+	np.Favorites().Add("node-favorite-1")
+
+	favGroup := &DynamicGroup{
+		ID:              "dg-fav",
+		Name:            "我的收藏组",
+		Country:         "FAVORITES",
+		TargetCount:     1,
+		IntervalMinutes: 15,
+		SortBy:          "latency",
+	}
+	_ = mgr.SaveGroup(favGroup)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	mgr.EvaluateGroup(ctx, favGroup)
+
+	// Should only pick favorite node even if unfavorite has higher score / lower latency
+	if favGroup.StatusText == "无匹配候选节点" || favGroup.StatusText == "无匹配收藏节点 (请在节点列表中添加收藏)" {
+		t.Fatalf("expected to match favorite node, got %s", favGroup.StatusText)
+	}
+}

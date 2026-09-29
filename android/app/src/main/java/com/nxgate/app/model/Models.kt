@@ -362,7 +362,9 @@ data class BlacklistRecord(
     val country: String,
     val reason: String,
     val blacklistedAt: String = "",
-    val expiresAt: String = ""
+    val expiresAt: String = "",
+    val isPermanent: Boolean = false,
+    val scope: String = "node"
 )
 
 data class SystemLogEntry(

@@ -197,7 +197,8 @@ fun RoutingMatrixScreen(
 
     val groupCountryOptions = remember(isEn) {
         val list = mutableListOf(
-            GroupCountryOption("ALL", if (isEn) "All Countries / Regions (Any)" else "全部国家/地区 (不限)")
+            GroupCountryOption("ALL", if (isEn) "All Countries / Regions (Any)" else "全部国家/地区 (不限)"),
+            GroupCountryOption("FAVORITES", strings.favoritesPool)
         )
         val majorCodes = listOf(
             "JP", "US", "KR", "TW", "HK", "SG", "GB", "DE", "FR", "CA", "AU",
@@ -576,8 +577,15 @@ fun RoutingMatrixScreen(
                                                         color = MaterialTheme.colorScheme.onSurface
                                                     )
                                                     Row(verticalAlignment = Alignment.CenterVertically) {
+                                                        val badgeText = if (group.isSystem) {
+                                                            if (isEn) "Primary (tun0)" else "系统主出口(tun0)"
+                                                        } else if (group.country.equals("FAVORITES", true)) {
+                                                            "⭐ ${strings.favoritesGroupBadge} (${group.targetCount}${if (isEn) " NICs" else "网卡"})"
+                                                        } else {
+                                                            if (isEn) "Exit Group (${group.targetCount} NICs)" else "出口组 (${group.targetCount}网卡)"
+                                                        }
                                                         Text(
-                                                            text = if (group.isSystem) (if (isEn) "Primary (tun0)" else "系统主出口(tun0)") else (if (isEn) "Exit Group (${group.targetCount} NICs)" else "出口组 (${group.targetCount}网卡)"),
+                                                            text = badgeText,
                                                             style = MaterialTheme.typography.labelSmall,
                                                             color = MaterialTheme.colorScheme.primary
                                                         )

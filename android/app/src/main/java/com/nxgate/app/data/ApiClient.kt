@@ -768,12 +768,14 @@ class ApiClient {
                     val obj = arr.getJSONObject(i)
                     list.add(
                         BlacklistRecord(
-                            nodeId = obj.optString("node_id", ""),
+                            nodeId = obj.optString("id", obj.optString("node_id", "")),
                             ip = obj.optString("ip", ""),
                             country = obj.optString("country", "JP"),
                             reason = obj.optString("reason", "不可达"),
-                            blacklistedAt = obj.optString("blacklisted_at", ""),
-                            expiresAt = obj.optString("expires_at", "")
+                            blacklistedAt = obj.optString("marked_at", obj.optString("blacklisted_at", "")),
+                            expiresAt = obj.optString("until", obj.optString("expires_at", "")),
+                            isPermanent = obj.optBoolean("is_permanent", false),
+                            scope = obj.optString("scope", "node")
                         )
                     )
                 }
@@ -784,10 +786,27 @@ class ApiClient {
         }
     }
 
-    suspend fun addBlacklist(profile: ServerProfile, nodeId: String, ip: String, country: String): Result<Boolean> = withContext(Dispatchers.IO) {
+    suspend fun addBlacklist(
+        profile: ServerProfile,
+        nodeId: String,
+        ip: String,
+        country: String,
+        permanent: Boolean = true,
+        durationMinutes: Int = 1440,
+        scope: String = "node",
+        reason: String = ""
+    ): Result<Boolean> = withContext(Dispatchers.IO) {
         try {
-            val body = JSONObject().put("node_id", nodeId).put("ip", ip).put("country", country).toString()
-            executeCall(profile, "/api/blacklist", "POST", body).use { resp ->
+            val body = JSONObject().apply {
+                put("node_id", nodeId)
+                put("ip", ip)
+                put("country", country)
+                put("permanent", permanent)
+                put("duration_minutes", durationMinutes)
+                put("scope", scope)
+                if (reason.isNotBlank()) put("reason", reason)
+            }.toString()
+            executeCall(profile, "/api/blacklist/add", "POST", body).use { resp ->
                 Result.success(resp.isSuccessful)
             }
         } catch (e: Exception) {
@@ -816,9 +835,10 @@ class ApiClient {
         }
     }
 
-    suspend fun clearBlacklist(profile: ServerProfile): Result<Boolean> = withContext(Dispatchers.IO) {
+    suspend fun clearBlacklist(profile: ServerProfile, type: String = "temporary"): Result<Boolean> = withContext(Dispatchers.IO) {
         try {
-            executeCall(profile, "/api/blacklist/clear", "POST", "{}").use { resp ->
+            val body = JSONObject().put("type", type).toString()
+            executeCall(profile, "/api/blacklist/clear?type=$type", "POST", body).use { resp ->
                 Result.success(resp.isSuccessful)
             }
         } catch (e: Exception) {

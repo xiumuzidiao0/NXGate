@@ -27,6 +27,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Sort
 import androidx.compose.material.icons.rounded.Block
+import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.rounded.Bookmark
 import androidx.compose.material.icons.rounded.BookmarkBorder
 import androidx.compose.material.icons.rounded.Category
@@ -42,6 +43,9 @@ import androidx.compose.material.icons.rounded.RocketLaunch
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.StarBorder
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -52,6 +56,8 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -335,6 +341,7 @@ fun NodeSquareScreen(
 ) {
     val context = LocalContext.current
     val strings = LocalAppStrings.current
+    val isEn = strings == AppStringsEn
     val scope = rememberCoroutineScope()
     val haptic = LocalHapticFeedback.current
 
@@ -366,6 +373,11 @@ fun NodeSquareScreen(
     var showBlacklistSheet by remember { mutableStateOf(false) }
     var activeMasterIp by remember { mutableStateOf(activeServer?.exitIp ?: "") }
     val blacklistSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    var blockCandidate by remember { mutableStateOf<NodeCandidate?>(null) }
+    var blockOptionSelected by remember { mutableIntStateOf(0) } // 0 = permanent, 1 = temporary 24h
+    var blacklistTab by remember { mutableIntStateOf(0) } // 0 = temp, 1 = perm
+    var showClearPermConfirmDialog by remember { mutableStateOf(false) }
 
     // Dynamic country dropdown options calculated from allNodes (matching Web)
     val countryOptions = remember(allNodes, strings) {
@@ -779,22 +791,8 @@ fun NodeSquareScreen(
                                     }
                                 },
                                 onBlacklist = {
-                                    if (activeServer != null) {
-                                        scope.launch {
-                                            val res = NXGateApplication.instance.apiClient.addBlacklist(activeServer, node.id, node.ip, node.countryShort)
-                                            if (res.isSuccess) {
-                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                allNodes = allNodes.filter { it.id != node.id }
-                                                Toast.makeText(context, "已将节点 [${node.ip}] 移入 24 小时隔离屏蔽库", Toast.LENGTH_SHORT).show()
-                                                val blRes = NXGateApplication.instance.apiClient.fetchBlacklist(activeServer)
-                                                if (blRes.isSuccess) {
-                                                    blacklistItems = blRes.getOrNull() ?: emptyList()
-                                                }
-                                            } else {
-                                                Toast.makeText(context, "屏蔽失败: ${res.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
-                                            }
-                                        }
-                                    }
+                                    blockCandidate = node
+                                    blockOptionSelected = 0
                                 }
                             )
                         }
@@ -849,22 +847,8 @@ fun NodeSquareScreen(
                                     }
                                 },
                                 onBlacklist = {
-                                    if (activeServer != null) {
-                                        scope.launch {
-                                            val res = NXGateApplication.instance.apiClient.addBlacklist(activeServer, node.id, node.ip, node.countryShort)
-                                            if (res.isSuccess) {
-                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                allNodes = allNodes.filter { it.id != node.id }
-                                                Toast.makeText(context, "已将节点 [${node.ip}] 移入 24 小时隔离屏蔽库", Toast.LENGTH_SHORT).show()
-                                                val blRes = NXGateApplication.instance.apiClient.fetchBlacklist(activeServer)
-                                                if (blRes.isSuccess) {
-                                                    blacklistItems = blRes.getOrNull() ?: emptyList()
-                                                }
-                                            } else {
-                                                Toast.makeText(context, "屏蔽失败: ${res.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
-                                            }
-                                        }
-                                    }
+                                    blockCandidate = node
+                                    blockOptionSelected = 0
                                 }
                             )
                         }
@@ -874,8 +858,143 @@ fun NodeSquareScreen(
         }
     }
 
-    // Blacklist Modal Bottom Sheet
+    // 确认屏蔽节点弹窗 (支持永久屏蔽与临时隔离 24h)
+    if (blockCandidate != null) {
+        val node = blockCandidate!!
+        AlertDialog(
+            onDismissRequest = { blockCandidate = null },
+            shape = RoundedCornerShape(24.dp),
+            containerColor = MaterialTheme.colorScheme.surfaceContainer,
+            title = {
+                Text(
+                    text = "${strings.blockConfirmTitle} [${node.ip}]",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    // Option 0: 永久屏蔽此节点
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (blockOptionSelected == 0) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { blockOptionSelected = 0 }
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                RadioButton(selected = blockOptionSelected == 0, onClick = { blockOptionSelected = 0 })
+                                Spacer(Modifier.width(6.dp))
+                                Text(strings.blockOptionPermanent, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                            }
+                            Text(strings.blockOptionPermanentDesc, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 32.dp))
+                        }
+                    }
+
+                    // Option 1: 临时隔离 24 小时
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (blockOptionSelected == 1) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { blockOptionSelected = 1 }
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                RadioButton(selected = blockOptionSelected == 1, onClick = { blockOptionSelected = 1 })
+                                Spacer(Modifier.width(6.dp))
+                                Text(strings.blockOptionTemporary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                            }
+                            Text(strings.blockOptionTemporaryDesc, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 32.dp))
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val isPermanent = blockOptionSelected != 1
+                        val dur = if (isPermanent) 0 else 1440
+                        val reasonStr = if (isPermanent) "用户手动永久屏蔽" else "用户临时隔离 24 小时"
+                        if (activeServer != null) {
+                            scope.launch {
+                                val res = NXGateApplication.instance.apiClient.addBlacklist(
+                                    activeServer,
+                                    node.id,
+                                    node.ip,
+                                    node.countryShort,
+                                    permanent = isPermanent,
+                                    durationMinutes = dur,
+                                    scope = "node",
+                                    reason = reasonStr
+                                )
+                                if (res.isSuccess) {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    allNodes = allNodes.filter { it.id != node.id }
+                                    val tip = if (isPermanent) (if (isEn) "Permanently blocked [${node.ip}] (hidden)" else "已永久屏蔽节点 [${node.ip}] (已彻底隐藏)") else (if (isEn) "Quarantined [${node.ip}] for 24h" else "已将节点 [${node.ip}] 移入 24 小时临时隔离池")
+                                    Toast.makeText(context, tip, Toast.LENGTH_SHORT).show()
+                                    val blRes = NXGateApplication.instance.apiClient.fetchBlacklist(activeServer)
+                                    if (blRes.isSuccess) {
+                                        blacklistItems = blRes.getOrNull() ?: emptyList()
+                                    }
+                                } else {
+                                    Toast.makeText(context, "屏蔽失败: ${res.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }
+                        blockCandidate = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text(if (isEn) "Confirm Block" else "确认屏蔽")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { blockCandidate = null }) {
+                    Text(strings.cancel)
+                }
+            }
+        )
+    }
+
+    // 确认清空永久黑名单弹窗
+    if (showClearPermConfirmDialog && activeServer != null) {
+        AlertDialog(
+            onDismissRequest = { showClearPermConfirmDialog = false },
+            shape = RoundedCornerShape(24.dp),
+            containerColor = MaterialTheme.colorScheme.surfaceContainer,
+            title = { Text(if (isEn) "Clear Permanent Blacklist?" else "确认清空用户永久黑名单？", fontWeight = FontWeight.Bold) },
+            text = { Text(if (isEn) "All permanently blocked nodes will be unblocked and reappear in the node list. Confirm?" else "所有被永久拉黑的节点将解除封禁并重新在节点列表中显示，确定清空吗？") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showClearPermConfirmDialog = false
+                        scope.launch {
+                            val res = NXGateApplication.instance.apiClient.clearBlacklist(activeServer, "permanent")
+                            if (res.isSuccess) {
+                                blacklistItems = blacklistItems.filter { !it.isPermanent }
+                                Toast.makeText(context, if (isEn) "Cleared permanent blacklist!" else "已成功清空用户永久黑名单！", Toast.LENGTH_SHORT).show()
+                                refreshAllNodes()
+                            }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text(if (isEn) "Confirm Clear" else "确认清空")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearPermConfirmDialog = false }) { Text(strings.cancel) }
+            }
+        )
+    }
+
+    // Blacklist Modal Bottom Sheet (双选项卡: 临时隔离池 vs 用户永久黑名单)
     if (showBlacklistSheet) {
+        val tempItems = blacklistItems.filter { !it.isPermanent }
+        val permItems = blacklistItems.filter { it.isPermanent }
+
         ModalBottomSheet(
             onDismissRequest = { showBlacklistSheet = false },
             sheetState = blacklistSheetState,
@@ -889,84 +1008,235 @@ fun NodeSquareScreen(
                     .padding(bottom = 32.dp)
             ) {
                 Text(
-                    text = "故障隔离屏蔽库 (Blacklist)",
+                    text = if (isEn) "Blacklist Management" else "屏蔽与故障隔离管理 (Blacklist)",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
-                Text(
-                    text = "包含因吞吐量低于 70KB/s、握手超时或离线而被系统自动隔离的死节点 (${blacklistItems.size} 个)",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface
+
+                Spacer(Modifier.height(10.dp))
+
+                // 双选项卡: 临时隔离 vs 永久黑名单
+                ConnectedChipGroup(
+                    chips = listOf(
+                        "${strings.blacklistTabTemporary} (${tempItems.size})",
+                        "${strings.blacklistTabPermanent} (${permItems.size})"
+                    ),
+                    selectedIndex = blacklistTab,
+                    onSelected = { blacklistTab = it }
                 )
 
-                Spacer(Modifier.height(14.dp))
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(10.dp))
 
-                // Action button: 一键批量探活复活
-                ConnectedButtonGroup(
-                    items = listOf(
-                        ConnectedButtonItem(
-                            text = "一键批量探活复活",
-                            style = ConnectedButtonStyle.Filled,
-                            icon = Icons.Rounded.Refresh,
-                            onClick = {
-                                if (activeServer != null) {
-                                    scope.launch {
-                                        NXGateApplication.instance.apiClient.resurrectBlacklist(activeServer)
-                                        Toast.makeText(context, "已在后台启动探活探测，恢复连通的节点将自动解封放回候选池！", Toast.LENGTH_SHORT).show()
+                if (blacklistTab == 0) {
+                    // Tab 0: 临时隔离池
+                    Text(
+                        text = if (isEn) "Nodes quarantined due to timeouts or dropped throughput (${tempItems.size} nodes). Auto-probed every 3 hours." else "包含因吞吐量低于 70KB/s、握手超时或离线而被系统自动隔离的死节点 (${tempItems.size} 个)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(Modifier.height(10.dp))
+
+                    ConnectedButtonGroup(
+                        items = listOf(
+                            ConnectedButtonItem(
+                                text = if (isEn) "Probe & Resurrect" else "一键批量探活复活",
+                                style = ConnectedButtonStyle.Filled,
+                                icon = Icons.Rounded.Refresh,
+                                onClick = {
+                                    if (activeServer != null) {
+                                        scope.launch {
+                                            NXGateApplication.instance.apiClient.resurrectBlacklist(activeServer)
+                                            Toast.makeText(context, if (isEn) "Probe started in background!" else "已在后台启动探活探测，恢复连通的节点将自动解封放回候选池！", Toast.LENGTH_SHORT).show()
+                                            val blRes = NXGateApplication.instance.apiClient.fetchBlacklist(activeServer)
+                                            if (blRes.isSuccess) blacklistItems = blRes.getOrNull() ?: emptyList()
+                                            refreshAllNodes()
+                                        }
                                     }
                                 }
-                            }
-                        )
-                    )
-                )
-
-                Spacer(Modifier.height(14.dp))
-
-                LazyColumn(
-                    modifier = Modifier.height(180.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    items(blacklistItems) { item ->
-                        Surface(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(8.dp),
-                            color = MaterialTheme.colorScheme.surfaceContainerHighest
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 12.dp, vertical = 6.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "${item.ip} (${item.country}) - ${item.reason}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.error,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                IconButton(
-                                    onClick = {
-                                        if (activeServer != null) {
-                                            scope.launch {
-                                                NXGateApplication.instance.apiClient.removeBlacklist(activeServer, item.nodeId)
-                                                blacklistItems = blacklistItems.filter { it.nodeId != item.nodeId }
-                                                Toast.makeText(context, "已解除对 [${item.ip}] 的屏蔽！", Toast.LENGTH_SHORT).show()
+                            ),
+                            ConnectedButtonItem(
+                                text = strings.clearTemporaryBlacklist,
+                                style = ConnectedButtonStyle.Tonal,
+                                onClick = {
+                                    if (activeServer != null) {
+                                        scope.launch {
+                                            val res = NXGateApplication.instance.apiClient.clearBlacklist(activeServer, "temporary")
+                                            if (res.isSuccess) {
+                                                blacklistItems = blacklistItems.filter { it.isPermanent }
+                                                Toast.makeText(context, if (isEn) "Cleared temporary quarantine" else "已清空临时故障隔离池！", Toast.LENGTH_SHORT).show()
                                                 refreshAllNodes()
                                             }
                                         }
-                                    },
-                                    modifier = Modifier.size(28.dp)
+                                    }
+                                }
+                            )
+                        )
+                    )
+
+                    Spacer(Modifier.height(12.dp))
+
+                    if (tempItems.isEmpty()) {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth().height(100.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(if (isEn) "No temporary quarantined nodes" else "当前无临时故障隔离节点", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.height(200.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            items(tempItems) { item ->
+                                Surface(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = MaterialTheme.colorScheme.surfaceContainerHighest
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.Delete,
-                                        contentDescription = "解除屏蔽",
-                                        tint = MaterialTheme.colorScheme.error,
-                                        modifier = Modifier.size(16.dp)
-                                    )
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = "${item.ip} (${item.country})",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                            Text(
+                                                text = item.reason,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.error
+                                            )
+                                        }
+                                        IconButton(
+                                            onClick = {
+                                                if (activeServer != null) {
+                                                    scope.launch {
+                                                        NXGateApplication.instance.apiClient.removeBlacklist(activeServer, item.nodeId)
+                                                        blacklistItems = blacklistItems.filter { it.nodeId != item.nodeId }
+                                                        Toast.makeText(context, if (isEn) "Unblocked [${item.ip}]" else "已解除对 [${item.ip}] 的屏蔽！", Toast.LENGTH_SHORT).show()
+                                                        refreshAllNodes()
+                                                    }
+                                                }
+                                            },
+                                            modifier = Modifier.size(28.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Rounded.Delete,
+                                                contentDescription = strings.unblockNode,
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // Tab 1: 用户永久黑名单
+                    Text(
+                        text = if (isEn) "Nodes permanently blocked. Hidden from node list and never connected (${permItems.size} nodes)." else "由用户手动永久屏蔽的节点。在节点列表中彻底隐藏，严禁建立连接，且免疫探活复活 (${permItems.size} 个)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(Modifier.height(10.dp))
+
+                    ConnectedButtonGroup(
+                        items = listOf(
+                            ConnectedButtonItem(
+                                text = strings.clearPermanentBlacklist,
+                                style = ConnectedButtonStyle.Outlined,
+                                icon = Icons.Rounded.Delete,
+                                onClick = { showClearPermConfirmDialog = true }
+                            )
+                        )
+                    )
+
+                    Spacer(Modifier.height(12.dp))
+
+                    if (permItems.isEmpty()) {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth().height(100.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(if (isEn) "No permanently blocked nodes" else "当前无用户永久屏蔽节点", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.height(200.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            items(permItems) { item ->
+                                Surface(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = MaterialTheme.colorScheme.surfaceContainerHighest
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Surface(
+                                                    shape = RoundedCornerShape(4.dp),
+                                                    color = MaterialTheme.colorScheme.errorContainer
+                                                ) {
+                                                    Text(
+                                                        text = if (isEn) "Permanent" else "永久",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = MaterialTheme.colorScheme.onErrorContainer,
+                                                        fontWeight = FontWeight.Bold,
+                                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                                    )
+                                                }
+                                                Spacer(Modifier.width(6.dp))
+                                                Text(
+                                                    text = "${item.ip} (${item.country})",
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = MaterialTheme.colorScheme.onSurface
+                                                )
+                                            }
+                                            Text(
+                                                text = item.reason,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        TextButton(
+                                            onClick = {
+                                                if (activeServer != null) {
+                                                    scope.launch {
+                                                        NXGateApplication.instance.apiClient.removeBlacklist(activeServer, item.nodeId)
+                                                        blacklistItems = blacklistItems.filter { it.nodeId != item.nodeId }
+                                                        Toast.makeText(context, if (isEn) "Unblocked [${item.ip}]" else "已移出黑名单 [${item.ip}]！", Toast.LENGTH_SHORT).show()
+                                                        refreshAllNodes()
+                                                    }
+                                                }
+                                            }
+                                        ) {
+                                            Text(if (isEn) "Unblock" else "移出黑名单")
+                                        }
+                                    }
                                 }
                             }
                         }

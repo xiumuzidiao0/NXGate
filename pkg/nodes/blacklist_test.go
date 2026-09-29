@@ -192,6 +192,27 @@ func TestIPLevelAndPermanentBlacklist(t *testing.T) {
 			t.Fatalf("permanent node must NEVER be revived")
 		}
 	}
+
+	// 3. Test ClearWithOptions: Clear temporary should leave permanent intact
+	bm.MarkManualWithOptions("temp-node:443", "198.51.100.200", "US", "临时屏蔽", 1*time.Hour, "node", false)
+	if !bm.IsBlacklisted("temp-node:443") {
+		t.Fatalf("expected temp-node to be blacklisted")
+	}
+
+	// Clear temporary
+	bm.ClearWithOptions(false)
+	if bm.IsBlacklisted("temp-node:443") {
+		t.Fatalf("expected temp-node to be cleared")
+	}
+	if !bm.IsBlacklisted("tombstone-node:443") {
+		t.Fatalf("expected permanent tombstone-node to REMAIN blacklisted after clearing temporary")
+	}
+
+	// Clear permanent
+	bm.ClearPermanent()
+	if bm.IsBlacklisted("tombstone-node:443") {
+		t.Fatalf("expected tombstone-node to be cleared after ClearPermanent")
+	}
 }
 
 func TestShadowProtocolProbing(t *testing.T) {
