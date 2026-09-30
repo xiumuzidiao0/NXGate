@@ -16,7 +16,7 @@ const mimeTypes = {
 function findChromium() {
   const candidates = [
     process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE,
-    "/home/xmzd/.cache/ms-playwright/chromium-1234/chrome-linux/chrome",
+    join(process.env.HOME || "", ".cache/ms-playwright/chromium-1234/chrome-linux/chrome"),
     "/usr/bin/chromium",
     "/usr/bin/chromium-browser",
     "/usr/bin/google-chrome",

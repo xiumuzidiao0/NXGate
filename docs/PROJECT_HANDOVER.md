@@ -158,9 +158,9 @@ NXGate 是基于 Go 语言重构的高性能 Linux 出口网关系统。其核�
 
 | 资产类型 | 参数 / 地址 | 备注 / 鉴权信息 |
 | :--- | :--- | :--- |
-| **服务器公网 IP** | `198.51.100.1` | 阿里云 ECS (Debian 12, x86_64) |
+| **服务器公网 IP** | `198.51.100.1` | 云服务器 (示例公网地址) |
 | **SSH 远程登录** | `ssh root@198.51.100.1` (端口 22) | 密码：`<YourSecureSSHPassword>` |
-| **Web 管理控制台** | `http://198.51.100.1:8787/enter` | 账号：`xmzd` / 密码：`<YourPasswordHere>` |
+| **Web 管理控制台** | `http://198.51.100.1:8787/enter` | 账号：`admin` / 密码：`<YourStrongPasswordHere>` |
 | **本地自适应代理端口** | `127.0.0.1:7928` | HTTP/HTTPS CONNECT/SOCKS5/UDP |
 | **安装与运行目录** | `/opt/nxgate/` | 包含二进制、配置、运行时 tun 证书等 |
 | **终端快捷管理命令** | `nx` (执行 `/opt/nxgate/install.sh`) | 在服务器终端任意位置执行 |

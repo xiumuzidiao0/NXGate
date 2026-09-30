@@ -964,9 +964,9 @@ do_install_singbox() {
     local dl_ok=0
 
     # 1. 优先检测本地源码仓库
-    if [ -f "/home/xmzd/sing-box/install.sh" ]; then
+    if [ -n "${HOME}" ] && [ -f "${HOME}/sing-box/install.sh" ]; then
         echo -e "  -> 检测到本地 sing-box 源码安装脚本，正在准备部署..."
-        cp -f "/home/xmzd/sing-box/install.sh" "${sb_installer}"
+        cp -f "${HOME}/sing-box/install.sh" "${sb_installer}"
         dl_ok=1
     fi
 

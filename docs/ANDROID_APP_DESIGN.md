@@ -340,8 +340,8 @@ nxgate://server?host=<HOST>&port=<PORT>&path=<PATH>&user=<USERNAME>&pass=<PASSWO
 | `host` | String | VPS 公网 IPv4 / IPv6 地址或解析域名 | `198.51.100.1` |
 | `port` | Int | Web 控制台开放的端口 | `8787` |
 | `path` | String | 后台安全访问路径 (Secret Path) | `enter` |
-| `user` | String | Web 管理员账号 | `xmzd` |
-| `pass` | String | Web 管理员明文密码 (URL 编码) | `<YourPasswordHere>` |
+| `user` | String | Web 管理员账号 | `admin` |
+| `pass` | String | Web 管理员明文密码 (URL 编码) | `YourPasswordHere` |
 | `name` | String | 显示给用户的节点备注别名 (URL 编码) | `NXGate+(198.51.100.1)` |
 | `tls` | Int | 是否通过 TLS (HTTPS) 协议通信 (0=HTTP, 1=HTTPS) | `0` |
 
@@ -354,7 +354,7 @@ nxgate://server?host=<HOST>&port=<PORT>&path=<PATH>&user=<USERNAME>&pass=<PASSWO
   "host": "198.51.100.1",
   "port": 8787,
   "path": "enter",
-  "username": "xmzd",
+  "username": "admin",
   "password": "your_password",
   "proxy_port": 7928,
   "tls": false

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -125,7 +126,10 @@ func NewClient() *Client {
 		"/usr/local/bin/sing-box",
 		"/usr/bin/sing-box",
 		"/etc/sing-box/sh/sing-box.sh",
-		"/home/xmzd/sing-box/sing-box.sh",
+	}
+
+	if home := os.Getenv("HOME"); home != "" {
+		candidates = append(candidates, filepath.Join(home, "sing-box/sing-box.sh"))
 	}
 
 	for _, p := range candidates {

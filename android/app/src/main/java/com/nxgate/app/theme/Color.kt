@@ -431,7 +431,7 @@ val RoseDarkColorScheme: ColorScheme = darkColorScheme(
 
 // ==========================================
 // 7. 小米澎湃 (HyperOS · MIUIX 风格)
-// 源自 /home/xmzd/flutter_miuix 的 Colors.kt，与 HyperOS 规范一致
+// 与 HyperOS 设计规范一致
 // ==========================================
 val MiuixLightPrimary = Color(0xFF3482FF) // HyperOS 超凡蔚蓝
 val MiuixLightOnPrimary = Color(0xFFFFFFFF)

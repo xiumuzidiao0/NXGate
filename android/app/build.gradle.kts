@@ -21,9 +21,9 @@ android {
     signingConfigs {
         create("release") {
             storeFile = file("release.jks")
-            storePassword = "aimilivpn"
-            keyAlias = "aimilivpn"
-            keyPassword = "aimilivpn"
+            storePassword = System.getenv("KEYSTORE_PASSWORD") ?: "aimilivpn"
+            keyAlias = System.getenv("KEY_ALIAS") ?: "aimilivpn"
+            keyPassword = System.getenv("KEY_PASSWORD") ?: "aimilivpn"
         }
     }
 
