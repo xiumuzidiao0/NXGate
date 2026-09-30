@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -51,6 +53,14 @@ func main() {
 		fmt.Printf("[Mirror] 写入 mirror/vpngate.csv 失败: %v\n", err)
 		os.Exit(1)
 	}
+
+	// Write compressed mirror file (vpngate.csv.gz) for high-speed transfer
+	var gzBuf bytes.Buffer
+	gw := gzip.NewWriter(&gzBuf)
+	_, _ = gw.Write(result.Data)
+	_ = gw.Close()
+	// #nosec G306 -- mirror files are public data intended for HTTP distribution.
+	_ = os.WriteFile("mirror/vpngate.csv.gz", gzBuf.Bytes(), 0644)
 
 	sum := sha256.Sum256(result.Data)
 	now := time.Now()

@@ -1,6 +1,8 @@
 package nodes
 
 import (
+	"bytes"
+	"compress/gzip"
 	"encoding/base64"
 	"fmt"
 	"net"
@@ -36,5 +38,27 @@ func TestParseVPNGateCSVIPv6NodeID(t *testing.T) {
 	}
 	if strings.Contains(nodes[0].ID, "2001:db8::1:1194") {
 		t.Fatalf("IPv6 node ID is ambiguous: %q", nodes[0].ID)
+	}
+}
+
+func TestParseVPNGateCSVGzip(t *testing.T) {
+	configText := "client\ndev tun\nproto udp\nremote 198.51.100.1 1194\n"
+	encoded := base64.StdEncoding.EncodeToString([]byte(configText))
+	csvContent := testCSVHeader + "\n" + fmt.Sprintf("example.test,198.51.100.1,100,20,1000000,Test,JP,1,%s\n", encoded)
+
+	var gzBuf bytes.Buffer
+	gw := gzip.NewWriter(&gzBuf)
+	_, _ = gw.Write([]byte(csvContent))
+	_ = gw.Close()
+
+	nodes, err := ParseVPNGateCSV(gzBuf.Bytes(), 0)
+	if err != nil {
+		t.Fatalf("ParseVPNGateCSV with gzip data failed: %v", err)
+	}
+	if len(nodes) != 1 {
+		t.Fatalf("expected one node from gzip payload, got %d", len(nodes))
+	}
+	if nodes[0].IP != "198.51.100.1" {
+		t.Fatalf("expected IP 198.51.100.1, got %s", nodes[0].IP)
 	}
 }

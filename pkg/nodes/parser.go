@@ -2,6 +2,7 @@ package nodes
 
 import (
 	"bytes"
+	"compress/gzip"
 	"encoding/csv"
 	"errors"
 	"fmt"
@@ -66,6 +67,18 @@ func ParseVPNGateCSV(data []byte, maxRows int) ([]*Node, error) {
 	if len(data) == 0 {
 		return nil, errors.New("vpngate csv is empty")
 	}
+
+	// Transparently decompress gzip payload if detected by magic header (0x1f 0x8b)
+	if len(data) >= 2 && data[0] == 0x1f && data[1] == 0x8b {
+		gz, err := gzip.NewReader(bytes.NewReader(data))
+		if err == nil {
+			defer gz.Close()
+			if decompressed, err := io.ReadAll(gz); err == nil {
+				data = decompressed
+			}
+		}
+	}
+
 	if len(data) > MaxSnapshotBytes {
 		return nil, fmt.Errorf("vpngate csv exceeds max size %d bytes", MaxSnapshotBytes)
 	}

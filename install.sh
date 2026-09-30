@@ -439,6 +439,7 @@ build_and_deploy() {
     if [ ! -f "${INSTALL_DIR}/mirror/vpngate.csv" ] || [ ! -s "${INSTALL_DIR}/mirror/vpngate.csv" ]; then
         echo -e "  -> 正在下载初始节点快照镜像..."
         local mirror_csv_urls=(
+            "https://raw.githubusercontent.com/xiumuzidiao0/NXGate/data/mirror/vpngate.csv"
             "https://fastly.jsdelivr.net/gh/baoweise-bot/aimili-vpngate@main/mirror/vpngate.csv"
             "https://baoweise-bot.github.io/aimili-vpngate/vpngate.csv"
             "https://raw.githubusercontent.com/baoweise-bot/aimili-vpngate/main/mirror/vpngate.csv"

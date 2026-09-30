@@ -79,6 +79,9 @@ func (sm *SnapshotManager) Load() ([]byte, *SnapshotMeta, error) {
 	// 尝试从程序内置或同目录镜像文件加载
 	fallbackPaths := []string{
 		"mirror/vpngate.csv",
+		"mirror/vpngate.csv.gz",
+		"/opt/nxgate/mirror/vpngate.csv",
+		"/opt/nxgate/mirror/vpngate.csv.gz",
 		"/opt/aimilivpn/mirror/vpngate.csv",
 		"../mirror/vpngate.csv",
 	}

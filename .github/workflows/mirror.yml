@@ -25,14 +25,21 @@ jobs:
         run: |
           go run ./cmd/mirror
 
-      - name: Commit and Push if Changed
+      - name: Publish Mirror Snapshot to Data Branch
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add mirror/vpngate.csv mirror/vpngate.meta.json
-          if git diff --staged --quiet; then
-            echo "Mirror data unchanged, skipping commit."
-          else
-            git commit -m "chore: automated VPNGate mirror update [skip ci]"
-            git push origin main
-          fi
+          
+          # Stage mirror files in a temp directory
+          TMP_MIRROR_DIR=$(mktemp -d)
+          cp -r mirror/* "${TMP_MIRROR_DIR}/"
+          
+          # Switch to an orphan data branch (only keeps latest snapshot, zero historical bloat)
+          git checkout --orphan data
+          git rm -rf .
+          mkdir -p mirror
+          cp -r "${TMP_MIRROR_DIR}"/* mirror/
+          
+          git add mirror/
+          git commit -m "chore: automated VPNGate mirror snapshot [skip ci]"
+          git push -f origin data
