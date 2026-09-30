@@ -77,6 +77,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -120,40 +123,51 @@ data class GroupTargetCountOption(val count: Int, val label: String)
 data class GroupIntervalOption(val minutes: Int, val label: String)
 data class GroupFallbackOption(val key: String, val label: String)
 
-data class MindMapBranch(
+data class PipelineLeaf(
+    val devName: String,
+    val locText: String,
+    val ipWithPort: String,
+    val latency: Int
+)
+
+data class PipelineStream(
     val port: Int,
+    val proto: String = "SOCKS5",
     val authText: String,
+    val isDefault: Boolean,
     val groupTitle: String,
     val groupSub: String,
     val isFallback: Boolean,
-    val leaves: List<String>,
+    val leaves: List<PipelineLeaf>,
+    val countryHint: String = "",
     val rule: PortRuleItem? = null,
     val group: DynamicGroupCard? = null
 )
 
 @Composable
-fun MindMapTreeConnector(
-    isFirst: Boolean,
-    isLast: Boolean,
-    isSingle: Boolean,
+fun PipelineCurvedConnector(
+    exitsCount: Int = 1,
+    isFallback: Boolean = false,
     modifier: Modifier = Modifier,
     color: Color = MaterialTheme.colorScheme.outlineVariant
 ) {
     Canvas(modifier = modifier) {
         val stroke = 2.dp.toPx()
-        val midY = size.height / 2f
-        if (isSingle) {
-            drawLine(color, Offset(0f, midY), Offset(size.width, midY), strokeWidth = stroke)
-        } else {
-            if (!isFirst) {
-                drawLine(color, Offset(0f, 0f), Offset(0f, midY), strokeWidth = stroke)
+        val startY = size.height / 2f
+        val exitCardHeight = 58.dp.toPx()
+        val gap = 8.dp.toPx()
+        val count = exitsCount.coerceAtLeast(1)
+        val wireColor = if (isFallback) Color(0xFFF59E0B) else color
+        for (i in 0 until count) {
+            val endY = if (count == 1) startY else (i * (exitCardHeight + gap) + exitCardHeight / 2f)
+            val path = Path().apply {
+                moveTo(0f, startY)
+                cubicTo(size.width * 0.5f, startY, size.width * 0.5f, endY, size.width, endY)
             }
-            if (!isLast) {
-                drawLine(color, Offset(0f, midY), Offset(0f, size.height), strokeWidth = stroke)
-            }
-            drawLine(color, Offset(0f, midY), Offset(size.width, midY), strokeWidth = stroke)
-            drawCircle(color, radius = 3.dp.toPx(), center = Offset(0f, midY))
+            drawPath(path, wireColor, style = Stroke(width = stroke, cap = StrokeCap.Round))
+            drawCircle(wireColor, radius = 3.dp.toPx(), center = Offset(size.width, endY))
         }
+        drawCircle(wireColor, radius = 3.5.dp.toPx(), center = Offset(0f, startY))
     }
 }
 
@@ -487,23 +501,33 @@ fun RoutingMatrixScreen(
                             // ==================== TAB 0: 多端口分流矩阵 (全增删改查) ====================
                             0 -> {
                                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                                    // 分流链路实时拓扑思维导图卡片 (Visual Egress Routing Mind Map)
+                                    // 分流链路实时拓扑流向图 (Visual Egress Routing Pipeline Flow)
                                     val sysPrimaryGroup = dynamicGroups.find { it.isSystem || it.id == "system-primary" }
                                     val masterTunnel = tunnels.find { it.isMaster }
                                     val masterLoc = formatNodeLocation(masterTunnel?.country ?: "", masterTunnel?.countryLong ?: "", isEn)
-                                    val masterLocPrefix = if (masterLoc.isNotEmpty()) "$masterLoc · " else ""
                                     val masterIp = (masterTunnel?.nodeIp ?: activeServer?.exitIp ?: "").ifEmpty { if (isEn) "Connected" else "已连通" }
+                                    val masterPort = masterTunnel?.nodePort ?: 443
                                     val masterLat = masterTunnel?.latencyMs ?: 0
-                                    val masterLatStr = if (masterLat > 0) " (${masterLat}ms)" else ""
-                                    val masterLeaf = "tun0: $masterLocPrefix$masterIp$masterLatStr"
+                                    val masterLeaves = if (masterIp != "未连接" && masterIp.isNotEmpty()) {
+                                        listOf(
+                                            PipelineLeaf(
+                                                devName = "tun0",
+                                                locText = if (masterLoc.isNotEmpty()) masterLoc else (if (isEn) "Primary Gateway" else "系统主出口"),
+                                                ipWithPort = "$masterIp:$masterPort",
+                                                latency = masterLat
+                                            )
+                                        )
+                                    } else emptyList()
 
-                                    val defaultBranch = MindMapBranch(
+                                    val defaultBranch = PipelineStream(
                                         port = 7928,
-                                        authText = if (isEn) "Default" else "系统默认",
+                                        proto = "SOCKS5",
+                                        authText = if (isEn) "Default Auth" else "系统默认鉴权",
+                                        isDefault = true,
                                         groupTitle = if (isEn) "Primary Gateway (tun0)" else "系统主出口网关 (tun0)",
-                                        groupSub = if (isEn) "Primary Egress (tun0)" else "主出海网卡 (tun0)",
+                                        groupSub = if (isEn) "1 Dedicated NIC (tun0)" else "1 独占主出海网卡 (tun0)",
                                         isFallback = false,
-                                        leaves = listOf(masterLeaf),
+                                        leaves = masterLeaves,
                                         group = sysPrimaryGroup
                                     )
 
@@ -525,50 +549,65 @@ fun RoutingMatrixScreen(
                                             if (isEn) "Direct Exit" else "原生网络"
                                         }
 
+                                        var countryHint = ""
                                         val leaves = if (matchedGroups.isNotEmpty()) {
                                             val allActiveTids = matchedGroups.flatMap { it.activeTunnelIds }
                                             val activeTuns = tunnels.filter { allActiveTids.contains(it.id) || allActiveTids.contains(it.devName) }
                                             if (activeTuns.isNotEmpty()) {
                                                 activeTuns.map { t ->
                                                     val loc = formatNodeLocation(t.country, t.countryLong, isEn)
-                                                    val locPrefix = if (loc.isNotEmpty()) "$loc · " else ""
-                                                    val portStr = if (t.nodePort > 0) ":${t.nodePort}" else ""
-                                                    val latStr = if (t.latencyMs > 0) " (${t.latencyMs}ms)" else ""
-                                                    "${t.devName}: $locPrefix${t.nodeIp}$portStr$latStr"
+                                                    PipelineLeaf(
+                                                        devName = t.devName,
+                                                        locText = if (loc.isNotEmpty()) loc else (if (isEn) "Global" else "全球"),
+                                                        ipWithPort = "${t.nodeIp}:${t.nodePort}",
+                                                        latency = t.latencyMs
+                                                    )
                                                 }
                                             } else {
                                                 val groupCountries = matchedGroups.map { it.country }.filter { it.isNotEmpty() }
-                                                val countryHint = if (groupCountries.isNotEmpty()) {
+                                                countryHint = if (groupCountries.isNotEmpty()) {
                                                     groupCountries.joinToString(", ") { formatNodeLocation(it, isEnglish = isEn) }
                                                 } else {
                                                     if (isEn) "All Regions" else "全部地区"
                                                 }
-                                                listOf("$countryHint · " + (if (isEn) "Scheduling..." else "调度就绪中..."))
+                                                emptyList()
                                             }
                                         } else if (rule.boundTunnelIds.isNotEmpty()) {
                                             val activeTuns = tunnels.filter { rule.boundTunnelIds.contains(it.id) || rule.boundTunnelIds.contains(it.devName) }
                                             if (activeTuns.isNotEmpty()) {
                                                 activeTuns.map { t ->
                                                     val loc = formatNodeLocation(t.country, t.countryLong, isEn)
-                                                    val locPrefix = if (loc.isNotEmpty()) "$loc · " else ""
-                                                    val portStr = if (t.nodePort > 0) ":${t.nodePort}" else ""
-                                                    val latStr = if (t.latencyMs > 0) " (${t.latencyMs}ms)" else ""
-                                                    "${t.devName}: $locPrefix${t.nodeIp}$portStr$latStr"
+                                                    PipelineLeaf(
+                                                        devName = t.devName,
+                                                        locText = if (loc.isNotEmpty()) loc else (if (isEn) "Global" else "全球"),
+                                                        ipWithPort = "${t.nodeIp}:${t.nodePort}",
+                                                        latency = t.latencyMs
+                                                    )
                                                 }
                                             } else {
-                                                listOf(if (isEn) "Tunnels offline" else "绑定的隧道离线")
+                                                emptyList()
                                             }
                                         } else {
-                                            listOf(if (isEn) "VPS Local IP" else "VPS 原生出网")
+                                            listOf(
+                                                PipelineLeaf(
+                                                    devName = "direct",
+                                                    locText = if (isEn) "VPS Native" else "原生网络",
+                                                    ipWithPort = if (isEn) "VPS Local Network" else "VPS 原生网络出海",
+                                                    latency = 0
+                                                )
+                                            )
                                         }
 
-                                        MindMapBranch(
+                                        PipelineStream(
                                             port = rule.port,
+                                            proto = "SOCKS5",
                                             authText = rule.authDisplay,
+                                            isDefault = false,
                                             groupTitle = groupTitle,
                                             groupSub = groupSub,
                                             isFallback = isFallback,
                                             leaves = leaves,
+                                            countryHint = countryHint,
                                             rule = rule,
                                             group = matchedGroup
                                         )
@@ -576,7 +615,7 @@ fun RoutingMatrixScreen(
 
                                     // 仅当 portRules 规则中未显式包含 7928 默认代理端口时，才补充默认分支；严禁出现 WebUI 端口 8787！
                                     val hasExplicitDefaultPort = portRules.any { it.enabled && it.port == 7928 }
-                                    val allBranches = if (hasExplicitDefaultPort) ruleBranches else listOf(defaultBranch) + ruleBranches
+                                    val allStreams = if (hasExplicitDefaultPort) ruleBranches else listOf(defaultBranch) + ruleBranches
 
                                     Card(
                                         modifier = Modifier.fillMaxWidth(),
@@ -588,7 +627,7 @@ fun RoutingMatrixScreen(
                                             modifier = Modifier
                                                 .fillMaxWidth()
                                                 .padding(16.dp),
-                                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                                            verticalArrangement = Arrangement.spacedBy(14.dp)
                                         ) {
                                             Row(
                                                 modifier = Modifier.fillMaxWidth(),
@@ -602,7 +641,7 @@ fun RoutingMatrixScreen(
                                                         fontWeight = FontWeight.Bold
                                                     )
                                                     Text(
-                                                        text = if (isEn) "Inbound Ports ──▶ Egress Groups ──▶ Physical Outbound Exits" else "入站监听端口 ──▶ 调度出口组 ──▶ 物理出网网卡",
+                                                        text = if (isEn) "Inbound Listeners ──▶ Routing Dispatcher ──▶ Physical Egress Exits" else "入站监听端口 ──▶ 调度策略与出口组 ──▶ 出海物理网卡与端点",
                                                         style = MaterialTheme.typography.labelSmall,
                                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                                     )
@@ -612,7 +651,7 @@ fun RoutingMatrixScreen(
                                                     color = MaterialTheme.colorScheme.primaryContainer
                                                 ) {
                                                     Text(
-                                                        text = if (isEn) "Mind Map" else "导图就绪",
+                                                        text = if (isEn) "Pipeline Active" else "流向就绪",
                                                         style = MaterialTheme.typography.labelSmall,
                                                         color = MaterialTheme.colorScheme.onPrimaryContainer,
                                                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
@@ -620,247 +659,274 @@ fun RoutingMatrixScreen(
                                                 }
                                             }
 
-                                            // Horizontal scrollable mind-map canvas
+                                            // 3-Stage Guide Header Bar
+                                            Surface(
+                                                shape = RoundedCornerShape(10.dp),
+                                                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                                modifier = Modifier.fillMaxWidth()
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                ) {
+                                                    Text("01 ${if (isEn) "Inbound" else "入站监听"}", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                                    Text("──▶", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                                                    Text("02 ${if (isEn) "Routing" else "调度策略与出口组"}", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                                    Text("──▶", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                                                    Text("03 ${if (isEn) "Physical Egress" else "物理出网网卡"}", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                                }
+                                            }
+
+                                            // Horizontal scrollable pipeline stream canvas
                                             Row(
                                                 modifier = Modifier
                                                     .fillMaxWidth()
                                                     .horizontalScroll(rememberScrollState())
-                                                    .padding(vertical = 4.dp),
-                                                verticalAlignment = Alignment.CenterVertically
+                                                    .padding(vertical = 4.dp)
                                             ) {
-                                                // 1. Root Node (NXGate Hub)
-                                                Surface(
-                                                    shape = RoundedCornerShape(14.dp),
-                                                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f),
-                                                    border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary),
-                                                    shadowElevation = 2.dp,
-                                                    modifier = Modifier.clickable {
-                                                        Toast.makeText(context, if (isEn) "NXGate Core Hub is online and dispatching exits" else "NXGate 分流中枢运行正常，各出口链路就绪", Toast.LENGTH_SHORT).show()
-                                                    }
-                                                ) {
-                                                    Column(
-                                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                                                        verticalArrangement = Arrangement.spacedBy(2.dp)
-                                                    ) {
-                                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                                            Box(
-                                                                modifier = Modifier
-                                                                    .size(8.dp)
-                                                                    .background(Color(0xFF22C55E), CircleShape)
-                                                            )
-                                                            Spacer(Modifier.width(6.dp))
-                                                            Text(
-                                                                text = if (isEn) "NXGate Hub" else "NXGate 分流中枢",
-                                                                style = MaterialTheme.typography.titleSmall,
-                                                                fontWeight = FontWeight.Bold,
-                                                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                                                            )
-                                                        }
-                                                        Text(
-                                                            text = if (isEn) "Routing Core" else "网关调度中枢",
-                                                            style = MaterialTheme.typography.labelSmall,
-                                                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-                                                        )
-                                                    }
-                                                }
-
-                                                // Stem from Root
-                                                HorizontalDivider(
-                                                    modifier = Modifier.width(24.dp).height(2.dp),
-                                                    color = MaterialTheme.colorScheme.outlineVariant
-                                                )
-
-                                                // 2. Branches Column
-                                                Column(
-                                                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                                                ) {
-                                                    allBranches.forEachIndexed { index, branch ->
+                                                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                                                    allStreams.forEach { stream ->
                                                         Row(
                                                             modifier = Modifier.height(IntrinsicSize.Min),
                                                             verticalAlignment = Alignment.CenterVertically
                                                         ) {
-                                                            MindMapTreeConnector(
-                                                                isFirst = index == 0,
-                                                                isLast = index == allBranches.size - 1,
-                                                                isSingle = allBranches.size == 1,
-                                                                modifier = Modifier.width(24.dp).fillMaxHeight()
-                                                            )
-
-                                                            // Inbound Port Node
+                                                            // Stage 1: Inbound Port Card
                                                             Surface(
-                                                                shape = RoundedCornerShape(10.dp),
+                                                                shape = RoundedCornerShape(12.dp),
                                                                 color = MaterialTheme.colorScheme.surfaceContainerHigh,
                                                                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                                                                modifier = Modifier.clickable {
-                                                                    val r = branch.rule
-                                                                    if (r != null) {
-                                                                        editPortRuleTarget = r
-                                                                        inputPortNum = r.port.toString()
-                                                                        selectedPortPolicyOption = portPolicyOptions.find { it.key == r.policy } ?: portPolicyOptions[0]
-                                                                        selectedPortIntervalOption = portIntervalOptions.find { it.seconds == r.intervalSeconds } ?: portIntervalOptions[1]
-                                                                        selectedPortAuthOption = portAuthOptions.find { it.key == r.authMode } ?: portAuthOptions[0]
-                                                                        inputAuthUser = r.authUser
-                                                                        inputAuthPass = r.authPass
-                                                                        bindAllTunnels = r.boundGroupIds.isEmpty() && r.boundTunnelIds.isEmpty()
-                                                                        selectedBoundGroups = r.boundGroupIds.toSet()
-                                                                        showPortDialog = true
-                                                                    } else {
-                                                                        Toast.makeText(context, if (isEn) "Default port 7928 can be adjusted in System Settings" else "系统默认代理端口 7928 可在「系统维护」设置中修改", Toast.LENGTH_SHORT).show()
+                                                                modifier = Modifier
+                                                                    .width(160.dp)
+                                                                    .clickable {
+                                                                        val r = stream.rule
+                                                                        if (r != null) {
+                                                                            editPortRuleTarget = r
+                                                                            inputPortNum = r.port.toString()
+                                                                            selectedPortPolicyOption = portPolicyOptions.find { it.key == r.policy } ?: portPolicyOptions[0]
+                                                                            selectedPortIntervalOption = portIntervalOptions.find { it.seconds == r.intervalSeconds } ?: portIntervalOptions[1]
+                                                                            selectedPortAuthOption = portAuthOptions.find { it.key == r.authMode } ?: portAuthOptions[0]
+                                                                            inputAuthUser = r.authUser
+                                                                            inputAuthPass = r.authPass
+                                                                            bindAllTunnels = r.boundGroupIds.isEmpty() && r.boundTunnelIds.isEmpty()
+                                                                            selectedBoundGroups = r.boundGroupIds.toSet()
+                                                                            showPortDialog = true
+                                                                        } else {
+                                                                            Toast.makeText(context, if (isEn) "Default port 7928 can be adjusted in System Settings" else "系统默认代理端口 7928 可在「系统维护」设置中修改", Toast.LENGTH_SHORT).show()
+                                                                        }
                                                                     }
-                                                                }
-                                                            ) {
-                                                                Row(
-                                                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                                                    verticalAlignment = Alignment.CenterVertically,
-                                                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                                                ) {
-                                                                    Surface(
-                                                                        shape = RoundedCornerShape(4.dp),
-                                                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
-                                                                    ) {
-                                                                        Text(
-                                                                            text = "PORT ${branch.port}",
-                                                                            style = MaterialTheme.typography.labelSmall,
-                                                                            fontWeight = FontWeight.Bold,
-                                                                            color = MaterialTheme.colorScheme.primary,
-                                                                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
-                                                                        )
-                                                                    }
-                                                                    Text(
-                                                                        text = branch.authText,
-                                                                        style = MaterialTheme.typography.labelSmall,
-                                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                                    )
-                                                                }
-                                                            }
-
-                                                            // Stem to Group
-                                                            HorizontalDivider(
-                                                                modifier = Modifier.width(20.dp).height(2.dp),
-                                                                color = MaterialTheme.colorScheme.outlineVariant
-                                                            )
-
-                                                            // Group Node
-                                                            Surface(
-                                                                shape = RoundedCornerShape(10.dp),
-                                                                color = if (branch.isFallback) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f) else MaterialTheme.colorScheme.surfaceContainerHigh,
-                                                                border = BorderStroke(
-                                                                    1.dp,
-                                                                    if (branch.isFallback) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outlineVariant
-                                                                ),
-                                                                modifier = Modifier.clickable {
-                                                                    val g = branch.group
-                                                                    if (g != null) {
-                                                                        editGroupTarget = g
-                                                                        groupNameInput = g.name
-                                                                        selectedGroupCountryOption = groupCountryOptions.find { it.code.equals(g.country, true) } ?: groupCountryOptions[1]
-                                                                        selectedGroupIpTypeOption = groupIpTypeOptions.find { it.key.equals(g.ipType, true) } ?: groupIpTypeOptions[1]
-                                                                        selectedGroupUnlockOption = groupUnlockOptions.find { it.key.equals(g.unlockFilter, true) } ?: groupUnlockOptions[1]
-                                                                        selectedGroupSortOption = groupSortOptions.find { it.key.equals(g.sortBy, true) } ?: groupSortOptions[0]
-                                                                        selectedGroupFallbackOption = groupFallbackOptions.find { it.key.equals(g.fallbackPolicy, true) } ?: groupFallbackOptions[1]
-                                                                        selectedGroupTargetCountOption = groupTargetCountOptions.find { it.count == g.targetCount } ?: groupTargetCountOptions[2]
-                                                                        selectedGroupIntervalOption = groupIntervalOptions.find { it.minutes == g.intervalMinutes } ?: groupIntervalOptions[2]
-                                                                        showGroupDialog = true
-                                                                    }
-                                                                }
                                                             ) {
                                                                 Column(
-                                                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                                                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                                                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                                                    verticalArrangement = Arrangement.spacedBy(4.dp)
                                                                 ) {
-                                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                                    Row(
+                                                                        modifier = Modifier.fillMaxWidth(),
+                                                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                                                        verticalAlignment = Alignment.CenterVertically
+                                                                    ) {
                                                                         Text(
-                                                                            text = branch.groupTitle,
-                                                                            style = MaterialTheme.typography.bodySmall,
-                                                                            fontWeight = FontWeight.SemiBold,
-                                                                            color = MaterialTheme.colorScheme.onSurface
+                                                                            text = "PORT ${stream.port}",
+                                                                            style = MaterialTheme.typography.titleSmall,
+                                                                            fontWeight = FontWeight.Bold,
+                                                                            fontFamily = FontFamily.Monospace,
+                                                                            color = MaterialTheme.colorScheme.primary
                                                                         )
-                                                                        if (branch.isFallback) {
-                                                                            Spacer(Modifier.width(4.dp))
+                                                                        Surface(
+                                                                            shape = RoundedCornerShape(4.dp),
+                                                                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                                                                        ) {
                                                                             Text(
-                                                                                text = if (isEn) "Fallback" else "降级中",
+                                                                                text = stream.proto,
                                                                                 style = MaterialTheme.typography.labelSmall,
-                                                                                color = MaterialTheme.colorScheme.error,
-                                                                                fontWeight = FontWeight.Bold
+                                                                                fontWeight = FontWeight.Bold,
+                                                                                color = MaterialTheme.colorScheme.primary,
+                                                                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
                                                                             )
                                                                         }
                                                                     }
                                                                     Text(
-                                                                        text = branch.groupSub,
+                                                                        text = stream.authText,
                                                                         style = MaterialTheme.typography.labelSmall,
                                                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                                                     )
                                                                 }
                                                             }
 
-                                                            // Stem to Exits
-                                                            HorizontalDivider(
-                                                                modifier = Modifier.width(20.dp).height(2.dp),
-                                                                color = MaterialTheme.colorScheme.outlineVariant
+                                                            // Connector 1 (Inbound -> Routing)
+                                                            PipelineCurvedConnector(
+                                                                exitsCount = 1,
+                                                                isFallback = stream.isFallback,
+                                                                modifier = Modifier.width(36.dp).fillMaxHeight()
                                                             )
 
-                                                            // Exit Leaf Nodes (支持多并发网卡分叉树枝展开)
-                                                            if (branch.leaves.size > 1) {
-                                                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                                                    branch.leaves.forEachIndexed { leafIdx, leafText ->
-                                                                        Row(
-                                                                            modifier = Modifier.height(IntrinsicSize.Min),
-                                                                            verticalAlignment = Alignment.CenterVertically
-                                                                        ) {
-                                                                            MindMapTreeConnector(
-                                                                                isFirst = leafIdx == 0,
-                                                                                isLast = leafIdx == branch.leaves.size - 1,
-                                                                                isSingle = false,
-                                                                                modifier = Modifier.width(20.dp).fillMaxHeight()
-                                                                            )
+                                                            // Stage 2: Routing Group Card
+                                                            Surface(
+                                                                shape = RoundedCornerShape(12.dp),
+                                                                color = if (stream.isFallback) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f) else MaterialTheme.colorScheme.surfaceContainerHigh,
+                                                                border = BorderStroke(
+                                                                    1.dp,
+                                                                    if (stream.isFallback) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outlineVariant
+                                                                ),
+                                                                modifier = Modifier
+                                                                    .width(220.dp)
+                                                                    .clickable {
+                                                                        val g = stream.group
+                                                                        if (g != null) {
+                                                                            editGroupTarget = g
+                                                                            groupNameInput = g.name
+                                                                            selectedGroupCountryOption = groupCountryOptions.find { it.code.equals(g.country, true) } ?: groupCountryOptions[1]
+                                                                            selectedGroupIpTypeOption = groupIpTypeOptions.find { it.key.equals(g.ipType, true) } ?: groupIpTypeOptions[1]
+                                                                            selectedGroupUnlockOption = groupUnlockOptions.find { it.key.equals(g.unlockFilter, true) } ?: groupUnlockOptions[1]
+                                                                            selectedGroupSortOption = groupSortOptions.find { it.key.equals(g.sortBy, true) } ?: groupSortOptions[0]
+                                                                            selectedGroupFallbackOption = groupFallbackOptions.find { it.key.equals(g.fallbackPolicy, true) } ?: groupFallbackOptions[1]
+                                                                            selectedGroupTargetCountOption = groupTargetCountOptions.find { it.count == g.targetCount } ?: groupTargetCountOptions[2]
+                                                                            selectedGroupIntervalOption = groupIntervalOptions.find { it.minutes == g.intervalMinutes } ?: groupIntervalOptions[2]
+                                                                            showGroupDialog = true
+                                                                        }
+                                                                    }
+                                                            ) {
+                                                                Column(
+                                                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                                                ) {
+                                                                    Row(
+                                                                        modifier = Modifier.fillMaxWidth(),
+                                                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                                                        verticalAlignment = Alignment.CenterVertically
+                                                                    ) {
+                                                                        Text(
+                                                                            text = stream.groupTitle,
+                                                                            style = MaterialTheme.typography.bodySmall,
+                                                                            fontWeight = FontWeight.SemiBold,
+                                                                            color = MaterialTheme.colorScheme.onSurface,
+                                                                            maxLines = 1
+                                                                        )
+                                                                        if (stream.isFallback) {
                                                                             Surface(
-                                                                                shape = RoundedCornerShape(8.dp),
-                                                                                color = MaterialTheme.colorScheme.surfaceContainerHighest,
-                                                                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                                                                                shape = RoundedCornerShape(4.dp),
+                                                                                color = MaterialTheme.colorScheme.error
                                                                             ) {
-                                                                                Row(
-                                                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
-                                                                                    verticalAlignment = Alignment.CenterVertically,
-                                                                                    horizontalArrangement = Arrangement.spacedBy(5.dp)
-                                                                                ) {
-                                                                                    Box(
-                                                                                        modifier = Modifier
-                                                                                            .size(6.dp)
-                                                                                            .background(Color(0xFF22C55E), CircleShape)
-                                                                                    )
-                                                                                    Text(
-                                                                                        text = leafText,
-                                                                                        style = MaterialTheme.typography.labelSmall,
-                                                                                        fontFamily = FontFamily.Monospace,
-                                                                                        color = MaterialTheme.colorScheme.onSurface
-                                                                                    )
-                                                                                }
+                                                                                Text(
+                                                                                    text = if (isEn) "Fallback" else "降级",
+                                                                                    style = MaterialTheme.typography.labelSmall,
+                                                                                    color = MaterialTheme.colorScheme.onError,
+                                                                                    fontWeight = FontWeight.Bold,
+                                                                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                                                                )
                                                                             }
                                                                         }
                                                                     }
+                                                                    Text(
+                                                                        text = stream.groupSub,
+                                                                        style = MaterialTheme.typography.labelSmall,
+                                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                                    )
                                                                 }
-                                                            } else {
-                                                                Surface(
-                                                                    shape = RoundedCornerShape(8.dp),
-                                                                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
-                                                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-                                                                ) {
-                                                                    Row(
-                                                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
-                                                                        verticalAlignment = Alignment.CenterVertically,
-                                                                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                                            }
+
+                                                            // Connector 2 (Routing -> Egress Exits)
+                                                            PipelineCurvedConnector(
+                                                                exitsCount = maxOf(1, stream.leaves.size),
+                                                                isFallback = stream.isFallback,
+                                                                modifier = Modifier.width(36.dp).fillMaxHeight()
+                                                            )
+
+                                                            // Stage 3: Physical Egress Cards
+                                                            Column(
+                                                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                                                            ) {
+                                                                if (stream.leaves.isNotEmpty()) {
+                                                                    stream.leaves.forEach { leaf ->
+                                                                        Surface(
+                                                                            shape = RoundedCornerShape(10.dp),
+                                                                            color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                                                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                                                                            modifier = Modifier.width(280.dp)
+                                                                        ) {
+                                                                            Column(
+                                                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                                                                                verticalArrangement = Arrangement.spacedBy(3.dp)
+                                                                            ) {
+                                                                                Row(
+                                                                                    modifier = Modifier.fillMaxWidth(),
+                                                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                                                    verticalAlignment = Alignment.CenterVertically
+                                                                                ) {
+                                                                                    Row(
+                                                                                        verticalAlignment = Alignment.CenterVertically,
+                                                                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                                                                    ) {
+                                                                                        Surface(
+                                                                                            shape = RoundedCornerShape(4.dp),
+                                                                                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                                                                        ) {
+                                                                                            Text(
+                                                                                                text = leaf.devName,
+                                                                                                style = MaterialTheme.typography.labelSmall,
+                                                                                                fontWeight = FontWeight.Bold,
+                                                                                                color = MaterialTheme.colorScheme.primary,
+                                                                                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                                                                                            )
+                                                                                        }
+                                                                                        Text(
+                                                                                            text = leaf.locText,
+                                                                                            style = MaterialTheme.typography.bodySmall,
+                                                                                            fontWeight = FontWeight.SemiBold,
+                                                                                            color = MaterialTheme.colorScheme.onSurface
+                                                                                        )
+                                                                                    }
+                                                                                    if (leaf.latency > 0) {
+                                                                                        val pillColor = if (leaf.latency < 100) Color(0xFF10B981) else Color(0xFFF59E0B)
+                                                                                        Surface(
+                                                                                            shape = RoundedCornerShape(10.dp),
+                                                                                            color = pillColor.copy(alpha = 0.15f)
+                                                                                        ) {
+                                                                                            Text(
+                                                                                                text = "⚡ ${leaf.latency}ms",
+                                                                                                style = MaterialTheme.typography.labelSmall,
+                                                                                                fontWeight = FontWeight.Bold,
+                                                                                                color = pillColor,
+                                                                                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.5.dp)
+                                                                                            )
+                                                                                        }
+                                                                                    }
+                                                                                }
+                                                                                Text(
+                                                                                    text = leaf.ipWithPort,
+                                                                                    style = MaterialTheme.typography.labelSmall,
+                                                                                    fontFamily = FontFamily.Monospace,
+                                                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                                                )
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                } else {
+                                                                    Surface(
+                                                                        shape = RoundedCornerShape(10.dp),
+                                                                        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                                                                        modifier = Modifier.width(280.dp)
                                                                     ) {
-                                                                        Box(
-                                                                            modifier = Modifier
-                                                                                .size(6.dp)
-                                                                                .background(Color(0xFF22C55E), CircleShape)
-                                                                        )
-                                                                        Text(
-                                                                            text = branch.leaves.firstOrNull() ?: "",
-                                                                            style = MaterialTheme.typography.labelSmall,
-                                                                            fontFamily = FontFamily.Monospace,
-                                                                            color = MaterialTheme.colorScheme.onSurface
-                                                                        )
+                                                                        Row(
+                                                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                                                            verticalAlignment = Alignment.CenterVertically,
+                                                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                                        ) {
+                                                                            Box(modifier = Modifier.size(8.dp).background(Color(0xFFE9A568), CircleShape))
+                                                                            Column {
+                                                                                Text(
+                                                                                    text = stream.countryHint.ifEmpty { if (isEn) "All Regions" else "全部地区" },
+                                                                                    style = MaterialTheme.typography.bodySmall,
+                                                                                    fontWeight = FontWeight.SemiBold
+                                                                                )
+                                                                                Text(
+                                                                                    text = if (isEn) "Scheduling exits..." else "调度就绪中，等待分配网卡...",
+                                                                                    style = MaterialTheme.typography.labelSmall,
+                                                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                                                )
+                                                                            }
+                                                                        }
                                                                     }
                                                                 }
                                                             }
