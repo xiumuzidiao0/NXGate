@@ -78,6 +78,7 @@ import com.nxgate.app.ui.components.GlobalServerSwitcherTitle
 import com.nxgate.app.ui.components.TrafficStatsCard
 import com.nxgate.app.ui.components.UnlockPill
 import com.nxgate.app.ui.components.countryFlag
+import com.nxgate.app.ui.components.formatNodeLocation
 import com.nxgate.app.util.AppStringsEn
 import com.nxgate.app.util.LocalAppStrings
 import kotlinx.coroutines.delay
@@ -91,6 +92,8 @@ fun TunnelChipCard(
     onStopTunnel: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val strings = LocalAppStrings.current
+    val isEn = strings == AppStringsEn
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -133,8 +136,11 @@ fun TunnelChipCard(
                     }
                 }
 
+                val locStr = formatNodeLocation(tunnel.country, tunnel.countryLong, isEn)
+                val locPrefix = if (locStr.isNotEmpty()) "$locStr · " else ""
+                val portStr = if (tunnel.nodePort > 0) ":${tunnel.nodePort}" else ""
                 Text(
-                    text = "${countryFlag(tunnel.country)} ${tunnel.nodeIp}:${tunnel.nodePort}",
+                    text = "$locPrefix${tunnel.nodeIp}$portStr",
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface
@@ -147,11 +153,16 @@ fun TunnelChipCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                val latencyText = if (tunnel.latencyMs > 0) {
+                    if (isEn) "Latency: ${tunnel.latencyMs}ms" else "延迟: ${tunnel.latencyMs}ms"
+                } else {
+                    if (isEn) "Ready" else "延迟: 测活就绪"
+                }
                 Text(
-                    text = if (tunnel.latencyMs > 0) "物理延迟: ${tunnel.latencyMs}ms" else "延迟: 测活就绪",
+                    text = latencyText,
                     style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = if (tunnel.latencyMs > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                 )
                 Text(
                     text = if (tunnel.throughputBps > 0) "吞吐: %.1f Mb/s (断流检测通过)".format((tunnel.throughputBps * 8.0) / 1_000_000.0) else "在线待命",
@@ -540,7 +551,15 @@ fun ServerConsoleScreen(
                                         color = MaterialTheme.colorScheme.onSurface
                                     )
                                     Spacer(Modifier.height(8.dp))
-                                    val masterNodeText = masterTunnel?.let { "${countryFlag(it.country)} ${it.nodeIp}" } ?: masterInfo.nodeName
+                                    val masterLoc = formatNodeLocation(
+                                        countryCode = masterTunnel?.country ?: masterInfo.country,
+                                        countryLong = masterTunnel?.countryLong ?: masterInfo.countryLong,
+                                        isEnglish = strings == AppStringsEn
+                                    )
+                                    val rawMasterIp = (masterTunnel?.nodeIp ?: masterInfo.nodeIp).ifEmpty { masterInfo.nodeName }
+                                    val masterLat = if ((masterTunnel?.latencyMs ?: 0) > 0) masterTunnel!!.latencyMs else masterInfo.latencyMs
+                                    val masterLatStr = if (masterLat > 0) " (${masterLat}ms)" else ""
+                                    val masterNodeText = if (masterLoc.isNotEmpty()) "$masterLoc · $rawMasterIp$masterLatStr" else "$rawMasterIp$masterLatStr"
                                     val masterUptime = masterTunnel?.let { "${it.uptimeSeconds / 3600}小时${(it.uptimeSeconds % 3600) / 60}分" } ?: masterInfo.uptimeStr
                                     Text(
                                         text = "设备：主网卡零号，策略表一百\n节点：$masterNodeText\n已运行：$masterUptime，${masterInfo.status}",
@@ -678,7 +697,15 @@ fun ServerConsoleScreen(
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Spacer(Modifier.height(8.dp))
-                            val masterNodeText = masterTunnel?.let { "${countryFlag(it.country)} ${it.nodeIp}" } ?: masterInfo.nodeName
+                            val masterLoc = formatNodeLocation(
+                                countryCode = masterTunnel?.country ?: masterInfo.country,
+                                countryLong = masterTunnel?.countryLong ?: masterInfo.countryLong,
+                                isEnglish = strings == AppStringsEn
+                            )
+                            val rawMasterIp = (masterTunnel?.nodeIp ?: masterInfo.nodeIp).ifEmpty { masterInfo.nodeName }
+                            val masterLat = if ((masterTunnel?.latencyMs ?: 0) > 0) masterTunnel!!.latencyMs else masterInfo.latencyMs
+                            val masterLatStr = if (masterLat > 0) " (${masterLat}ms)" else ""
+                            val masterNodeText = if (masterLoc.isNotEmpty()) "$masterLoc · $rawMasterIp$masterLatStr" else "$rawMasterIp$masterLatStr"
                             val masterUptime = masterTunnel?.let { "${it.uptimeSeconds / 3600}小时${(it.uptimeSeconds % 3600) / 60}分" } ?: masterInfo.uptimeStr
                             Text(
                                 text = "设备：主网卡零号，策略表一百\n节点：$masterNodeText\n已运行：$masterUptime，${masterInfo.status}",

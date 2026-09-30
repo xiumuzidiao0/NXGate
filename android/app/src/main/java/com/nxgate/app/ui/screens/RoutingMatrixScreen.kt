@@ -101,6 +101,7 @@ import com.nxgate.app.ui.components.SubscriptionDialog
 import com.nxgate.app.ui.components.countryChineseName
 import com.nxgate.app.ui.components.countryDisplayName
 import com.nxgate.app.ui.components.countryFlag
+import com.nxgate.app.ui.components.formatNodeLocation
 import com.nxgate.app.util.AppStringsEn
 import com.nxgate.app.util.LocalAppStrings
 import androidx.compose.material.icons.rounded.CloudDownload
@@ -125,7 +126,7 @@ data class MindMapBranch(
     val groupTitle: String,
     val groupSub: String,
     val isFallback: Boolean,
-    val exitLabel: String,
+    val leaves: List<String>,
     val rule: PortRuleItem? = null,
     val group: DynamicGroupCard? = null
 )
@@ -188,6 +189,7 @@ fun RoutingMatrixScreen(
     var portRules by remember { mutableStateOf<List<PortRuleItem>>(emptyList()) }
     var dynamicGroups by remember { mutableStateOf<List<DynamicGroupCard>>(emptyList()) }
     var inbounds by remember { mutableStateOf<List<InboundProtocolItem>>(emptyList()) }
+    var tunnels by remember { mutableStateOf<List<TunnelItem>>(emptyList()) }
     var availableOutbounds by remember(isEn) {
         mutableStateOf(
             listOf(
@@ -348,6 +350,10 @@ fun RoutingMatrixScreen(
             if (groupsRes.isSuccess) {
                 dynamicGroups = groupsRes.getOrNull() ?: emptyList()
             }
+            val tunnelsRes = NXGateApplication.instance.apiClient.fetchTunnels(activeServer)
+            if (tunnelsRes.isSuccess) {
+                tunnels = tunnelsRes.getOrNull() ?: emptyList()
+            }
             val sbOverviewRes = NXGateApplication.instance.apiClient.fetchSingBoxOverview(activeServer)
             if (sbOverviewRes.isSuccess) {
                 val data = sbOverviewRes.getOrNull()
@@ -385,6 +391,8 @@ fun RoutingMatrixScreen(
                                     if (portsRes.isSuccess && !portsRes.getOrNull().isNullOrEmpty()) portRules = portsRes.getOrNull()!!
                                     val groupsRes = NXGateApplication.instance.apiClient.fetchDynamicGroups(activeServer)
                                     if (groupsRes.isSuccess && !groupsRes.getOrNull().isNullOrEmpty()) dynamicGroups = groupsRes.getOrNull()!!
+                                    val tunnelsRes = NXGateApplication.instance.apiClient.fetchTunnels(activeServer)
+                                    if (tunnelsRes.isSuccess) tunnels = tunnelsRes.getOrNull() ?: emptyList()
                                     val sbOverviewRes = NXGateApplication.instance.apiClient.fetchSingBoxOverview(activeServer)
                                     if (sbOverviewRes.isSuccess) {
                                         val data = sbOverviewRes.getOrNull()
@@ -480,35 +488,95 @@ fun RoutingMatrixScreen(
                             0 -> {
                                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                                     // 分流链路实时拓扑思维导图卡片 (Visual Egress Routing Mind Map)
-                                    val defaultProxyPort = activeServer?.port ?: 7928
                                     val sysPrimaryGroup = dynamicGroups.find { it.isSystem || it.id == "system-primary" }
+                                    val masterTunnel = tunnels.find { it.isMaster }
+                                    val masterLoc = formatNodeLocation(masterTunnel?.country ?: "", masterTunnel?.countryLong ?: "", isEn)
+                                    val masterLocPrefix = if (masterLoc.isNotEmpty()) "$masterLoc · " else ""
+                                    val masterIp = (masterTunnel?.nodeIp ?: activeServer?.exitIp ?: "").ifEmpty { if (isEn) "Connected" else "已连通" }
+                                    val masterLat = masterTunnel?.latencyMs ?: 0
+                                    val masterLatStr = if (masterLat > 0) " (${masterLat}ms)" else ""
+                                    val masterLeaf = "tun0: $masterLocPrefix$masterIp$masterLatStr"
+
                                     val defaultBranch = MindMapBranch(
-                                        port = defaultProxyPort,
+                                        port = 7928,
                                         authText = if (isEn) "Default" else "系统默认",
                                         groupTitle = if (isEn) "Primary Gateway (tun0)" else "系统主出口网关 (tun0)",
-                                        groupSub = if (isEn) "Primary Egress" else "主出海网卡 (tun0)",
+                                        groupSub = if (isEn) "Primary Egress (tun0)" else "主出海网卡 (tun0)",
                                         isFallback = false,
-                                        exitLabel = "tun0: " + (activeServer?.exitIp?.ifEmpty { if (isEn) "Connected" else "已连通" } ?: (if (isEn) "Connected" else "已连通")),
+                                        leaves = listOf(masterLeaf),
                                         group = sysPrimaryGroup
                                     )
+
                                     val ruleBranches = portRules.filter { it.enabled }.map { rule ->
-                                        val matchedGroup = dynamicGroups.find { g -> rule.boundGroupIds.contains(g.id) }
-                                        val isFallback = matchedGroup?.inFallback == true
-                                        val groupTitle = matchedGroup?.name ?: if (rule.boundTunnelIds.isNotEmpty()) (if (isEn) "Bound Tunnels (${rule.boundTunnelIds.size})" else "指定隧道 (${rule.boundTunnelIds.size})") else (if (isEn) "Direct Native" else "原生直连")
-                                        val groupSub = if (matchedGroup != null) "${rule.policyDisplay} · ${matchedGroup.targetCount} ${if (isEn) "NICs" else "并发网卡"}" else (if (isEn) "Direct Exit" else "原生网络")
-                                        val exitLabel = if (matchedGroup != null) "${matchedGroup.targetCount} ${if (isEn) "Exits" else "网卡出口"}" else if (rule.boundTunnelIds.isNotEmpty()) "${rule.boundTunnelIds.size} ${if (isEn) "Tunnels" else "条隧道"}" else (if (isEn) "VPS Native" else "VPS 原生")
+                                        val matchedGroups = dynamicGroups.filter { g -> rule.boundGroupIds.contains(g.id) }
+                                        val matchedGroup = matchedGroups.firstOrNull()
+                                        val isFallback = matchedGroups.any { it.inFallback }
+                                        val groupTitle = if (matchedGroups.isNotEmpty()) {
+                                            matchedGroups.joinToString(" / ") { it.name }
+                                        } else if (rule.boundTunnelIds.isNotEmpty()) {
+                                            if (isEn) "Bound Tunnels (${rule.boundTunnelIds.size})" else "指定隧道 (${rule.boundTunnelIds.size})"
+                                        } else {
+                                            if (isEn) "Direct Native" else "原生直连"
+                                        }
+                                        val totalTarget = if (matchedGroups.isNotEmpty()) matchedGroups.sumOf { it.targetCount } else rule.boundTunnelIds.size
+                                        val groupSub = if (matchedGroups.isNotEmpty()) {
+                                            "${rule.policyDisplay} · $totalTarget ${if (isEn) "NICs" else "并发网卡"}"
+                                        } else {
+                                            if (isEn) "Direct Exit" else "原生网络"
+                                        }
+
+                                        val leaves = if (matchedGroups.isNotEmpty()) {
+                                            val allActiveTids = matchedGroups.flatMap { it.activeTunnelIds }
+                                            val activeTuns = tunnels.filter { allActiveTids.contains(it.id) || allActiveTids.contains(it.devName) }
+                                            if (activeTuns.isNotEmpty()) {
+                                                activeTuns.map { t ->
+                                                    val loc = formatNodeLocation(t.country, t.countryLong, isEn)
+                                                    val locPrefix = if (loc.isNotEmpty()) "$loc · " else ""
+                                                    val portStr = if (t.nodePort > 0) ":${t.nodePort}" else ""
+                                                    val latStr = if (t.latencyMs > 0) " (${t.latencyMs}ms)" else ""
+                                                    "${t.devName}: $locPrefix${t.nodeIp}$portStr$latStr"
+                                                }
+                                            } else {
+                                                val groupCountries = matchedGroups.map { it.country }.filter { it.isNotEmpty() }
+                                                val countryHint = if (groupCountries.isNotEmpty()) {
+                                                    groupCountries.joinToString(", ") { formatNodeLocation(it, isEnglish = isEn) }
+                                                } else {
+                                                    if (isEn) "All Regions" else "全部地区"
+                                                }
+                                                listOf("$countryHint · " + (if (isEn) "Scheduling..." else "调度就绪中..."))
+                                            }
+                                        } else if (rule.boundTunnelIds.isNotEmpty()) {
+                                            val activeTuns = tunnels.filter { rule.boundTunnelIds.contains(it.id) || rule.boundTunnelIds.contains(it.devName) }
+                                            if (activeTuns.isNotEmpty()) {
+                                                activeTuns.map { t ->
+                                                    val loc = formatNodeLocation(t.country, t.countryLong, isEn)
+                                                    val locPrefix = if (loc.isNotEmpty()) "$loc · " else ""
+                                                    val portStr = if (t.nodePort > 0) ":${t.nodePort}" else ""
+                                                    val latStr = if (t.latencyMs > 0) " (${t.latencyMs}ms)" else ""
+                                                    "${t.devName}: $locPrefix${t.nodeIp}$portStr$latStr"
+                                                }
+                                            } else {
+                                                listOf(if (isEn) "Tunnels offline" else "绑定的隧道离线")
+                                            }
+                                        } else {
+                                            listOf(if (isEn) "VPS Local IP" else "VPS 原生出网")
+                                        }
+
                                         MindMapBranch(
                                             port = rule.port,
                                             authText = rule.authDisplay,
                                             groupTitle = groupTitle,
                                             groupSub = groupSub,
                                             isFallback = isFallback,
-                                            exitLabel = exitLabel,
+                                            leaves = leaves,
                                             rule = rule,
                                             group = matchedGroup
                                         )
                                     }
-                                    val allBranches = listOf(defaultBranch) + ruleBranches
+
+                                    // 仅当 portRules 规则中未显式包含 7928 默认代理端口时，才补充默认分支；严禁出现 WebUI 端口 8787！
+                                    val hasExplicitDefaultPort = portRules.any { it.enabled && it.port == 7928 }
+                                    val allBranches = if (hasExplicitDefaultPort) ruleBranches else listOf(defaultBranch) + ruleBranches
 
                                     Card(
                                         modifier = Modifier.fillMaxWidth(),
@@ -725,34 +793,75 @@ fun RoutingMatrixScreen(
                                                                 }
                                                             }
 
-                                                            // Stem to Exit
+                                                            // Stem to Exits
                                                             HorizontalDivider(
                                                                 modifier = Modifier.width(20.dp).height(2.dp),
                                                                 color = MaterialTheme.colorScheme.outlineVariant
                                                             )
 
-                                                            // Exit Leaf Node
-                                                            Surface(
-                                                                shape = RoundedCornerShape(8.dp),
-                                                                color = MaterialTheme.colorScheme.surfaceContainerHighest,
-                                                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-                                                            ) {
-                                                                Row(
-                                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
-                                                                    verticalAlignment = Alignment.CenterVertically,
-                                                                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                                            // Exit Leaf Nodes (支持多并发网卡分叉树枝展开)
+                                                            if (branch.leaves.size > 1) {
+                                                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                                    branch.leaves.forEachIndexed { leafIdx, leafText ->
+                                                                        Row(
+                                                                            modifier = Modifier.height(IntrinsicSize.Min),
+                                                                            verticalAlignment = Alignment.CenterVertically
+                                                                        ) {
+                                                                            MindMapTreeConnector(
+                                                                                isFirst = leafIdx == 0,
+                                                                                isLast = leafIdx == branch.leaves.size - 1,
+                                                                                isSingle = false,
+                                                                                modifier = Modifier.width(20.dp).fillMaxHeight()
+                                                                            )
+                                                                            Surface(
+                                                                                shape = RoundedCornerShape(8.dp),
+                                                                                color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                                                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                                                                            ) {
+                                                                                Row(
+                                                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                                                                                    verticalAlignment = Alignment.CenterVertically,
+                                                                                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                                                                ) {
+                                                                                    Box(
+                                                                                        modifier = Modifier
+                                                                                            .size(6.dp)
+                                                                                            .background(Color(0xFF22C55E), CircleShape)
+                                                                                    )
+                                                                                    Text(
+                                                                                        text = leafText,
+                                                                                        style = MaterialTheme.typography.labelSmall,
+                                                                                        fontFamily = FontFamily.Monospace,
+                                                                                        color = MaterialTheme.colorScheme.onSurface
+                                                                                    )
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+                                                            } else {
+                                                                Surface(
+                                                                    shape = RoundedCornerShape(8.dp),
+                                                                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                                                                 ) {
-                                                                    Box(
-                                                                        modifier = Modifier
-                                                                            .size(6.dp)
-                                                                            .background(Color(0xFF22C55E), CircleShape)
-                                                                    )
-                                                                    Text(
-                                                                        text = branch.exitLabel,
-                                                                        style = MaterialTheme.typography.labelSmall,
-                                                                        fontFamily = FontFamily.Monospace,
-                                                                        color = MaterialTheme.colorScheme.onSurface
-                                                                    )
+                                                                    Row(
+                                                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                                                                        verticalAlignment = Alignment.CenterVertically,
+                                                                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                                                    ) {
+                                                                        Box(
+                                                                            modifier = Modifier
+                                                                                .size(6.dp)
+                                                                                .background(Color(0xFF22C55E), CircleShape)
+                                                                        )
+                                                                        Text(
+                                                                            text = branch.leaves.firstOrNull() ?: "",
+                                                                            style = MaterialTheme.typography.labelSmall,
+                                                                            fontFamily = FontFamily.Monospace,
+                                                                            color = MaterialTheme.colorScheme.onSurface
+                                                                        )
+                                                                    }
                                                                 }
                                                             }
                                                         }

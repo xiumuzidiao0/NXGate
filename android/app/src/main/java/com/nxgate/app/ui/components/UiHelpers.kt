@@ -63,6 +63,28 @@ val COUNTRY_ENGLISH_NAMES = mapOf(
     "RO" to "Romania", "IL" to "Israel", "AE" to "UAE", "SA" to "Saudi Arabia", "CN" to "China"
 )
 
+fun normalizeCountryCode(raw: String): String {
+    val clean = raw.trim().uppercase()
+    if (clean.length == 2 && clean[0] in 'A'..'Z' && clean[1] in 'A'..'Z') {
+        return if (clean == "UK") "GB" else clean
+    }
+    return COUNTRY_ENGLISH_NAMES.entries.find { it.value.equals(clean, ignoreCase = true) }?.key
+        ?: (COUNTRY_CHINESE_NAMES.entries.find { it.value.equals(clean, ignoreCase = true) }?.key ?: "")
+}
+
+fun formatNodeLocation(countryCode: String, countryLong: String = "", isEnglish: Boolean = false): String {
+    val code = normalizeCountryCode(countryCode.ifEmpty { countryLong })
+    val flag = if (code.isNotEmpty()) countryFlag(code) else ""
+    val name = if (code.isNotEmpty()) {
+        countryDisplayName(code, isEnglish)
+    } else if (countryLong.isNotEmpty()) {
+        countryLong
+    } else {
+        ""
+    }
+    return if (flag.isNotEmpty() && name.isNotEmpty()) "$flag $name" else if (name.isNotEmpty()) name else flag
+}
+
 fun countryChineseName(code: String): String {
     return COUNTRY_CHINESE_NAMES[code.trim().uppercase()] ?: code
 }

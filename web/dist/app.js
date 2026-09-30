@@ -1009,17 +1009,20 @@
                         tunListEl.innerHTML = tunnels.map(t => {
                             const cCode = t.node ? t.node.country_short : '';
                             const flag = cCode ? getCountryFlagSVG(cCode) : '';
+                            const cName = cCode ? getCountryName(cCode) : '';
+                            const locStr = cName ? `${cName} · ` : '';
                             const ip = t.node ? `${t.node.ip}:${t.node.port}` : '';
                             const isUp = t.status === 'connected';
                             const badgeClass = isUp ? 'connected' : (t.status === 'connecting' ? 'connecting' : 'disconnected');
                             const unlockBadges = renderUnlockBadges(t.unlock || (t.node ? cachedUnlockMap[t.node.ip] : null));
-                            const pingStr = t.node && t.node.latency_ms > 0 ? `<span class="ping-ok">${t.node.latency_ms}ms</span>` : '';
+                            const pingVal = (t.node && t.node.latency_ms > 0) ? t.node.latency_ms : (t.latency_ms > 0 ? t.latency_ms : 0);
+                            const pingStr = pingVal > 0 ? `<span class="ping-ok">${pingVal}ms</span>` : '';
                             const statusStr = t.status === 'connected' ? (isEn ? 'Online' : '在线') : (t.status === 'connecting' ? (isEn ? 'Connecting' : '连接中') : (isEn ? 'Disconnected' : '断开'));
                             return `
                                 <div class="tunnel-chip">
                                     <strong class="mono text-accent">${escapeHtml(t.dev_name)}</strong>
                                     <span class="badge ${badgeClass} badge-mini"><span class="status-dot"></span> ${escapeHtml(statusStr)}</span>
-                                    <span class="flag-box text-note">${flag} ${escapeHtml(ip)}</span>
+                                    <span class="flag-box text-note">${flag} ${escapeHtml(locStr)}${escapeHtml(ip)}</span>
                                     ${pingStr}
                                     <div class="tunnel-flags">${unlockBadges}</div>
                                     <button class="btn btn-outline btn-xs" data-action="probeTunnelUnlock" data-args="${jsonAttr([t.id])}" title="${isEn ? 'Probe AI & streaming unlock status for this exit' : '探测该出口的AI与流媒体解锁状态'}">${isEn ? 'Unlock' : '测解锁'}</button>
@@ -1809,31 +1812,38 @@
             const defaultProxyPort = (st && st.settings && st.settings.proxy_port) || (st && st.proxy_addr ? parseInt(st.proxy_addr.split(':').pop()) : 7928);
             const tunnels = (st && st.tunnels) ? st.tunnels : [];
 
-            // 1. Primary default pipeline branch
+            // 1. Primary default pipeline branch (tun0)
             const sysGroup = (currentDynamicGroups || []).find(g => g.is_system || g.id === 'system-primary');
             const sysGroupName = sysGroup ? sysGroup.name : (isEn ? 'Primary Gateway Group' : '系统主出口网关组');
             const primaryDev = (st && st.primary && st.primary.dev_name) || 'tun0';
             const primaryIp = (st && st.primary && st.primary.ip) || (st ? st.exit_ip : '');
             const primaryCountry = (st && st.primary && st.primary.country) || '';
+            const primaryFlag = primaryCountry ? getCountryFlagSVG(primaryCountry) : '';
+            const primaryCName = primaryCountry ? getCountryName(primaryCountry) : '';
+            const primaryLoc = primaryCountry ? `${primaryFlag} ${primaryCName} · ` : '';
+            const primaryLat = (st && st.primary && st.primary.latency_ms > 0) ? ` (${st.primary.latency_ms}ms)` : '';
 
             const primaryExitBadge = primaryIp
-                ? `<div class="mindmap-leaf-node"><span class="status-dot connected"></span> ${escapeHtml(primaryDev)}: ${escapeHtml(primaryIp)} ${primaryCountry ? '(' + escapeHtml(primaryCountry) + ')' : ''}</div>`
+                ? `<div class="mindmap-leaf-node"><span class="status-dot connected"></span> ${escapeHtml(primaryDev)}: ${primaryLoc}${escapeHtml(primaryIp)}${primaryLat}</div>`
                 : `<div class="mindmap-leaf-node"><span class="text-xs text-muted">${isEn ? 'Connecting primary exit...' : '主出口正在连接中...'}</span></div>`;
 
             const branchesData = [];
 
-            // Branch 0: Default Port
-            branchesData.push({
-                port: defaultProxyPort,
-                portDesc: isEn ? 'Default' : '系统默认',
-                isDefault: true,
-                groupId: 'system-primary',
-                groupName: sysGroupName,
-                groupMeta: isEn ? 'Primary Egress (tun0)' : '主出海网卡 (tun0)',
-                isFallback: false,
-                fallbackReason: '',
-                leavesHtml: `<div class="mindmap-leaves-single">${primaryExitBadge}</div>`
-            });
+            // Check if default proxy port (7928) is already explicitly handled in currentPortRules
+            const hasExplicitDefaultPort = (currentPortRules || []).some(r => r.port === defaultProxyPort);
+            if (!hasExplicitDefaultPort) {
+                branchesData.push({
+                    port: defaultProxyPort,
+                    portDesc: isEn ? 'Default' : '系统默认',
+                    isDefault: true,
+                    groupId: 'system-primary',
+                    groupName: sysGroupName,
+                    groupMeta: isEn ? 'Primary Egress (tun0)' : '主出海网卡 (tun0)',
+                    isFallback: false,
+                    fallbackReason: '',
+                    leavesHtml: `<div class="mindmap-leaves-single">${primaryExitBadge}</div>`
+                });
+            }
 
             // Extra Multi-Port rules branches
             if (currentPortRules && currentPortRules.length > 0) {
@@ -1872,12 +1882,19 @@
                             if (activeTuns.length > 0) {
                                 leaves = activeTuns.map(t => {
                                     const ip = (t.node && t.node.ip) || (t.node && t.node.id) || t.dev_name;
+                                    const port = (t.node && t.node.port) ? `:${t.node.port}` : '';
                                     const c = (t.node && t.node.country_short) || '';
-                                    const lat = t.latency_ms > 0 ? `${t.latency_ms}ms` : '';
-                                    return `<div class="mindmap-leaf-node"><span class="status-dot connected"></span> ${escapeHtml(t.dev_name)}: ${escapeHtml(ip)} ${c ? '(' + c + ')' : ''} ${lat ? '· ' + lat : ''}</div>`;
+                                    const flag = c ? getCountryFlagSVG(c) : '';
+                                    const cName = c ? getCountryName(c) : '';
+                                    const loc = c ? `${flag} ${cName} · ` : '';
+                                    const latVal = (t.node && t.node.latency_ms > 0) ? t.node.latency_ms : (t.latency_ms > 0 ? t.latency_ms : 0);
+                                    const latStr = latVal > 0 ? ` (${latVal}ms)` : '';
+                                    return `<div class="mindmap-leaf-node"><span class="status-dot connected"></span> ${escapeHtml(t.dev_name)}: ${loc}${escapeHtml(ip)}${port}${latStr}</div>`;
                                 });
                             } else {
-                                leaves = [`<div class="mindmap-leaf-node"><span class="text-xs text-muted">${isEn ? 'Scheduling tunnels...' : '等待调度拉起网卡...'}</span></div>`];
+                                const groupCountries = matchedGroups.map(g => g.country).filter(Boolean);
+                                const countryHint = groupCountries.length > 0 ? groupCountries.map(c => `${getCountryFlagSVG(c)} ${getCountryName(c)}`).join(', ') : (isEn ? 'All Countries' : '全部地区');
+                                leaves = [`<div class="mindmap-leaf-node"><span class="text-xs text-muted">${countryHint} · ${isEn ? 'Scheduling tunnels...' : '调度就绪中...'}</span></div>`];
                             }
                         }
                     } else if (rule.bound_tunnel_ids && rule.bound_tunnel_ids.length > 0) {
@@ -1887,7 +1904,14 @@
                         if (activeTuns.length > 0) {
                             leaves = activeTuns.map(t => {
                                 const ip = (t.node && t.node.ip) || t.dev_name;
-                                return `<div class="mindmap-leaf-node"><span class="status-dot connected"></span> ${escapeHtml(t.dev_name)}: ${escapeHtml(ip)}</div>`;
+                                const port = (t.node && t.node.port) ? `:${t.node.port}` : '';
+                                const c = (t.node && t.node.country_short) || '';
+                                const flag = c ? getCountryFlagSVG(c) : '';
+                                const cName = c ? getCountryName(c) : '';
+                                const loc = c ? `${flag} ${cName} · ` : '';
+                                const latVal = (t.node && t.node.latency_ms > 0) ? t.node.latency_ms : (t.latency_ms > 0 ? t.latency_ms : 0);
+                                const latStr = latVal > 0 ? ` (${latVal}ms)` : '';
+                                return `<div class="mindmap-leaf-node"><span class="status-dot connected"></span> ${escapeHtml(t.dev_name)}: ${loc}${escapeHtml(ip)}${port}${latStr}</div>`;
                             });
                         } else {
                             leaves = [`<div class="mindmap-leaf-node"><span class="text-xs text-muted">${isEn ? 'Tunnels offline' : '绑定的隧道离线'}</span></div>`];

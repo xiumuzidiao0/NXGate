@@ -144,14 +144,24 @@ func (p *Pool) startTunnelInternalLocked(node *nodes.Node, devIdx int) (*Tunnel,
 	tunnelID := fmt.Sprintf("tun-%d", p.nextIDSeq)
 	devName := fmt.Sprintf("tun%d", devIdx)
 
+	initialLatency := 0
+	if node != nil {
+		if node.LatencyMs > 0 {
+			initialLatency = node.LatencyMs
+		} else if node.Ping > 0 {
+			initialLatency = node.Ping
+		}
+	}
+
 	t := &Tunnel{
-		ID:       tunnelID,
-		DevName:  devName,
-		DevIndex: devIdx,
-		Node:     node,
-		Status:   StatusConnecting,
-		Message:  fmt.Sprintf("正在发起对节点 %s 的连接...", node.ID),
-		done:     make(chan struct{}),
+		ID:        tunnelID,
+		DevName:   devName,
+		DevIndex:  devIdx,
+		Node:      node,
+		Status:    StatusConnecting,
+		Message:   fmt.Sprintf("正在发起对节点 %s 的连接...", node.ID),
+		LatencyMs: initialLatency,
+		done:      make(chan struct{}),
 	}
 	p.tunnels[tunnelID] = t
 	p.mu.Unlock()

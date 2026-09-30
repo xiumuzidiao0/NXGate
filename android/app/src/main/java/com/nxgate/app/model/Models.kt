@@ -158,6 +158,8 @@ data class MasterGatewayInfo(
     val nodeName: String = "未连接",
     val nodeIp: String = "",
     val country: String = "",
+    val countryLong: String = "",
+    val latencyMs: Int = 0,
     val uptimeStr: String = "0秒",
     val status: String = "未连接",
     val isConnected: Boolean = false
@@ -184,6 +186,7 @@ data class TunnelItem(
     val nodeIp: String = "",
     val nodePort: Int = 443,
     val country: String = "",
+    val countryLong: String = "",
     val uptimeSeconds: Long = 0,
     val throughputBps: Long = 0,
     val throughputPassed: Boolean = true,

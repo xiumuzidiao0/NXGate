@@ -1087,6 +1087,15 @@ class ApiClient {
                             val json = JSONObject(data)
                             val vpnObj = json.optJSONObject("vpn")
                             val activeNode = vpnObj?.optString("active_node_id", "") ?: ""
+                            val activeNodeObj = vpnObj?.optJSONObject("active_node")
+                            val masterIp = activeNodeObj?.optString("ip", activeNode) ?: activeNode
+                            val masterCShort = activeNodeObj?.optString("country_short", "") ?: ""
+                            val masterCLong = activeNodeObj?.optString("country_long", "") ?: ""
+                            val masterLat = if (activeNodeObj != null && activeNodeObj.has("latency_ms") && activeNodeObj.optInt("latency_ms") > 0) {
+                                activeNodeObj.optInt("latency_ms")
+                            } else {
+                                activeNodeObj?.optInt("ping", 0) ?: 0
+                            }
                             val status = vpnObj?.optString("status", "disconnected") ?: "disconnected"
                             val uptimeSec = vpnObj?.optLong("uptime_seconds", 0) ?: 0
                             val hours = uptimeSec / 3600
@@ -1096,6 +1105,10 @@ class ApiClient {
                             val masterInfo = MasterGatewayInfo(
                                 devName = "主网卡零号 (tun0)",
                                 nodeName = if (activeNode.isNotEmpty()) activeNode else "未连接",
+                                nodeIp = masterIp,
+                                country = masterCShort,
+                                countryLong = masterCLong,
+                                latencyMs = masterLat,
                                 uptimeStr = uptimeStr,
                                 status = if (isConnected) "断流检测通过" else "未连接",
                                 isConnected = isConnected
@@ -1124,11 +1137,17 @@ class ApiClient {
                                     val devIndex = obj.optInt("dev_index", i)
                                     val tStatus = obj.optString("status", "connected")
                                     val uptime = obj.optLong("uptime", 0)
-                                    val latency = obj.optInt("latency_ms", 38)
                                     val nodeObj = obj.optJSONObject("node")
                                     val ip = nodeObj?.optString("ip", "") ?: ""
                                     val port = nodeObj?.optInt("port", 443) ?: 443
-                                    val country = nodeObj?.optString("country_long", nodeObj.optString("country_short", "JP")) ?: "JP"
+                                    val cShort = nodeObj?.optString("country_short", "") ?: ""
+                                    val cLong = nodeObj?.optString("country_long", "") ?: ""
+                                    val country = if (cShort.isNotEmpty()) cShort else cLong
+
+                                    val latFromObj = if (obj.has("latency_ms")) obj.optInt("latency_ms", 0) else 0
+                                    val latFromNode = if (nodeObj != null && nodeObj.has("latency_ms")) nodeObj.optInt("latency_ms", 0) else 0
+                                    val pingFromNode = nodeObj?.optInt("ping", 0) ?: 0
+                                    val latency = if (latFromObj > 0) latFromObj else (if (latFromNode > 0) latFromNode else (if (pingFromNode > 0) pingFromNode else 38))
 
                                     val unlockObj = obj.optJSONObject("unlock")
                                     val throughputBps = unlockObj?.optLong("throughput_bps", 0) ?: 0
@@ -1145,6 +1164,7 @@ class ApiClient {
                                             nodeIp = ip,
                                             nodePort = port,
                                             country = country,
+                                            countryLong = cLong,
                                             throughputBps = throughputBps,
                                             throughputPassed = throughputPassed,
                                             openai = unlockObj?.optString("openai", "unknown") ?: "unknown",
