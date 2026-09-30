@@ -46,7 +46,11 @@ func (s *Server) prepareSubscriptionNodes(ctx context.Context, r *http.Request) 
 	}
 
 	filtered := s.FilterSubscriptionNodes(nodes, q)
-	decorated := s.DecorateSubscriptionNodes(filtered, isEnglishRequest(r))
+	namingStyle := ""
+	if q != nil {
+		namingStyle = q.Get("naming")
+	}
+	decorated := s.DecorateSubscriptionNodesWithOptions(filtered, isEnglishRequest(r), namingStyle)
 	return decorated, nil
 }
 
@@ -293,15 +297,148 @@ func (s *Server) FilterSubscriptionNodes(nodes []singbox.Node, q url.Values) []s
 	return res
 }
 
-// DecorateSubscriptionNodes dynamically prepends the bound exit group name (e.g. [日本Top3住宅出口组])
-// to the front of sing-box node names and URL fragments for presentation in client subscriptions.
+// resolveCleanProtocol returns a clean standardized protocol name (e.g. VLESS, Hysteria2, TUIC, Trojan, Shadowsocks).
+func resolveCleanProtocol(n singbox.Node, cleanName string) string {
+	raw := strings.ToLower(strings.TrimSpace(n.RawProtocol))
+	proto := strings.ToLower(strings.TrimSpace(n.Protocol))
+	clean := strings.ToLower(strings.TrimSpace(cleanName))
+	combined := raw + " " + proto + " " + clean
+
+	switch {
+	case strings.Contains(combined, "reality") || strings.Contains(combined, "rh2"):
+		return "VLESS"
+	case strings.Contains(combined, "vless"):
+		return "VLESS"
+	case strings.Contains(combined, "hysteria2") || strings.Contains(combined, "hy2"):
+		return "Hysteria2"
+	case strings.Contains(combined, "tuic"):
+		return "TUIC"
+	case strings.Contains(combined, "trojan"):
+		return "Trojan"
+	case strings.Contains(combined, "shadowsocks") || strings.Contains(combined, "ss"):
+		return "Shadowsocks"
+	case strings.Contains(combined, "vmess"):
+		return "VMess"
+	case strings.Contains(combined, "anytls"):
+		return "AnyTLS"
+	case strings.Contains(combined, "socks"):
+		return "Socks5"
+	case strings.Contains(combined, "http"):
+		return "HTTP"
+	default:
+		p := strings.TrimSpace(n.Protocol)
+		if p != "" {
+			return p
+		}
+		return "Proxy"
+	}
+}
+
+// resolveNodeCountry determines the uppercase country code (e.g. JP, KR, US, DIRECT, FAV, GLOBAL)
+// for an inbound sing-box node based on its outbound routing and active egress state.
+func (s *Server) resolveNodeCountry(n singbox.Node, outboundPort int, outboundRaw string, cleanName string) string {
+	if outboundRaw == "direct" || outboundRaw == "none" || (outboundRaw == "" && outboundPort <= 0) {
+		return "DIRECT"
+	}
+
+	if outboundPort > 0 {
+		defaultPort := 7928
+		if s.cfg != nil && s.cfg.ProxyPort > 0 {
+			defaultPort = s.cfg.ProxyPort
+		}
+
+		if outboundPort == defaultPort {
+			if s.dynamicMgr != nil {
+				if sysGroup := s.dynamicMgr.GetGroup(tunnel.SystemPrimaryGroupID); sysGroup != nil {
+					if c := strings.TrimSpace(sysGroup.Country); c != "" && !strings.EqualFold(c, "FAVORITES") && !strings.EqualFold(c, "ALL") {
+						return strings.ToUpper(c)
+					}
+					if s.tunnelPool != nil {
+						for _, tid := range sysGroup.ActiveTunnelIDs {
+							if tun := s.tunnelPool.GetTunnel(tid); tun != nil && tun.Node != nil && tun.Node.CountryShort != "" {
+								return strings.ToUpper(tun.Node.CountryShort)
+							}
+						}
+					}
+				}
+			}
+			if s.tunnelPool != nil {
+				for _, tun := range s.tunnelPool.ListTunnels() {
+					if (tun.DevIndex == 0 || tun.DevName == "tun0") && tun.Node != nil && tun.Node.CountryShort != "" {
+						return strings.ToUpper(tun.Node.CountryShort)
+					}
+				}
+			}
+			if s.vpn != nil {
+				snap := s.vpn.Snapshot()
+				if snap.ActiveNode != nil && snap.ActiveNode.CountryShort != "" {
+					return strings.ToUpper(snap.ActiveNode.CountryShort)
+				}
+			}
+		} else if s.portMgr != nil {
+			if rule := s.portMgr.GetRule(outboundPort); rule != nil {
+				if len(rule.BoundGroupIDs) > 0 && s.dynamicMgr != nil {
+					for _, gid := range rule.BoundGroupIDs {
+						if grp := s.dynamicMgr.GetGroup(gid); grp != nil {
+							if c := strings.TrimSpace(grp.Country); c != "" && !strings.EqualFold(c, "FAVORITES") && !strings.EqualFold(c, "ALL") {
+								return strings.ToUpper(c)
+							}
+							if s.tunnelPool != nil {
+								for _, tid := range grp.ActiveTunnelIDs {
+									if tun := s.tunnelPool.GetTunnel(tid); tun != nil && tun.Node != nil && tun.Node.CountryShort != "" {
+										return strings.ToUpper(tun.Node.CountryShort)
+									}
+								}
+							}
+							if strings.EqualFold(grp.Country, "FAVORITES") {
+								return "FAV"
+							}
+						}
+					}
+				}
+				if len(rule.BoundTunnelIDs) > 0 && s.tunnelPool != nil {
+					for _, tid := range rule.BoundTunnelIDs {
+						if tun := s.tunnelPool.GetTunnel(tid); tun != nil && tun.Node != nil && tun.Node.CountryShort != "" {
+							return strings.ToUpper(tun.Node.CountryShort)
+						}
+					}
+				}
+			}
+		}
+	}
+
+	rePrefix := regexp.MustCompile(`^(?i)(JP|KR|US|SG|HK|TW|UK|GB|DE|FR|CA|AU|DIRECT|FAV)[-_]`)
+	if m := rePrefix.FindStringSubmatch(cleanName); len(m) > 1 {
+		return strings.ToUpper(m[1])
+	}
+
+	if s.tunnelPool != nil {
+		for _, tun := range s.tunnelPool.ListTunnels() {
+			if tun.Node != nil && tun.Node.CountryShort != "" {
+				return strings.ToUpper(tun.Node.CountryShort)
+			}
+		}
+	}
+
+	return "GLOBAL"
+}
+
+// DecorateSubscriptionNodes dynamically standardizes sing-box node names and URL fragments for presentation in client subscriptions.
+// By default, it formats nodes as: {CountryCode}-{Protocol}-{Port} (e.g. JP-VLESS-443, KR-Hysteria2-8443, DIRECT-Trojan-443).
 // Underlying sing-box configuration files and daemon tags remain strictly unmodified.
 func (s *Server) DecorateSubscriptionNodes(nodes []singbox.Node, isEnglish bool) []singbox.Node {
+	return s.DecorateSubscriptionNodesWithOptions(nodes, isEnglish, "")
+}
+
+// DecorateSubscriptionNodesWithOptions allows selecting naming style ("" for standard Country-Proto-Port, "group" for [Group] cleanName).
+func (s *Server) DecorateSubscriptionNodesWithOptions(nodes []singbox.Node, isEnglish bool, namingStyle string) []singbox.Node {
 	if len(nodes) == 0 {
 		return nodes
 	}
 
 	decorated := make([]singbox.Node, len(nodes))
+	usedNames := make(map[string]int)
+
 	for i, n := range nodes {
 		decorated[i] = n
 
@@ -329,66 +466,90 @@ func (s *Server) DecorateSubscriptionNodes(nodes []singbox.Node, isEnglish bool)
 			}
 		}
 
-		groupLabel := ""
-		if outboundRaw == "direct" || outboundRaw == "none" || (outboundRaw == "" && outboundPort <= 0) {
-			if isEnglish {
-				groupLabel = "Direct"
-			} else {
-				groupLabel = "直连"
-			}
-		} else if outboundPort > 0 {
-			defaultPort := 7928
-			if s.cfg != nil && s.cfg.ProxyPort > 0 {
-				defaultPort = s.cfg.ProxyPort
-			}
+		var finalName string
+		if strings.EqualFold(namingStyle, "group") {
+			groupLabel := ""
+			if outboundRaw == "direct" || outboundRaw == "none" || (outboundRaw == "" && outboundPort <= 0) {
+				if isEnglish {
+					groupLabel = "Direct"
+				} else {
+					groupLabel = "直连"
+				}
+			} else if outboundPort > 0 {
+				defaultPort := 7928
+				if s.cfg != nil && s.cfg.ProxyPort > 0 {
+					defaultPort = s.cfg.ProxyPort
+				}
 
-			if outboundPort == defaultPort {
-				if s.dynamicMgr != nil {
-					if sysGroup := s.dynamicMgr.GetGroup(tunnel.SystemPrimaryGroupID); sysGroup != nil && sysGroup.Name != "" {
-						groupLabel = sysGroup.Name
+				if outboundPort == defaultPort {
+					if s.dynamicMgr != nil {
+						if sysGroup := s.dynamicMgr.GetGroup(tunnel.SystemPrimaryGroupID); sysGroup != nil && sysGroup.Name != "" {
+							groupLabel = sysGroup.Name
+						}
 					}
-				}
-				if groupLabel == "" {
-					if isEnglish {
-						groupLabel = "Default Gateway"
-					} else {
-						groupLabel = "默认出口"
+					if groupLabel == "" {
+						if isEnglish {
+							groupLabel = "Default Gateway"
+						} else {
+							groupLabel = "默认出口"
+						}
 					}
-				}
-			} else if s.portMgr != nil {
-				if rule := s.portMgr.GetRule(outboundPort); rule != nil {
-					if len(rule.BoundGroupIDs) > 0 && s.dynamicMgr != nil {
-						var gNames []string
-						for _, gid := range rule.BoundGroupIDs {
-							if grp := s.dynamicMgr.GetGroup(gid); grp != nil && grp.Name != "" {
-								gNames = append(gNames, grp.Name)
+				} else if s.portMgr != nil {
+					if rule := s.portMgr.GetRule(outboundPort); rule != nil {
+						if len(rule.BoundGroupIDs) > 0 && s.dynamicMgr != nil {
+							var gNames []string
+							for _, gid := range rule.BoundGroupIDs {
+								if grp := s.dynamicMgr.GetGroup(gid); grp != nil && grp.Name != "" {
+									gNames = append(gNames, grp.Name)
+								}
+							}
+							if len(gNames) > 0 {
+								groupLabel = strings.Join(gNames, "/")
 							}
 						}
-						if len(gNames) > 0 {
-							groupLabel = strings.Join(gNames, "/")
+						if groupLabel == "" && len(rule.BoundTunnelIDs) > 0 {
+							if isEnglish {
+								groupLabel = fmt.Sprintf("Tunnel Exit (%d)", len(rule.BoundTunnelIDs))
+							} else {
+								groupLabel = fmt.Sprintf("指定隧道出口 (%d)", len(rule.BoundTunnelIDs))
+							}
 						}
 					}
-					if groupLabel == "" && len(rule.BoundTunnelIDs) > 0 {
-						if isEnglish {
-							groupLabel = fmt.Sprintf("Tunnel Exit (%d)", len(rule.BoundTunnelIDs))
-						} else {
-							groupLabel = fmt.Sprintf("指定隧道出口 (%d)", len(rule.BoundTunnelIDs))
-						}
+					if groupLabel == "" {
+						groupLabel = fmt.Sprintf("PORT %d", outboundPort)
 					}
-				}
-				if groupLabel == "" {
+				} else {
 					groupLabel = fmt.Sprintf("PORT %d", outboundPort)
 				}
-			} else {
-				groupLabel = fmt.Sprintf("PORT %d", outboundPort)
 			}
-		}
 
-		var finalName string
-		if groupLabel != "" {
-			finalName = fmt.Sprintf("[%s] %s", groupLabel, cleanName)
+			if groupLabel != "" {
+				finalName = fmt.Sprintf("[%s] %s", groupLabel, cleanName)
+			} else {
+				finalName = cleanName
+			}
 		} else {
-			finalName = cleanName
+			// Standard clean format: {CountryCode}-{Protocol}-{Port} (e.g. JP-VLESS-443)
+			countryCode := s.resolveNodeCountry(n, outboundPort, outboundRaw, cleanName)
+			protoName := resolveCleanProtocol(n, cleanName)
+			port := n.Port
+			if port <= 0 {
+				reDigits := regexp.MustCompile(`\d+`)
+				matches := reDigits.FindAllString(cleanName, -1)
+				if len(matches) > 0 {
+					port, _ = strconv.Atoi(matches[len(matches)-1])
+				}
+			}
+			if port <= 0 {
+				port = 443
+			}
+
+			baseName := fmt.Sprintf("%s-%s-%d", countryCode, protoName, port)
+			usedNames[baseName]++
+			finalName = baseName
+			if count := usedNames[baseName]; count > 1 {
+				finalName = fmt.Sprintf("%s-%02d", baseName, count)
+			}
 		}
 
 		decorated[i].Name = finalName

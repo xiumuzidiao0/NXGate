@@ -367,43 +367,49 @@ func TestSubscriptionGroupPrefixAndFiltering(t *testing.T) {
 		},
 	}
 
-	// 1. Test Node Decoration
+	// 1. Test Node Decoration (Default: Country-Protocol-Port, e.g. JP-VLESS-443)
 	decNodes := s.DecorateSubscriptionNodes(testNodes, false)
 	if len(decNodes) != 3 {
 		t.Fatalf("expected 3 decorated nodes, got %d", len(decNodes))
 	}
 
-	// First node: bound to dg-japan -> [日本高速专线] reality-443
-	if decNodes[0].Name != "[日本高速专线] reality-443" {
-		t.Errorf("expected [日本高速专线] reality-443, got %s", decNodes[0].Name)
+	// First node: bound to dg-japan -> JP-VLESS-443
+	if decNodes[0].Name != "JP-VLESS-443" {
+		t.Errorf("expected JP-VLESS-443, got %s", decNodes[0].Name)
 	}
-	if !strings.Contains(decNodes[0].URL, "%5B%E6%97%A5%E6%9C%AC%E9%AB%98%E9%80%9F%E4%B8%93%E7%BA%BF%5D") {
-		t.Errorf("expected decorated URL fragment in node 0, got %s", decNodes[0].URL)
-	}
-
-	// Second node: bound to dg-fav -> [我的收藏出口组] hy2-8443
-	if decNodes[1].Name != "[我的收藏出口组] hy2-8443" {
-		t.Errorf("expected [我的收藏出口组] hy2-8443, got %s", decNodes[1].Name)
+	if !strings.Contains(decNodes[0].URL, "#JP-VLESS-443") {
+		t.Errorf("expected decorated URL fragment #JP-VLESS-443 in node 0, got %s", decNodes[0].URL)
 	}
 
-	// Third node: direct -> [直连] direct-node
-	if decNodes[2].Name != "[直连] direct-node" {
-		t.Errorf("expected [直连] direct-node, got %s", decNodes[2].Name)
+	// Second node: bound to dg-fav -> FAV-Hysteria2-8443
+	if decNodes[1].Name != "FAV-Hysteria2-8443" {
+		t.Errorf("expected FAV-Hysteria2-8443, got %s", decNodes[1].Name)
 	}
 
-	// Test English decoration
-	decNodesEn := s.DecorateSubscriptionNodes(testNodes, true)
-	if decNodesEn[2].Name != "[Direct] direct-node" {
-		t.Errorf("expected [Direct] direct-node in English, got %s", decNodesEn[2].Name)
+	// Third node: direct -> DIRECT-Trojan-4443
+	if decNodes[2].Name != "DIRECT-Trojan-4443" {
+		t.Errorf("expected DIRECT-Trojan-4443, got %s", decNodes[2].Name)
+	}
+
+	// Test Backward-compatible Group-style decoration (naming=group)
+	decNodesGroup := s.DecorateSubscriptionNodesWithOptions(testNodes, false, "group")
+	if decNodesGroup[0].Name != "[日本高速专线] reality-443" {
+		t.Errorf("expected [日本高速专线] reality-443, got %s", decNodesGroup[0].Name)
+	}
+	if decNodesGroup[1].Name != "[我的收藏出口组] hy2-8443" {
+		t.Errorf("expected [我的收藏出口组] hy2-8443, got %s", decNodesGroup[1].Name)
+	}
+	if decNodesGroup[2].Name != "[直连] direct-node" {
+		t.Errorf("expected [直连] direct-node, got %s", decNodesGroup[2].Name)
 	}
 
 	// 2. Test Clash YAML Generation with decorated nodes
 	clashYaml := GenerateClashYAML(decNodes, "198.51.100.1")
-	if !strings.Contains(clashYaml, "name: \"[日本高速专线] reality-443\"") {
-		t.Errorf("Clash YAML missing decorated reality proxy name: %s", clashYaml)
+	if !strings.Contains(clashYaml, "name: \"JP-VLESS-443\"") {
+		t.Errorf("Clash YAML missing decorated JP-VLESS-443 proxy name: %s", clashYaml)
 	}
-	if !strings.Contains(clashYaml, "- \"[日本高速专线] reality-443\"") {
-		t.Errorf("Clash YAML proxy groups missing decorated reality proxy name: %s", clashYaml)
+	if !strings.Contains(clashYaml, "- \"JP-VLESS-443\"") {
+		t.Errorf("Clash YAML proxy groups missing decorated JP-VLESS-443 proxy name: %s", clashYaml)
 	}
 
 	// 3. Test Filtering
