@@ -68,17 +68,24 @@ check_versions() {
     local ver_web_header
     ver_web_header=$(grep -o -E 'id="app-version-badge" class="badge badge-accent">v[^<]+' web/dist/index.html 2>/dev/null | sed -E 's/.*>v//' || echo "MISSING")
 
+    local ver_android="MISSING"
+    if [ -f "android/app/build.gradle.kts" ]; then
+        ver_android=$(grep -E 'versionName\s*=\s*' android/app/build.gradle.kts 2>/dev/null | cut -d'"' -f2 || echo "MISSING")
+    fi
+
     echo "  • VERSION 文件            : ${ver_file}"
     echo "  • pkg/config/version.go   : ${ver_go}"
     echo "  • install.sh 默认版本     : ${ver_install}"
     echo "  • web/dist/index.html 侧栏: ${ver_web_sidebar}"
     echo "  • web/dist/index.html 顶栏: ${ver_web_header}"
+    echo "  • android/build.gradle.kts: ${ver_android}"
 
     local has_error=0
     if [ "$ver_file" != "$ver_go" ] || \
        [ "$ver_file" != "$ver_install" ] || \
        [ "$ver_file" != "$ver_web_sidebar" ] || \
-       [ "$ver_file" != "$ver_web_header" ]; then
+       [ "$ver_file" != "$ver_web_header" ] || \
+       ([ -f "android/app/build.gradle.kts" ] && [ "$ver_file" != "$ver_android" ]); then
         has_error=1
     fi
 

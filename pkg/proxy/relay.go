@@ -70,7 +70,11 @@ func relay(client, upstream net.Conn) {
 	// Upstream -> Client (Download)
 	go func() {
 		defer wg.Done()
-		defer closeWrite(client)
+		defer func() {
+			closeWrite(client)
+			// When upstream closes, give client 10s grace to finish reading or sending
+			_ = client.SetReadDeadline(time.Now().Add(10 * time.Second))
+		}()
 
 		cr := &countingReader{
 			reader: upstream,
@@ -88,7 +92,11 @@ func relay(client, upstream net.Conn) {
 	// Client -> Upstream (Upload)
 	go func() {
 		defer wg.Done()
-		defer closeWrite(upstream)
+		defer func() {
+			closeWrite(upstream)
+			// When client closes, give upstream 15s grace to flush remaining response data
+			_ = upstream.SetReadDeadline(time.Now().Add(15 * time.Second))
+		}()
 
 		cr := &countingReader{
 			reader: client,

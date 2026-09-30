@@ -73,7 +73,7 @@ func (m *Middleware) BasicAuth(next http.Handler) http.Handler {
 			settings := m.cfg.GetSettings()
 			secret := strings.Trim(settings.UIPath, "/")
 			subToken := strings.Trim(m.cfg.GetSubscriptionToken(), "/")
-			if token != "" && ((subToken != "" && token == subToken) || (secret != "" && token == secret) || (settings.UIPassword != "" && token == settings.UIPassword)) {
+			if token != "" && ((subToken != "" && token == subToken) || (secret != "" && token == secret)) {
 				next.ServeHTTP(w, r)
 				return
 			}
@@ -111,7 +111,7 @@ func (m *Middleware) SecretPathGuard(next http.Handler) http.Handler {
 		// 1. Direct subscription fetch with valid query token bypasses secret path prefix
 		token := r.URL.Query().Get("token")
 		if strings.HasPrefix(reqPath, "/api/singbox/subscription") && token != "" {
-			if (subToken != "" && token == subToken) || (secret != "" && token == secret) || (settings.UIPassword != "" && token == settings.UIPassword) {
+			if (subToken != "" && token == subToken) || (secret != "" && token == secret) {
 				ctx := context.WithValue(r.Context(), secretPathVerifiedKey, true)
 				next.ServeHTTP(w, r.WithContext(ctx))
 				return
@@ -123,7 +123,7 @@ func (m *Middleware) SecretPathGuard(next http.Handler) http.Handler {
 			subRemainder := strings.TrimPrefix(reqPath, "/sub/")
 			parts := strings.SplitN(subRemainder, "/", 2)
 			tokenPart := parts[0]
-			if (subToken != "" && tokenPart == subToken) || (secret != "" && tokenPart == secret) || (settings.UIPassword != "" && tokenPart == settings.UIPassword) {
+			if (subToken != "" && tokenPart == subToken) || (secret != "" && tokenPart == secret) {
 				subFormat := ""
 				if len(parts) > 1 {
 					subFormat = parts[1]
