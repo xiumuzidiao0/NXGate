@@ -472,6 +472,14 @@ class ApiClient {
                 val list = mutableListOf<DynamicGroupCard>()
                 for (i in 0 until arr.length()) {
                     val obj = arr.getJSONObject(i)
+                    val tidsArr = obj.optJSONArray("active_tunnel_ids")
+                    val activeTids = mutableListOf<String>()
+                    if (tidsArr != null) {
+                        for (j in 0 until tidsArr.length()) {
+                            val tid = tidsArr.optString(j)
+                            if (tid.isNotEmpty()) activeTids.add(tid)
+                        }
+                    }
                     list.add(
                         DynamicGroupCard(
                             id = obj.optString("id", "dg-$i"),
@@ -484,6 +492,7 @@ class ApiClient {
                             sortBy = obj.optString("sort_by", "latency"),
                             targetCount = obj.optInt("target_count", 3),
                             intervalMinutes = obj.optInt("interval_minutes", 15),
+                            activeTunnelIds = activeTids,
                             statusText = obj.optString("status_text", ""),
                             fallbackPolicy = obj.optString("fallback_policy", "none"),
                             inFallback = obj.optBoolean("in_fallback", false),

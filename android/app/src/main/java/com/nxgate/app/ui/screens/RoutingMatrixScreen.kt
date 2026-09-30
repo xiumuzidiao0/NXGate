@@ -78,6 +78,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -87,10 +88,12 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.nxgate.app.NXGateApplication
 import com.nxgate.app.model.AvailableOutbound
 import com.nxgate.app.model.DynamicGroupCard
 import com.nxgate.app.model.InboundProtocolItem
+import com.nxgate.app.model.MasterGatewayInfo
 import com.nxgate.app.model.PortRuleItem
 import com.nxgate.app.model.ServerProfile
 import com.nxgate.app.model.TunnelItem
@@ -127,7 +130,11 @@ data class PipelineLeaf(
     val devName: String,
     val locText: String,
     val ipWithPort: String,
-    val latency: Int
+    val latency: Int,
+    val openai: String = "unknown",
+    val claude: String = "unknown",
+    val gemini: String = "unknown",
+    val netflix: String = "unknown"
 )
 
 data class PipelineStream(
@@ -137,6 +144,8 @@ data class PipelineStream(
     val isDefault: Boolean,
     val groupTitle: String,
     val groupSub: String,
+    val policyLabel: String = "",
+    val concurrencyText: String = "",
     val isFallback: Boolean,
     val leaves: List<PipelineLeaf>,
     val countryHint: String = "",
@@ -145,26 +154,47 @@ data class PipelineStream(
 )
 
 @Composable
+fun UnlockMiniPill(label: String, status: String) {
+    val isOk = status == "unlocked"
+    val textColor = if (isOk) Color(0xFF10B981) else MaterialTheme.colorScheme.outline
+    val bgColor = if (isOk) Color(0xFF10B981).copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceContainerHighest
+    Surface(
+        shape = RoundedCornerShape(4.dp),
+        color = bgColor
+    ) {
+        Text(
+            text = if (isOk) "$label✓" else label,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = textColor,
+            fontSize = 9.sp,
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+        )
+    }
+}
+
+@Composable
 fun PipelineCurvedConnector(
     exitsCount: Int = 1,
     isFallback: Boolean = false,
     modifier: Modifier = Modifier,
-    color: Color = MaterialTheme.colorScheme.outlineVariant
+    color: Color = Color(0xFF4DCAEC)
 ) {
     Canvas(modifier = modifier) {
         val stroke = 2.dp.toPx()
         val startY = size.height / 2f
-        val exitCardHeight = 58.dp.toPx()
-        val gap = 8.dp.toPx()
+        val exitCardHeight = 84.dp.toPx()
+        val gap = 10.dp.toPx()
         val count = exitsCount.coerceAtLeast(1)
         val wireColor = if (isFallback) Color(0xFFF59E0B) else color
+        val pathEffect = PathEffect.dashPathEffect(floatArrayOf(12f, 8f), 0f)
         for (i in 0 until count) {
             val endY = if (count == 1) startY else (i * (exitCardHeight + gap) + exitCardHeight / 2f)
             val path = Path().apply {
                 moveTo(0f, startY)
                 cubicTo(size.width * 0.5f, startY, size.width * 0.5f, endY, size.width, endY)
             }
-            drawPath(path, wireColor, style = Stroke(width = stroke, cap = StrokeCap.Round))
+            drawPath(path, wireColor, style = Stroke(width = stroke, cap = StrokeCap.Round, pathEffect = pathEffect))
             drawCircle(wireColor, radius = 3.dp.toPx(), center = Offset(size.width, endY))
         }
         drawCircle(wireColor, radius = 3.5.dp.toPx(), center = Offset(0f, startY))
@@ -204,6 +234,7 @@ fun RoutingMatrixScreen(
     var dynamicGroups by remember { mutableStateOf<List<DynamicGroupCard>>(emptyList()) }
     var inbounds by remember { mutableStateOf<List<InboundProtocolItem>>(emptyList()) }
     var tunnels by remember { mutableStateOf<List<TunnelItem>>(emptyList()) }
+    var masterInfo by remember { mutableStateOf(MasterGatewayInfo()) }
     var availableOutbounds by remember(isEn) {
         mutableStateOf(
             listOf(
@@ -364,9 +395,17 @@ fun RoutingMatrixScreen(
             if (groupsRes.isSuccess) {
                 dynamicGroups = groupsRes.getOrNull() ?: emptyList()
             }
+            val statusRes = NXGateApplication.instance.apiClient.fetchServerStatus(activeServer)
+            if (statusRes.isSuccess) {
+                val sData = statusRes.getOrNull()
+                if (sData != null) {
+                    masterInfo = sData.masterGateway
+                    if (sData.tunnels.isNotEmpty()) tunnels = sData.tunnels
+                }
+            }
             val tunnelsRes = NXGateApplication.instance.apiClient.fetchTunnels(activeServer)
-            if (tunnelsRes.isSuccess) {
-                tunnels = tunnelsRes.getOrNull() ?: emptyList()
+            if (tunnelsRes.isSuccess && !tunnelsRes.getOrNull().isNullOrEmpty()) {
+                tunnels = tunnelsRes.getOrNull()!!
             }
             val sbOverviewRes = NXGateApplication.instance.apiClient.fetchSingBoxOverview(activeServer)
             if (sbOverviewRes.isSuccess) {
@@ -405,8 +444,16 @@ fun RoutingMatrixScreen(
                                     if (portsRes.isSuccess && !portsRes.getOrNull().isNullOrEmpty()) portRules = portsRes.getOrNull()!!
                                     val groupsRes = NXGateApplication.instance.apiClient.fetchDynamicGroups(activeServer)
                                     if (groupsRes.isSuccess && !groupsRes.getOrNull().isNullOrEmpty()) dynamicGroups = groupsRes.getOrNull()!!
+                                    val statusRes = NXGateApplication.instance.apiClient.fetchServerStatus(activeServer)
+                                    if (statusRes.isSuccess) {
+                                        val sData = statusRes.getOrNull()
+                                        if (sData != null) {
+                                            masterInfo = sData.masterGateway
+                                            if (sData.tunnels.isNotEmpty()) tunnels = sData.tunnels
+                                        }
+                                    }
                                     val tunnelsRes = NXGateApplication.instance.apiClient.fetchTunnels(activeServer)
-                                    if (tunnelsRes.isSuccess) tunnels = tunnelsRes.getOrNull() ?: emptyList()
+                                    if (tunnelsRes.isSuccess && !tunnelsRes.getOrNull().isNullOrEmpty()) tunnels = tunnelsRes.getOrNull()!!
                                     val sbOverviewRes = NXGateApplication.instance.apiClient.fetchSingBoxOverview(activeServer)
                                     if (sbOverviewRes.isSuccess) {
                                         val data = sbOverviewRes.getOrNull()
@@ -504,17 +551,21 @@ fun RoutingMatrixScreen(
                                     // 分流链路实时拓扑流向图 (Visual Egress Routing Pipeline Flow)
                                     val sysPrimaryGroup = dynamicGroups.find { it.isSystem || it.id == "system-primary" }
                                     val masterTunnel = tunnels.find { it.isMaster }
-                                    val masterLoc = formatNodeLocation(masterTunnel?.country ?: "", masterTunnel?.countryLong ?: "", isEn)
-                                    val masterIp = (masterTunnel?.nodeIp ?: activeServer?.exitIp ?: "").ifEmpty { if (isEn) "Connected" else "已连通" }
-                                    val masterPort = masterTunnel?.nodePort ?: 443
-                                    val masterLat = masterTunnel?.latencyMs ?: 0
+                                    val masterLoc = formatNodeLocation(masterTunnel?.country ?: masterInfo.country, masterTunnel?.countryLong ?: masterInfo.countryLong, isEn)
+                                    val masterIp = (masterTunnel?.nodeIp ?: masterInfo.nodeIp.ifEmpty { activeServer?.exitIp ?: "" }).ifEmpty { if (isEn) "Connected" else "已连通" }
+                                    val masterPort = if ((masterTunnel?.nodePort ?: 0) > 0) masterTunnel!!.nodePort else 443
+                                    val masterLat = if ((masterTunnel?.latencyMs ?: 0) > 0) masterTunnel!!.latencyMs else masterInfo.latencyMs
                                     val masterLeaves = if (masterIp != "未连接" && masterIp.isNotEmpty()) {
                                         listOf(
                                             PipelineLeaf(
                                                 devName = "tun0",
                                                 locText = if (masterLoc.isNotEmpty()) masterLoc else (if (isEn) "Primary Gateway" else "系统主出口"),
                                                 ipWithPort = "$masterIp:$masterPort",
-                                                latency = masterLat
+                                                latency = masterLat,
+                                                openai = masterTunnel?.openai ?: "unknown",
+                                                claude = masterTunnel?.claude ?: "unknown",
+                                                gemini = masterTunnel?.gemini ?: "unknown",
+                                                netflix = masterTunnel?.netflix ?: "unknown"
                                             )
                                         )
                                     } else emptyList()
@@ -526,6 +577,8 @@ fun RoutingMatrixScreen(
                                         isDefault = true,
                                         groupTitle = if (isEn) "Primary Gateway (tun0)" else "系统主出口网关 (tun0)",
                                         groupSub = if (isEn) "1 Dedicated NIC (tun0)" else "1 独占主出海网卡 (tun0)",
+                                        policyLabel = if (isEn) "Primary Route" else "系统主干路由",
+                                        concurrencyText = if (isEn) "1 Dedicated NIC" else "1 独占主网卡",
                                         isFallback = false,
                                         leaves = masterLeaves,
                                         group = sysPrimaryGroup
@@ -552,15 +605,42 @@ fun RoutingMatrixScreen(
                                         var countryHint = ""
                                         val leaves = if (matchedGroups.isNotEmpty()) {
                                             val allActiveTids = matchedGroups.flatMap { it.activeTunnelIds }
-                                            val activeTuns = tunnels.filter { allActiveTids.contains(it.id) || allActiveTids.contains(it.devName) }
+                                            var activeTuns = tunnels.filter { allActiveTids.contains(it.id) || allActiveTids.contains(it.devName) }
+                                            // Double-layer matching: if activeTuns is empty by ID, match by country or master tun0
+                                            if (activeTuns.isEmpty() && matchedGroup != null) {
+                                                val byCountry = tunnels.filter { it.country.equals(matchedGroup.country, true) }
+                                                if (byCountry.isNotEmpty()) {
+                                                    activeTuns = byCountry.take(matchedGroup.targetCount)
+                                                } else if (matchedGroup.country.equals(masterInfo.country, true) && masterInfo.nodeIp.isNotEmpty()) {
+                                                    activeTuns = listOf(
+                                                        TunnelItem(
+                                                            id = "tunnel-0",
+                                                            devName = "tun0",
+                                                            devIndex = 0,
+                                                            status = if (masterInfo.isConnected) "connected" else "connecting",
+                                                            nodeIp = masterInfo.nodeIp,
+                                                            nodePort = 443,
+                                                            country = masterInfo.country,
+                                                            countryLong = masterInfo.countryLong,
+                                                            latencyMs = masterInfo.latencyMs
+                                                        )
+                                                    )
+                                                }
+                                            }
+
                                             if (activeTuns.isNotEmpty()) {
                                                 activeTuns.map { t ->
                                                     val loc = formatNodeLocation(t.country, t.countryLong, isEn)
+                                                    val portStr = if (t.nodePort > 0) ":${t.nodePort}" else ""
                                                     PipelineLeaf(
                                                         devName = t.devName,
                                                         locText = if (loc.isNotEmpty()) loc else (if (isEn) "Global" else "全球"),
-                                                        ipWithPort = "${t.nodeIp}:${t.nodePort}",
-                                                        latency = t.latencyMs
+                                                        ipWithPort = "${t.nodeIp}$portStr",
+                                                        latency = t.latencyMs,
+                                                        openai = t.openai,
+                                                        claude = t.claude,
+                                                        gemini = t.gemini,
+                                                        netflix = t.netflix
                                                     )
                                                 }
                                             } else {
@@ -577,11 +657,16 @@ fun RoutingMatrixScreen(
                                             if (activeTuns.isNotEmpty()) {
                                                 activeTuns.map { t ->
                                                     val loc = formatNodeLocation(t.country, t.countryLong, isEn)
+                                                    val portStr = if (t.nodePort > 0) ":${t.nodePort}" else ""
                                                     PipelineLeaf(
                                                         devName = t.devName,
                                                         locText = if (loc.isNotEmpty()) loc else (if (isEn) "Global" else "全球"),
-                                                        ipWithPort = "${t.nodeIp}:${t.nodePort}",
-                                                        latency = t.latencyMs
+                                                        ipWithPort = "${t.nodeIp}$portStr",
+                                                        latency = t.latencyMs,
+                                                        openai = t.openai,
+                                                        claude = t.claude,
+                                                        gemini = t.gemini,
+                                                        netflix = t.netflix
                                                     )
                                                 }
                                             } else {
@@ -605,6 +690,8 @@ fun RoutingMatrixScreen(
                                             isDefault = false,
                                             groupTitle = groupTitle,
                                             groupSub = groupSub,
+                                            policyLabel = rule.policyDisplay,
+                                            concurrencyText = "$totalTarget ${if (isEn) "Target NICs" else "目标并发网卡"}",
                                             isFallback = isFallback,
                                             leaves = leaves,
                                             countryHint = countryHint,
@@ -659,22 +746,47 @@ fun RoutingMatrixScreen(
                                                 }
                                             }
 
-                                            // 3-Stage Guide Header Bar
+                                            // 3-Stage Guide Header Bar (Matches Web UI)
                                             Surface(
                                                 shape = RoundedCornerShape(10.dp),
                                                 color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
                                                 modifier = Modifier.fillMaxWidth()
                                             ) {
                                                 Row(
-                                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
                                                     verticalAlignment = Alignment.CenterVertically,
-                                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                                                 ) {
-                                                    Text("01 ${if (isEn) "Inbound" else "入站监听"}", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                                                    Text("──▶", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
-                                                    Text("02 ${if (isEn) "Routing" else "调度策略与出口组"}", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                                                    Text("──▶", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
-                                                    Text("03 ${if (isEn) "Physical Egress" else "物理出网网卡"}", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                        Surface(shape = RoundedCornerShape(6.dp), color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)) {
+                                                            Text("01", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp))
+                                                        }
+                                                        Column {
+                                                            Text(if (isEn) "Inbound Listeners" else "入站监听端口", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                                                            Text(if (isEn) "Proxy Ports & Auth" else "本地监听端口与鉴权", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 9.sp)
+                                                        }
+                                                    }
+                                                    Text("──▶", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outlineVariant)
+                                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                        Surface(shape = RoundedCornerShape(6.dp), color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)) {
+                                                            Text("02", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp))
+                                                        }
+                                                        Column {
+                                                            Text(if (isEn) "Routing Dispatcher" else "分流策略与出口组", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                                                            Text(if (isEn) "Dynamic Egress Pool" else "动态选路与负载调度", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 9.sp)
+                                                        }
+                                                    }
+                                                    Text("──▶", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outlineVariant)
+                                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                        Surface(shape = RoundedCornerShape(6.dp), color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)) {
+                                                            Text("03", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp))
+                                                        }
+                                                        Column {
+                                                            Text(if (isEn) "Physical Egress Exits" else "出海物理网卡与端点", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                                                            Text(if (isEn) "Active NICs · Latency" else "活跃网卡 · 属地 · 延迟", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 9.sp)
+                                                        }
+                                                    }
                                                 }
                                             }
 
@@ -717,8 +829,8 @@ fun RoutingMatrixScreen(
                                                                     }
                                                             ) {
                                                                 Column(
-                                                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                                                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                                                                    verticalArrangement = Arrangement.spacedBy(8.dp)
                                                                 ) {
                                                                     Row(
                                                                         modifier = Modifier.fillMaxWidth(),
@@ -733,7 +845,7 @@ fun RoutingMatrixScreen(
                                                                             color = MaterialTheme.colorScheme.primary
                                                                         )
                                                                         Surface(
-                                                                            shape = RoundedCornerShape(4.dp),
+                                                                            shape = RoundedCornerShape(6.dp),
                                                                             color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
                                                                         ) {
                                                                             Text(
@@ -741,13 +853,13 @@ fun RoutingMatrixScreen(
                                                                                 style = MaterialTheme.typography.labelSmall,
                                                                                 fontWeight = FontWeight.Bold,
                                                                                 color = MaterialTheme.colorScheme.primary,
-                                                                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                                                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
                                                                             )
                                                                         }
                                                                     }
                                                                     Text(
                                                                         text = stream.authText,
-                                                                        style = MaterialTheme.typography.labelSmall,
+                                                                        style = MaterialTheme.typography.bodySmall,
                                                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                                                     )
                                                                 }
@@ -787,8 +899,8 @@ fun RoutingMatrixScreen(
                                                                     }
                                                             ) {
                                                                 Column(
-                                                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                                                                    verticalArrangement = Arrangement.spacedBy(8.dp)
                                                                 ) {
                                                                     Row(
                                                                         modifier = Modifier.fillMaxWidth(),
@@ -797,8 +909,8 @@ fun RoutingMatrixScreen(
                                                                     ) {
                                                                         Text(
                                                                             text = stream.groupTitle,
-                                                                            style = MaterialTheme.typography.bodySmall,
-                                                                            fontWeight = FontWeight.SemiBold,
+                                                                            style = MaterialTheme.typography.titleMedium,
+                                                                            fontWeight = FontWeight.Bold,
                                                                             color = MaterialTheme.colorScheme.onSurface,
                                                                             maxLines = 1
                                                                         )
@@ -817,11 +929,28 @@ fun RoutingMatrixScreen(
                                                                             }
                                                                         }
                                                                     }
-                                                                    Text(
-                                                                        text = stream.groupSub,
-                                                                        style = MaterialTheme.typography.labelSmall,
-                                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                                    )
+                                                                    Row(
+                                                                        modifier = Modifier.fillMaxWidth(),
+                                                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                                                        verticalAlignment = Alignment.CenterVertically
+                                                                    ) {
+                                                                        Surface(
+                                                                            shape = RoundedCornerShape(6.dp),
+                                                                            color = MaterialTheme.colorScheme.surfaceContainerHighest
+                                                                        ) {
+                                                                            Text(
+                                                                                text = stream.policyLabel,
+                                                                                style = MaterialTheme.typography.labelSmall,
+                                                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                                            )
+                                                                        }
+                                                                        Text(
+                                                                            text = stream.concurrencyText,
+                                                                            style = MaterialTheme.typography.labelSmall,
+                                                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                                        )
+                                                                    }
                                                                 }
                                                             }
 
@@ -832,22 +961,23 @@ fun RoutingMatrixScreen(
                                                                 modifier = Modifier.width(36.dp).fillMaxHeight()
                                                             )
 
-                                                            // Stage 3: Physical Egress Cards
+                                                            // Stage 3: Physical Egress Cards (Matches Web UI Bento style)
                                                             Column(
-                                                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                                                                verticalArrangement = Arrangement.spacedBy(10.dp)
                                                             ) {
                                                                 if (stream.leaves.isNotEmpty()) {
                                                                     stream.leaves.forEach { leaf ->
                                                                         Surface(
-                                                                            shape = RoundedCornerShape(10.dp),
-                                                                            color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                                                            shape = RoundedCornerShape(12.dp),
+                                                                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
                                                                             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                                                                            modifier = Modifier.width(280.dp)
+                                                                            modifier = Modifier.width(300.dp)
                                                                         ) {
                                                                             Column(
-                                                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
-                                                                                verticalArrangement = Arrangement.spacedBy(3.dp)
+                                                                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                                                                                verticalArrangement = Arrangement.spacedBy(6.dp)
                                                                             ) {
+                                                                                // Row 1: NIC + Country/Location + Latency
                                                                                 Row(
                                                                                     modifier = Modifier.fillMaxWidth(),
                                                                                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -855,7 +985,7 @@ fun RoutingMatrixScreen(
                                                                                 ) {
                                                                                     Row(
                                                                                         verticalAlignment = Alignment.CenterVertically,
-                                                                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                                                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                                                                                     ) {
                                                                                         Surface(
                                                                                             shape = RoundedCornerShape(4.dp),
@@ -865,13 +995,14 @@ fun RoutingMatrixScreen(
                                                                                                 text = leaf.devName,
                                                                                                 style = MaterialTheme.typography.labelSmall,
                                                                                                 fontWeight = FontWeight.Bold,
+                                                                                                fontFamily = FontFamily.Monospace,
                                                                                                 color = MaterialTheme.colorScheme.primary,
-                                                                                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                                                                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                                                                             )
                                                                                         }
                                                                                         Text(
                                                                                             text = leaf.locText,
-                                                                                            style = MaterialTheme.typography.bodySmall,
+                                                                                            style = MaterialTheme.typography.bodyMedium,
                                                                                             fontWeight = FontWeight.SemiBold,
                                                                                             color = MaterialTheme.colorScheme.onSurface
                                                                                         )
@@ -880,44 +1011,58 @@ fun RoutingMatrixScreen(
                                                                                         val pillColor = if (leaf.latency < 100) Color(0xFF10B981) else Color(0xFFF59E0B)
                                                                                         Surface(
                                                                                             shape = RoundedCornerShape(10.dp),
-                                                                                            color = pillColor.copy(alpha = 0.15f)
+                                                                                            color = pillColor.copy(alpha = 0.15f),
+                                                                                            border = BorderStroke(1.dp, pillColor.copy(alpha = 0.3f))
                                                                                         ) {
                                                                                             Text(
                                                                                                 text = "⚡ ${leaf.latency}ms",
                                                                                                 style = MaterialTheme.typography.labelSmall,
                                                                                                 fontWeight = FontWeight.Bold,
                                                                                                 color = pillColor,
-                                                                                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.5.dp)
+                                                                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                                                                             )
                                                                                         }
                                                                                     }
                                                                                 }
+
+                                                                                // Row 2: IP:Port in monospace
                                                                                 Text(
                                                                                     text = leaf.ipWithPort,
-                                                                                    style = MaterialTheme.typography.labelSmall,
+                                                                                    style = MaterialTheme.typography.bodySmall,
                                                                                     fontFamily = FontFamily.Monospace,
                                                                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                                                                 )
+
+                                                                                // Row 3: Unlock Pills (GPT✓, Claude✓, Gemini✓, NF✓)
+                                                                                Row(
+                                                                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                                                                    verticalAlignment = Alignment.CenterVertically
+                                                                                ) {
+                                                                                    UnlockMiniPill("GPT", leaf.openai)
+                                                                                    UnlockMiniPill("Claude", leaf.claude)
+                                                                                    UnlockMiniPill("Gemini", leaf.gemini)
+                                                                                    UnlockMiniPill("NF", leaf.netflix)
+                                                                                }
                                                                             }
                                                                         }
                                                                     }
                                                                 } else {
                                                                     Surface(
-                                                                        shape = RoundedCornerShape(10.dp),
-                                                                        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                                                        shape = RoundedCornerShape(12.dp),
+                                                                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
                                                                         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                                                                        modifier = Modifier.width(280.dp)
+                                                                        modifier = Modifier.width(300.dp)
                                                                     ) {
                                                                         Row(
-                                                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                                                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
                                                                             verticalAlignment = Alignment.CenterVertically,
-                                                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                                            horizontalArrangement = Arrangement.spacedBy(10.dp)
                                                                         ) {
                                                                             Box(modifier = Modifier.size(8.dp).background(Color(0xFFE9A568), CircleShape))
                                                                             Column {
                                                                                 Text(
                                                                                     text = stream.countryHint.ifEmpty { if (isEn) "All Regions" else "全部地区" },
-                                                                                    style = MaterialTheme.typography.bodySmall,
+                                                                                    style = MaterialTheme.typography.bodyMedium,
                                                                                     fontWeight = FontWeight.SemiBold
                                                                                 )
                                                                                 Text(
