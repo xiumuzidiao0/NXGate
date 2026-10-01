@@ -38,3 +38,6 @@ web/test-results/
 
 # CodeGraph
 .codegraph/
+
+# Local agent & goal runtime
+.pi/

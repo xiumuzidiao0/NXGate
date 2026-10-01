@@ -391,6 +391,34 @@ func TestSubscriptionGroupPrefixAndFiltering(t *testing.T) {
 		t.Errorf("expected DIRECT-Trojan-4443, got %s", decNodes[2].Name)
 	}
 
+	// 1b. Test Symmetric Numbering for multiple nodes with the same baseName (e.g. two JP-VLESS-443 nodes)
+	multiNodes := []singbox.Node{
+		{
+			Name:         "node1.json",
+			Protocol:     "VLESS-REALITY",
+			Port:         443,
+			Outbound:     "socks5://127.0.0.1:1081",
+			OutboundPort: 1081,
+		},
+		{
+			Name:         "node2.json",
+			Protocol:     "VLESS-REALITY",
+			Port:         443,
+			Outbound:     "socks5://127.0.0.1:1081",
+			OutboundPort: 1081,
+		},
+	}
+	decMulti := s.DecorateSubscriptionNodes(multiNodes, false)
+	if len(decMulti) != 2 {
+		t.Fatalf("expected 2 decorated nodes, got %d", len(decMulti))
+	}
+	if decMulti[0].Name != "JP-VLESS-443-01" {
+		t.Errorf("expected first symmetric node JP-VLESS-443-01, got %s", decMulti[0].Name)
+	}
+	if decMulti[1].Name != "JP-VLESS-443-02" {
+		t.Errorf("expected second symmetric node JP-VLESS-443-02, got %s", decMulti[1].Name)
+	}
+
 	// Test Backward-compatible Group-style decoration (naming=group)
 	decNodesGroup := s.DecorateSubscriptionNodesWithOptions(testNodes, false, "group")
 	if decNodesGroup[0].Name != "[日本高速专线] reality-443" {

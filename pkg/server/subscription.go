@@ -442,35 +442,84 @@ func (s *Server) DecorateSubscriptionNodesWithOptions(nodes []singbox.Node, isEn
 	decorated := make([]singbox.Node, len(nodes))
 	usedNames := make(map[string]int)
 
+	// Precompute baseNames and total counts for standard naming style to achieve symmetric numbering
+	baseNames := make([]string, len(nodes))
+	baseCounts := make(map[string]int)
+
+	if !strings.EqualFold(namingStyle, "group") {
+		for i, n := range nodes {
+			cleanName := strings.TrimSpace(n.Name)
+			if cleanName == "" {
+				cleanName = strings.TrimSpace(n.Tag)
+			}
+			cleanName = strings.TrimSuffix(cleanName, ".json")
+			cleanName = reLeadingGroup.ReplaceAllString(cleanName, "")
+			cleanName = strings.TrimSpace(cleanName)
+			if cleanName == "" {
+				cleanName = fmt.Sprintf("Node-%s-%d", n.Protocol, n.Port)
+			}
+
+			outboundRaw := strings.TrimSpace(n.Outbound)
+			outboundPort := n.OutboundPort
+			if outboundPort <= 0 && outboundRaw != "" && !strings.EqualFold(outboundRaw, "direct") && !strings.EqualFold(outboundRaw, "none") {
+				if u, err := url.Parse(outboundRaw); err == nil && u.Port() != "" {
+					outboundPort, _ = strconv.Atoi(u.Port())
+				} else if strings.Contains(outboundRaw, ":") {
+					_, pStr, err := net.SplitHostPort(outboundRaw)
+					if err == nil {
+						outboundPort, _ = strconv.Atoi(pStr)
+					}
+				}
+			}
+
+			countryCode := s.resolveNodeCountry(n, outboundPort, outboundRaw, cleanName)
+			protoName := resolveCleanProtocol(n, cleanName)
+			port := n.Port
+			if port <= 0 {
+				matches := reDigits.FindAllString(cleanName, -1)
+				if len(matches) > 0 {
+					port, _ = strconv.Atoi(matches[len(matches)-1])
+				}
+			}
+			if port <= 0 {
+				port = 443
+			}
+
+			bn := fmt.Sprintf("%s-%s-%d", countryCode, protoName, port)
+			baseNames[i] = bn
+			baseCounts[bn]++
+		}
+	}
+
 	for i, n := range nodes {
 		decorated[i] = n
 
-		cleanName := strings.TrimSpace(n.Name)
-		if cleanName == "" {
-			cleanName = strings.TrimSpace(n.Tag)
-		}
-		cleanName = strings.TrimSuffix(cleanName, ".json")
-		cleanName = reLeadingGroup.ReplaceAllString(cleanName, "")
-		cleanName = strings.TrimSpace(cleanName)
-		if cleanName == "" {
-			cleanName = fmt.Sprintf("Node-%s-%d", n.Protocol, n.Port)
-		}
-
-		outboundRaw := strings.TrimSpace(n.Outbound)
-		outboundPort := n.OutboundPort
-		if outboundPort <= 0 && outboundRaw != "" && !strings.EqualFold(outboundRaw, "direct") && !strings.EqualFold(outboundRaw, "none") {
-			if u, err := url.Parse(outboundRaw); err == nil && u.Port() != "" {
-				outboundPort, _ = strconv.Atoi(u.Port())
-			} else if strings.Contains(outboundRaw, ":") {
-				_, pStr, err := net.SplitHostPort(outboundRaw)
-				if err == nil {
-					outboundPort, _ = strconv.Atoi(pStr)
-				}
-			}
-		}
-
 		var finalName string
 		if strings.EqualFold(namingStyle, "group") {
+			cleanName := strings.TrimSpace(n.Name)
+			if cleanName == "" {
+				cleanName = strings.TrimSpace(n.Tag)
+			}
+			cleanName = strings.TrimSuffix(cleanName, ".json")
+			cleanName = reLeadingGroup.ReplaceAllString(cleanName, "")
+			cleanName = strings.TrimSpace(cleanName)
+			if cleanName == "" {
+				cleanName = fmt.Sprintf("Node-%s-%d", n.Protocol, n.Port)
+			}
+
+			outboundRaw := strings.TrimSpace(n.Outbound)
+			outboundPort := n.OutboundPort
+			if outboundPort <= 0 && outboundRaw != "" && !strings.EqualFold(outboundRaw, "direct") && !strings.EqualFold(outboundRaw, "none") {
+				if u, err := url.Parse(outboundRaw); err == nil && u.Port() != "" {
+					outboundPort, _ = strconv.Atoi(u.Port())
+				} else if strings.Contains(outboundRaw, ":") {
+					_, pStr, err := net.SplitHostPort(outboundRaw)
+					if err == nil {
+						outboundPort, _ = strconv.Atoi(pStr)
+					}
+				}
+			}
+
 			groupLabel := ""
 			if outboundRaw == "direct" || outboundRaw == "none" || (outboundRaw == "" && outboundPort <= 0) {
 				if isEnglish {
@@ -532,25 +581,14 @@ func (s *Server) DecorateSubscriptionNodesWithOptions(nodes []singbox.Node, isEn
 				finalName = cleanName
 			}
 		} else {
-			// Standard clean format: {CountryCode}-{Protocol}-{Port} (e.g. JP-VLESS-443)
-			countryCode := s.resolveNodeCountry(n, outboundPort, outboundRaw, cleanName)
-			protoName := resolveCleanProtocol(n, cleanName)
-			port := n.Port
-			if port <= 0 {
-				matches := reDigits.FindAllString(cleanName, -1)
-				if len(matches) > 0 {
-					port, _ = strconv.Atoi(matches[len(matches)-1])
-				}
-			}
-			if port <= 0 {
-				port = 443
-			}
-
-			baseName := fmt.Sprintf("%s-%s-%d", countryCode, protoName, port)
+			// Standard clean format: {CountryCode}-{Protocol}-{Port} (e.g. JP-VLESS-443 or JP-VLESS-443-01 if multiple)
+			baseName := baseNames[i]
 			usedNames[baseName]++
-			finalName = baseName
-			if count := usedNames[baseName]; count > 1 {
+			count := usedNames[baseName]
+			if baseCounts[baseName] > 1 {
 				finalName = fmt.Sprintf("%s-%02d", baseName, count)
+			} else {
+				finalName = baseName
 			}
 		}
 
