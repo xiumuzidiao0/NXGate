@@ -2,9 +2,11 @@
   "name": "nxgate-webui-tests",
   "private": true,
   "scripts": {
+    "build": "esbuild src/app.js --bundle --minify-whitespace --minify-syntax --format=iife --target=es2020 --outfile=dist/app.js",
     "test:ui": "node tests/ui-smoke.mjs"
   },
   "devDependencies": {
+    "esbuild": "^0.28.2",
     "playwright-core": "1.55.0"
   }
 }

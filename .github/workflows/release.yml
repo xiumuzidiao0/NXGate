@@ -49,8 +49,23 @@ jobs:
           govulncheck ./...
           go test -v -count=1 ./...
           npm --prefix web install
+          npm --prefix web run build
           npx --prefix web playwright install --with-deps chromium
           npm --prefix web run test:ui
+
+      - name: Set up JDK 17 for Android Build
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
+      - name: Build Android Release APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
+          cd ..
+          cp -f android/app/build/outputs/apk/release/app-release.apk nxgate-release.apk
 
       - name: Build Multi-architecture Release Artifacts
         run: |
@@ -69,6 +84,7 @@ jobs:
             "dist/nxgate_linux_arm"
             "dist/nxgate_linux_arm.gz"
             "dist/SHA256SUMS.txt"
+            "nxgate-release.apk"
           )
           for f in "${EXPECTED_FILES[@]}"; do
             if [ ! -s "$f" ]; then
