@@ -1,8 +1,15 @@
 package com.nxgate.app.ui.components
 
+import android.content.Context
+import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -10,8 +17,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -19,6 +28,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.nxgate.app.model.ApiError
+import com.nxgate.app.model.ServerProfile
+import com.nxgate.app.model.toApiError
 
 /**
  * Universal Unicode Country Flag Generator.
@@ -126,4 +138,70 @@ fun UnlockPill(label: String, status: String) {
             )
         }
     }
+}
+
+/**
+ * Displays a self-healing error guidance banner card with actionable advice.
+ */
+@Composable
+fun ApiErrorCard(
+    error: ApiError,
+    onRetry: (() -> Unit)? = null,
+    isEn: Boolean = false,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.4f))
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Warning,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(18.dp)
+                )
+                Text(
+                    text = error.userFriendlyMessage(isEn),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onErrorContainer
+                )
+            }
+            Text(
+                text = "💡 ${error.suggestedAction(isEn)}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (onRetry != null) {
+                Spacer(Modifier.height(2.dp))
+                OutlinedButton(
+                    onClick = onRetry,
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                    modifier = Modifier.align(Alignment.End)
+                ) {
+                    Text(if (isEn) "Retry" else "重试", style = MaterialTheme.typography.labelSmall)
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Shows an actionable Toast message with user-friendly diagnosis and self-healing action advice.
+ */
+fun showApiErrorToast(context: Context, error: Throwable?, server: ServerProfile? = null, isEn: Boolean = false) {
+    val apiErr = error?.toApiError(server) ?: ApiError.General(if (isEn) "Unknown error" else "未知异常")
+    val userMsg = "${apiErr.userFriendlyMessage(isEn)}\n💡 ${apiErr.suggestedAction(isEn)}"
+    Toast.makeText(context, userMsg, Toast.LENGTH_LONG).show()
 }

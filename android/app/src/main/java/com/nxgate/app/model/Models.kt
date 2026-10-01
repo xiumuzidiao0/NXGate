@@ -215,7 +215,7 @@ data class TunnelItem(
 data class PortRuleItem(
     val port: Int,
     val enabled: Boolean = true,
-    val policy: String = "round_robin", // "round_robin", "interval", "random"
+    val policy: String = "round_robin", // "round_robin", "least_rtt", "interval", "random"
     val intervalSeconds: Int = 300,
     val authMode: String = "random", // "none", "random", "custom"
     val authUser: String = "",
@@ -226,6 +226,7 @@ data class PortRuleItem(
     val policyDisplay: String
         get() = when (policy) {
             "round_robin" -> "轮询"
+            "least_rtt" -> "最低延迟 (Least-RTT)"
             "interval" -> "定时轮换 ${intervalSeconds}秒"
             "random" -> "随机"
             else -> policy

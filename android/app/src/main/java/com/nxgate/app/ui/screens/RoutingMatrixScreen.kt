@@ -112,94 +112,8 @@ import com.nxgate.app.util.AppStringsEn
 import com.nxgate.app.util.LocalAppStrings
 import androidx.compose.material.icons.rounded.CloudDownload
 import kotlinx.coroutines.launch
-
-// Dropdown option data models
-data class PortPolicyOption(val key: String, val label: String)
-data class PortIntervalOption(val seconds: Int, val label: String)
-data class PortAuthOption(val key: String, val label: String)
-
-data class GroupCountryOption(val code: String, val label: String)
-data class GroupIpTypeOption(val key: String, val label: String)
-data class GroupUnlockOption(val key: String, val label: String)
-data class GroupSortOption(val key: String, val label: String)
-data class GroupTargetCountOption(val count: Int, val label: String)
-data class GroupIntervalOption(val minutes: Int, val label: String)
-data class GroupFallbackOption(val key: String, val label: String)
-
-data class PipelineLeaf(
-    val devName: String,
-    val locText: String,
-    val ipWithPort: String,
-    val latency: Int,
-    val openai: String = "unknown",
-    val claude: String = "unknown",
-    val gemini: String = "unknown",
-    val netflix: String = "unknown"
-)
-
-data class PipelineStream(
-    val port: Int,
-    val proto: String = "SOCKS5",
-    val authText: String,
-    val isDefault: Boolean,
-    val groupTitle: String,
-    val groupSub: String,
-    val policyLabel: String = "",
-    val concurrencyText: String = "",
-    val isFallback: Boolean,
-    val leaves: List<PipelineLeaf>,
-    val countryHint: String = "",
-    val rule: PortRuleItem? = null,
-    val group: DynamicGroupCard? = null
-)
-
-@Composable
-fun UnlockMiniPill(label: String, status: String) {
-    val isOk = status == "unlocked"
-    val textColor = if (isOk) Color(0xFF10B981) else MaterialTheme.colorScheme.outline
-    val bgColor = if (isOk) Color(0xFF10B981).copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceContainerHighest
-    Surface(
-        shape = RoundedCornerShape(4.dp),
-        color = bgColor
-    ) {
-        Text(
-            text = if (isOk) "$label✓" else label,
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.SemiBold,
-            color = textColor,
-            fontSize = 9.sp,
-            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
-        )
-    }
-}
-
-@Composable
-fun PipelineCurvedConnector(
-    exitsCount: Int = 1,
-    isFallback: Boolean = false,
-    modifier: Modifier = Modifier,
-    color: Color = Color(0xFF4DCAEC)
-) {
-    val pathEffect = remember { PathEffect.dashPathEffect(floatArrayOf(12f, 8f), 0f) }
-    Canvas(modifier = modifier) {
-        val stroke = 2.dp.toPx()
-        val startY = size.height / 2f
-        val exitCardHeight = 84.dp.toPx()
-        val gap = 10.dp.toPx()
-        val count = exitsCount.coerceAtLeast(1)
-        val wireColor = if (isFallback) Color(0xFFF59E0B) else color
-        for (i in 0 until count) {
-            val endY = if (count == 1) startY else (i * (exitCardHeight + gap) + exitCardHeight / 2f)
-            val path = Path().apply {
-                moveTo(0f, startY)
-                cubicTo(size.width * 0.5f, startY, size.width * 0.5f, endY, size.width, endY)
-            }
-            drawPath(path, wireColor, style = Stroke(width = stroke, cap = StrokeCap.Round, pathEffect = pathEffect))
-            drawCircle(wireColor, radius = 3.dp.toPx(), center = Offset(size.width, endY))
-        }
-        drawCircle(wireColor, radius = 3.5.dp.toPx(), center = Offset(0f, startY))
-    }
-}
+import com.nxgate.app.ui.screens.matrix.*
+import com.nxgate.app.ui.components.showApiErrorToast
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -252,6 +166,7 @@ fun RoutingMatrixScreen(
     val portPolicyOptions = remember(isEn) {
         listOf(
             PortPolicyOption("round_robin", if (isEn) "Round-Robin Load Balancing" else "轮询负载均衡 (Round-Robin)"),
+            PortPolicyOption("least_rtt", if (isEn) "Weighted Least Latency (Least-RTT)" else "加权最低延迟 (Least-RTT)"),
             PortPolicyOption("interval", if (isEn) "Timed Rotation (Interval)" else "定时自动轮换 (Interval)"),
             PortPolicyOption("random", if (isEn) "Dynamic Random Routing" else "动态随机分流 (Random)")
         )
@@ -547,906 +462,312 @@ fun RoutingMatrixScreen(
                         when (tabIndex) {
                             // ==================== TAB 0: 多端口分流矩阵 (全增删改查) ====================
                             0 -> {
-                                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                                    // 分流链路实时拓扑流向图 (Visual Egress Routing Pipeline Flow)
-                                    val allStreams = remember(portRules, dynamicGroups, tunnels, masterInfo, isEn, activeServer) {
-                                        val sysPrimaryGroup = dynamicGroups.find { it.isSystem || it.id == "system-primary" }
-                                        val masterTunnel = tunnels.find { it.isMaster }
-                                        val masterLoc = formatNodeLocation(masterTunnel?.country ?: masterInfo.country, masterTunnel?.countryLong ?: masterInfo.countryLong, isEn)
-                                        val masterIp = (masterTunnel?.nodeIp ?: masterInfo.nodeIp.ifEmpty { activeServer?.exitIp ?: "" }).ifEmpty { if (isEn) "Connected" else "已连通" }
-                                        val masterPort = if ((masterTunnel?.nodePort ?: 0) > 0) masterTunnel!!.nodePort else 443
-                                        val masterLat = if ((masterTunnel?.latencyMs ?: 0) > 0) masterTunnel!!.latencyMs else masterInfo.latencyMs
-                                        val masterLeaves = if (masterIp != "未连接" && masterIp.isNotEmpty()) {
+                                val allStreams = remember(portRules, dynamicGroups, tunnels, masterInfo, isEn, activeServer) {
+                                    val sysPrimaryGroup = dynamicGroups.find { it.isSystem || it.id == "system-primary" }
+                                    val masterTunnel = tunnels.find { it.isMaster }
+                                    val masterLoc = formatNodeLocation(masterTunnel?.country ?: masterInfo.country, masterTunnel?.countryLong ?: masterInfo.countryLong, isEn)
+                                    val masterIp = (masterTunnel?.nodeIp ?: masterInfo.nodeIp.ifEmpty { activeServer?.exitIp ?: "" }).ifEmpty { if (isEn) "Connected" else "已连通" }
+                                    val masterPort = if ((masterTunnel?.nodePort ?: 0) > 0) masterTunnel!!.nodePort else 443
+                                    val masterLat = if ((masterTunnel?.latencyMs ?: 0) > 0) masterTunnel!!.latencyMs else masterInfo.latencyMs
+                                    val masterLeaves = if (masterIp != "未连接" && masterIp.isNotEmpty()) {
+                                        listOf(
+                                            PipelineLeaf(
+                                                devName = "tun0",
+                                                locText = if (masterLoc.isNotEmpty()) masterLoc else (if (isEn) "Primary Gateway" else "系统主出口"),
+                                                ipWithPort = "$masterIp:$masterPort",
+                                                latency = masterLat,
+                                                openai = masterTunnel?.openai ?: "unknown",
+                                                claude = masterTunnel?.claude ?: "unknown",
+                                                gemini = masterTunnel?.gemini ?: "unknown",
+                                                netflix = masterTunnel?.netflix ?: "unknown"
+                                            )
+                                        )
+                                    } else emptyList()
+
+                                    val defaultBranch = PipelineStream(
+                                        port = 7928,
+                                        proto = "SOCKS5",
+                                        authText = if (isEn) "Default Auth" else "系统默认鉴权",
+                                        isDefault = true,
+                                        groupTitle = if (isEn) "Primary Gateway (tun0)" else "系统主出口网关 (tun0)",
+                                        groupSub = if (isEn) "1 Dedicated NIC (tun0)" else "1 独占主出海网卡 (tun0)",
+                                        policyLabel = if (isEn) "Primary Route" else "系统主干路由",
+                                        concurrencyText = if (isEn) "1 Dedicated NIC" else "1 独占主网卡",
+                                        isFallback = false,
+                                        leaves = masterLeaves,
+                                        group = sysPrimaryGroup
+                                    )
+
+                                    val ruleBranches = portRules.filter { it.enabled }.map { rule ->
+                                        val matchedGroups = dynamicGroups.filter { g -> rule.boundGroupIds.contains(g.id) }
+                                        val matchedGroup = matchedGroups.firstOrNull()
+                                        val isFallback = matchedGroups.any { it.inFallback }
+                                        val groupTitle = if (matchedGroups.isNotEmpty()) {
+                                            matchedGroups.joinToString(" / ") { it.name }
+                                        } else if (rule.boundTunnelIds.isNotEmpty()) {
+                                            if (isEn) "Bound Tunnels (${rule.boundTunnelIds.size})" else "指定隧道 (${rule.boundTunnelIds.size})"
+                                        } else {
+                                            if (isEn) "Direct Native" else "原生直连"
+                                        }
+                                        val totalTarget = if (matchedGroups.isNotEmpty()) matchedGroups.sumOf { it.targetCount } else rule.boundTunnelIds.size
+                                        val groupSub = if (matchedGroups.isNotEmpty()) {
+                                            "${rule.policyDisplay} · $totalTarget ${if (isEn) "NICs" else "并发网卡"}"
+                                        } else {
+                                            if (isEn) "Direct Exit" else "原生网络"
+                                        }
+
+                                        var countryHint = ""
+                                        val leaves = if (matchedGroups.isNotEmpty()) {
+                                            val allActiveTids = matchedGroups.flatMap { it.activeTunnelIds }
+                                            var activeTuns = tunnels.filter { allActiveTids.contains(it.id) || allActiveTids.contains(it.devName) }
+                                            if (activeTuns.isEmpty() && matchedGroup != null) {
+                                                val byCountry = tunnels.filter { it.country.equals(matchedGroup.country, true) }
+                                                if (byCountry.isNotEmpty()) {
+                                                    activeTuns = byCountry.take(matchedGroup.targetCount)
+                                                } else if (matchedGroup.country.equals(masterInfo.country, true) && masterInfo.nodeIp.isNotEmpty()) {
+                                                    activeTuns = listOf(
+                                                        TunnelItem(
+                                                            id = "tunnel-0",
+                                                            devName = "tun0",
+                                                            devIndex = 0,
+                                                            status = if (masterInfo.isConnected) "connected" else "connecting",
+                                                            nodeIp = masterInfo.nodeIp,
+                                                            nodePort = 443,
+                                                            country = masterInfo.country,
+                                                            countryLong = masterInfo.countryLong,
+                                                            latencyMs = masterInfo.latencyMs
+                                                        )
+                                                    )
+                                                }
+                                            }
+
+                                            if (activeTuns.isNotEmpty()) {
+                                                activeTuns.map { t ->
+                                                    val loc = formatNodeLocation(t.country, t.countryLong, isEn)
+                                                    val portStr = if (t.nodePort > 0) ":${t.nodePort}" else ""
+                                                    PipelineLeaf(
+                                                        devName = t.devName,
+                                                        locText = if (loc.isNotEmpty()) loc else (if (isEn) "Global" else "全球"),
+                                                        ipWithPort = "${t.nodeIp}$portStr",
+                                                        latency = t.latencyMs,
+                                                        openai = t.openai,
+                                                        claude = t.claude,
+                                                        gemini = t.gemini,
+                                                        netflix = t.netflix
+                                                    )
+                                                }
+                                            } else {
+                                                val groupCountries = matchedGroups.map { it.country }.filter { it.isNotEmpty() }
+                                                countryHint = if (groupCountries.isNotEmpty()) {
+                                                    groupCountries.joinToString(", ") { formatNodeLocation(it, isEnglish = isEn) }
+                                                } else {
+                                                    if (isEn) "All Regions" else "全部地区"
+                                                }
+                                                emptyList()
+                                            }
+                                        } else if (rule.boundTunnelIds.isNotEmpty()) {
+                                            val activeTuns = tunnels.filter { rule.boundTunnelIds.contains(it.id) || rule.boundTunnelIds.contains(it.devName) }
+                                            if (activeTuns.isNotEmpty()) {
+                                                activeTuns.map { t ->
+                                                    val loc = formatNodeLocation(t.country, t.countryLong, isEn)
+                                                    val portStr = if (t.nodePort > 0) ":${t.nodePort}" else ""
+                                                    PipelineLeaf(
+                                                        devName = t.devName,
+                                                        locText = if (loc.isNotEmpty()) loc else (if (isEn) "Global" else "全球"),
+                                                        ipWithPort = "${t.nodeIp}$portStr",
+                                                        latency = t.latencyMs,
+                                                        openai = t.openai,
+                                                        claude = t.claude,
+                                                        gemini = t.gemini,
+                                                        netflix = t.netflix
+                                                    )
+                                                }
+                                            } else {
+                                                emptyList()
+                                            }
+                                        } else {
                                             listOf(
                                                 PipelineLeaf(
-                                                    devName = "tun0",
-                                                    locText = if (masterLoc.isNotEmpty()) masterLoc else (if (isEn) "Primary Gateway" else "系统主出口"),
-                                                    ipWithPort = "$masterIp:$masterPort",
-                                                    latency = masterLat,
-                                                    openai = masterTunnel?.openai ?: "unknown",
-                                                    claude = masterTunnel?.claude ?: "unknown",
-                                                    gemini = masterTunnel?.gemini ?: "unknown",
-                                                    netflix = masterTunnel?.netflix ?: "unknown"
+                                                    devName = "direct",
+                                                    locText = if (isEn) "VPS Native" else "原生网络",
+                                                    ipWithPort = if (isEn) "VPS Local Network" else "VPS 原生网络出海",
+                                                    latency = 0
                                                 )
                                             )
-                                        } else emptyList()
+                                        }
 
-                                        val defaultBranch = PipelineStream(
-                                            port = 7928,
+                                        PipelineStream(
+                                            port = rule.port,
                                             proto = "SOCKS5",
-                                            authText = if (isEn) "Default Auth" else "系统默认鉴权",
-                                            isDefault = true,
-                                            groupTitle = if (isEn) "Primary Gateway (tun0)" else "系统主出口网关 (tun0)",
-                                            groupSub = if (isEn) "1 Dedicated NIC (tun0)" else "1 独占主出海网卡 (tun0)",
-                                            policyLabel = if (isEn) "Primary Route" else "系统主干路由",
-                                            concurrencyText = if (isEn) "1 Dedicated NIC" else "1 独占主网卡",
-                                            isFallback = false,
-                                            leaves = masterLeaves,
-                                            group = sysPrimaryGroup
+                                            authText = rule.authDisplay,
+                                            isDefault = false,
+                                            groupTitle = groupTitle,
+                                            groupSub = groupSub,
+                                            policyLabel = rule.policyDisplay,
+                                            concurrencyText = "$totalTarget ${if (isEn) "Target NICs" else "目标并发网卡"}",
+                                            isFallback = isFallback,
+                                            leaves = leaves,
+                                            countryHint = countryHint,
+                                            rule = rule,
+                                            group = matchedGroup
                                         )
-
-                                        val ruleBranches = portRules.filter { it.enabled }.map { rule ->
-                                            val matchedGroups = dynamicGroups.filter { g -> rule.boundGroupIds.contains(g.id) }
-                                            val matchedGroup = matchedGroups.firstOrNull()
-                                            val isFallback = matchedGroups.any { it.inFallback }
-                                            val groupTitle = if (matchedGroups.isNotEmpty()) {
-                                                matchedGroups.joinToString(" / ") { it.name }
-                                            } else if (rule.boundTunnelIds.isNotEmpty()) {
-                                                if (isEn) "Bound Tunnels (${rule.boundTunnelIds.size})" else "指定隧道 (${rule.boundTunnelIds.size})"
-                                            } else {
-                                                if (isEn) "Direct Native" else "原生直连"
-                                            }
-                                            val totalTarget = if (matchedGroups.isNotEmpty()) matchedGroups.sumOf { it.targetCount } else rule.boundTunnelIds.size
-                                            val groupSub = if (matchedGroups.isNotEmpty()) {
-                                                "${rule.policyDisplay} · $totalTarget ${if (isEn) "NICs" else "并发网卡"}"
-                                            } else {
-                                                if (isEn) "Direct Exit" else "原生网络"
-                                            }
-
-                                            var countryHint = ""
-                                            val leaves = if (matchedGroups.isNotEmpty()) {
-                                                val allActiveTids = matchedGroups.flatMap { it.activeTunnelIds }
-                                                var activeTuns = tunnels.filter { allActiveTids.contains(it.id) || allActiveTids.contains(it.devName) }
-                                                // Double-layer matching: if activeTuns is empty by ID, match by country or master tun0
-                                                if (activeTuns.isEmpty() && matchedGroup != null) {
-                                                    val byCountry = tunnels.filter { it.country.equals(matchedGroup.country, true) }
-                                                    if (byCountry.isNotEmpty()) {
-                                                        activeTuns = byCountry.take(matchedGroup.targetCount)
-                                                    } else if (matchedGroup.country.equals(masterInfo.country, true) && masterInfo.nodeIp.isNotEmpty()) {
-                                                        activeTuns = listOf(
-                                                            TunnelItem(
-                                                                id = "tunnel-0",
-                                                                devName = "tun0",
-                                                                devIndex = 0,
-                                                                status = if (masterInfo.isConnected) "connected" else "connecting",
-                                                                nodeIp = masterInfo.nodeIp,
-                                                                nodePort = 443,
-                                                                country = masterInfo.country,
-                                                                countryLong = masterInfo.countryLong,
-                                                                latencyMs = masterInfo.latencyMs
-                                                            )
-                                                        )
-                                                    }
-                                                }
-
-                                                if (activeTuns.isNotEmpty()) {
-                                                    activeTuns.map { t ->
-                                                        val loc = formatNodeLocation(t.country, t.countryLong, isEn)
-                                                        val portStr = if (t.nodePort > 0) ":${t.nodePort}" else ""
-                                                        PipelineLeaf(
-                                                            devName = t.devName,
-                                                            locText = if (loc.isNotEmpty()) loc else (if (isEn) "Global" else "全球"),
-                                                            ipWithPort = "${t.nodeIp}$portStr",
-                                                            latency = t.latencyMs,
-                                                            openai = t.openai,
-                                                            claude = t.claude,
-                                                            gemini = t.gemini,
-                                                            netflix = t.netflix
-                                                        )
-                                                    }
-                                                } else {
-                                                    val groupCountries = matchedGroups.map { it.country }.filter { it.isNotEmpty() }
-                                                    countryHint = if (groupCountries.isNotEmpty()) {
-                                                        groupCountries.joinToString(", ") { formatNodeLocation(it, isEnglish = isEn) }
-                                                    } else {
-                                                        if (isEn) "All Regions" else "全部地区"
-                                                    }
-                                                    emptyList()
-                                                }
-                                            } else if (rule.boundTunnelIds.isNotEmpty()) {
-                                                val activeTuns = tunnels.filter { rule.boundTunnelIds.contains(it.id) || rule.boundTunnelIds.contains(it.devName) }
-                                                if (activeTuns.isNotEmpty()) {
-                                                    activeTuns.map { t ->
-                                                        val loc = formatNodeLocation(t.country, t.countryLong, isEn)
-                                                        val portStr = if (t.nodePort > 0) ":${t.nodePort}" else ""
-                                                        PipelineLeaf(
-                                                            devName = t.devName,
-                                                            locText = if (loc.isNotEmpty()) loc else (if (isEn) "Global" else "全球"),
-                                                            ipWithPort = "${t.nodeIp}$portStr",
-                                                            latency = t.latencyMs,
-                                                            openai = t.openai,
-                                                            claude = t.claude,
-                                                            gemini = t.gemini,
-                                                            netflix = t.netflix
-                                                        )
-                                                    }
-                                                } else {
-                                                    emptyList()
-                                                }
-                                            } else {
-                                                listOf(
-                                                    PipelineLeaf(
-                                                        devName = "direct",
-                                                        locText = if (isEn) "VPS Native" else "原生网络",
-                                                        ipWithPort = if (isEn) "VPS Local Network" else "VPS 原生网络出海",
-                                                        latency = 0
-                                                    )
-                                                )
-                                            }
-
-                                            PipelineStream(
-                                                port = rule.port,
-                                                proto = "SOCKS5",
-                                                authText = rule.authDisplay,
-                                                isDefault = false,
-                                                groupTitle = groupTitle,
-                                                groupSub = groupSub,
-                                                policyLabel = rule.policyDisplay,
-                                                concurrencyText = "$totalTarget ${if (isEn) "Target NICs" else "目标并发网卡"}",
-                                                isFallback = isFallback,
-                                                leaves = leaves,
-                                                countryHint = countryHint,
-                                                rule = rule,
-                                                group = matchedGroup
-                                            )
-                                        }
-
-                                        // 仅当 portRules 规则中未显式包含 7928 默认代理端口时，才补充默认分支；严禁出现 WebUI 端口 8787！
-                                        val hasExplicitDefaultPort = portRules.any { it.enabled && it.port == 7928 }
-                                        if (hasExplicitDefaultPort) ruleBranches else listOf(defaultBranch) + ruleBranches
                                     }
 
-                                    Card(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        shape = RoundedCornerShape(20.dp),
-                                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-                                    ) {
-                                        Column(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(16.dp),
-                                            verticalArrangement = Arrangement.spacedBy(14.dp)
-                                        ) {
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.SpaceBetween,
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                Column {
-                                                    Text(
-                                                        text = strings.matrixTopologyTitle,
-                                                        style = MaterialTheme.typography.titleSmall,
-                                                        fontWeight = FontWeight.Bold
-                                                    )
-                                                    Text(
-                                                        text = if (isEn) "Inbound Listeners ──▶ Routing Dispatcher ──▶ Physical Egress Exits" else "入站监听端口 ──▶ 调度策略与出口组 ──▶ 出海物理网卡与端点",
-                                                        style = MaterialTheme.typography.labelSmall,
-                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                    )
-                                                }
-                                                Surface(
-                                                    shape = RoundedCornerShape(6.dp),
-                                                    color = MaterialTheme.colorScheme.primaryContainer
-                                                ) {
-                                                    Text(
-                                                        text = if (isEn) "Pipeline Active" else "流向就绪",
-                                                        style = MaterialTheme.typography.labelSmall,
-                                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                                    )
-                                                }
-                                            }
-
-                                            // 3-Stage Guide Header Bar (Matches Web UI)
-                                            Surface(
-                                                shape = RoundedCornerShape(10.dp),
-                                                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-                                                modifier = Modifier.fillMaxWidth()
-                                            ) {
-                                                Row(
-                                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                                                    verticalAlignment = Alignment.CenterVertically,
-                                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                                ) {
-                                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                                        Surface(shape = RoundedCornerShape(6.dp), color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)) {
-                                                            Text("01", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp))
-                                                        }
-                                                        Column {
-                                                            Text(if (isEn) "Inbound Listeners" else "入站监听端口", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                                                            Text(if (isEn) "Proxy Ports & Auth" else "本地监听端口与鉴权", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 9.sp)
-                                                        }
-                                                    }
-                                                    Text("──▶", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outlineVariant)
-                                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                                        Surface(shape = RoundedCornerShape(6.dp), color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)) {
-                                                            Text("02", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp))
-                                                        }
-                                                        Column {
-                                                            Text(if (isEn) "Routing Dispatcher" else "分流策略与出口组", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                                                            Text(if (isEn) "Dynamic Egress Pool" else "动态选路与负载调度", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 9.sp)
-                                                        }
-                                                    }
-                                                    Text("──▶", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outlineVariant)
-                                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                                        Surface(shape = RoundedCornerShape(6.dp), color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)) {
-                                                            Text("03", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp))
-                                                        }
-                                                        Column {
-                                                            Text(if (isEn) "Physical Egress Exits" else "出海物理网卡与端点", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                                                            Text(if (isEn) "Active NICs · Latency" else "活跃网卡 · 属地 · 延迟", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 9.sp)
-                                                        }
-                                                    }
-                                                }
-                                            }
-
-                                            // Horizontal scrollable pipeline stream canvas
-                                            Row(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .horizontalScroll(rememberScrollState())
-                                                    .padding(vertical = 4.dp)
-                                            ) {
-                                                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                                                    allStreams.forEach { stream ->
-                                                        Row(
-                                                            modifier = Modifier.height(IntrinsicSize.Min),
-                                                            verticalAlignment = Alignment.CenterVertically
-                                                        ) {
-                                                            // Stage 1: Inbound Port Card
-                                                            Surface(
-                                                                shape = RoundedCornerShape(12.dp),
-                                                                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                                                                modifier = Modifier
-                                                                    .width(160.dp)
-                                                                    .clickable {
-                                                                        val r = stream.rule
-                                                                        if (r != null) {
-                                                                            editPortRuleTarget = r
-                                                                            inputPortNum = r.port.toString()
-                                                                            selectedPortPolicyOption = portPolicyOptions.find { it.key == r.policy } ?: portPolicyOptions[0]
-                                                                            selectedPortIntervalOption = portIntervalOptions.find { it.seconds == r.intervalSeconds } ?: portIntervalOptions[1]
-                                                                            selectedPortAuthOption = portAuthOptions.find { it.key == r.authMode } ?: portAuthOptions[0]
-                                                                            inputAuthUser = r.authUser
-                                                                            inputAuthPass = r.authPass
-                                                                            bindAllTunnels = r.boundGroupIds.isEmpty() && r.boundTunnelIds.isEmpty()
-                                                                            selectedBoundGroups = r.boundGroupIds.toSet()
-                                                                            showPortDialog = true
-                                                                        } else {
-                                                                            Toast.makeText(context, if (isEn) "Default port 7928 can be adjusted in System Settings" else "系统默认代理端口 7928 可在「系统维护」设置中修改", Toast.LENGTH_SHORT).show()
-                                                                        }
-                                                                    }
-                                                            ) {
-                                                                Column(
-                                                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                                                                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                                                                ) {
-                                                                    Row(
-                                                                        modifier = Modifier.fillMaxWidth(),
-                                                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                                                        verticalAlignment = Alignment.CenterVertically
-                                                                    ) {
-                                                                        Text(
-                                                                            text = "PORT ${stream.port}",
-                                                                            style = MaterialTheme.typography.titleSmall,
-                                                                            fontWeight = FontWeight.Bold,
-                                                                            fontFamily = FontFamily.Monospace,
-                                                                            color = MaterialTheme.colorScheme.primary
-                                                                        )
-                                                                        Surface(
-                                                                            shape = RoundedCornerShape(6.dp),
-                                                                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
-                                                                        ) {
-                                                                            Text(
-                                                                                text = stream.proto,
-                                                                                style = MaterialTheme.typography.labelSmall,
-                                                                                fontWeight = FontWeight.Bold,
-                                                                                color = MaterialTheme.colorScheme.primary,
-                                                                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
-                                                                            )
-                                                                        }
-                                                                    }
-                                                                    Text(
-                                                                        text = stream.authText,
-                                                                        style = MaterialTheme.typography.bodySmall,
-                                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                                    )
-                                                                }
-                                                            }
-
-                                                            // Connector 1 (Inbound -> Routing)
-                                                            PipelineCurvedConnector(
-                                                                exitsCount = 1,
-                                                                isFallback = stream.isFallback,
-                                                                modifier = Modifier.width(36.dp).fillMaxHeight()
-                                                            )
-
-                                                            // Stage 2: Routing Group Card
-                                                            Surface(
-                                                                shape = RoundedCornerShape(12.dp),
-                                                                color = if (stream.isFallback) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f) else MaterialTheme.colorScheme.surfaceContainerHigh,
-                                                                border = BorderStroke(
-                                                                    1.dp,
-                                                                    if (stream.isFallback) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outlineVariant
-                                                                ),
-                                                                modifier = Modifier
-                                                                    .width(220.dp)
-                                                                    .clickable {
-                                                                        val g = stream.group
-                                                                        if (g != null) {
-                                                                            editGroupTarget = g
-                                                                            groupNameInput = g.name
-                                                                            selectedGroupCountryOption = groupCountryOptions.find { it.code.equals(g.country, true) } ?: groupCountryOptions[1]
-                                                                            selectedGroupIpTypeOption = groupIpTypeOptions.find { it.key.equals(g.ipType, true) } ?: groupIpTypeOptions[1]
-                                                                            selectedGroupUnlockOption = groupUnlockOptions.find { it.key.equals(g.unlockFilter, true) } ?: groupUnlockOptions[1]
-                                                                            selectedGroupSortOption = groupSortOptions.find { it.key.equals(g.sortBy, true) } ?: groupSortOptions[0]
-                                                                            selectedGroupFallbackOption = groupFallbackOptions.find { it.key.equals(g.fallbackPolicy, true) } ?: groupFallbackOptions[1]
-                                                                            selectedGroupTargetCountOption = groupTargetCountOptions.find { it.count == g.targetCount } ?: groupTargetCountOptions[2]
-                                                                            selectedGroupIntervalOption = groupIntervalOptions.find { it.minutes == g.intervalMinutes } ?: groupIntervalOptions[2]
-                                                                            showGroupDialog = true
-                                                                        }
-                                                                    }
-                                                            ) {
-                                                                Column(
-                                                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                                                                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                                                                ) {
-                                                                    Row(
-                                                                        modifier = Modifier.fillMaxWidth(),
-                                                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                                                        verticalAlignment = Alignment.CenterVertically
-                                                                    ) {
-                                                                        Text(
-                                                                            text = stream.groupTitle,
-                                                                            style = MaterialTheme.typography.titleMedium,
-                                                                            fontWeight = FontWeight.Bold,
-                                                                            color = MaterialTheme.colorScheme.onSurface,
-                                                                            maxLines = 1
-                                                                        )
-                                                                        if (stream.isFallback) {
-                                                                            Surface(
-                                                                                shape = RoundedCornerShape(4.dp),
-                                                                                color = MaterialTheme.colorScheme.error
-                                                                            ) {
-                                                                                Text(
-                                                                                    text = if (isEn) "Fallback" else "降级",
-                                                                                    style = MaterialTheme.typography.labelSmall,
-                                                                                    color = MaterialTheme.colorScheme.onError,
-                                                                                    fontWeight = FontWeight.Bold,
-                                                                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
-                                                                                )
-                                                                            }
-                                                                        }
-                                                                    }
-                                                                    Row(
-                                                                        modifier = Modifier.fillMaxWidth(),
-                                                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                                                        verticalAlignment = Alignment.CenterVertically
-                                                                    ) {
-                                                                        Surface(
-                                                                            shape = RoundedCornerShape(6.dp),
-                                                                            color = MaterialTheme.colorScheme.surfaceContainerHighest
-                                                                        ) {
-                                                                            Text(
-                                                                                text = stream.policyLabel,
-                                                                                style = MaterialTheme.typography.labelSmall,
-                                                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                                                            )
-                                                                        }
-                                                                        Text(
-                                                                            text = stream.concurrencyText,
-                                                                            style = MaterialTheme.typography.labelSmall,
-                                                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                                        )
-                                                                    }
-                                                                }
-                                                            }
-
-                                                            // Connector 2 (Routing -> Egress Exits)
-                                                            PipelineCurvedConnector(
-                                                                exitsCount = maxOf(1, stream.leaves.size),
-                                                                isFallback = stream.isFallback,
-                                                                modifier = Modifier.width(36.dp).fillMaxHeight()
-                                                            )
-
-                                                            // Stage 3: Physical Egress Cards (Matches Web UI Bento style)
-                                                            Column(
-                                                                verticalArrangement = Arrangement.spacedBy(10.dp)
-                                                            ) {
-                                                                if (stream.leaves.isNotEmpty()) {
-                                                                    stream.leaves.forEach { leaf ->
-                                                                        Surface(
-                                                                            shape = RoundedCornerShape(12.dp),
-                                                                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                                                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                                                                            modifier = Modifier.width(300.dp)
-                                                                        ) {
-                                                                            Column(
-                                                                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                                                                                verticalArrangement = Arrangement.spacedBy(6.dp)
-                                                                            ) {
-                                                                                // Row 1: NIC + Country/Location + Latency
-                                                                                Row(
-                                                                                    modifier = Modifier.fillMaxWidth(),
-                                                                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                                                                    verticalAlignment = Alignment.CenterVertically
-                                                                                ) {
-                                                                                    Row(
-                                                                                        verticalAlignment = Alignment.CenterVertically,
-                                                                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                                                                    ) {
-                                                                                        Surface(
-                                                                                            shape = RoundedCornerShape(4.dp),
-                                                                                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
-                                                                                        ) {
-                                                                                            Text(
-                                                                                                text = leaf.devName,
-                                                                                                style = MaterialTheme.typography.labelSmall,
-                                                                                                fontWeight = FontWeight.Bold,
-                                                                                                fontFamily = FontFamily.Monospace,
-                                                                                                color = MaterialTheme.colorScheme.primary,
-                                                                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                                                                            )
-                                                                                        }
-                                                                                        Text(
-                                                                                            text = leaf.locText,
-                                                                                            style = MaterialTheme.typography.bodyMedium,
-                                                                                            fontWeight = FontWeight.SemiBold,
-                                                                                            color = MaterialTheme.colorScheme.onSurface
-                                                                                        )
-                                                                                    }
-                                                                                    if (leaf.latency > 0) {
-                                                                                        val pillColor = if (leaf.latency < 100) Color(0xFF10B981) else Color(0xFFF59E0B)
-                                                                                        Surface(
-                                                                                            shape = RoundedCornerShape(10.dp),
-                                                                                            color = pillColor.copy(alpha = 0.15f),
-                                                                                            border = BorderStroke(1.dp, pillColor.copy(alpha = 0.3f))
-                                                                                        ) {
-                                                                                            Text(
-                                                                                                text = "⚡ ${leaf.latency}ms",
-                                                                                                style = MaterialTheme.typography.labelSmall,
-                                                                                                fontWeight = FontWeight.Bold,
-                                                                                                color = pillColor,
-                                                                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                                                                            )
-                                                                                        }
-                                                                                    }
-                                                                                }
-
-                                                                                // Row 2: IP:Port in monospace
-                                                                                Text(
-                                                                                    text = leaf.ipWithPort,
-                                                                                    style = MaterialTheme.typography.bodySmall,
-                                                                                    fontFamily = FontFamily.Monospace,
-                                                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                                                )
-
-                                                                                // Row 3: Unlock Pills (GPT✓, Claude✓, Gemini✓, NF✓)
-                                                                                Row(
-                                                                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                                                                    verticalAlignment = Alignment.CenterVertically
-                                                                                ) {
-                                                                                    UnlockMiniPill("GPT", leaf.openai)
-                                                                                    UnlockMiniPill("Claude", leaf.claude)
-                                                                                    UnlockMiniPill("Gemini", leaf.gemini)
-                                                                                    UnlockMiniPill("NF", leaf.netflix)
-                                                                                }
-                                                                            }
-                                                                        }
-                                                                    }
-                                                                } else {
-                                                                    Surface(
-                                                                        shape = RoundedCornerShape(12.dp),
-                                                                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                                                                        modifier = Modifier.width(300.dp)
-                                                                    ) {
-                                                                        Row(
-                                                                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-                                                                            verticalAlignment = Alignment.CenterVertically,
-                                                                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                                                        ) {
-                                                                            Box(modifier = Modifier.size(8.dp).background(Color(0xFFE9A568), CircleShape))
-                                                                            Column {
-                                                                                Text(
-                                                                                    text = stream.countryHint.ifEmpty { if (isEn) "All Regions" else "全部地区" },
-                                                                                    style = MaterialTheme.typography.bodyMedium,
-                                                                                    fontWeight = FontWeight.SemiBold
-                                                                                )
-                                                                                Text(
-                                                                                    text = if (isEn) "Scheduling exits..." else "调度就绪中，等待分配网卡...",
-                                                                                    style = MaterialTheme.typography.labelSmall,
-                                                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                                                )
-                                                                            }
-                                                                        }
-                                                                    }
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    if (portRules.isEmpty()) {
-                                        Surface(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            shape = RoundedCornerShape(16.dp),
-                                            color = MaterialTheme.colorScheme.surfaceContainerLow
-                                        ) {
-                                            Text(
-                                                text = if (activeServer == null) {
-                                                    if (isEn) "No servers managed yet. Go to Dashboard or Settings to add a VPS gateway." else "当前尚未纳管任何服务器，请前往「概览」或「设置」添加 VPS 网关。"
-                                                } else {
-                                                    if (isEn) "No port proxy rules configured on this server. Tap \"Add Port Rule\" below to create one." else "当前服务器尚未配置独立代理端口规则，请点击下方「新建代理端口」添加。"
-                                                },
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                color = MaterialTheme.colorScheme.onSurface,
-                                                modifier = Modifier.padding(20.dp)
-                                            )
-                                        }
-                                    } else {
-                                        // 端口列表项
-                                        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                                            portRules.forEachIndexed { index, rule ->
-                                                ConnectedListItem(
-                                                index = index,
-                                                total = portRules.size,
-                                                headline = rule.title,
-                                                supportingText = rule.subtitle,
-                                                leadingIcon = Icons.Rounded.Lan,
-                                                trailingContent = {
-                                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                                        IconButton(onClick = {
-                                                            val updated = portRules.toMutableList()
-                                                            updated[index] = rule.copy(enabled = !rule.enabled)
-                                                            portRules = updated
-                                                            if (activeServer != null) {
-                                                                scope.launch {
-                                                                    NXGateApplication.instance.apiClient.savePortRules(activeServer, updated)
-                                                                }
-                                                            }
-                                                            val statusMsg = if (isEn) "Port ${rule.port} is now ${if (!rule.enabled) "enabled" else "disabled"}" else "端口 ${rule.port} 状态已更新为: ${if (!rule.enabled) "已启用" else "已停用"}"
-                                                            Toast.makeText(context, statusMsg, Toast.LENGTH_SHORT).show()
-                                                        }) {
-                                                            Icon(
-                                                                imageVector = if (rule.enabled) Icons.Rounded.ToggleOn else Icons.Rounded.ToggleOff,
-                                                                contentDescription = if (isEn) "Toggle switch" else "切换开关",
-                                                                tint = if (rule.enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-                                                                modifier = Modifier.size(32.dp)
-                                                            )
-                                                        }
-                                                        IconButton(onClick = { deletePortRuleCandidate = rule }) {
-                                                            Icon(Icons.Rounded.Delete, contentDescription = if (isEn) "Delete" else "删除端口规则", tint = MaterialTheme.colorScheme.error)
-                                                        }
-                                                    }
-                                                },
-                                                onClick = {
-                                                    editPortRuleTarget = rule
-                                                    inputPortNum = rule.port.toString()
-                                                    selectedPortPolicyOption = portPolicyOptions.find { it.key == rule.policy } ?: portPolicyOptions[0]
-                                                    selectedPortIntervalOption = portIntervalOptions.find { it.seconds == rule.intervalSeconds } ?: portIntervalOptions[1]
-                                                    selectedPortAuthOption = portAuthOptions.find { it.key == rule.authMode } ?: portAuthOptions[0]
-                                                    inputAuthUser = rule.authUser
-                                                    inputAuthPass = rule.authPass
-                                                    bindAllTunnels = rule.boundGroupIds.isEmpty() && rule.boundTunnelIds.isEmpty()
-                                                    selectedBoundGroups = rule.boundGroupIds.toSet()
-                                                    showPortDialog = true
-                                                }
-                                            )
-                                        }
-                                    }
-                                    }
-
-                                    // 新建端口操作组
-                                    ConnectedButtonGroup(
-                                        items = listOf(
-                                            ConnectedButtonItem(
-                                                text = if (isEn) "Add Port Rule" else "新建代理端口",
-                                                style = ConnectedButtonStyle.Filled,
-                                                icon = Icons.Rounded.Add,
-                                                onClick = {
-                                                    editPortRuleTarget = null
-                                                    inputPortNum = (portRules.maxOfOrNull { it.port }?.plus(1) ?: 7931).toString()
-                                                    selectedPortPolicyOption = portPolicyOptions[0]
-                                                    selectedPortIntervalOption = portIntervalOptions[1]
-                                                    selectedPortAuthOption = portAuthOptions[0]
-                                                    inputAuthUser = ""
-                                                    inputAuthPass = ""
-                                                    bindAllTunnels = true
-                                                    selectedBoundGroups = emptySet()
-                                                    showPortDialog = true
-                                                }
-                                            ),
-                                            ConnectedButtonItem(
-                                                text = if (isEn) "Refresh Ports" else "刷新端口状态",
-                                                style = ConnectedButtonStyle.Tonal,
-                                                icon = Icons.Rounded.Refresh,
-                                                onClick = {
-                                                    if (activeServer != null) {
-                                                        scope.launch {
-                                                            val res = NXGateApplication.instance.apiClient.fetchPortRules(activeServer)
-                                                            if (res.isSuccess) portRules = res.getOrNull() ?: portRules
-                                                            Toast.makeText(context, if (isEn) "Port rules updated from server!" else "已从服务器获取最新端口分流规则！", Toast.LENGTH_SHORT).show()
-                                                        }
-                                                    }
-                                                }
-                                            )
-                                        )
-                                    )
+                                    val hasExplicitDefaultPort = portRules.any { it.enabled && it.port == 7928 }
+                                    if (hasExplicitDefaultPort) ruleBranches else listOf(defaultBranch) + ruleBranches
                                 }
+
+                                MatrixPipelineTab(
+                                    allStreams = allStreams,
+                                    portRules = portRules,
+                                    activeServer = activeServer,
+                                    isEn = isEn,
+                                    onToggleRuleEnabled = { index, rule ->
+                                        val updated = portRules.toMutableList()
+                                        updated[index] = rule.copy(enabled = !rule.enabled)
+                                        portRules = updated
+                                        if (activeServer != null) {
+                                            scope.launch {
+                                                val res = NXGateApplication.instance.apiClient.savePortRules(activeServer, updated)
+                                                if (res.isFailure) {
+                                                    showApiErrorToast(context, res.exceptionOrNull(), activeServer, isEn)
+                                                }
+                                            }
+                                        }
+                                        val statusMsg = if (isEn) "Port ${rule.port} is now ${if (!rule.enabled) "enabled" else "disabled"}" else "端口 ${rule.port} 状态已更新为: ${if (!rule.enabled) "已启用" else "已停用"}"
+                                        Toast.makeText(context, statusMsg, Toast.LENGTH_SHORT).show()
+                                    },
+                                    onEditRule = { rule ->
+                                        editPortRuleTarget = rule
+                                        inputPortNum = rule.port.toString()
+                                        selectedPortPolicyOption = portPolicyOptions.find { it.key == rule.policy } ?: portPolicyOptions[0]
+                                        selectedPortIntervalOption = portIntervalOptions.find { it.seconds == rule.intervalSeconds } ?: portIntervalOptions[1]
+                                        selectedPortAuthOption = portAuthOptions.find { it.key == rule.authMode } ?: portAuthOptions[0]
+                                        inputAuthUser = rule.authUser
+                                        inputAuthPass = rule.authPass
+                                        bindAllTunnels = rule.boundGroupIds.isEmpty() && rule.boundTunnelIds.isEmpty()
+                                        selectedBoundGroups = rule.boundGroupIds.toSet()
+                                        showPortDialog = true
+                                    },
+                                    onDeleteRule = { rule ->
+                                        deletePortRuleCandidate = rule
+                                    },
+                                    onAddRuleClick = {
+                                        editPortRuleTarget = null
+                                        inputPortNum = (portRules.maxOfOrNull { it.port }?.plus(1) ?: 7931).toString()
+                                        selectedPortPolicyOption = portPolicyOptions[0]
+                                        selectedPortIntervalOption = portIntervalOptions[1]
+                                        selectedPortAuthOption = portAuthOptions[0]
+                                        inputAuthUser = ""
+                                        inputAuthPass = ""
+                                        bindAllTunnels = true
+                                        selectedBoundGroups = emptySet()
+                                        showPortDialog = true
+                                    },
+                                    onRefreshRulesClick = {
+                                        if (activeServer != null) {
+                                            scope.launch {
+                                                val res = NXGateApplication.instance.apiClient.fetchPortRules(activeServer)
+                                                if (res.isSuccess) {
+                                                    portRules = res.getOrNull() ?: portRules
+                                                    Toast.makeText(context, if (isEn) "Port rules updated from server!" else "已从服务器获取最新端口分流规则！", Toast.LENGTH_SHORT).show()
+                                                } else {
+                                                    showApiErrorToast(context, res.exceptionOrNull(), activeServer, isEn)
+                                                }
+                                            }
+                                        }
+                                    },
+                                    onEditGroup = { g ->
+                                        editGroupTarget = g
+                                        groupNameInput = g.name
+                                        selectedGroupCountryOption = groupCountryOptions.find { it.code.equals(g.country, true) } ?: groupCountryOptions[1]
+                                        selectedGroupIpTypeOption = groupIpTypeOptions.find { it.key.equals(g.ipType, true) } ?: groupIpTypeOptions[1]
+                                        selectedGroupUnlockOption = groupUnlockOptions.find { it.key.equals(g.unlockFilter, true) } ?: groupUnlockOptions[1]
+                                        selectedGroupSortOption = groupSortOptions.find { it.key.equals(g.sortBy, true) } ?: groupSortOptions[0]
+                                        selectedGroupFallbackOption = groupFallbackOptions.find { it.key.equals(g.fallbackPolicy, true) } ?: groupFallbackOptions[1]
+                                        selectedGroupTargetCountOption = groupTargetCountOptions.find { it.count == g.targetCount } ?: groupTargetCountOptions[2]
+                                        selectedGroupIntervalOption = groupIntervalOptions.find { it.minutes == g.intervalMinutes } ?: groupIntervalOptions[2]
+                                        showGroupDialog = true
+                                    }
+                                )
                             }
 
                             // ==================== TAB 1: 动态出口组 (全增删改查) ====================
                             1 -> {
-                                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                                    if (dynamicGroups.isEmpty()) {
-                                        Surface(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            shape = RoundedCornerShape(16.dp),
-                                            color = MaterialTheme.colorScheme.surfaceContainerLow
-                                        ) {
-                                            Text(
-                                                text = if (activeServer == null) {
-                                                    if (isEn) "No servers managed yet. Go to Dashboard or Settings to add a VPS gateway." else "当前尚未纳管任何服务器，请前往「概览」或「设置」添加 VPS 网关。"
+                                DynamicGroupTab(
+                                    dynamicGroups = dynamicGroups,
+                                    activeServer = activeServer,
+                                    isEn = isEn,
+                                    onDeleteGroup = { group ->
+                                        deleteGroupCandidate = group
+                                    },
+                                    onEditGroup = { group ->
+                                        editGroupTarget = group
+                                        groupNameInput = group.name
+                                        selectedGroupCountryOption = groupCountryOptions.find { it.code.equals(group.country, true) } ?: groupCountryOptions[1]
+                                        selectedGroupIpTypeOption = groupIpTypeOptions.find { it.key.equals(group.ipType, true) } ?: groupIpTypeOptions[1]
+                                        selectedGroupUnlockOption = groupUnlockOptions.find { it.key.equals(group.unlockFilter, true) } ?: groupUnlockOptions[1]
+                                        selectedGroupSortOption = groupSortOptions.find { it.key.equals(group.sortBy, true) } ?: groupSortOptions[0]
+                                        selectedGroupFallbackOption = groupFallbackOptions.find { it.key.equals(group.fallbackPolicy, true) } ?: groupFallbackOptions[1]
+                                        selectedGroupTargetCountOption = groupTargetCountOptions.find { it.count == group.targetCount } ?: groupTargetCountOptions[2]
+                                        selectedGroupIntervalOption = groupIntervalOptions.find { it.minutes == group.intervalMinutes } ?: groupIntervalOptions[2]
+                                        showGroupDialog = true
+                                    },
+                                    onEvaluateAndRotateClick = {
+                                        if (activeServer != null) {
+                                            scope.launch {
+                                                val res = NXGateApplication.instance.apiClient.triggerRotate(activeServer)
+                                                if (res.isSuccess) {
+                                                    Toast.makeText(context, res.getOrDefault(if (isEn) "Triggered exit group re-evaluation" else "已触发自适应组重新测速探测并替换失效节点！"), Toast.LENGTH_SHORT).show()
                                                 } else {
-                                                    if (isEn) "No dynamic exit groups configured. Tap \"Add Exit Group\" below to create one." else "当前服务器尚未配置动态出口组，请点击下方「新建出口组」添加。"
-                                                },
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                color = MaterialTheme.colorScheme.onSurface,
-                                                modifier = Modifier.padding(20.dp)
-                                            )
-                                        }
-                                    } else {
-                                        dynamicGroups.forEach { group ->
-                                            Card(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                shape = RoundedCornerShape(20.dp),
-                                                colors = CardDefaults.cardColors(
-                                                    containerColor = MaterialTheme.colorScheme.surfaceContainer
-                                                ),
-                                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                                                elevation = CardDefaults.cardElevation(defaultElevation = 1.5.dp)
-                                            ) {
-                                            Column(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .padding(20.dp),
-                                                verticalArrangement = Arrangement.Center
-                                            ) {
-                                                Row(
-                                                    modifier = Modifier.fillMaxWidth(),
-                                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                                    verticalAlignment = Alignment.CenterVertically
-                                                ) {
-                                                    Text(
-                                                        text = group.title,
-                                                        style = MaterialTheme.typography.titleMedium,
-                                                        fontWeight = FontWeight.Bold,
-                                                        color = MaterialTheme.colorScheme.onSurface
-                                                    )
-                                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                                        val badgeText = if (group.isSystem) {
-                                                            if (isEn) "Primary (tun0)" else "系统主出口(tun0)"
-                                                        } else if (group.country.equals("FAVORITES", true)) {
-                                                            "⭐ ${strings.favoritesGroupBadge} (${group.targetCount}${if (isEn) " NICs" else "网卡"})"
-                                                        } else {
-                                                            if (isEn) "Exit Group (${group.targetCount} NICs)" else "出口组 (${group.targetCount}网卡)"
-                                                        }
-                                                        Text(
-                                                            text = badgeText,
-                                                            style = MaterialTheme.typography.labelSmall,
-                                                            color = MaterialTheme.colorScheme.primary
-                                                        )
-                                                        if (!group.isSystem) {
-                                                            IconButton(
-                                                                onClick = { deleteGroupCandidate = group },
-                                                                modifier = Modifier.size(32.dp)
-                                                            ) {
-                                                                Icon(Icons.Rounded.Delete, contentDescription = if (isEn) "Delete" else "删除组", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                                Spacer(Modifier.height(8.dp))
-                                                Text(
-                                                    text = group.description,
-                                                    style = MaterialTheme.typography.bodyMedium,
-                                                    color = MaterialTheme.colorScheme.onSurface,
-                                                    lineHeight = MaterialTheme.typography.bodyMedium.lineHeight * 1.35f
-                                                )
-                                                if (group.inFallback) {
-                                                    Spacer(Modifier.height(6.dp))
-                                                    Surface(
-                                                        shape = RoundedCornerShape(8.dp),
-                                                        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.85f),
-                                                        modifier = Modifier.fillMaxWidth()
-                                                    ) {
-                                                        Row(
-                                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                                            verticalAlignment = Alignment.CenterVertically
-                                                        ) {
-                                                            Icon(
-                                                                Icons.Rounded.Warning,
-                                                                contentDescription = null,
-                                                                tint = MaterialTheme.colorScheme.error,
-                                                                modifier = Modifier.size(16.dp)
-                                                            )
-                                                            Spacer(Modifier.width(6.dp))
-                                                            Text(
-                                                                text = group.fallbackReason.ifEmpty { if (isEn) "Fallback Active" else "已触发级联降级策略运行中" },
-                                                                style = MaterialTheme.typography.labelSmall,
-                                                                color = MaterialTheme.colorScheme.onErrorContainer,
-                                                                fontWeight = FontWeight.SemiBold
-                                                            )
-                                                        }
-                                                    }
-                                                }
-                                                Spacer(Modifier.height(12.dp))
-                                                Row(
-                                                    modifier = Modifier.fillMaxWidth(),
-                                                    horizontalArrangement = Arrangement.End
-                                                ) {
-                                                    OutlinedButton(
-                                                        onClick = {
-                                                            editGroupTarget = group
-                                                            groupNameInput = group.name
-                                                            selectedGroupCountryOption = groupCountryOptions.find { it.code.equals(group.country, true) } ?: groupCountryOptions[1]
-                                                            selectedGroupIpTypeOption = groupIpTypeOptions.find { it.key.equals(group.ipType, true) } ?: groupIpTypeOptions[1]
-                                                            selectedGroupUnlockOption = groupUnlockOptions.find { it.key.equals(group.unlockFilter, true) } ?: groupUnlockOptions[1]
-                                                            selectedGroupSortOption = groupSortOptions.find { it.key.equals(group.sortBy, true) } ?: groupSortOptions[0]
-                                                            selectedGroupFallbackOption = groupFallbackOptions.find { it.key.equals(group.fallbackPolicy, true) } ?: groupFallbackOptions[1]
-                                                            selectedGroupTargetCountOption = groupTargetCountOptions.find { it.count == group.targetCount } ?: groupTargetCountOptions[2]
-                                                            selectedGroupIntervalOption = groupIntervalOptions.find { it.minutes == group.intervalMinutes } ?: groupIntervalOptions[2]
-                                                            showGroupDialog = true
-                                                        },
-                                                        modifier = Modifier.height(36.dp),
-                                                        shape = RoundedCornerShape(18.dp)
-                                                    ) {
-                                                        Icon(Icons.Rounded.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
-                                                        Spacer(Modifier.width(4.dp))
-                                                        Text(if (isEn) "Edit Rule" else "编辑规则", style = MaterialTheme.typography.labelMedium)
-                                                    }
+                                                    showApiErrorToast(context, res.exceptionOrNull(), activeServer, isEn)
                                                 }
                                             }
                                         }
+                                    },
+                                    onAddGroupClick = {
+                                        editGroupTarget = null
+                                        groupNameInput = if (isEn) "Residential Exit Group" else "新动态出口组"
+                                        selectedGroupCountryOption = groupCountryOptions[1]
+                                        selectedGroupIpTypeOption = groupIpTypeOptions[1]
+                                        selectedGroupUnlockOption = groupUnlockOptions[1]
+                                        selectedGroupSortOption = groupSortOptions[0]
+                                        selectedGroupFallbackOption = groupFallbackOptions[1]
+                                        selectedGroupTargetCountOption = groupTargetCountOptions[2]
+                                        selectedGroupIntervalOption = groupIntervalOptions[2]
+                                        showGroupDialog = true
                                     }
-                                    }
-
-                                    // 出口组操作组
-                                    ConnectedButtonGroup(
-                                        items = listOf(
-                                            ConnectedButtonItem(
-                                                text = if (isEn) "Evaluate & Rotate" else "立即重评换线",
-                                                style = ConnectedButtonStyle.Filled,
-                                                icon = Icons.Rounded.Refresh,
-                                                onClick = {
-                                                    if (activeServer != null) {
-                                                        scope.launch {
-                                                            val res = NXGateApplication.instance.apiClient.triggerRotate(activeServer)
-                                                            Toast.makeText(context, res.getOrDefault(if (isEn) "Triggered exit group re-evaluation" else "已触发自适应组重新测速探测并替换失效节点！"), Toast.LENGTH_SHORT).show()
-                                                        }
-                                                    }
-                                                }
-                                            ),
-                                            ConnectedButtonItem(
-                                                text = if (isEn) "Add Exit Group" else "新建出口组",
-                                                style = ConnectedButtonStyle.Tonal,
-                                                icon = Icons.Rounded.Add,
-                                                onClick = {
-                                                    editGroupTarget = null
-                                                    groupNameInput = if (isEn) "Residential Exit Group" else "新动态出口组"
-                                                    selectedGroupCountryOption = groupCountryOptions[1]
-                                                    selectedGroupIpTypeOption = groupIpTypeOptions[1]
-                                                    selectedGroupUnlockOption = groupUnlockOptions[1]
-                                                    selectedGroupSortOption = groupSortOptions[0]
-                                                    selectedGroupFallbackOption = groupFallbackOptions[1]
-                                                    selectedGroupTargetCountOption = groupTargetCountOptions[2]
-                                                    selectedGroupIntervalOption = groupIntervalOptions[2]
-                                                    showGroupDialog = true
-                                                }
-                                            )
-                                        )
-                                    )
-                                }
+                                )
                             }
 
                             // ==================== TAB 2: 边缘抗封锁入站 (22 种协议全管理) ====================
                             2 -> {
-                                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                                    if (inbounds.isEmpty()) {
-                                        Surface(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            shape = RoundedCornerShape(16.dp),
-                                            color = MaterialTheme.colorScheme.surfaceContainerLow
-                                        ) {
-                                            Text(
-                                                text = if (activeServer == null) {
-                                                    if (isEn) "No servers managed yet. Go to Dashboard or Settings to add a VPS gateway." else "当前尚未纳管任何服务器，请前往「概览」或「设置」添加 VPS 网关。"
-                                                } else {
-                                                    if (isEn) "No sing-box nodes configured. Tap \"Add Node\" below to create one." else "当前服务器尚未创建 sing-box 节点，请点击下方「添加节点」创建。"
-                                                },
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                color = MaterialTheme.colorScheme.onSurface,
-                                                modifier = Modifier.padding(20.dp)
-                                            )
-                                        }
-                                    } else {
-                                        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                                            inbounds.forEachIndexed { index, inbound ->
-                                                ConnectedListItem(
-                                                index = index,
-                                                total = inbounds.size,
-                                                headline = inbound.title,
-                                                supportingText = inbound.subtitle,
-                                                leadingIcon = if (index % 2 == 0) Icons.Rounded.VpnKey else Icons.Rounded.Security,
-                                                trailingContent = {
-                                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                                        IconButton(onClick = { showInboundQRDialog = inbound }) {
-                                                            Icon(Icons.Rounded.QrCode2, contentDescription = if (isEn) "Share" else "分享", tint = MaterialTheme.colorScheme.primary)
-                                                        }
-                                                        IconButton(onClick = {
-                                                            selectedInboundForOutboundSwitch = inbound
-                                                            switchOutboundTargetOption = availableOutbounds.find { it.addr == inbound.outbound } ?: availableOutbounds.first()
-                                                        }) {
-                                                            Icon(Icons.Rounded.SwapHoriz, contentDescription = if (isEn) "Change Egress" else "更改出口", tint = MaterialTheme.colorScheme.secondary)
-                                                        }
-                                                        IconButton(onClick = { deleteInboundCandidate = inbound }) {
-                                                            Icon(Icons.Rounded.Delete, contentDescription = if (isEn) "Delete" else "删除入站", tint = MaterialTheme.colorScheme.error)
-                                                        }
-                                                    }
-                                                },
-                                                onClick = {
-                                                    Toast.makeText(context, "${if (isEn) "Inbound: " else "入站: "}${inbound.name} (Port ${inbound.port})", Toast.LENGTH_SHORT).show()
-                                                }
-                                            )
+                                IngressProtocolsTab(
+                                    inbounds = inbounds,
+                                    activeServer = activeServer,
+                                    isEn = isEn,
+                                    onShowInboundQR = { inbound ->
+                                        showInboundQRDialog = inbound
+                                    },
+                                    onChangeOutbound = { inbound ->
+                                        selectedInboundForOutboundSwitch = inbound
+                                        switchOutboundTargetOption = availableOutbounds.find { it.addr == inbound.outbound } ?: availableOutbounds.first()
+                                    },
+                                    onDeleteInbound = { inbound ->
+                                        deleteInboundCandidate = inbound
+                                    },
+                                    onAddNodeClick = {
+                                        newInboundProtocol = "reality"
+                                        newInboundPort = "auto"
+                                        selectedInboundOutboundOption = availableOutbounds.first()
+                                        showAddInboundDialog = true
+                                    },
+                                    onGetSubscriptionsClick = {
+                                        if (activeServer != null) {
+                                            showSubscriptionDialog = true
                                         }
                                     }
-                                    }
-
-                                    // 入站协议操作组
-                                    ConnectedButtonGroup(
-                                        items = listOf(
-                                            ConnectedButtonItem(
-                                                text = if (isEn) "Add Node" else "添加节点",
-                                                style = ConnectedButtonStyle.Filled,
-                                                icon = Icons.Rounded.Add,
-                                                onClick = {
-                                                    newInboundProtocol = "reality"
-                                                    newInboundPort = "auto"
-                                                    selectedInboundOutboundOption = availableOutbounds.first()
-                                                    showAddInboundDialog = true
-                                                }
-                                            ),
-                                            ConnectedButtonItem(
-                                                text = if (isEn) "Get Subscriptions" else "获取订阅",
-                                                style = ConnectedButtonStyle.Tonal,
-                                                icon = Icons.Rounded.CloudDownload,
-                                                onClick = {
-                                                    if (activeServer != null) {
-                                                        showSubscriptionDialog = true
-                                                    }
-                                                }
-                                            )
-                                        )
-                                    )
-                                }
+                                )
                             }
                         }
                     }
@@ -1608,7 +929,10 @@ fun RoutingMatrixScreen(
                         portRules = updated
                         if (activeServer != null) {
                             scope.launch {
-                                NXGateApplication.instance.apiClient.savePortRules(activeServer, updated)
+                                val res = NXGateApplication.instance.apiClient.savePortRules(activeServer, updated)
+                                if (res.isFailure) {
+                                    showApiErrorToast(context, res.exceptionOrNull(), activeServer, isEn)
+                                }
                             }
                         }
                         showPortDialog = false
@@ -1646,7 +970,10 @@ fun RoutingMatrixScreen(
                         portRules = updated
                         if (activeServer != null) {
                             scope.launch {
-                                NXGateApplication.instance.apiClient.savePortRules(activeServer, updated)
+                                val res = NXGateApplication.instance.apiClient.savePortRules(activeServer, updated)
+                                if (res.isFailure) {
+                                    showApiErrorToast(context, res.exceptionOrNull(), activeServer, isEn)
+                                }
                             }
                         }
                         deletePortRuleCandidate = null
@@ -1781,7 +1108,10 @@ fun RoutingMatrixScreen(
 
                         if (activeServer != null) {
                             scope.launch {
-                                NXGateApplication.instance.apiClient.saveDynamicGroup(activeServer, newG)
+                                val res = NXGateApplication.instance.apiClient.saveDynamicGroup(activeServer, newG)
+                                if (res.isFailure) {
+                                    showApiErrorToast(context, res.exceptionOrNull(), activeServer, isEn)
+                                }
                             }
                         }
                         showGroupDialog = false
@@ -1818,7 +1148,10 @@ fun RoutingMatrixScreen(
                         dynamicGroups = dynamicGroups.filter { it.id != target.id }
                         if (activeServer != null) {
                             scope.launch {
-                                NXGateApplication.instance.apiClient.deleteDynamicGroup(activeServer, target.id)
+                                val res = NXGateApplication.instance.apiClient.deleteDynamicGroup(activeServer, target.id)
+                                if (res.isFailure) {
+                                    showApiErrorToast(context, res.exceptionOrNull(), activeServer, isEn)
+                                }
                             }
                         }
                         deleteGroupCandidate = null

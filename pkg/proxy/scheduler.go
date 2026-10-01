@@ -15,6 +15,7 @@ const (
 	PolicyRoundRobin PortPolicy = "round_robin"
 	PolicyRandom     PortPolicy = "random"
 	PolicyInterval   PortPolicy = "interval"
+	PolicyLeastRTT   PortPolicy = "least_rtt"
 )
 
 type TunnelSelector interface {
@@ -99,12 +100,42 @@ func (s *DefaultScheduler) SelectTunnel(port int, boundIDs []string, boundGroupI
 		}
 	}
 
+	return s.selectFromHealthy(healthy, policy, intervalSec)
+}
+
+func (s *DefaultScheduler) selectFromHealthy(healthy []*tunnel.Tunnel, policy PortPolicy, intervalSec int) *tunnel.Tunnel {
 	n := len(healthy)
+	if n == 0 {
+		return nil
+	}
 	if n == 1 {
 		return healthy[0]
 	}
 
 	switch policy {
+	case PolicyLeastRTT:
+		best := healthy[0]
+		minRTT := getTunnelRTT(best)
+		var candidates []*tunnel.Tunnel
+		candidates = append(candidates, best)
+		for i := 1; i < n; i++ {
+			rtt := getTunnelRTT(healthy[i])
+			if rtt < minRTT {
+				best = healthy[i]
+				minRTT = rtt
+				candidates = candidates[:0]
+				candidates = append(candidates, best)
+			} else if rtt == minRTT {
+				candidates = append(candidates, healthy[i])
+			}
+		}
+		if len(candidates) == 1 {
+			return candidates[0]
+		}
+		// #nosec G115 -- modulo bounds the result to slice length
+		idx := int(s.counter.Add(1) % uint64(len(candidates)))
+		return candidates[idx]
+
 	case PolicyRandom:
 		nBig, err := rand.Int(rand.Reader, big.NewInt(int64(n)))
 		if err == nil {
@@ -126,4 +157,17 @@ func (s *DefaultScheduler) SelectTunnel(port int, boundIDs []string, boundGroupI
 		idx := int(s.counter.Add(1) % uint64(n))
 		return healthy[idx]
 	}
+}
+
+func getTunnelRTT(t *tunnel.Tunnel) int {
+	if t == nil {
+		return 9999
+	}
+	if t.LatencyMs > 0 {
+		return t.LatencyMs
+	}
+	if t.Node != nil && t.Node.Ping > 0 {
+		return t.Node.Ping
+	}
+	return 9999
 }
