@@ -180,6 +180,7 @@ fun PipelineCurvedConnector(
     modifier: Modifier = Modifier,
     color: Color = Color(0xFF4DCAEC)
 ) {
+    val pathEffect = remember { PathEffect.dashPathEffect(floatArrayOf(12f, 8f), 0f) }
     Canvas(modifier = modifier) {
         val stroke = 2.dp.toPx()
         val startY = size.height / 2f
@@ -187,7 +188,6 @@ fun PipelineCurvedConnector(
         val gap = 10.dp.toPx()
         val count = exitsCount.coerceAtLeast(1)
         val wireColor = if (isFallback) Color(0xFFF59E0B) else color
-        val pathEffect = PathEffect.dashPathEffect(floatArrayOf(12f, 8f), 0f)
         for (i in 0 until count) {
             val endY = if (count == 1) startY else (i * (exitCardHeight + gap) + exitCardHeight / 2f)
             val path = Path().apply {
@@ -549,160 +549,162 @@ fun RoutingMatrixScreen(
                             0 -> {
                                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                                     // 分流链路实时拓扑流向图 (Visual Egress Routing Pipeline Flow)
-                                    val sysPrimaryGroup = dynamicGroups.find { it.isSystem || it.id == "system-primary" }
-                                    val masterTunnel = tunnels.find { it.isMaster }
-                                    val masterLoc = formatNodeLocation(masterTunnel?.country ?: masterInfo.country, masterTunnel?.countryLong ?: masterInfo.countryLong, isEn)
-                                    val masterIp = (masterTunnel?.nodeIp ?: masterInfo.nodeIp.ifEmpty { activeServer?.exitIp ?: "" }).ifEmpty { if (isEn) "Connected" else "已连通" }
-                                    val masterPort = if ((masterTunnel?.nodePort ?: 0) > 0) masterTunnel!!.nodePort else 443
-                                    val masterLat = if ((masterTunnel?.latencyMs ?: 0) > 0) masterTunnel!!.latencyMs else masterInfo.latencyMs
-                                    val masterLeaves = if (masterIp != "未连接" && masterIp.isNotEmpty()) {
-                                        listOf(
-                                            PipelineLeaf(
-                                                devName = "tun0",
-                                                locText = if (masterLoc.isNotEmpty()) masterLoc else (if (isEn) "Primary Gateway" else "系统主出口"),
-                                                ipWithPort = "$masterIp:$masterPort",
-                                                latency = masterLat,
-                                                openai = masterTunnel?.openai ?: "unknown",
-                                                claude = masterTunnel?.claude ?: "unknown",
-                                                gemini = masterTunnel?.gemini ?: "unknown",
-                                                netflix = masterTunnel?.netflix ?: "unknown"
-                                            )
-                                        )
-                                    } else emptyList()
-
-                                    val defaultBranch = PipelineStream(
-                                        port = 7928,
-                                        proto = "SOCKS5",
-                                        authText = if (isEn) "Default Auth" else "系统默认鉴权",
-                                        isDefault = true,
-                                        groupTitle = if (isEn) "Primary Gateway (tun0)" else "系统主出口网关 (tun0)",
-                                        groupSub = if (isEn) "1 Dedicated NIC (tun0)" else "1 独占主出海网卡 (tun0)",
-                                        policyLabel = if (isEn) "Primary Route" else "系统主干路由",
-                                        concurrencyText = if (isEn) "1 Dedicated NIC" else "1 独占主网卡",
-                                        isFallback = false,
-                                        leaves = masterLeaves,
-                                        group = sysPrimaryGroup
-                                    )
-
-                                    val ruleBranches = portRules.filter { it.enabled }.map { rule ->
-                                        val matchedGroups = dynamicGroups.filter { g -> rule.boundGroupIds.contains(g.id) }
-                                        val matchedGroup = matchedGroups.firstOrNull()
-                                        val isFallback = matchedGroups.any { it.inFallback }
-                                        val groupTitle = if (matchedGroups.isNotEmpty()) {
-                                            matchedGroups.joinToString(" / ") { it.name }
-                                        } else if (rule.boundTunnelIds.isNotEmpty()) {
-                                            if (isEn) "Bound Tunnels (${rule.boundTunnelIds.size})" else "指定隧道 (${rule.boundTunnelIds.size})"
-                                        } else {
-                                            if (isEn) "Direct Native" else "原生直连"
-                                        }
-                                        val totalTarget = if (matchedGroups.isNotEmpty()) matchedGroups.sumOf { it.targetCount } else rule.boundTunnelIds.size
-                                        val groupSub = if (matchedGroups.isNotEmpty()) {
-                                            "${rule.policyDisplay} · $totalTarget ${if (isEn) "NICs" else "并发网卡"}"
-                                        } else {
-                                            if (isEn) "Direct Exit" else "原生网络"
-                                        }
-
-                                        var countryHint = ""
-                                        val leaves = if (matchedGroups.isNotEmpty()) {
-                                            val allActiveTids = matchedGroups.flatMap { it.activeTunnelIds }
-                                            var activeTuns = tunnels.filter { allActiveTids.contains(it.id) || allActiveTids.contains(it.devName) }
-                                            // Double-layer matching: if activeTuns is empty by ID, match by country or master tun0
-                                            if (activeTuns.isEmpty() && matchedGroup != null) {
-                                                val byCountry = tunnels.filter { it.country.equals(matchedGroup.country, true) }
-                                                if (byCountry.isNotEmpty()) {
-                                                    activeTuns = byCountry.take(matchedGroup.targetCount)
-                                                } else if (matchedGroup.country.equals(masterInfo.country, true) && masterInfo.nodeIp.isNotEmpty()) {
-                                                    activeTuns = listOf(
-                                                        TunnelItem(
-                                                            id = "tunnel-0",
-                                                            devName = "tun0",
-                                                            devIndex = 0,
-                                                            status = if (masterInfo.isConnected) "connected" else "connecting",
-                                                            nodeIp = masterInfo.nodeIp,
-                                                            nodePort = 443,
-                                                            country = masterInfo.country,
-                                                            countryLong = masterInfo.countryLong,
-                                                            latencyMs = masterInfo.latencyMs
-                                                        )
-                                                    )
-                                                }
-                                            }
-
-                                            if (activeTuns.isNotEmpty()) {
-                                                activeTuns.map { t ->
-                                                    val loc = formatNodeLocation(t.country, t.countryLong, isEn)
-                                                    val portStr = if (t.nodePort > 0) ":${t.nodePort}" else ""
-                                                    PipelineLeaf(
-                                                        devName = t.devName,
-                                                        locText = if (loc.isNotEmpty()) loc else (if (isEn) "Global" else "全球"),
-                                                        ipWithPort = "${t.nodeIp}$portStr",
-                                                        latency = t.latencyMs,
-                                                        openai = t.openai,
-                                                        claude = t.claude,
-                                                        gemini = t.gemini,
-                                                        netflix = t.netflix
-                                                    )
-                                                }
-                                            } else {
-                                                val groupCountries = matchedGroups.map { it.country }.filter { it.isNotEmpty() }
-                                                countryHint = if (groupCountries.isNotEmpty()) {
-                                                    groupCountries.joinToString(", ") { formatNodeLocation(it, isEnglish = isEn) }
-                                                } else {
-                                                    if (isEn) "All Regions" else "全部地区"
-                                                }
-                                                emptyList()
-                                            }
-                                        } else if (rule.boundTunnelIds.isNotEmpty()) {
-                                            val activeTuns = tunnels.filter { rule.boundTunnelIds.contains(it.id) || rule.boundTunnelIds.contains(it.devName) }
-                                            if (activeTuns.isNotEmpty()) {
-                                                activeTuns.map { t ->
-                                                    val loc = formatNodeLocation(t.country, t.countryLong, isEn)
-                                                    val portStr = if (t.nodePort > 0) ":${t.nodePort}" else ""
-                                                    PipelineLeaf(
-                                                        devName = t.devName,
-                                                        locText = if (loc.isNotEmpty()) loc else (if (isEn) "Global" else "全球"),
-                                                        ipWithPort = "${t.nodeIp}$portStr",
-                                                        latency = t.latencyMs,
-                                                        openai = t.openai,
-                                                        claude = t.claude,
-                                                        gemini = t.gemini,
-                                                        netflix = t.netflix
-                                                    )
-                                                }
-                                            } else {
-                                                emptyList()
-                                            }
-                                        } else {
+                                    val allStreams = remember(portRules, dynamicGroups, tunnels, masterInfo, isEn, activeServer) {
+                                        val sysPrimaryGroup = dynamicGroups.find { it.isSystem || it.id == "system-primary" }
+                                        val masterTunnel = tunnels.find { it.isMaster }
+                                        val masterLoc = formatNodeLocation(masterTunnel?.country ?: masterInfo.country, masterTunnel?.countryLong ?: masterInfo.countryLong, isEn)
+                                        val masterIp = (masterTunnel?.nodeIp ?: masterInfo.nodeIp.ifEmpty { activeServer?.exitIp ?: "" }).ifEmpty { if (isEn) "Connected" else "已连通" }
+                                        val masterPort = if ((masterTunnel?.nodePort ?: 0) > 0) masterTunnel!!.nodePort else 443
+                                        val masterLat = if ((masterTunnel?.latencyMs ?: 0) > 0) masterTunnel!!.latencyMs else masterInfo.latencyMs
+                                        val masterLeaves = if (masterIp != "未连接" && masterIp.isNotEmpty()) {
                                             listOf(
                                                 PipelineLeaf(
-                                                    devName = "direct",
-                                                    locText = if (isEn) "VPS Native" else "原生网络",
-                                                    ipWithPort = if (isEn) "VPS Local Network" else "VPS 原生网络出海",
-                                                    latency = 0
+                                                    devName = "tun0",
+                                                    locText = if (masterLoc.isNotEmpty()) masterLoc else (if (isEn) "Primary Gateway" else "系统主出口"),
+                                                    ipWithPort = "$masterIp:$masterPort",
+                                                    latency = masterLat,
+                                                    openai = masterTunnel?.openai ?: "unknown",
+                                                    claude = masterTunnel?.claude ?: "unknown",
+                                                    gemini = masterTunnel?.gemini ?: "unknown",
+                                                    netflix = masterTunnel?.netflix ?: "unknown"
                                                 )
+                                            )
+                                        } else emptyList()
+
+                                        val defaultBranch = PipelineStream(
+                                            port = 7928,
+                                            proto = "SOCKS5",
+                                            authText = if (isEn) "Default Auth" else "系统默认鉴权",
+                                            isDefault = true,
+                                            groupTitle = if (isEn) "Primary Gateway (tun0)" else "系统主出口网关 (tun0)",
+                                            groupSub = if (isEn) "1 Dedicated NIC (tun0)" else "1 独占主出海网卡 (tun0)",
+                                            policyLabel = if (isEn) "Primary Route" else "系统主干路由",
+                                            concurrencyText = if (isEn) "1 Dedicated NIC" else "1 独占主网卡",
+                                            isFallback = false,
+                                            leaves = masterLeaves,
+                                            group = sysPrimaryGroup
+                                        )
+
+                                        val ruleBranches = portRules.filter { it.enabled }.map { rule ->
+                                            val matchedGroups = dynamicGroups.filter { g -> rule.boundGroupIds.contains(g.id) }
+                                            val matchedGroup = matchedGroups.firstOrNull()
+                                            val isFallback = matchedGroups.any { it.inFallback }
+                                            val groupTitle = if (matchedGroups.isNotEmpty()) {
+                                                matchedGroups.joinToString(" / ") { it.name }
+                                            } else if (rule.boundTunnelIds.isNotEmpty()) {
+                                                if (isEn) "Bound Tunnels (${rule.boundTunnelIds.size})" else "指定隧道 (${rule.boundTunnelIds.size})"
+                                            } else {
+                                                if (isEn) "Direct Native" else "原生直连"
+                                            }
+                                            val totalTarget = if (matchedGroups.isNotEmpty()) matchedGroups.sumOf { it.targetCount } else rule.boundTunnelIds.size
+                                            val groupSub = if (matchedGroups.isNotEmpty()) {
+                                                "${rule.policyDisplay} · $totalTarget ${if (isEn) "NICs" else "并发网卡"}"
+                                            } else {
+                                                if (isEn) "Direct Exit" else "原生网络"
+                                            }
+
+                                            var countryHint = ""
+                                            val leaves = if (matchedGroups.isNotEmpty()) {
+                                                val allActiveTids = matchedGroups.flatMap { it.activeTunnelIds }
+                                                var activeTuns = tunnels.filter { allActiveTids.contains(it.id) || allActiveTids.contains(it.devName) }
+                                                // Double-layer matching: if activeTuns is empty by ID, match by country or master tun0
+                                                if (activeTuns.isEmpty() && matchedGroup != null) {
+                                                    val byCountry = tunnels.filter { it.country.equals(matchedGroup.country, true) }
+                                                    if (byCountry.isNotEmpty()) {
+                                                        activeTuns = byCountry.take(matchedGroup.targetCount)
+                                                    } else if (matchedGroup.country.equals(masterInfo.country, true) && masterInfo.nodeIp.isNotEmpty()) {
+                                                        activeTuns = listOf(
+                                                            TunnelItem(
+                                                                id = "tunnel-0",
+                                                                devName = "tun0",
+                                                                devIndex = 0,
+                                                                status = if (masterInfo.isConnected) "connected" else "connecting",
+                                                                nodeIp = masterInfo.nodeIp,
+                                                                nodePort = 443,
+                                                                country = masterInfo.country,
+                                                                countryLong = masterInfo.countryLong,
+                                                                latencyMs = masterInfo.latencyMs
+                                                            )
+                                                        )
+                                                    }
+                                                }
+
+                                                if (activeTuns.isNotEmpty()) {
+                                                    activeTuns.map { t ->
+                                                        val loc = formatNodeLocation(t.country, t.countryLong, isEn)
+                                                        val portStr = if (t.nodePort > 0) ":${t.nodePort}" else ""
+                                                        PipelineLeaf(
+                                                            devName = t.devName,
+                                                            locText = if (loc.isNotEmpty()) loc else (if (isEn) "Global" else "全球"),
+                                                            ipWithPort = "${t.nodeIp}$portStr",
+                                                            latency = t.latencyMs,
+                                                            openai = t.openai,
+                                                            claude = t.claude,
+                                                            gemini = t.gemini,
+                                                            netflix = t.netflix
+                                                        )
+                                                    }
+                                                } else {
+                                                    val groupCountries = matchedGroups.map { it.country }.filter { it.isNotEmpty() }
+                                                    countryHint = if (groupCountries.isNotEmpty()) {
+                                                        groupCountries.joinToString(", ") { formatNodeLocation(it, isEnglish = isEn) }
+                                                    } else {
+                                                        if (isEn) "All Regions" else "全部地区"
+                                                    }
+                                                    emptyList()
+                                                }
+                                            } else if (rule.boundTunnelIds.isNotEmpty()) {
+                                                val activeTuns = tunnels.filter { rule.boundTunnelIds.contains(it.id) || rule.boundTunnelIds.contains(it.devName) }
+                                                if (activeTuns.isNotEmpty()) {
+                                                    activeTuns.map { t ->
+                                                        val loc = formatNodeLocation(t.country, t.countryLong, isEn)
+                                                        val portStr = if (t.nodePort > 0) ":${t.nodePort}" else ""
+                                                        PipelineLeaf(
+                                                            devName = t.devName,
+                                                            locText = if (loc.isNotEmpty()) loc else (if (isEn) "Global" else "全球"),
+                                                            ipWithPort = "${t.nodeIp}$portStr",
+                                                            latency = t.latencyMs,
+                                                            openai = t.openai,
+                                                            claude = t.claude,
+                                                            gemini = t.gemini,
+                                                            netflix = t.netflix
+                                                        )
+                                                    }
+                                                } else {
+                                                    emptyList()
+                                                }
+                                            } else {
+                                                listOf(
+                                                    PipelineLeaf(
+                                                        devName = "direct",
+                                                        locText = if (isEn) "VPS Native" else "原生网络",
+                                                        ipWithPort = if (isEn) "VPS Local Network" else "VPS 原生网络出海",
+                                                        latency = 0
+                                                    )
+                                                )
+                                            }
+
+                                            PipelineStream(
+                                                port = rule.port,
+                                                proto = "SOCKS5",
+                                                authText = rule.authDisplay,
+                                                isDefault = false,
+                                                groupTitle = groupTitle,
+                                                groupSub = groupSub,
+                                                policyLabel = rule.policyDisplay,
+                                                concurrencyText = "$totalTarget ${if (isEn) "Target NICs" else "目标并发网卡"}",
+                                                isFallback = isFallback,
+                                                leaves = leaves,
+                                                countryHint = countryHint,
+                                                rule = rule,
+                                                group = matchedGroup
                                             )
                                         }
 
-                                        PipelineStream(
-                                            port = rule.port,
-                                            proto = "SOCKS5",
-                                            authText = rule.authDisplay,
-                                            isDefault = false,
-                                            groupTitle = groupTitle,
-                                            groupSub = groupSub,
-                                            policyLabel = rule.policyDisplay,
-                                            concurrencyText = "$totalTarget ${if (isEn) "Target NICs" else "目标并发网卡"}",
-                                            isFallback = isFallback,
-                                            leaves = leaves,
-                                            countryHint = countryHint,
-                                            rule = rule,
-                                            group = matchedGroup
-                                        )
+                                        // 仅当 portRules 规则中未显式包含 7928 默认代理端口时，才补充默认分支；严禁出现 WebUI 端口 8787！
+                                        val hasExplicitDefaultPort = portRules.any { it.enabled && it.port == 7928 }
+                                        if (hasExplicitDefaultPort) ruleBranches else listOf(defaultBranch) + ruleBranches
                                     }
-
-                                    // 仅当 portRules 规则中未显式包含 7928 默认代理端口时，才补充默认分支；严禁出现 WebUI 端口 8787！
-                                    val hasExplicitDefaultPort = portRules.any { it.enabled && it.port == 7928 }
-                                    val allStreams = if (hasExplicitDefaultPort) ruleBranches else listOf(defaultBranch) + ruleBranches
 
                                     Card(
                                         modifier = Modifier.fillMaxWidth(),

@@ -73,7 +73,8 @@ func ParseVPNGateCSV(data []byte, maxRows int) ([]*Node, error) {
 		gz, err := gzip.NewReader(bytes.NewReader(data))
 		if err == nil {
 			defer gz.Close()
-			if decompressed, err := io.ReadAll(gz); err == nil {
+			limited := io.LimitReader(gz, int64(MaxSnapshotBytes+1))
+			if decompressed, err := io.ReadAll(limited); err == nil {
 				data = decompressed
 			}
 		}

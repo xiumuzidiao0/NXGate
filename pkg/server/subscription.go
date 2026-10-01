@@ -15,7 +15,11 @@ import (
 	"aimili-vpngate-go/pkg/tunnel"
 )
 
-var reLeadingGroup = regexp.MustCompile(`^\[[^\]]+\]\s*`)
+var (
+	reLeadingGroup   = regexp.MustCompile(`^\[[^\]]+\]\s*`)
+	reCountryPrefix  = regexp.MustCompile(`^(?i)(JP|KR|US|SG|HK|TW|UK|GB|DE|FR|CA|AU|DIRECT|FAV)[-_]`)
+	reDigits         = regexp.MustCompile(`\d+`)
+)
 
 // isEnglishRequest checks if the incoming HTTP request explicitly or implicitly prefers English.
 func isEnglishRequest(r *http.Request) bool {
@@ -407,8 +411,7 @@ func (s *Server) resolveNodeCountry(n singbox.Node, outboundPort int, outboundRa
 		}
 	}
 
-	rePrefix := regexp.MustCompile(`^(?i)(JP|KR|US|SG|HK|TW|UK|GB|DE|FR|CA|AU|DIRECT|FAV)[-_]`)
-	if m := rePrefix.FindStringSubmatch(cleanName); len(m) > 1 {
+	if m := reCountryPrefix.FindStringSubmatch(cleanName); len(m) > 1 {
 		return strings.ToUpper(m[1])
 	}
 
@@ -534,7 +537,6 @@ func (s *Server) DecorateSubscriptionNodesWithOptions(nodes []singbox.Node, isEn
 			protoName := resolveCleanProtocol(n, cleanName)
 			port := n.Port
 			if port <= 0 {
-				reDigits := regexp.MustCompile(`\d+`)
 				matches := reDigits.FindAllString(cleanName, -1)
 				if len(matches) > 0 {
 					port, _ = strconv.Atoi(matches[len(matches)-1])
