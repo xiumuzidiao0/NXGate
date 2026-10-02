@@ -122,12 +122,36 @@ type StatusResponse struct {
 }
 
 func NewClient() *Client {
-	candidates := []string{
+	var candidates []string
+
+	if custom := os.Getenv("SINGBOX_CLI"); custom != "" {
+		candidates = append(candidates, custom)
+	}
+
+	// 1. System installed binaries / wrappers
+	candidates = append(candidates,
 		"/usr/local/bin/sing-box",
 		"/usr/bin/sing-box",
 		"/etc/sing-box/sh/sing-box.sh",
+	)
+
+	// 2. Project local development scripts (e.g. running from repo or binary directory)
+	if wd, err := os.Getwd(); err == nil {
+		candidates = append(candidates,
+			filepath.Join(wd, "scripts/singbox/sing-box.sh"),
+			filepath.Join(wd, "../scripts/singbox/sing-box.sh"),
+			filepath.Join(wd, "../../scripts/singbox/sing-box.sh"),
+		)
+	}
+	if exe, err := os.Executable(); err == nil {
+		exeDir := filepath.Dir(exe)
+		candidates = append(candidates,
+			filepath.Join(exeDir, "scripts/singbox/sing-box.sh"),
+			filepath.Join(exeDir, "../scripts/singbox/sing-box.sh"),
+		)
 	}
 
+	// 3. User home legacy fallback
 	if home := os.Getenv("HOME"); home != "" {
 		candidates = append(candidates, filepath.Join(home, "sing-box/sing-box.sh"))
 	}

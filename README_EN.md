@@ -183,7 +183,7 @@ Execute with `root` privileges on any modern Linux distribution (Debian, Ubuntu,
 curl -sSL https://raw.githubusercontent.com/xiumuzidiao0/NXGate/main/install.sh | bash
 ```
 
-The script automatically matches CPU architecture, downloads precompiled binaries, configures systemd daemon units, and links the global `nx` CLI helper.
+The script automatically matches CPU architecture, downloads precompiled binaries, configures systemd daemon units, and links the global `nx` CLI helper. All sing-box edge gateway management scripts are natively embedded (`//go:embed`) with **zero external GitHub script dependencies**, guaranteeing fast, self-contained deployment even in restricted environments.
 
 ### CLI Quick Reference
 

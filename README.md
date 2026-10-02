@@ -243,7 +243,7 @@ NXGate 实现了一套单端口双栈协议嗅探与中继引擎：
 curl -sSL https://raw.githubusercontent.com/xiumuzidiao0/NXGate/main/install.sh | bash
 ```
 
-安装脚本将自动执行架构匹配、拉取预编译可执行文件、配置网络守护进程服务并写入全局管理指令。
+安装脚本将自动执行架构匹配、拉取预编译可执行文件、配置网络守护进程服务并写入全局管理指令。所有 sing-box 边缘抗审查网关管理脚本已完全原生内嵌（`//go:embed`），部署过程**零外部 GitHub 脚本网络依赖**，在受限网络环境下亦可秒级完成自释放与初始化部署。
 
 ### CLI 快捷指令参考
 

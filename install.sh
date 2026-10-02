@@ -938,6 +938,19 @@ menu_uninstall() {
         systemctl daemon-reload
         rm -f /usr/local/bin/nxgate /usr/bin/nxgate /usr/local/bin/nx /usr/bin/nx /usr/local/bin/aimilivpn /usr/bin/aimilivpn /usr/local/bin/ml /usr/bin/ml /usr/bin/aimili
         rm -rf "${INSTALL_DIR}" /opt/aimilivpn 2>/dev/null || true
+
+        if type -P sing-box &>/dev/null || [ -d "/etc/sing-box" ]; then
+            read -p "是否同时卸载边缘抗封锁网关 sing-box 及其配置？[y/N]: " un_sb
+            if [ "${un_sb,,}" = "y" ]; then
+                systemctl stop sing-box 2>/dev/null || true
+                systemctl disable sing-box 2>/dev/null || true
+                rm -f /etc/systemd/system/sing-box.service /lib/systemd/system/sing-box.service
+                rm -rf /etc/sing-box /var/log/sing-box
+                rm -f /usr/local/bin/sing-box /usr/local/bin/sb
+                echo -e "${GREEN}✓ sing-box 已完全卸载。${PLAIN}"
+            fi
+        fi
+
         echo -e "${GREEN}NXGate 已完全卸载干净。${PLAIN}"
         exit 0
     else
@@ -960,46 +973,187 @@ show_singbox_status() {
 
 do_install_singbox() {
     echo -e "\n${YELLOW}正在准备安装部署 sing-box 边缘抗封锁网关...${PLAIN}"
-    local sb_installer="/tmp/singbox_install_$$.sh"
-    local dl_ok=0
+    detect_arch
+    detect_os
 
-    # 1. 优先检测本地源码仓库
-    if [ -n "${HOME}" ] && [ -f "${HOME}/sing-box/install.sh" ]; then
-        echo -e "  -> 检测到本地 sing-box 源码安装脚本，正在准备部署..."
-        cp -f "${HOME}/sing-box/install.sh" "${sb_installer}"
-        dl_ok=1
+    # 1. 确保基础依赖工具已安装 (jq, tar)
+    local need_pkgs=()
+    type -P jq &>/dev/null || need_pkgs+=("jq")
+    type -P tar &>/dev/null || need_pkgs+=("tar")
+    if [ "$OS_TYPE" = "alpine" ]; then
+        type -P gcompat &>/dev/null || need_pkgs+=("gcompat")
+    fi
+    if [ ${#need_pkgs[@]} -gt 0 ]; then
+        echo -e "  -> 正在安装基础依赖: ${need_pkgs[*]} ..."
+        if [ -n "$PKG_MGR" ]; then
+            if [ "$PKG_MGR" = "apk" ]; then
+                apk update &>/dev/null || true
+                apk add "${need_pkgs[@]}" &>/dev/null || true
+            else
+                $PKG_MGR install -y "${need_pkgs[@]}" &>/dev/null || true
+            fi
+        fi
     fi
 
-    # 2. 如果未找到本地脚本，尝试多 CDN 镜像源下载
-    if [ "$dl_ok" = "0" ]; then
-        local sb_urls=(
-            "https://raw.githubusercontent.com/xiumuzidiao0/sing-box/main/install.sh"
-            "https://ghproxy.net/https://raw.githubusercontent.com/xiumuzidiao0/sing-box/main/install.sh"
-            "https://mirror.ghproxy.com/https://raw.githubusercontent.com/xiumuzidiao0/sing-box/main/install.sh"
-            "https://cdn.jsdelivr.net/gh/xiumuzidiao0/sing-box@main/install.sh"
-        )
-        for u in "${sb_urls[@]}"; do
-            echo -e "  -> 尝试从镜像源拉取 sing-box 脚本: ${u} ..."
-            if curl -sSL -f -m 15 "$u" -o "${sb_installer}" 2>/dev/null && [ -s "${sb_installer}" ]; then
-                dl_ok=1
-                break
+    # 2. 部署 sing-box 管理脚本到 /etc/sing-box/sh (零外部 GitHub 脚本请求)
+    mkdir -p /etc/sing-box/sh /etc/sing-box/bin /etc/sing-box/conf /var/log/sing-box
+
+    local scripts_installed=0
+    local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+    # 策略 1: 本地源码目录 scripts/singbox
+    if [ -d "${script_dir}/scripts/singbox/src" ]; then
+        echo -e "  -> 发现本地工程管理脚本 (${script_dir}/scripts/singbox)，正在同步..."
+        cp -rf "${script_dir}/scripts/singbox/"* /etc/sing-box/sh/
+        scripts_installed=1
+    elif [ -d "${INSTALL_DIR}/scripts/singbox/src" ]; then
+        echo -e "  -> 发现已部署工程管理脚本 (${INSTALL_DIR}/scripts/singbox)，正在同步..."
+        cp -rf "${INSTALL_DIR}/scripts/singbox/"* /etc/sing-box/sh/
+        scripts_installed=1
+    fi
+
+    # 策略 2: 利用 nxgate 可执行文件内置内嵌脚本自解压 (--extract-singbox)
+    if [ "$scripts_installed" = "0" ]; then
+        local candidate_bins=("${BIN_PATH}" "${script_dir}/nxgate" "$(type -P nxgate || true)")
+        for b in "${candidate_bins[@]}"; do
+            if [ -n "$b" ] && [ -x "$b" ]; then
+                echo -e "  -> 正在通过 NXGate 二进制程序 (${b}) 自释放管理脚本..."
+                if "$b" --extract-singbox /etc/sing-box/sh 2>/dev/null; then
+                    scripts_installed=1
+                    break
+                fi
             fi
         done
     fi
 
-    if [ "$dl_ok" = "1" ] && [ -s "${sb_installer}" ]; then
-        chmod +x "${sb_installer}"
-        bash "${sb_installer}"
-        rm -f "${sb_installer}"
-        if type -P sing-box &>/dev/null || [ -x "/usr/local/bin/sing-box" ]; then
-            echo -e "${GREEN}✓ sing-box 边缘抗封锁网关安装部署成功！${PLAIN}"
-            return 0
+    # 策略 3: 用户 HOME 目录历史残留本地源码 (兼容降级)
+    if [ "$scripts_installed" = "0" ] && [ -n "${HOME}" ] && [ -d "${HOME}/sing-box/src" ]; then
+        echo -e "  -> 发现用户主目录历史源码 (${HOME}/sing-box)，正在复制..."
+        cp -rf "${HOME}/sing-box/"* /etc/sing-box/sh/
+        scripts_installed=1
+    fi
+
+    if [ "$scripts_installed" = "0" ] || [ ! -f "/etc/sing-box/sh/sing-box.sh" ]; then
+        echo -e "${RED}✗ 无法定位或提取 sing-box 管理脚本，安装中断。${PLAIN}"
+        return 1
+    fi
+
+    # 设置权限与软链接
+    chmod +x /etc/sing-box/sh/sing-box.sh /etc/sing-box/sh/src/*.sh 2>/dev/null || true
+    ln -sf /etc/sing-box/sh/sing-box.sh /usr/local/bin/sing-box
+    ln -sf /etc/sing-box/sh/sing-box.sh /usr/local/bin/sb
+    echo -e "  ${GREEN}✓ sing-box 管理脚本与控制接口部署就绪${PLAIN}"
+
+    # 3. 部署 sing-box 官方核心二进制 (/etc/sing-box/bin/sing-box)
+    local sb_bin="/etc/sing-box/bin/sing-box"
+    local need_download_core=1
+
+    if [ -x "$sb_bin" ]; then
+        local cur_ver=$("$sb_bin" version 2>/dev/null | head -n1 | awk '{print $3}' || true)
+        if [ -n "$cur_ver" ]; then
+            echo -e "  -> 检测到已存在 sing-box 核心二进制 (${cur_ver})，跳过重复下载。"
+            need_download_core=0
         fi
     fi
 
-    echo -e "${RED}✗ sing-box 安装脚本拉取或执行未成功完成，请检查网络连通性。${PLAIN}"
-    rm -f "${sb_installer}"
-    return 1
+    if [ "$need_download_core" = "1" ]; then
+        local sb_ver="v1.14.0"
+        local sb_arch="$GO_ARCH"
+        case "$sb_arch" in
+            amd64) sb_arch="amd64" ;;
+            arm64) sb_arch="arm64" ;;
+            386)   sb_arch="386" ;;
+            arm)   sb_arch="armv7" ;;
+            *)     sb_arch="amd64" ;;
+        esac
+
+        local core_urls=(
+            "https://github.com/SagerNet/sing-box/releases/download/${sb_ver}/sing-box-${sb_ver#v}-linux-${sb_arch}.tar.gz"
+            "https://ghproxy.net/https://github.com/SagerNet/sing-box/releases/download/${sb_ver}/sing-box-${sb_ver#v}-linux-${sb_arch}.tar.gz"
+            "https://mirror.ghproxy.com/https://github.com/SagerNet/sing-box/releases/download/${sb_ver}/sing-box-${sb_ver#v}-linux-${sb_arch}.tar.gz"
+            "https://gh-proxy.com/https://github.com/SagerNet/sing-box/releases/download/${sb_ver}/sing-box-${sb_ver#v}-linux-${sb_arch}.tar.gz"
+        )
+
+        local core_tar="/tmp/singbox_core_$$.tar.gz"
+        local core_ok=0
+        for u in "${core_urls[@]}"; do
+            echo -e "  -> 正在下载官方 sing-box 核心 (${sb_ver}, ${sb_arch}): ${u} ..."
+            if curl -sSL -f -m 30 "$u" -o "$core_tar" 2>/dev/null && [ -s "$core_tar" ]; then
+                core_ok=1
+                break
+            fi
+        done
+
+        if [ "$core_ok" = "1" ]; then
+            local tmp_extract="/tmp/singbox_extract_$$"
+            mkdir -p "$tmp_extract"
+            tar -zxf "$core_tar" -C "$tmp_extract" --strip-components 1 2>/dev/null || tar -zxf "$core_tar" -C "$tmp_extract" 2>/dev/null || true
+            if [ -f "$tmp_extract/sing-box" ]; then
+                mv -f "$tmp_extract/sing-box" "$sb_bin"
+                chmod +x "$sb_bin"
+                echo -e "  ${GREEN}✓ sing-box 官方核心二进制部署成功${PLAIN}"
+            fi
+            rm -rf "$tmp_extract" "$core_tar"
+        else
+            echo -e "${RED}✗ 官方 sing-box 核心二进制下载失败，请检查网络连通性。${PLAIN}"
+            rm -f "$core_tar"
+            return 1
+        fi
+    fi
+
+    # 4. 确保基础配置 config.json 存在
+    if [ ! -f "/etc/sing-box/config.json" ]; then
+        cat >/etc/sing-box/config.json <<'EOF'
+{
+  "log": {
+    "output": "/var/log/sing-box/access.log",
+    "level": "info",
+    "timestamp": true
+  },
+  "dns": {},
+  "outbounds": [
+    {
+      "tag": "direct",
+      "type": "direct"
+    }
+  ],
+  "route": {
+    "final": "direct"
+  }
+}
+EOF
+    fi
+
+    # 5. 注册并启动 systemd 服务
+    if command -v systemctl >/dev/null 2>&1; then
+        cat >/etc/systemd/system/sing-box.service <<'EOF'
+[Unit]
+Description=sing-box Service
+Documentation=https://sing-box.sagernet.org/
+After=network.target nss-lookup.target
+
+[Service]
+User=root
+NoNewPrivileges=true
+ExecStart=/etc/sing-box/bin/sing-box run -c /etc/sing-box/config.json -C /etc/sing-box/conf
+Restart=on-failure
+RestartPreventExitStatus=23
+LimitNPROC=10000
+LimitNOFILE=1048576
+PrivateTmp=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target
+EOF
+        systemctl daemon-reload
+        systemctl enable sing-box &>/dev/null || true
+        systemctl restart sing-box &>/dev/null || true
+        echo -e "  ${GREEN}✓ sing-box.service 守护进程已注册并启动${PLAIN}"
+    fi
+
+    echo -e "${GREEN}✓ sing-box 边缘抗封锁网关安装部署成功！${PLAIN}"
+    return 0
 }
 
 setup_singbox_integration() {
@@ -1161,8 +1315,14 @@ menu_singbox() {
                 ;;
             9)
                 read -p "确认彻底卸载 sing-box 及其所有配置文件吗？[y/N]: " un_confirm
-                if [ "${un_confirm,,}" = "y" ]; then
-                    $sb_cmd un
+                if [ "${un_confirm,,}" = "y" ] || [ "${un_confirm,,}" = "yes" ]; then
+                    systemctl stop sing-box 2>/dev/null || true
+                    systemctl disable sing-box 2>/dev/null || true
+                    rm -f /etc/systemd/system/sing-box.service /lib/systemd/system/sing-box.service
+                    rm -rf /etc/sing-box /var/log/sing-box
+                    rm -f /usr/local/bin/sing-box /usr/local/bin/sb
+                    systemctl daemon-reload 2>/dev/null || true
+                    echo -e "${GREEN}✓ sing-box 已彻底卸载干净！${PLAIN}"
                 fi
                 read -p "按回车键继续..."
                 ;;

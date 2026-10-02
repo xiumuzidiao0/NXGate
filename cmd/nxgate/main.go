@@ -18,14 +18,29 @@ import (
 	"aimili-vpngate-go/pkg/stats"
 	"aimili-vpngate-go/pkg/tunnel"
 	"aimili-vpngate-go/pkg/vpn"
+	singboxscripts "aimili-vpngate-go/scripts/singbox"
 )
 
 func main() {
 	showVersion := flag.Bool("version", false, "显示程序版本号")
+	extractSingbox := flag.String("extract-singbox", "", "释放内置的 sing-box 管理脚本到指定目录 (例如 /etc/sing-box/sh)")
 	flag.Parse()
 
 	if *showVersion {
 		fmt.Printf("NXGate Multi-Egress Gateway v%s\n", config.Version)
+		os.Exit(0)
+	}
+
+	if *extractSingbox != "" {
+		targetDir := *extractSingbox
+		if targetDir == "default" {
+			targetDir = "/etc/sing-box/sh"
+		}
+		if err := singboxscripts.ExtractTo(targetDir); err != nil {
+			fmt.Fprintf(os.Stderr, "释放 sing-box 脚本失败: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("✓ 成功释放 sing-box 管理脚本至: %s\n", targetDir)
 		os.Exit(0)
 	}
 

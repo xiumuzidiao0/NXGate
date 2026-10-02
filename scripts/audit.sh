@@ -23,12 +23,12 @@ echo -e "${BOLD}🛡️  [Audit] 正在执行项目代码与依赖安全审计..
 echo -e "${BLUE}======================================================${PLAIN}\n"
 
 # 1. Go Vet
-echo -e "${YELLOW}[1/2] 运行 Go 官方静态代码分析 (go vet)...${PLAIN}"
+echo -e "${YELLOW}[1/3] 运行 Go 官方静态代码分析 (go vet)...${PLAIN}"
 go vet ./...
 echo -e "${GREEN}  [✓] go vet 检查通过：无逻辑死锁、格式化串错误或隐藏隐患${PLAIN}\n"
 
 # 2. Govulncheck
-echo -e "${YELLOW}[2/2] 运行 Go 官方 CVE 依赖漏洞扫描 (govulncheck)...${PLAIN}"
+echo -e "${YELLOW}[2/3] 运行 Go 官方 CVE 依赖漏洞扫描 (govulncheck)...${PLAIN}"
 if ! command -v govulncheck >/dev/null 2>&1; then
     GOPATH_BIN="$(go env GOPATH 2>/dev/null || echo "$HOME/go")/bin"
     if [ -x "${GOPATH_BIN}/govulncheck" ]; then
@@ -41,6 +41,19 @@ if ! command -v govulncheck >/dev/null 2>&1; then
 fi
 
 govulncheck ./...
+echo -e "${GREEN}  [✓] govulncheck 检查通过：无已知漏洞依赖${PLAIN}\n"
+
+# 3. Shell Scripts & sing-box API Regression
+echo -e "${YELLOW}[3/3] 运行 Shell 脚本语法静态校验与 sing-box 接口自动化测试...${PLAIN}"
+for s in install.sh scripts/*.sh scripts/singbox/*.sh scripts/singbox/src/*.sh scripts/singbox/tests/*.sh; do
+    [ -f "$s" ] && bash -n "$s"
+done
+echo -e "  [✓] 所有 Shell 部署与管理脚本语法校验通过 (bash -n)"
+
+if [ -f "scripts/singbox/tests/test_api.sh" ]; then
+    bash scripts/singbox/tests/test_api.sh
+    echo -e "${GREEN}  [✓] sing-box 对外控制 API 全量回归测试通过${PLAIN}\n"
+fi
 
 echo -e "\n${GREEN}======================================================${PLAIN}"
 echo -e "${GREEN}🎉 [Audit] 代码审计全部通过！未发现已知安全风险。${PLAIN}"

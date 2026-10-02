@@ -42,6 +42,11 @@ jobs:
         run: |
           go test -v -count=1 ./...
 
+      - name: Run sing-box API Regression Tests
+        run: |
+          chmod +x scripts/singbox/tests/test_api.sh
+          bash scripts/singbox/tests/test_api.sh
+
       - name: Install Web Test Dependencies & Chromium
         run: |
           npm --prefix web install
