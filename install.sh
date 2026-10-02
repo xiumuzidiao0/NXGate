@@ -1033,6 +1033,36 @@ do_install_singbox() {
         scripts_installed=1
     fi
 
+    # 策略 4: 从 NXGate 官方仓库源拉取内嵌管理脚本 (多 CDN 镜像容灾，针对旧二进制或极简部署环境)
+    if [ "$scripts_installed" = "0" ]; then
+        echo -e "  -> 尝试从 NXGate 官方代码库拉取工程管理脚本..."
+        local repo_tar="/tmp/nxgate_repo_$$.tar.gz"
+        local repo_urls=(
+            "https://github.com/xiumuzidiao0/NXGate/archive/refs/heads/main.tar.gz"
+            "https://ghproxy.net/https://github.com/xiumuzidiao0/NXGate/archive/refs/heads/main.tar.gz"
+            "https://mirror.ghproxy.com/https://github.com/xiumuzidiao0/NXGate/archive/refs/heads/main.tar.gz"
+            "https://gh-proxy.com/https://github.com/xiumuzidiao0/NXGate/archive/refs/heads/main.tar.gz"
+        )
+        for ru in "${repo_urls[@]}"; do
+            echo -e "    • 尝试拉取源: ${ru} ..."
+            if curl -sSL -f -m 25 "$ru" -o "$repo_tar" 2>/dev/null && [ -s "$repo_tar" ]; then
+                local tmp_repo_dir="/tmp/nxgate_repo_dir_$$"
+                mkdir -p "$tmp_repo_dir"
+                if tar -zxf "$repo_tar" -C "$tmp_repo_dir" 2>/dev/null; then
+                    local found_src=$(find "$tmp_repo_dir" -type d -path "*/scripts/singbox/src" 2>/dev/null | head -n1)
+                    if [ -n "$found_src" ]; then
+                        local found_sb_dir="$(dirname "$found_src")"
+                        cp -rf "$found_sb_dir/"* /etc/sing-box/sh/
+                        scripts_installed=1
+                    fi
+                fi
+                rm -rf "$tmp_repo_dir" "$repo_tar"
+                [ "$scripts_installed" = "1" ] && break
+            fi
+        done
+        rm -f "$repo_tar"
+    fi
+
     if [ "$scripts_installed" = "0" ] || [ ! -f "/etc/sing-box/sh/sing-box.sh" ]; then
         echo -e "${RED}✗ 无法定位或提取 sing-box 管理脚本，安装中断。${PLAIN}"
         return 1
@@ -1088,8 +1118,9 @@ do_install_singbox() {
             local tmp_extract="/tmp/singbox_extract_$$"
             mkdir -p "$tmp_extract"
             tar -zxf "$core_tar" -C "$tmp_extract" --strip-components 1 2>/dev/null || tar -zxf "$core_tar" -C "$tmp_extract" 2>/dev/null || true
-            if [ -f "$tmp_extract/sing-box" ]; then
-                mv -f "$tmp_extract/sing-box" "$sb_bin"
+            local found_sb=$(find "$tmp_extract" -type f -name "sing-box" 2>/dev/null | head -n1)
+            if [ -n "$found_sb" ]; then
+                mv -f "$found_sb" "$sb_bin"
                 chmod +x "$sb_bin"
                 echo -e "  ${GREEN}✓ sing-box 官方核心二进制部署成功${PLAIN}"
             fi
@@ -1150,6 +1181,18 @@ EOF
         systemctl enable sing-box &>/dev/null || true
         systemctl restart sing-box &>/dev/null || true
         echo -e "  ${GREEN}✓ sing-box.service 守护进程已注册并启动${PLAIN}"
+    fi
+
+    # 6. 如果尚未创建任何节点，自动创建一个推荐的 VLESS-REALITY 入站并接入 NXGate
+    local proxy_port=$(get_config_val "LOCAL_PROXY_PORT" 2>/dev/null || echo "7928")
+    [ -z "$proxy_port" ] && proxy_port="7928"
+    local node_count=0
+    if [ -d "/etc/sing-box/conf" ]; then
+        node_count=$(ls /etc/sing-box/conf 2>/dev/null | grep -c '\.json$' || true)
+    fi
+    if [ "$node_count" -eq 0 ]; then
+        echo -e "  -> 正在初始化默认 VLESS-REALITY 边缘节点并链式接入 NXGate (${proxy_port})..."
+        /usr/local/bin/sing-box api add reality auto auto auto "127.0.0.1:${proxy_port}" 2>/dev/null || true
     fi
 
     echo -e "${GREEN}✓ sing-box 边缘抗封锁网关安装部署成功！${PLAIN}"
