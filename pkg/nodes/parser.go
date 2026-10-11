@@ -211,6 +211,11 @@ func ParseVPNGateCSV(data []byte, maxRows int) ([]*Node, error) {
 			LatencyMs:      -1,
 		}
 
+		if lat, lon, ok := ApproximateCoordinates(node.CountryShort, node.IP); ok {
+			node.Latitude = lat
+			node.Longitude = lon
+		}
+
 		nodes = append(nodes, node)
 		seenIPs[ip] = true
 

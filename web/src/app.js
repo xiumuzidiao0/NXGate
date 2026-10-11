@@ -491,6 +491,63 @@ import { I18N } from './i18n.js';
         let nodesMarkerGroup = null;
         let isMapCollapsed = false;
 
+        const COUNTRY_COORDS = {
+            JP: [36.2048, 138.2529],
+            US: [37.0902, -95.7129],
+            KR: [35.9078, 127.7669],
+            TW: [23.6978, 120.9605],
+            HK: [22.3193, 114.1694],
+            SG: [1.3521, 103.8198],
+            GB: [55.3781, -3.4360],
+            DE: [51.1657, 10.4515],
+            FR: [46.2276, 2.2137],
+            CA: [56.1304, -106.3468],
+            AU: [-25.2744, 133.7751],
+            NL: [52.1326, 5.2913],
+            RU: [61.5240, 105.3188],
+            VN: [14.0583, 108.2772],
+            TH: [15.8700, 100.9925],
+            MY: [4.2105, 101.9758],
+            IN: [20.5937, 78.9629],
+            BR: [-14.2350, -51.9253],
+            UA: [48.3794, 31.1656],
+            PL: [51.9194, 19.1451],
+            SE: [60.1282, 18.6435],
+            NO: [60.4720, 8.4689],
+            FI: [61.9241, 25.7482],
+            IT: [41.8719, 12.5674],
+            ES: [40.4637, -3.7492],
+            CH: [46.8182, 8.2275],
+            AT: [47.5162, 14.5501],
+            NZ: [-40.9006, 174.8860],
+            ID: [-0.7893, 113.9213],
+            PH: [12.8797, 121.7740],
+            TR: [38.9637, 35.2433],
+            ZA: [-30.5595, 22.9375],
+            MX: [23.6345, -102.5528],
+            AR: [-38.4161, -63.6167],
+            CL: [-35.6751, -71.5430]
+        };
+
+        function getNodeCoordinates(node) {
+            if (node && Number.isFinite(node.latitude) && Number.isFinite(node.longitude) && (node.latitude !== 0 || node.longitude !== 0)) {
+                return [node.latitude, node.longitude];
+            }
+            const c = String(node?.country_short || '').toUpperCase();
+            if (COUNTRY_COORDS[c]) {
+                const [baseLat, baseLon] = COUNTRY_COORDS[c];
+                const ipStr = String(node?.ip || '0.0.0.0');
+                let hash = 0;
+                for (let i = 0; i < ipStr.length; i++) {
+                    hash = (hash * 31 + ipStr.charCodeAt(i)) & 0xffffff;
+                }
+                const jitterLat = (((hash % 200) - 100) / 100) * 1.5;
+                const jitterLon = ((((hash >> 8) % 200) - 100) / 100) * 2.0;
+                return [baseLat + jitterLat, baseLon + jitterLon];
+            }
+            return null;
+        }
+
         function initNodesMap() {
             if (nodesMap) return;
             const container = document.getElementById('global-nodes-map');
@@ -499,19 +556,37 @@ import { I18N } from './i18n.js';
             try {
                 nodesMap = L.map('global-nodes-map', {
                     zoomControl: false,
-                    attributionControl: true,
+                    attributionControl: false,
                     minZoom: 1,
-                    maxZoom: 18
-                }).setView([25, 10], 2);
+                    maxZoom: 10,
+                    maxBounds: [[-85, -180], [85, 180]],
+                    maxBoundsViscosity: 1.0,
+                    worldCopyJump: true
+                }).setView([25, 0], 2);
 
-                if (nodesMap.attributionControl) {
-                    nodesMap.attributionControl.setPrefix(false);
+                // 1. Add 100% offline local vector landmass (completely avoids any external network requirement)
+                if (window.WORLD_LAND) {
+                    L.geoJSON(window.WORLD_LAND, {
+                        style: {
+                            fillColor: '#172554',
+                            fillOpacity: 0.9,
+                            color: '#1e3a8a',
+                            weight: 1,
+                            lineJoin: 'round'
+                        }
+                    }).addTo(nodesMap);
                 }
 
-                L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    maxZoom: 18,
-                    attribution: '© OpenStreetMap'
-                }).addTo(nodesMap);
+                // 2. Add CartoDB Dark Matter tile layer (never use OSM tile.openstreetmap.org which returned 403)
+                const darkTile = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png', {
+                    subdomains: 'abcd',
+                    maxZoom: 19,
+                    opacity: 0.7
+                });
+                darkTile.on('tileerror', function() {
+                    // Quietly ignore tile error so offline vector landmass continues working
+                });
+                darkTile.addTo(nodesMap);
 
                 nodesMarkerGroup = L.featureGroup().addTo(nodesMap);
             } catch (err) {
@@ -529,18 +604,24 @@ import { I18N } from './i18n.js';
             let activeExitCount = 0;
             let pinnedCount = 0;
 
+            if (currentState?.vpn?.status === 'connected') {
+                activeExitCount++;
+            }
+            if (Array.isArray(currentState?.tunnels)) {
+                activeExitCount += currentState.tunnels.filter(t => t && t.status === 'connected').length;
+            }
+
             const primaryId = currentState?.vpn?.active_node_id;
             const primaryIp = currentState?.vpn?.active_node?.ip;
             const dynamicTunnels = (currentState?.tunnels || []);
 
             nodesList.forEach(node => {
-                if (!node || !Number.isFinite(node.latitude) || !Number.isFinite(node.longitude)) return;
-                if (node.latitude === 0 && node.longitude === 0) return;
+                const coords = getNodeCoordinates(node);
+                if (!coords) return;
 
                 pinnedCount++;
                 const isPrimary = primaryId === node.id || (primaryIp && primaryIp === node.ip);
                 const isDynamic = dynamicTunnels.some(t => t.node && (t.node.id === node.id || t.node.ip === node.ip));
-                if (isPrimary || isDynamic) activeExitCount++;
 
                 let pinClass = 'pin-clean';
                 if (isPrimary) {
@@ -565,7 +646,7 @@ import { I18N } from './i18n.js';
                     popupAnchor: [0, -8]
                 });
 
-                const marker = L.marker([node.latitude, node.longitude], { icon });
+                const marker = L.marker(coords, { icon });
 
                 const latencyText = node.latency_ms > 0 ? `${node.latency_ms} ms` : (node.ping > 0 ? `${node.ping} ms` : (isEn ? 'Unknown' : '未知'));
                 const riskLabel = node.risk_label || (isEn ? 'Clean' : '纯净住宅');

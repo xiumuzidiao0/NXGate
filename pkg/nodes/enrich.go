@@ -117,7 +117,7 @@ func (e *IPEnricher) EnrichNodes(ctx context.Context, nodeList []*Node) {
 	var toQuery []string
 	now := time.Now()
 	for _, n := range nodeList {
-		if entry, ok := e.cache[n.IP]; ok && now.Sub(entry.CachedAt) < 7*24*time.Hour {
+		if entry, ok := e.cache[n.IP]; ok && now.Sub(entry.CachedAt) < 7*24*time.Hour && (entry.Lat != 0 || entry.Lon != 0) {
 			n.IPType = entry.IPType
 			n.ISP = entry.ISP
 			n.City = entry.City
@@ -281,6 +281,13 @@ func (e *IPEnricher) EnrichNodes(ctx context.Context, nodeList []*Node) {
 			n.RiskLevel = risk.Level
 			n.RiskLabel = risk.Label
 			n.FraudFlags = risk.FraudFlags
+		}
+
+		if n.Latitude == 0 && n.Longitude == 0 {
+			if lat, lon, ok := ApproximateCoordinates(n.CountryShort, n.IP); ok {
+				n.Latitude = lat
+				n.Longitude = lon
+			}
 		}
 	}
 
