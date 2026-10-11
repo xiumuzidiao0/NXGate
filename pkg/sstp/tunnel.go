@@ -44,6 +44,54 @@ type Tunnel struct {
 	closeCh    chan struct{}
 }
 
+func ResolveCandidatePorts(targetPort int, proto string) []int {
+	var candidates []int
+	seen := make(map[int]bool)
+
+	add := func(p int) {
+		if p > 0 && p <= 65535 && !seen[p] {
+			candidates = append(candidates, p)
+			seen[p] = true
+		}
+	}
+
+	// 1. If targetPort is valid, prioritize it!
+	if targetPort > 0 {
+		add(targetPort)
+	}
+
+	// 2. Standard SoftEther / SSTP listener ports
+	add(443)
+	add(995)
+	add(5555)
+
+	return candidates
+}
+
+func ConnectNode(ctx context.Context, host string, targetPort int, proto string, user, pass string) (*Tunnel, error) {
+	ports := ResolveCandidatePorts(targetPort, proto)
+	var lastErr error
+
+	for _, p := range ports {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+
+		connCtx, cancel := context.WithTimeout(ctx, 7*time.Second)
+		tun, err := Connect(connCtx, host, p, user, pass)
+		cancel()
+		if err == nil {
+			return tun, nil
+		}
+		lastErr = err
+	}
+
+	if lastErr != nil {
+		return nil, fmt.Errorf("connect to %s across ports %v failed: %w", host, ports, lastErr)
+	}
+	return nil, ErrHandshakeFailed
+}
+
 func Connect(ctx context.Context, host string, port int, user, pass string) (*Tunnel, error) {
 	if port <= 0 {
 		port = 443
@@ -477,6 +525,10 @@ func (t *Tunnel) Dial(ctx context.Context, network, addr string) (net.Conn, erro
 
 func (t *Tunnel) AssignedIP() net.IP {
 	return t.assignedIP
+}
+
+func (t *Tunnel) Port() int {
+	return t.port
 }
 
 func (t *Tunnel) IsHealthy() bool {

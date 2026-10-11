@@ -190,7 +190,7 @@ func (p *Pool) StartUserlandTunnel(node *nodes.Node) (*Tunnel, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 		defer cancel()
 
-		st, err := sstp.Connect(ctx, node.IP, 443, "vpn", "vpn")
+		st, err := sstp.ConnectNode(ctx, node.IP, node.Port, node.Proto, "vpn", "vpn")
 		if err != nil {
 			tun.mu.Lock()
 			tun.Status = StatusFailed
@@ -204,12 +204,12 @@ func (p *Pool) StartUserlandTunnel(node *nodes.Node) (*Tunnel, error) {
 		tun.mu.Lock()
 		tun.Status = StatusConnected
 		tun.ConnectedAt = time.Now()
-		tun.Message = fmt.Sprintf("用户态免 TUN 已就绪 (虚拟 IP: %s, 443)", st.AssignedIP())
+		tun.Message = fmt.Sprintf("用户态免 TUN 已就绪 (虚拟 IP: %s, 端口: %d)", st.AssignedIP(), st.Port())
 		tun.Dialer = st.Dial
 		tun.Closer = st
 		tun.mu.Unlock()
 
-		stats.LogInfo("TunnelPool", "用户态免 TUN 隧道 [%s] (%s) 已连接就绪", tunnelID, devName)
+		stats.LogInfo("TunnelPool", "用户态免 TUN 隧道 [%s] (%s) 已连接就绪 (端口: %d)", tunnelID, devName, st.Port())
 	}()
 
 	return tun, nil

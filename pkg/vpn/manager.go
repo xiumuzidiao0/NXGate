@@ -296,13 +296,13 @@ func (m *Manager) ConnectUserland(target *nodes.Node) error {
 	m.lastMessage = fmt.Sprintf("正在通过用户态 SSTP (免 TUN) 连接 %s (%s)...", target.ID, target.CountryShort)
 	m.mu.Unlock()
 
-	stats.LogInfo("VPN", "开始用户态免 TUN 直连: %s (%s %s:443)", target.ID, target.CountryShort, target.IP)
+	stats.LogInfo("VPN", "开始用户态免 TUN 直连: %s (%s %s:%d, 协议: %s)", target.ID, target.CountryShort, target.IP, target.Port, target.Proto)
 
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 		defer cancel()
 
-		tun, err := sstp.Connect(ctx, target.IP, 443, "vpn", "vpn")
+		tun, err := sstp.ConnectNode(ctx, target.IP, target.Port, target.Proto, "vpn", "vpn")
 		if err != nil {
 			m.mu.Lock()
 			if m.epoch == currentEpoch {
@@ -311,6 +311,9 @@ func (m *Manager) ConnectUserland(target *nodes.Node) error {
 				m.lastMessage = fmt.Sprintf("用户态 SSTP 直连失败: %v", err)
 			}
 			m.mu.Unlock()
+			if m.pool != nil {
+				m.pool.Blacklist().Mark(target, fmt.Sprintf("用户态免TUN直连失败: %v", err), 600*time.Second)
+			}
 			stats.LogWarn("VPN", "用户态直连 %s 失败: %v", target.IP, err)
 			go m.TriggerAutoFailover()
 			return
@@ -326,14 +329,14 @@ func (m *Manager) ConnectUserland(target *nodes.Node) error {
 		m.status = StatusConnected
 		m.isConnecting = false
 		m.connectedAt = time.Now()
-		m.lastMessage = fmt.Sprintf("用户态免 TUN 直连已就绪 (虚拟 IP: %s, 端口 443)", tun.AssignedIP())
+		m.lastMessage = fmt.Sprintf("用户态免 TUN 直连已就绪 (虚拟 IP: %s, 端口: %d)", tun.AssignedIP(), tun.Port())
 		m.mu.Unlock()
 
 		if m.attacher != nil {
 			m.attacher.SetUserlandDialer(tun.Dial)
 		}
 
-		stats.LogInfo("VPN", "用户态免 TUN 直连就绪: %s (%s), 虚拟 IP: %s", target.ID, target.CountryShort, tun.AssignedIP())
+		stats.LogInfo("VPN", "用户态免 TUN 直连就绪: %s (%s), 虚拟 IP: %s, 端口: %d", target.ID, target.CountryShort, tun.AssignedIP(), tun.Port())
 	}()
 
 	return nil

@@ -705,10 +705,14 @@ func (m *DynamicGroupManager) evaluateAll(ctx context.Context) {
 			needsEval := false
 			if g.IsSystem || gid == SystemPrimaryGroupID {
 				hasPrimary := false
-				for _, t := range m.pool.ListTunnels() {
-					if t.DevIndex == 0 && t.IsHealthy() && t.IsAvailable() {
-						hasPrimary = true
-						break
+				if m.primaryConnector != nil {
+					hasPrimary = m.primaryConnector.GetStatus() == "connected"
+				} else {
+					for _, t := range m.pool.ListTunnels() {
+						if t.DevIndex == 0 && t.IsHealthy() && t.IsAvailable() {
+							hasPrimary = true
+							break
+						}
 					}
 				}
 				if !hasPrimary {
@@ -733,18 +737,33 @@ func (m *DynamicGroupManager) evaluateAll(ctx context.Context) {
 			needsEval = true
 		} else {
 			validCount := 0
-			for _, tid := range g.ActiveTunnelIDs {
-				t := m.pool.GetTunnel(tid)
-				if t == nil || !t.IsHealthy() || !t.IsAvailable() {
-					continue
+			if g.IsSystem || gid == SystemPrimaryGroupID {
+				if m.primaryConnector != nil {
+					if m.primaryConnector.GetStatus() == "connected" {
+						validCount = 1
+					}
+				} else {
+					for _, t := range m.pool.ListTunnels() {
+						if t.DevIndex == 0 && t.IsHealthy() && t.IsAvailable() {
+							validCount = 1
+							break
+						}
+					}
 				}
-				// Active egress verification: ensure traffic actually flows out to internet
-				if !t.IsUserland && !CheckTunnelConnectivity(t.DevName, 2*time.Second) {
-					stats.LogWarn("DynamicGroup", "[%s] 出口隧道 %s (%s) 探测公网不通，标记失效并触发换线", g.Name, t.ID, t.DevName)
-					t.TripCircuitBreaker(60 * time.Second)
-					continue
+			} else {
+				for _, tid := range g.ActiveTunnelIDs {
+					t := m.pool.GetTunnel(tid)
+					if t == nil || !t.IsHealthy() || !t.IsAvailable() {
+						continue
+					}
+					// Active egress verification: ensure traffic actually flows out to internet
+					if !t.IsUserland && !CheckTunnelConnectivity(t.DevName, 2*time.Second) {
+						stats.LogWarn("DynamicGroup", "[%s] 出口隧道 %s (%s) 探测公网不通，标记失效并触发换线", g.Name, t.ID, t.DevName)
+						t.TripCircuitBreaker(60 * time.Second)
+						continue
+					}
+					validCount++
 				}
-				validCount++
 			}
 			if validCount < g.TargetCount {
 				needsEval = true
@@ -798,6 +817,9 @@ func (m *DynamicGroupManager) evaluatePrimarySystemGroup(ctx context.Context, g 
 	}
 
 	primaryHealthy := primaryTun != nil && primaryTun.IsHealthy()
+	if m.primaryConnector != nil && m.primaryConnector.GetStatus() == "connected" {
+		primaryHealthy = true
+	}
 	var currentActiveNode *nodes.Node
 	if m.primaryConnector != nil {
 		currentActiveNode = m.primaryConnector.GetActiveNode()
@@ -837,9 +859,15 @@ func (m *DynamicGroupManager) evaluatePrimarySystemGroup(ctx context.Context, g 
 	// If periodic rotation is disabled (IntervalMinutes <= 0), keep the healthy primary connection without rotating ONLY IF it satisfies unlock requirement
 	if g.IntervalMinutes <= 0 && primaryHealthy && currentActiveNode != nil && primaryUnlockValid {
 		m.mu.Lock()
-		g.ActiveTunnelIDs = []string{primaryTun.ID}
+		if primaryTun != nil {
+			g.ActiveTunnelIDs = []string{primaryTun.ID}
+		}
 		g.LastEvaluatedAt = time.Now()
-		g.StatusText = fmt.Sprintf("主网关固定连接: %s (%s, tun0)", currentActiveNode.IP, currentActiveNode.CountryShort)
+		if g.ConnectMode == "zero_tun" || g.ConnectMode == "sstp" {
+			g.StatusText = fmt.Sprintf("主网关固定连接: %s (%s, 免TUN)", currentActiveNode.IP, currentActiveNode.CountryShort)
+		} else {
+			g.StatusText = fmt.Sprintf("主网关固定连接: %s (%s, tun0)", currentActiveNode.IP, currentActiveNode.CountryShort)
+		}
 		m.saveLocked()
 		m.mu.Unlock()
 		return
@@ -848,9 +876,15 @@ func (m *DynamicGroupManager) evaluatePrimarySystemGroup(ctx context.Context, g 
 	// If primary is already healthy on this best node AND satisfies unlock requirement, keep it
 	if primaryHealthy && currentActiveNode != nil && primaryUnlockValid && (currentActiveNode.ID == best.ID || currentActiveNode.IP == best.IP) {
 		m.mu.Lock()
-		g.ActiveTunnelIDs = []string{primaryTun.ID}
+		if primaryTun != nil {
+			g.ActiveTunnelIDs = []string{primaryTun.ID}
+		}
 		g.LastEvaluatedAt = time.Now()
-		g.StatusText = fmt.Sprintf("主网关正常运行: %s (%s, tun0)", currentActiveNode.IP, currentActiveNode.CountryShort)
+		if g.ConnectMode == "zero_tun" || g.ConnectMode == "sstp" {
+			g.StatusText = fmt.Sprintf("主网关正常运行: %s (%s, 免TUN)", currentActiveNode.IP, currentActiveNode.CountryShort)
+		} else {
+			g.StatusText = fmt.Sprintf("主网关正常运行: %s (%s, tun0)", currentActiveNode.IP, currentActiveNode.CountryShort)
+		}
 		m.saveLocked()
 		m.mu.Unlock()
 		return
