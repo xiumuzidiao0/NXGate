@@ -1261,7 +1261,10 @@ import { I18N } from './i18n.js';
                 if (g.country === 'FAVORITES') {
                     countryStr = isEn ? '⭐ My Favorites (Cross-Country Pool)' : '⭐ 我的收藏节点 (跨国收藏池)';
                 }
-                const activeCount = (g.active_tunnel_ids || []).length;
+                let activeCount = (g.active_tunnel_ids || []).length;
+                if (isSys && currentState && currentState.vpn && currentState.vpn.status === 'connected') {
+                    activeCount = 1;
+                }
                 const statusClass = activeCount >= g.target_count ? 'connected' : (activeCount > 0 ? 'connecting' : 'disconnected');
                 const statusText = g.status_text || (isEn ? 'Normal' : '正常');
 
@@ -1278,8 +1281,9 @@ import { I18N } from './i18n.js';
                 const fallbackReasonDiv = (g.in_fallback && g.fallback_reason) ? `<div class="text-xs text-warning mt-1">${escapeHtml(g.fallback_reason)}</div>` : '';
 
                 const favBadge = `<span class="badge badge-accent">⭐ ${isEn ? 'Favorites' : '收藏组'}</span>`;
-                const sysBadge = isSys ? `<span class="badge badge-system">${isEn ? 'Primary Gateway (tun0)' : '系统主连网关 (tun0)'}</span>` : (g.country === 'FAVORITES' ? favBadge : `<span class="badge badge-accent">Top ${g.target_count} ${isEn ? 'Tunnels' : '隧道'}</span>`);
                 const isZeroTun = g.connect_mode === 'zero_tun' || g.connect_mode === 'sstp';
+                const sysTitle = isZeroTun ? (isEn ? 'Primary Gateway (Zero-TUN)' : '系统主连网关 (免TUN)') : (isEn ? 'Primary Gateway (tun0)' : '系统主连网关 (tun0)');
+                const sysBadge = isSys ? `<span class="badge badge-system">${sysTitle}</span>` : (g.country === 'FAVORITES' ? favBadge : `<span class="badge badge-accent">Top ${g.target_count} ${isEn ? 'Tunnels' : '隧道'}</span>`);
                 const modeBadge = isZeroTun ?
                     `<span class="badge badge-accent" style="font-size:10px">⚡ ${isEn ? 'Zero-TUN' : '免TUN (SSTP)'}</span>` :
                     `<span class="badge badge-mini" style="font-size:10px">${isEn ? 'Kernel TUN' : '内核 TUN'}</span>`;

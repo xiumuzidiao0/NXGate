@@ -145,6 +145,15 @@ func (m *DynamicGroupManager) ListGroups() []*DynamicGroup {
 		// Clone active IDs slice
 		cp.ActiveTunnelIDs = make([]string, len(g.ActiveTunnelIDs))
 		copy(cp.ActiveTunnelIDs, g.ActiveTunnelIDs)
+		if (cp.IsSystem || cp.ID == SystemPrimaryGroupID) && (cp.ConnectMode == "zero_tun" || cp.ConnectMode == "sstp") {
+			if m.primaryConnector != nil && m.primaryConnector.GetStatus() == "connected" {
+				activeNode := m.primaryConnector.GetActiveNode()
+				if activeNode != nil {
+					cp.ActiveTunnelIDs = []string{"primary-userland"}
+					cp.StatusText = fmt.Sprintf("主网关正常运行: %s (%s, 免TUN)", activeNode.IP, activeNode.CountryShort)
+				}
+			}
+		}
 		list = append(list, &cp)
 	}
 	sort.Slice(list, func(i, j int) bool {
@@ -164,6 +173,15 @@ func (m *DynamicGroupManager) GetGroup(id string) *DynamicGroup {
 		return nil
 	}
 	cp := *g
+	if (cp.IsSystem || cp.ID == SystemPrimaryGroupID) && (cp.ConnectMode == "zero_tun" || cp.ConnectMode == "sstp") {
+		if m.primaryConnector != nil && m.primaryConnector.GetStatus() == "connected" {
+			activeNode := m.primaryConnector.GetActiveNode()
+			if activeNode != nil {
+				cp.ActiveTunnelIDs = []string{"primary-userland"}
+				cp.StatusText = fmt.Sprintf("主网关正常运行: %s (%s, 免TUN)", activeNode.IP, activeNode.CountryShort)
+			}
+		}
+	}
 	return &cp
 }
 
@@ -891,14 +909,24 @@ func (m *DynamicGroupManager) evaluatePrimarySystemGroup(ctx context.Context, g 
 	}
 
 	// If primary connection was established within last 60 seconds and satisfies unlock requirement, don't interrupt it
-	if primaryHealthy && primaryUnlockValid && primaryTun != nil && !primaryTun.ConnectedAt.IsZero() && time.Since(primaryTun.ConnectedAt) < 60*time.Second {
-		m.mu.Lock()
-		g.ActiveTunnelIDs = []string{primaryTun.ID}
-		g.LastEvaluatedAt = time.Now()
-		g.StatusText = fmt.Sprintf("主网关刚建立: %s (%s, tun0)", primaryTun.Node.IP, primaryTun.Node.CountryShort)
-		m.saveLocked()
-		m.mu.Unlock()
-		return
+	if primaryHealthy && primaryUnlockValid {
+		if primaryTun != nil && !primaryTun.ConnectedAt.IsZero() && time.Since(primaryTun.ConnectedAt) < 60*time.Second {
+			m.mu.Lock()
+			g.ActiveTunnelIDs = []string{primaryTun.ID}
+			g.LastEvaluatedAt = time.Now()
+			g.StatusText = fmt.Sprintf("主网关刚建立: %s (%s, tun0)", primaryTun.Node.IP, primaryTun.Node.CountryShort)
+			m.saveLocked()
+			m.mu.Unlock()
+			return
+		} else if (g.ConnectMode == "zero_tun" || g.ConnectMode == "sstp") && currentActiveNode != nil {
+			m.mu.Lock()
+			g.ActiveTunnelIDs = []string{"primary-userland"}
+			g.LastEvaluatedAt = time.Now()
+			g.StatusText = fmt.Sprintf("主网关正常运行: %s (%s, 免TUN)", currentActiveNode.IP, currentActiveNode.CountryShort)
+			m.saveLocked()
+			m.mu.Unlock()
+			return
+		}
 	}
 
 	// Trigger primary connection to the best node

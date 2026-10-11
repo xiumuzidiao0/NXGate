@@ -49,6 +49,25 @@ func (s *Server) buildStatusResponse() StatusResponse {
 	if s.tunnelPool != nil {
 		tunnels = s.tunnelPool.ListTunnels()
 	}
+	// Synthesize primary userland Zero-TUN egress so it is properly exposed in active tunnels and metrics
+	if s.vpn != nil && s.vpn.DriverMode() == vpn.DriverUserland && s.vpn.GetStatus() == string(vpn.StatusConnected) {
+		activeNode := s.vpn.GetActiveNode()
+		if activeNode != nil {
+			primaryUserland := &tunnel.Tunnel{
+				ID:          "primary-userland",
+				DevName:     fmt.Sprintf("sstp-%d", activeNode.Port),
+				DevIndex:    0,
+				Node:        activeNode,
+				Status:      tunnel.StatusConnected,
+				Message:     "系统主连网关 (用户态免TUN直连)",
+				ConnectedAt: s.vpn.ConnectedAt(),
+				LatencyMs:   activeNode.LatencyMs,
+				IsUserland:  true,
+				Unlock:      activeNode.Unlock,
+			}
+			tunnels = append([]*tunnel.Tunnel{primaryUserland}, tunnels...)
+		}
+	}
 	var portRules []proxy.PortRule
 	if s.portMgr != nil {
 		portRules = s.portMgr.GetRules()
@@ -91,7 +110,12 @@ func (s *Server) handleNodes(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	s.writeJSON(w, http.StatusOK, candidates)
+	respNodes := make([]nodes.Node, len(candidates))
+	for i, n := range candidates {
+		respNodes[i] = *n
+		respNodes[i].ConfigData = ""
+	}
+	s.writeJSON(w, http.StatusOK, respNodes)
 }
 
 type ProbeNodesRequest struct {

@@ -266,8 +266,14 @@ func (p *Pool) startTunnelInternalLocked(node *nodes.Node, devIdx int) (*Tunnel,
 		return nil, fmt.Errorf("写入认证文件失败: %w", err)
 	}
 
+	if strings.TrimSpace(node.ConfigData) == "" {
+		t.mu.Unlock()
+		p.cleanupTunnel(t, tunnelID)
+		return nil, fmt.Errorf("节点 %s 缺少有效 OpenVPN 配置文件数据", node.ID)
+	}
+
 	confPath := filepath.Join(dir, fmt.Sprintf("%s.ovpn", tunnelID))
-	modified := prepareSafeOpenVPNConfig(node.ConfigData, authPath, devName)
+	modified := prepareSafeOpenVPNConfig(node.ConfigData, authPath, devName, node)
 
 	if err := os.WriteFile(confPath, []byte(strings.Join(modified, "\n")), 0600); err != nil {
 		t.mu.Unlock()
@@ -786,9 +792,10 @@ func (p *Pool) CloseAll() {
 
 // prepareSafeOpenVPNConfig strictly purges any dangerous directives (routes, default gateway,
 // DNS manipulation, scripts) and injects bulletproof isolation flags including route-noexec.
-func prepareSafeOpenVPNConfig(configData, authPath, devName string) []string {
+func prepareSafeOpenVPNConfig(configData, authPath, devName string, node ...*nodes.Node) []string {
 	lines := strings.Split(configData, "\n")
 	var modified []string
+	hasRemote := false
 
 	for _, rawLine := range lines {
 		trimmed := strings.TrimSpace(rawLine)
@@ -807,6 +814,9 @@ func prepareSafeOpenVPNConfig(configData, authPath, devName string) []string {
 		}
 
 		lower := strings.ToLower(trimmed)
+		if strings.HasPrefix(lower, "remote ") || strings.HasPrefix(lower, "remote\t") {
+			hasRemote = true
+		}
 		// Strictly filter out any directives that could affect routing, gateway, DNS, scripts, device name, or credentials
 		if strings.HasPrefix(lower, "auth-user-pass") ||
 			strings.HasPrefix(lower, "dev ") ||
@@ -833,9 +843,19 @@ func prepareSafeOpenVPNConfig(configData, authPath, devName string) []string {
 		modified = append(modified, trimmed)
 	}
 
+	// Ensure remote is specified if missing from raw config
+	if !hasRemote && len(node) > 0 && node[0] != nil && node[0].IP != "" && node[0].Port > 0 {
+		proto := strings.ToLower(node[0].Proto)
+		if proto == "" {
+			proto = "udp"
+		}
+		modified = append([]string{fmt.Sprintf("remote %s %d %s", node[0].IP, node[0].Port, proto)}, modified...)
+		hasRemote = true
+	}
+
 	// Append bulletproof isolation and anti-hijack flags
-	modified = append(modified,
-		"auth-user-pass "+authPath,
+	extraFlags := []string{
+		"auth-user-pass " + authPath,
 		fmt.Sprintf("dev %s", devName),
 		"dev-type tun",
 		"verb 3",
@@ -857,7 +877,14 @@ func prepareSafeOpenVPNConfig(configData, authPath, devName string) []string {
 		"pull-filter ignore \"ip-win32\"",
 		// 4. Prohibit OpenVPN from executing external scripts
 		"script-security 1",
-		"nobind",
+	}
+
+	// Only add nobind when remote directive is present (OpenVPN rejects nobind without remote)
+	if hasRemote {
+		extraFlags = append(extraFlags, "nobind")
+	}
+
+	extraFlags = append(extraFlags,
 		"connect-retry 1 2",
 		"connect-retry-max 2",
 		"resolv-retry 2",
@@ -868,6 +895,8 @@ func prepareSafeOpenVPNConfig(configData, authPath, devName string) []string {
 		"rcvbuf 524288",
 		"txqueuelen 1000",
 	)
+
+	modified = append(modified, extraFlags...)
 	return modified
 }
 

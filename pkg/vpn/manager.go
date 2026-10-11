@@ -504,3 +504,15 @@ func (m *Manager) GetStatus() string {
 	defer m.mu.RUnlock()
 	return string(m.status)
 }
+
+func (m *Manager) DriverMode() DriverMode {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.driverMode
+}
+
+func (m *Manager) ConnectedAt() time.Time {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.connectedAt
+}
