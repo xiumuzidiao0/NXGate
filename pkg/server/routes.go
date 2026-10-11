@@ -53,6 +53,14 @@ func (s *Server) buildStatusResponse() StatusResponse {
 	if s.vpn != nil && s.vpn.DriverMode() == vpn.DriverUserland && s.vpn.GetStatus() == string(vpn.StatusConnected) {
 		activeNode := s.vpn.GetActiveNode()
 		if activeNode != nil {
+			var unlockRes *nodes.UnlockResult
+			if s.tunnelPool != nil && s.tunnelPool.UnlockDetector() != nil {
+				unlockRes = s.tunnelPool.UnlockDetector().GetUnlock(activeNode.IP)
+			}
+			if unlockRes == nil {
+				unlockRes = activeNode.Unlock
+			}
+
 			primaryUserland := &tunnel.Tunnel{
 				ID:          "primary-userland",
 				DevName:     fmt.Sprintf("sstp-%d", activeNode.Port),
@@ -63,7 +71,7 @@ func (s *Server) buildStatusResponse() StatusResponse {
 				ConnectedAt: s.vpn.ConnectedAt(),
 				LatencyMs:   activeNode.LatencyMs,
 				IsUserland:  true,
-				Unlock:      activeNode.Unlock,
+				Unlock:      unlockRes,
 			}
 			tunnels = append([]*tunnel.Tunnel{primaryUserland}, tunnels...)
 		}
@@ -606,17 +614,46 @@ func (s *Server) handleProbeTunnelUnlock(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	t := s.tunnelPool.GetTunnel(req.TunnelID)
+	var t *tunnel.Tunnel
+	if req.TunnelID == "primary-userland" {
+		if s.vpn != nil && s.vpn.DriverMode() == vpn.DriverUserland && s.vpn.GetStatus() == string(vpn.StatusConnected) {
+			activeNode := s.vpn.GetActiveNode()
+			sTun := s.vpn.GetSSTPTunnel()
+			if activeNode != nil && sTun != nil {
+				t = &tunnel.Tunnel{
+					ID:         "primary-userland",
+					DevName:    fmt.Sprintf("sstp-%d", activeNode.Port),
+					Node:       activeNode,
+					Status:     tunnel.StatusConnected,
+					IsUserland: true,
+					Dialer:     sTun.Dial,
+				}
+			}
+		}
+	} else {
+		t = s.tunnelPool.GetTunnel(req.TunnelID)
+	}
+
 	if t == nil || t.Node == nil {
 		s.writeError(w, http.StatusBadRequest, "指定隧道不存在或未上线")
 		return
 	}
 
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 		defer cancel()
-		res := s.tunnelPool.UnlockDetector().ProbeTunnelInstance(ctx, t)
-		t.SetUnlock(res)
+		detector := s.tunnelPool.UnlockDetector()
+		if detector == nil {
+			return
+		}
+		res := detector.ProbeTunnelInstance(ctx, t)
+		if t.ID == "primary-userland" {
+			if t.Node != nil {
+				t.Node.Unlock = res
+			}
+		} else {
+			t.SetUnlock(res)
+		}
 	}()
 
 	s.writeJSON(w, http.StatusOK, map[string]string{

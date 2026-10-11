@@ -252,8 +252,16 @@ func (d *UnlockDetector) ProbeWithDialer(ctx context.Context, dialer func(ctx co
 		label = "userland"
 	}
 	client := newDialerHTTPClient(dialer, 6*time.Second)
+	cfg := ThroughputConfig{
+		TestURL:        "https://speed.cloudflare.com/__down?bytes=250000",
+		MinBytesPerSec: 50 * 1024,
+		Timeout:        5 * time.Second,
+		MaxAttempts:    1,
+		SampleDuration: 3 * time.Second,
+		MinSampleBytes: 30 * 1024,
+	}
 	return d.probeWithClient(ctx, client, label, ip, func() ThroughputResult {
-		return CheckThroughputWithDialer(dialer, DefaultThroughputConfig())
+		return CheckThroughputWithDialer(dialer, cfg)
 	})
 }
 
@@ -529,13 +537,15 @@ func (d *UnlockDetector) probeWithClient(ctx context.Context, client *http.Clien
 
 	if !throughputResult.Passed {
 		stats.LogWarn("UnlockDetector", "[%s:%s] 断流检测失败: %s", devLabel, ip, throughputResult.String())
-		// Downgrade all unlock statuses to blocked if throughput fails
-		result.OpenAI = StatusBlocked
-		result.Claude = StatusBlocked
-		result.Gemini = StatusBlocked
-		result.Google = StatusBlocked
-		result.Cloudflare = StatusBlocked
-		result.Netflix = StatusBlocked
+		// Only downgrade if NO services were successfully unlocked (i.e. truly dead/blocked tunnel)
+		if result.OpenAI != StatusUnlocked && result.Claude != StatusUnlocked && result.Gemini != StatusUnlocked && result.Google != StatusUnlocked && result.Cloudflare != StatusUnlocked {
+			result.OpenAI = StatusBlocked
+			result.Claude = StatusBlocked
+			result.Gemini = StatusBlocked
+			result.Google = StatusBlocked
+			result.Cloudflare = StatusBlocked
+			result.Netflix = StatusBlocked
+		}
 	} else {
 		stats.LogInfo("UnlockDetector", "[%s:%s] 吞吐量检测通过: %s", devLabel, ip, throughputResult.String())
 	}

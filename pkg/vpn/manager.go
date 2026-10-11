@@ -516,3 +516,9 @@ func (m *Manager) ConnectedAt() time.Time {
 	defer m.mu.RUnlock()
 	return m.connectedAt
 }
+
+func (m *Manager) GetSSTPTunnel() *sstp.Tunnel {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.sstpTunnel
+}

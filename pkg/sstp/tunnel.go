@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"aimili-vpngate-go/pkg/dns"
 	"aimili-vpngate-go/pkg/stats"
 )
 
@@ -580,12 +581,17 @@ func (t *Tunnel) Dial(ctx context.Context, network, addr string) (net.Conn, erro
 	}
 	targetPort := uint16(portInt)
 
-	// Resolve target IP
+	// Resolve target IP (prioritize anti-pollution DoH resolver, fallback to system resolver)
 	targetIP := net.ParseIP(host)
 	if targetIP == nil || targetIP.To4() == nil {
-		ips, err := net.DefaultResolver.LookupIP(ctx, "ip4", host)
+		dohCtx, dohCancel := context.WithTimeout(ctx, 3*time.Second)
+		ips, err := dns.Default().LookupIPv4(dohCtx, host)
+		dohCancel()
 		if err != nil || len(ips) == 0 {
-			return nil, fmt.Errorf("resolve target host %q failed: %w", host, err)
+			ips, err = net.DefaultResolver.LookupIP(ctx, "ip4", host)
+			if err != nil || len(ips) == 0 {
+				return nil, fmt.Errorf("resolve target host %q failed: %w", host, err)
+			}
 		}
 		targetIP = ips[0].To4()
 	} else {
@@ -645,7 +651,7 @@ func (t *Tunnel) Dial(ctx context.Context, network, addr string) (net.Conn, erro
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
-	case <-time.After(10 * time.Second):
+	case <-time.After(6 * time.Second):
 		return nil, fmt.Errorf("tcp handshake to %s timed out", addr)
 	case resp := <-respCh:
 		if resp.Flags&(TCPFlagSYN|TCPFlagACK) != (TCPFlagSYN | TCPFlagACK) {

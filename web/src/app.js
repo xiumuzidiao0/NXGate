@@ -256,19 +256,48 @@ import { I18N } from './i18n.js';
         }
 
         async function probeTunnelUnlock(tunnelId) {
-            appendLog({ level: 'INFO', module: 'Unlock', message: `正在对隧道 ${tunnelId} 启动流媒体与 AI 解锁探测...` });
+            const isEn = getLanguage() === 'en';
+            appendLog({ level: 'INFO', module: 'Unlock', message: `正在对出口 [${tunnelId}] 启动流媒体与 AI 解锁探测...` });
+            const btn = document.querySelector(`[data-action="probeTunnelUnlock"][data-args*="${tunnelId}"]`);
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = `<span class="status-dot status-dot-warning animate-pulse"></span> ${isEn ? 'Probing...' : '探测中...'}`;
+            }
             try {
-                await fetch('/api/unlock/probe', {
+                const res = await fetch('/api/unlock/probe', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ tunnel_id: tunnelId })
                 });
-                setTimeout(async () => {
+                if (!res.ok) {
+                    const errData = await res.json().catch(() => ({}));
+                    tAlert('探测启动失败: ' + (errData.error || res.statusText), 'Probe failed: ' + (errData.error || res.statusText));
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.innerText = isEn ? 'Unlock' : '测解锁';
+                    }
+                    return;
+                }
+                tAlert('已启动解锁探测，正在实时检测三大 AI 与流媒体，请稍候...', 'Unlock probing started, checking AI & streaming services...');
+                let attempts = 0;
+                const pollInterval = setInterval(async () => {
+                    attempts++;
                     await fetchUnlockCache();
                     fetchStatus();
-                }, 3500);
+                    if (attempts >= 4) {
+                        clearInterval(pollInterval);
+                        if (btn) {
+                            btn.disabled = false;
+                            btn.innerText = isEn ? 'Unlock' : '测解锁';
+                        }
+                    }
+                }, 2500);
             } catch(err) {
                 tAlert('探测请求失败: ' + err, 'Probe request failed: ' + err);
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerText = isEn ? 'Unlock' : '测解锁';
+                }
             }
         }
 
