@@ -26,6 +26,7 @@ type DynamicGroup struct {
 	ConnectMode     string    `json:"connect_mode,omitempty"` // "tun" (内核虚拟网卡模式) or "zero_tun" (用户态免TUN模式)
 	Country         string    `json:"country"`           // "JP", "US", or "" for 全部
 	IPType          string    `json:"ip_type"`           // "residential", "hosting", "all"
+	PurityLevel     string    `json:"purity_level,omitempty"` // "any" (不限), "pure_residential" (仅极度纯净住宅 IP, Risk <= 15), "clean" (纯净/低风险 IP, Risk <= 35), "datacenter" (仅高速机房)
 	UnlockFilter    string    `json:"unlock_filter"`     // "none" (不限), "ai" (OpenAI/Claude), "streaming" (Netflix/Google), "all" (全解锁)
 	SortBy          string    `json:"sort_by"`           // "latency" (延迟优先), "speed" (带宽优先), "score" (评分优先)
 	TargetCount     int       `json:"target_count"`      // 维持并发隧道数 (主网关固定为 1, 其余组例如 3)
@@ -221,6 +222,9 @@ func (m *DynamicGroupManager) SaveGroup(g *DynamicGroup) error {
 	if g.IPType == "" {
 		g.IPType = "all"
 	}
+	if g.PurityLevel == "" {
+		g.PurityLevel = "any"
+	}
 	if g.UnlockFilter == "" {
 		g.UnlockFilter = "none"
 	}
@@ -304,8 +308,8 @@ func (m *DynamicGroupManager) GetTunnelsForGroups(groupIDs []string) []*Tunnel {
 	return healthy
 }
 
-// filterCandidatesForGroup evaluates and filters candidates matching specific country, IP type and unlock filter
-func (m *DynamicGroupManager) filterCandidatesForGroup(allCandidates []*nodes.Node, country, ipType, unlockFilter string) []*nodes.Node {
+// filterCandidatesForGroup evaluates and filters candidates matching specific country, IP type, purity level and unlock filter
+func (m *DynamicGroupManager) filterCandidatesForGroup(allCandidates []*nodes.Node, country, ipType, purityLevel, unlockFilter string) []*nodes.Node {
 	var matched []*nodes.Node
 	targetCountry := strings.ToUpper(strings.TrimSpace(country))
 	isFavoritesGroup := targetCountry == "FAVORITES"
@@ -324,6 +328,25 @@ func (m *DynamicGroupManager) filterCandidatesForGroup(allCandidates []*nodes.No
 		if ipType != "" && ipType != "all" {
 			if n.IPType != ipType {
 				continue
+			}
+		}
+		if purityLevel != "" && purityLevel != "any" {
+			switch purityLevel {
+			case "pure_residential":
+				// Highly pure residential: is_residential && (risk_score <= 15 or pure)
+				if !n.IsResidential || (n.RiskScore > 15 && n.RiskLevel != nodes.RiskLevelPure) {
+					continue
+				}
+			case "clean":
+				// Clean / low risk: risk_score <= 35 or clean/pure
+				if n.RiskScore > 35 && n.RiskLevel != nodes.RiskLevelPure && n.RiskLevel != nodes.RiskLevelClean {
+					continue
+				}
+			case "datacenter":
+				// High speed datacenter: is_hosting or ip_type hosting/datacenter
+				if !n.IsHosting && n.IPType != "hosting" && n.IPType != "datacenter" {
+					continue
+				}
 			}
 		}
 		if unlockFilter != "" && unlockFilter != "none" {
@@ -354,7 +377,7 @@ func (m *DynamicGroupManager) EvaluateGroup(ctx context.Context, g *DynamicGroup
 	targetCountry := strings.ToUpper(strings.TrimSpace(g.Country))
 	isFavoritesGroup := targetCountry == "FAVORITES"
 
-	matched := m.filterCandidatesForGroup(allCandidates, g.Country, g.IPType, g.UnlockFilter)
+	matched := m.filterCandidatesForGroup(allCandidates, g.Country, g.IPType, g.PurityLevel, g.UnlockFilter)
 
 	inFallback := false
 	fallbackReason := ""
@@ -363,9 +386,9 @@ func (m *DynamicGroupManager) EvaluateGroup(ctx context.Context, g *DynamicGroup
 	if len(matched) == 0 && g.FallbackPolicy != "" && g.FallbackPolicy != "none" {
 		switch strings.ToLower(g.FallbackPolicy) {
 		case "favorites":
-			fb := m.filterCandidatesForGroup(allCandidates, "FAVORITES", g.IPType, g.UnlockFilter)
+			fb := m.filterCandidatesForGroup(allCandidates, "FAVORITES", g.IPType, g.PurityLevel, g.UnlockFilter)
 			if len(fb) == 0 {
-				fb = m.filterCandidatesForGroup(allCandidates, "FAVORITES", "all", "none")
+				fb = m.filterCandidatesForGroup(allCandidates, "FAVORITES", "all", "any", "none")
 			}
 			if len(fb) > 0 {
 				matched = fb
@@ -373,9 +396,9 @@ func (m *DynamicGroupManager) EvaluateGroup(ctx context.Context, g *DynamicGroup
 				fallbackReason = fmt.Sprintf("主目标 [%s] 候选枯竭，已自动级联降级至 [我的收藏组]", g.Country)
 			}
 		case "auto_low_latency", "latency":
-			fb := m.filterCandidatesForGroup(allCandidates, "ALL", g.IPType, g.UnlockFilter)
+			fb := m.filterCandidatesForGroup(allCandidates, "ALL", g.IPType, g.PurityLevel, g.UnlockFilter)
 			if len(fb) == 0 {
-				fb = m.filterCandidatesForGroup(allCandidates, "ALL", "all", "none")
+				fb = m.filterCandidatesForGroup(allCandidates, "ALL", "all", "any", "none")
 			}
 			if len(fb) > 0 {
 				matched = fb
@@ -383,9 +406,9 @@ func (m *DynamicGroupManager) EvaluateGroup(ctx context.Context, g *DynamicGroup
 				fallbackReason = fmt.Sprintf("主目标 [%s] 候选枯竭，已自动级联降级至 [全球低延迟组]", g.Country)
 			}
 		case "auto_speed", "speed":
-			fb := m.filterCandidatesForGroup(allCandidates, "ALL", g.IPType, g.UnlockFilter)
+			fb := m.filterCandidatesForGroup(allCandidates, "ALL", g.IPType, g.PurityLevel, g.UnlockFilter)
 			if len(fb) == 0 {
-				fb = m.filterCandidatesForGroup(allCandidates, "ALL", "all", "none")
+				fb = m.filterCandidatesForGroup(allCandidates, "ALL", "all", "any", "none")
 			}
 			if len(fb) > 0 {
 				matched = fb
@@ -394,7 +417,10 @@ func (m *DynamicGroupManager) EvaluateGroup(ctx context.Context, g *DynamicGroup
 			}
 		default:
 			cUpper := strings.ToUpper(g.FallbackPolicy)
-			fb := m.filterCandidatesForGroup(allCandidates, cUpper, g.IPType, g.UnlockFilter)
+			fb := m.filterCandidatesForGroup(allCandidates, cUpper, g.IPType, g.PurityLevel, g.UnlockFilter)
+			if len(fb) == 0 {
+				fb = m.filterCandidatesForGroup(allCandidates, cUpper, "all", "any", "none")
+			}
 			if len(fb) > 0 {
 				matched = fb
 				inFallback = true

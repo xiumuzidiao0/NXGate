@@ -1285,6 +1285,21 @@ import { I18N } from './i18n.js';
                 else if (g.unlock_filter === 'streaming') unlockText = `<span>${isEn ? 'Unlock: ' : '解锁: '}<strong class="unlock-stream">${isEn ? 'Streaming Only' : '仅流媒体'}</strong></span>`;
                 else if (g.unlock_filter === 'full' || g.unlock_filter === 'all') unlockText = `<span>${isEn ? 'Unlock: ' : '解锁: '}<strong class="unlock-full">${isEn ? 'Full Unlock (AI+Streaming)' : '全解锁 (三大 AI+流媒体)'}</strong></span>`;
 
+                let purityText = '';
+                if (g.purity_level === 'pure_residential') purityText = isEn ? 'Pure Residential (Risk ≤ 15)' : '极度纯净住宅 (Risk ≤ 15)';
+                else if (g.purity_level === 'clean') purityText = isEn ? 'Clean / Low Risk (Risk ≤ 35)' : '纯净/低风险 (Risk ≤ 35)';
+                else if (g.purity_level === 'datacenter') purityText = isEn ? 'Datacenter' : '高速机房';
+                const purityInfo = purityText ? `<span>${isEn ? 'Purity: ' : '纯净度: '}<strong class="text-accent">${escapeHtml(purityText)}</strong></span>` : '';
+
+                let purityBadge = '';
+                if (g.purity_level === 'pure_residential') {
+                    purityBadge = `<span class="badge badge-pure badge-mini" style="font-size:10px">🏡 ${isEn ? 'Pure Res' : '极纯住宅'}</span>`;
+                } else if (g.purity_level === 'clean') {
+                    purityBadge = `<span class="badge badge-info badge-mini" style="font-size:10px">🛡️ ${isEn ? 'Clean IP' : '纯净低风险'}</span>`;
+                } else if (g.purity_level === 'datacenter') {
+                    purityBadge = `<span class="badge badge-muted badge-mini" style="font-size:10px">🏢 ${isEn ? 'DC' : '机房'}</span>`;
+                }
+
                 const isSys = g.is_system || g.id === 'system-primary';
                 let countryStr = g.country ? `${getCountryName(g.country)} (${g.country})` : (isEn ? 'All Countries / Regions' : '全部国家/地区');
                 if (g.country === 'FAVORITES') {
@@ -1327,12 +1342,14 @@ import { I18N } from './i18n.js';
                                 <strong class="dynamic-group-name">${escapeHtml(g.name)}</strong>
                                 ${sysBadge}
                                 ${modeBadge}
+                                ${purityBadge}
                                 ${fallbackBadge}
                             </div>
                             <div class="dynamic-group-meta">
                                 <span>${isEn ? 'Driver: ' : '连接方式: '}<strong class="text-strong">${isZeroTun ? (isEn ? 'Zero-TUN' : '免TUN用户态') : (isEn ? 'Kernel TUN' : '内核虚拟网卡')}</strong></span>
                                 <span>${isEn ? 'Target: ' : '目标: '}<strong class="text-strong">${escapeHtml(countryStr)}</strong></span>
                                 <span>${isEn ? 'Type: ' : '类型: '}<strong class="text-strong">${escapeHtml(ipTypeText)}</strong></span>
+                                ${purityInfo}
                                 ${unlockText}
                                 ${fallbackInfo}
                                 <span>${isEn ? 'Policy: ' : '指标: '}<strong class="dynamic-metric">${metricText}</strong></span>
@@ -1357,6 +1374,8 @@ import { I18N } from './i18n.js';
             if (modeEl) modeEl.value = 'tun';
             document.getElementById('dg-country').value = 'JP';
             document.getElementById('dg-iptype').value = 'residential';
+            const purityEl = document.getElementById('dg-purity');
+            if (purityEl) purityEl.value = 'any';
             document.getElementById('dg-unlock').value = 'none';
             document.getElementById('dg-sortby').value = 'latency';
             const fallbackEl = document.getElementById('dg-fallback');
@@ -1384,6 +1403,8 @@ import { I18N } from './i18n.js';
             if (modeEl) modeEl.value = g.connect_mode || 'tun';
             document.getElementById('dg-country').value = g.country || '';
             document.getElementById('dg-iptype').value = g.ip_type || 'all';
+            const purityEl = document.getElementById('dg-purity');
+            if (purityEl) purityEl.value = g.purity_level || 'any';
             document.getElementById('dg-unlock').value = g.unlock_filter || 'none';
             document.getElementById('dg-sortby').value = g.sort_by || 'latency';
             const fallbackEl = document.getElementById('dg-fallback');
@@ -1401,6 +1422,7 @@ import { I18N } from './i18n.js';
             const connectMode = document.getElementById('dg-connect-mode')?.value || 'tun';
             const country = document.getElementById('dg-country').value;
             const ipType = document.getElementById('dg-iptype').value;
+            const purityLevel = document.getElementById('dg-purity')?.value || 'any';
             const unlockFilter = document.getElementById('dg-unlock').value;
             const sortBy = document.getElementById('dg-sortby').value;
             const fallbackPolicy = document.getElementById('dg-fallback')?.value || 'none';
@@ -1415,6 +1437,7 @@ import { I18N } from './i18n.js';
                 connect_mode: connectMode,
                 country: country,
                 ip_type: ipType,
+                purity_level: purityLevel,
                 unlock_filter: unlockFilter,
                 sort_by: sortBy,
                 fallback_policy: fallbackPolicy,
