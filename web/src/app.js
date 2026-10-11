@@ -407,11 +407,37 @@ import { I18N } from './i18n.js';
                             const pingVal = (t.node && t.node.latency_ms > 0) ? t.node.latency_ms : (t.latency_ms > 0 ? t.latency_ms : 0);
                             const pingStr = pingVal > 0 ? `<span class="ping-ok">${pingVal}ms</span>` : '';
                             const statusStr = t.status === 'connected' ? (isEn ? 'Online' : '在线') : (t.status === 'connecting' ? (isEn ? 'Connecting' : '连接中') : (isEn ? 'Disconnected' : '断开'));
+
+                            const modeBadge = t.is_userland
+                                ? `<span class="badge badge-warning badge-mini" title="${isEn ? 'Userland Zero-TUN direct connection' : '用户态免TUN直连'}">⚡ ${isEn ? 'Zero-TUN' : '免TUN'}</span>`
+                                : `<span class="badge badge-info badge-mini" title="${isEn ? 'Kernel TUN virtual network device' : '内核TUN虚拟网卡'}">🔷 ${isEn ? 'TUN' : '内核TUN'}</span>`;
+
+                            let purityBadge = '';
+                            if (t.node) {
+                                if (t.node.is_residential) {
+                                    purityBadge = `<span class="badge badge-pure badge-mini" title="${isEn ? 'Pure Residential IP' : '原生住宅家宽'}">🏡 ${isEn ? 'Res' : '住宅'}</span>`;
+                                } else if (t.node.is_hosting || t.node.ip_type === 'hosting' || t.node.ip_type === 'datacenter') {
+                                    purityBadge = `<span class="badge badge-muted badge-mini" title="${isEn ? 'Datacenter / Hosting IP' : '机房/数据中心'}">🏢 ${isEn ? 'DC' : '机房'}</span>`;
+                                }
+                                if (t.node.risk_score !== undefined && t.node.risk_score >= 0) {
+                                    const rScore = t.node.risk_score.toFixed(1);
+                                    if (t.node.risk_score <= 15) {
+                                        purityBadge += ` <span class="badge badge-success badge-mini" title="${isEn ? 'Low Risk Pure IP' : '低风险纯净IP'}">🟢 ${rScore}</span>`;
+                                    } else if (t.node.risk_score <= 35) {
+                                        purityBadge += ` <span class="badge badge-info badge-mini" title="${isEn ? 'Clean IP' : '清洁IP'}">🔵 ${rScore}</span>`;
+                                    } else {
+                                        purityBadge += ` <span class="badge badge-danger badge-mini" title="${isEn ? 'Elevated Risk IP' : '较高风险IP'}">🟠 ${rScore}</span>`;
+                                    }
+                                }
+                            }
+
                             return `
                                 <div class="tunnel-chip">
                                     <strong class="mono text-accent">${escapeHtml(t.dev_name)}</strong>
+                                    ${modeBadge}
                                     <span class="badge ${badgeClass} badge-mini"><span class="status-dot"></span> ${escapeHtml(statusStr)}</span>
                                     <span class="flag-box text-note">${flag} ${escapeHtml(locStr)}${escapeHtml(ip)}</span>
+                                    ${purityBadge}
                                     ${pingStr}
                                     <div class="tunnel-flags">${unlockBadges}</div>
                                     <button class="btn btn-outline btn-xs" data-action="probeTunnelUnlock" data-args="${jsonAttr([t.id])}" title="${isEn ? 'Probe AI & streaming unlock status for this exit' : '探测该出口的AI与流媒体解锁状态'}">${isEn ? 'Unlock' : '测解锁'}</button>
@@ -2249,6 +2275,27 @@ import { I18N } from './i18n.js';
                     authBadge = `<span class="auth-note text-accent">${isEn ? 'Custom: ' : '独立账号: '}${escapeHtml(r.auth_user || (isEn ? 'Not Set' : '未设'))}</span>`;
                 }
 
+                let constraintBadges = [];
+                if (r.connect_mode === 'tun') {
+                    constraintBadges.push(`<span class="badge badge-info badge-mini">${isEn ? 'Kernel TUN' : '🔷 仅内核TUN'}</span>`);
+                } else if (r.connect_mode === 'zero_tun') {
+                    constraintBadges.push(`<span class="badge badge-warning badge-mini">${isEn ? '⚡ Zero-TUN' : '⚡ 仅免TUN'}</span>`);
+                }
+
+                if (r.purity_level === 'pure_residential') {
+                    constraintBadges.push(`<span class="badge badge-pure badge-mini">${isEn ? 'Pure Res' : '🏡 仅纯净住宅'}</span>`);
+                } else if (r.purity_level === 'clean') {
+                    constraintBadges.push(`<span class="badge badge-info badge-mini">${isEn ? 'Clean IP' : '🛡️ 纯净/低风险'}</span>`);
+                } else if (r.purity_level === 'datacenter') {
+                    constraintBadges.push(`<span class="badge badge-muted badge-mini">${isEn ? 'Datacenter' : '🏢 仅高速机房'}</span>`);
+                }
+
+                if (r.strict_match) {
+                    constraintBadges.push(`<span class="badge badge-danger badge-mini">${isEn ? 'Strict' : '🚫 严格匹配'}</span>`);
+                }
+
+                const constraintHtml = constraintBadges.length > 0 ? constraintBadges.join(' ') : `<span class="auth-note">${isEn ? 'Unrestricted' : '不限形态/纯净度'}</span>`;
+
                 let boundBadges = [];
                 if (r.bound_group_ids && r.bound_group_ids.length > 0) {
                     r.bound_group_ids.forEach(gid => {
@@ -2304,6 +2351,10 @@ import { I18N } from './i18n.js';
                                 <div class="port-card-val">${policyBadge}</div>
                             </div>
                             <div class="port-card-col">
+                                <span class="port-card-label">${isEn ? 'Egress Constraints' : '形态与纯净度约束'}</span>
+                                <div class="port-card-val">${constraintHtml}</div>
+                            </div>
+                            <div class="port-card-col">
                                 <span class="port-card-label">${isEn ? 'Bound Egress / Exit Groups' : '绑定出口 / 动态出口组'}</span>
                                 <div class="port-card-val">${boundHtml}</div>
                             </div>
@@ -2327,6 +2378,12 @@ import { I18N } from './i18n.js';
             selectAuthMode('random');
             document.getElementById('rule-auth-user').value = '';
             document.getElementById('rule-auth-pass').value = '';
+            const cmEl = document.getElementById('rule-connect-mode');
+            if (cmEl) cmEl.value = 'all';
+            const plEl = document.getElementById('rule-purity-level');
+            if (plEl) plEl.value = 'any';
+            const smEl = document.getElementById('rule-strict-match');
+            if (smEl) smEl.checked = false;
             renderTunnelCheckboxes([], []);
             suggestNextPort();
             openEditorDrawer('port-edit-card');
@@ -2346,6 +2403,12 @@ import { I18N } from './i18n.js';
             selectAuthMode(aMode);
             document.getElementById('rule-auth-user').value = rule.auth_user || '';
             document.getElementById('rule-auth-pass').value = rule.auth_pass || '';
+            const cmEl = document.getElementById('rule-connect-mode');
+            if (cmEl) cmEl.value = rule.connect_mode || 'all';
+            const plEl = document.getElementById('rule-purity-level');
+            if (plEl) plEl.value = rule.purity_level || 'any';
+            const smEl = document.getElementById('rule-strict-match');
+            if (smEl) smEl.checked = !!rule.strict_match;
             renderTunnelCheckboxes(rule.bound_tunnel_ids || [], rule.bound_group_ids || []);
             openEditorDrawer('port-edit-card');
         }
@@ -2513,7 +2576,10 @@ import { I18N } from './i18n.js';
                 interval_seconds: interval,
                 auth_mode: authMode,
                 auth_user: authUser,
-                auth_pass: authPass
+                auth_pass: authPass,
+                connect_mode: document.getElementById('rule-connect-mode')?.value || 'all',
+                purity_level: document.getElementById('rule-purity-level')?.value || 'any',
+                strict_match: !!document.getElementById('rule-strict-match')?.checked
             };
 
             let updatedRules = currentPortRules ? [...currentPortRules] : [];

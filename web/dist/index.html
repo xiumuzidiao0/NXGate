@@ -24,7 +24,7 @@
                 </div>
                 <div class="brand-text">
                     <div class="brand-title">NXGate</div>
-                    <div class="brand-sub"><span data-i18n="brand.sub">多出口智能网关</span> <span class="version-trigger" data-action="openUpdateModal" title="点击检查系统更新"><span id="sidebar-version-badge" class="badge-ver">v2.6.5</span></span></div>
+                    <div class="brand-sub"><span data-i18n="brand.sub">多出口智能网关</span> <span class="version-trigger" data-action="openUpdateModal" title="点击检查系统更新"><span id="sidebar-version-badge" class="badge-ver">v2.6.5.1</span></span></div>
                 </div>
             </div>
 
@@ -80,7 +80,7 @@
                     </button>
                     <h1 id="page-title">运行概览</h1>
                     <span id="conn-badge" class="badge disconnected"><span class="status-dot"></span> 检查中</span>
-                    <span class="version-trigger" data-action="openUpdateModal" title="点击检查系统更新"><span id="app-version-badge" class="badge badge-accent">v2.6.5</span><span id="header-update-dot" class="badge-dot-pulse hidden" title="发现新版本"></span></span>
+                    <span class="version-trigger" data-action="openUpdateModal" title="点击检查系统更新"><span id="app-version-badge" class="badge badge-accent">v2.6.5.1</span><span id="header-update-dot" class="badge-dot-pulse hidden" title="发现新版本"></span></span>
                 </div>
 
                 <div class="header-actions">
@@ -1306,6 +1306,33 @@
                     <button type="button" class="btn btn-outline btn-sm whitespace-nowrap" data-action="generateRandomPortAuth" data-i18n="pe.random_gen">随机生成</button>
                 </div>
             </div>
+        </div>
+
+        <div class="form-grid-auto">
+            <div>
+                <label class="form-label" data-i18n="pe.connect_mode_label">出口连接形态约束</label>
+                <select id="rule-connect-mode" class="input-field w-full">
+                    <option value="all" data-i18n="pe.cm_all">全部形态 (内核TUN + 免TUN混合)</option>
+                    <option value="tun" data-i18n="pe.cm_tun">仅内核 TUN 网卡出口</option>
+                    <option value="zero_tun" data-i18n="pe.cm_zero">仅⚡免TUN 用户态直连口</option>
+                </select>
+            </div>
+            <div>
+                <label class="form-label" data-i18n="pe.purity_level_label">IP 纯净度等级要求</label>
+                <select id="rule-purity-level" class="input-field w-full">
+                    <option value="any" data-i18n="pe.purity_any">不限纯净度 (全部可用节点)</option>
+                    <option value="pure_residential" data-i18n="pe.purity_pure">仅极度纯净住宅 IP (Risk ≤ 15)</option>
+                    <option value="clean" data-i18n="pe.purity_clean">纯净/低风险 IP (Risk ≤ 35)</option>
+                    <option value="datacenter" data-i18n="pe.purity_dc">仅高速机房 IP (大流量下载)</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label class="checkbox-label flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" id="rule-strict-match" class="toggle-checkbox">
+                <span class="text-sm font-medium" data-i18n="pe.strict_match_label">严格模式 (无满足条件的出口时拒绝转发，防止因降权机房导致业务账号风控)</span>
+            </label>
         </div>
 
         <div class="form-group">

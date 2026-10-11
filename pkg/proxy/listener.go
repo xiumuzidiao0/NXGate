@@ -26,6 +26,9 @@ type PortRule struct {
 	AuthMode            string     `json:"auth_mode"` // "random", "custom", "none" (legacy "default_web")
 	AuthUser            string     `json:"auth_user"`
 	AuthPass            string     `json:"auth_pass"`
+	ConnectMode         string     `json:"connect_mode,omitempty"` // "all" (默认), "tun" (仅内核TUN), "zero_tun" (仅免TUN直连)
+	PurityLevel         string     `json:"purity_level,omitempty"` // "any" (默认), "pure_residential" (仅纯净住宅), "clean" (纯净/低风险), "datacenter" (仅高速机房)
+	StrictMatch         bool       `json:"strict_match,omitempty"` // 严格模式: 无满足条件的出口时拒绝转发(防风控)
 }
 
 type PortListener struct {
@@ -208,7 +211,7 @@ func (l *PortListener) dispatch(client net.Conn) {
 
 	// 3. Fall back to standard tunnel scheduler
 	if dialer == nil && l.scheduler != nil {
-		if tun := l.scheduler.SelectTunnel(l.rule.Port, l.rule.BoundTunnelIDs, l.rule.BoundGroupIDs, l.rule.Policy, l.rule.IntervalSeconds); tun != nil {
+		if tun := l.scheduler.SelectTunnelForRule(l.rule); tun != nil {
 			selectedTun = tun
 			devName = tun.DevName
 		}
