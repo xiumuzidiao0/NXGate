@@ -233,6 +233,25 @@ fun RoutingMatrixScreen(
     }
     var selectedGroupIpTypeOption by remember { mutableStateOf(groupIpTypeOptions[1]) }
 
+    val groupPurityOptions = remember(isEn) {
+        listOf(
+            GroupPurityOption("any", if (isEn) "Any Purity Level (Default)" else "不限纯净度要求 (默认)"),
+            GroupPurityOption("pure_residential", if (isEn) "Pure Residential (Risk <= 15)" else "极度纯净家宽 (风控分 <= 15 且原生家宽)"),
+            GroupPurityOption("clean", if (isEn) "Clean IP (Risk <= 35)" else "清洁低风险 IP (风控分 <= 35)"),
+            GroupPurityOption("datacenter", if (isEn) "Datacenter / Hosting IP" else "高速机房 / 数据中心托管")
+        )
+    }
+    var selectedGroupPurityOption by remember { mutableStateOf(groupPurityOptions[0]) }
+
+    val groupConnectModeOptions = remember(isEn) {
+        listOf(
+            GroupConnectModeOption("any", if (isEn) "Adaptive (Zero-TUN Preferred)" else "智能自适应 (默认)"),
+            GroupConnectModeOption("zero_tun", if (isEn) "Userland Zero-TUN (SSTP)" else "用户态免 TUN (SSTP 直连)"),
+            GroupConnectModeOption("kernel", if (isEn) "Kernel TUN (OpenVPN)" else "Linux 内核 TUN (OpenVPN)")
+        )
+    }
+    var selectedGroupConnectModeOption by remember { mutableStateOf(groupConnectModeOptions[0]) }
+
     val groupUnlockOptions = remember(isEn) {
         listOf(
             GroupUnlockOption("none", if (isEn) "Any Unlock Capability" else "不限解锁能力 (全量候选)"),
@@ -247,11 +266,11 @@ fun RoutingMatrixScreen(
     val groupFallbackOptions = remember(isEn) {
         listOf(
             GroupFallbackOption("none", if (isEn) "No Fallback (Block on exhaustion)" else "不启用兜底 (候选枯竭时阻断)"),
-            GroupFallbackOption("favorites", if (isEn) "⭐ Fallback to Favorites (Recommended)" else "⭐ 降级至我的收藏节点 (推荐)"),
-            GroupFallbackOption("auto_low_latency", if (isEn) "⚡ Fallback to Lowest Latency" else "⚡ 降级至全球最低延迟节点"),
-            GroupFallbackOption("auto_speed", if (isEn) "🚀 Fallback to Highest Speed" else "🚀 降级至全球最高带宽节点"),
-            GroupFallbackOption("JP", if (isEn) "🇯🇵 Fallback to Japan Egress" else "🇯🇵 降级至日本出口"),
-            GroupFallbackOption("US", if (isEn) "🇺🇸 Fallback to US Egress" else "🇺🇸 降级至美国出口")
+            GroupFallbackOption("favorites", if (isEn) "Fallback to Favorites (Recommended)" else "降级至我的收藏节点 (推荐)"),
+            GroupFallbackOption("auto_low_latency", if (isEn) "Fallback to Lowest Latency" else "降级至全球最低延迟节点"),
+            GroupFallbackOption("auto_speed", if (isEn) "Fallback to Highest Speed" else "降级至全球最高带宽节点"),
+            GroupFallbackOption("JP", if (isEn) "Fallback to Japan Egress" else "降级至日本出口"),
+            GroupFallbackOption("US", if (isEn) "Fallback to US Egress" else "降级至美国出口")
         )
     }
     var selectedGroupFallbackOption by remember { mutableStateOf(groupFallbackOptions[1]) }
@@ -682,6 +701,8 @@ fun RoutingMatrixScreen(
                                         groupNameInput = g.name
                                         selectedGroupCountryOption = groupCountryOptions.find { it.code.equals(g.country, true) } ?: groupCountryOptions[1]
                                         selectedGroupIpTypeOption = groupIpTypeOptions.find { it.key.equals(g.ipType, true) } ?: groupIpTypeOptions[1]
+                                        selectedGroupPurityOption = groupPurityOptions.find { it.key.equals(g.purityLevel, true) } ?: groupPurityOptions[0]
+                                        selectedGroupConnectModeOption = groupConnectModeOptions.find { it.key.equals(g.connectMode, true) } ?: groupConnectModeOptions[0]
                                         selectedGroupUnlockOption = groupUnlockOptions.find { it.key.equals(g.unlockFilter, true) } ?: groupUnlockOptions[1]
                                         selectedGroupSortOption = groupSortOptions.find { it.key.equals(g.sortBy, true) } ?: groupSortOptions[0]
                                         selectedGroupFallbackOption = groupFallbackOptions.find { it.key.equals(g.fallbackPolicy, true) } ?: groupFallbackOptions[1]
@@ -706,6 +727,8 @@ fun RoutingMatrixScreen(
                                         groupNameInput = group.name
                                         selectedGroupCountryOption = groupCountryOptions.find { it.code.equals(group.country, true) } ?: groupCountryOptions[1]
                                         selectedGroupIpTypeOption = groupIpTypeOptions.find { it.key.equals(group.ipType, true) } ?: groupIpTypeOptions[1]
+                                        selectedGroupPurityOption = groupPurityOptions.find { it.key.equals(group.purityLevel, true) } ?: groupPurityOptions[0]
+                                        selectedGroupConnectModeOption = groupConnectModeOptions.find { it.key.equals(group.connectMode, true) } ?: groupConnectModeOptions[0]
                                         selectedGroupUnlockOption = groupUnlockOptions.find { it.key.equals(group.unlockFilter, true) } ?: groupUnlockOptions[1]
                                         selectedGroupSortOption = groupSortOptions.find { it.key.equals(group.sortBy, true) } ?: groupSortOptions[0]
                                         selectedGroupFallbackOption = groupFallbackOptions.find { it.key.equals(group.fallbackPolicy, true) } ?: groupFallbackOptions[1]
@@ -730,6 +753,8 @@ fun RoutingMatrixScreen(
                                         groupNameInput = if (isEn) "Residential Exit Group" else "新动态出口组"
                                         selectedGroupCountryOption = groupCountryOptions[1]
                                         selectedGroupIpTypeOption = groupIpTypeOptions[1]
+                                        selectedGroupPurityOption = groupPurityOptions[0]
+                                        selectedGroupConnectModeOption = groupConnectModeOptions[0]
                                         selectedGroupUnlockOption = groupUnlockOptions[1]
                                         selectedGroupSortOption = groupSortOptions[0]
                                         selectedGroupFallbackOption = groupFallbackOptions[1]
@@ -1037,6 +1062,24 @@ fun RoutingMatrixScreen(
                         optionLabel = { it.label }
                     )
 
+                    // IP 纯净度等级要求下拉框
+                    AppExposedDropdown(
+                        label = if (isEn) "IP Purity Level" else "IP 纯净度等级要求",
+                        options = groupPurityOptions,
+                        selectedOption = selectedGroupPurityOption,
+                        onOptionSelected = { selectedGroupPurityOption = it },
+                        optionLabel = { it.label }
+                    )
+
+                    // 出口连接形态下拉框
+                    AppExposedDropdown(
+                        label = if (isEn) "Connection Mode" else "出口连接形态",
+                        options = groupConnectModeOptions,
+                        selectedOption = selectedGroupConnectModeOption,
+                        onOptionSelected = { selectedGroupConnectModeOption = it },
+                        optionLabel = { it.label }
+                    )
+
                     // 解锁要求下拉框
                     AppExposedDropdown(
                         label = if (isEn) "Unlock Requirement" else "节点解锁要求",
@@ -1096,6 +1139,8 @@ fun RoutingMatrixScreen(
                             targetCount = selectedGroupTargetCountOption.count,
                             intervalMinutes = selectedGroupIntervalOption.minutes,
                             ipType = selectedGroupIpTypeOption.key,
+                            purityLevel = selectedGroupPurityOption.key,
+                            connectMode = selectedGroupConnectModeOption.key,
                             unlockFilter = selectedGroupUnlockOption.key,
                             sortBy = selectedGroupSortOption.key,
                             fallbackPolicy = selectedGroupFallbackOption.key,

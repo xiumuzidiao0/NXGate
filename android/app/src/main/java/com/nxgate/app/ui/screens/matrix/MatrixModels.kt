@@ -10,6 +10,8 @@ data class PortAuthOption(val key: String, val label: String)
 
 data class GroupCountryOption(val code: String, val label: String)
 data class GroupIpTypeOption(val key: String, val label: String)
+data class GroupPurityOption(val key: String, val label: String)
+data class GroupConnectModeOption(val key: String, val label: String)
 data class GroupUnlockOption(val key: String, val label: String)
 data class GroupSortOption(val key: String, val label: String)
 data class GroupTargetCountOption(val count: Int, val label: String)

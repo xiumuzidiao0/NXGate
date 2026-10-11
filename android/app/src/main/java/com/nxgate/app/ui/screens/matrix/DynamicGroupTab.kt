@@ -101,12 +101,18 @@ fun DynamicGroupTab(
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Row(verticalAlignment = Alignment.CenterVertically) {
+                                    val modeSuffix = when (group.connectMode) {
+                                        "zero_tun" -> " [免TUN]"
+                                        "kernel" -> " [内核TUN]"
+                                        else -> ""
+                                    }
                                     val badgeText = if (group.isSystem) {
-                                        if (isEn) "Primary (tun0)" else "系统主出口(tun0)"
+                                        val sysMode = if (group.connectMode == "zero_tun") "免TUN" else "tun0"
+                                        if (isEn) "Primary ($sysMode)" else "系统主出口 ($sysMode)"
                                     } else if (group.country.equals("FAVORITES", true)) {
-                                        "⭐ ${strings.favoritesGroupBadge} (${group.targetCount}${if (isEn) " NICs" else "网卡"})"
+                                        "${strings.favoritesGroupBadge} (${group.targetCount}${if (isEn) " NICs" else "网卡"})$modeSuffix"
                                     } else {
-                                        if (isEn) "Exit Group (${group.targetCount} NICs)" else "出口组 (${group.targetCount}网卡)"
+                                        if (isEn) "Exit Group (${group.targetCount} NICs)$modeSuffix" else "出口组 (${group.targetCount}网卡)$modeSuffix"
                                     }
                                     Text(
                                         text = badgeText,

@@ -162,7 +162,9 @@ data class MasterGatewayInfo(
     val latencyMs: Int = 0,
     val uptimeStr: String = "0秒",
     val status: String = "未连接",
-    val isConnected: Boolean = false
+    val isConnected: Boolean = false,
+    val isZeroTun: Boolean = false,
+    val driverMode: String = "kernel"
 )
 
 data class AvailableOutbound(
@@ -190,16 +192,25 @@ data class TunnelItem(
     val uptimeSeconds: Long = 0,
     val throughputBps: Long = 0,
     val throughputPassed: Boolean = true,
+    val isUserland: Boolean = false,
+    val isResidential: Boolean = false,
+    val isHosting: Boolean = false,
+    val riskScore: Float = -1.0f,
+    val riskLevel: String = "unknown",
+    val riskLabel: String = "",
     val openai: String = "unknown",
     val claude: String = "unknown",
     val gemini: String = "unknown",
     val netflix: String = "unknown"
 ) {
     val isMaster: Boolean
-        get() = devIndex == 0 || devName == "tun0"
+        get() = devIndex == 0 || devName == "tun0" || id == "primary-userland"
+
+    val modeBadge: String
+        get() = if (isUserland || devName.startsWith("sstp")) "[免TUN]" else "[内核TUN]"
 
     val title: String
-        get() = "$devName ${if (isMaster) "(系统主网关出口)" else "(并发独立出口)"} • 延迟${if (latencyMs > 0) "${latencyMs}ms" else "就绪"}"
+        get() = "$devName $modeBadge ${if (isMaster) "(系统主网关出口)" else "(并发独立出口)"} • 延迟${if (latencyMs > 0) "${latencyMs}ms" else "就绪"}"
 
     val subtitle: String
         get() {
@@ -208,7 +219,9 @@ data class TunnelItem(
             val hours = uptimeSeconds / 3600
             val mins = (uptimeSeconds % 3600) / 60
             val up = if (hours > 0) "${hours}h${mins}m" else "${mins}m"
-            return "$c($nodeIp) • 运行 $up $tp"
+            val res = if (isResidential) " [住宅]" else if (isHosting) " [机房]" else ""
+            val risk = if (riskScore >= 0) " [评分: %.1f]".format(riskScore) else ""
+            return "$c($nodeIp)$res$risk • 运行 $up $tp"
         }
 }
 
@@ -261,6 +274,8 @@ data class DynamicGroupCard(
     val isSystem: Boolean = false,
     val country: String = "",
     val ipType: String = "all", // "all", "residential", "hosting"
+    val purityLevel: String = "any", // "any", "pure_residential", "clean", "datacenter"
+    val connectMode: String = "any", // "any", "zero_tun", "kernel"
     val unlockFilter: String = "none", // "none", "connectivity", "ai", "streaming", "all"
     val sortBy: String = "latency", // "latency", "speed", "score"
     val targetCount: Int = 1,
@@ -276,11 +291,22 @@ data class DynamicGroupCard(
 
     val description: String
         get() {
-            val c = if (country.isNotEmpty()) (if (country.equals("FAVORITES", true)) "⭐ 我的收藏池" else country) else "全部国家"
+            val c = if (country.isNotEmpty()) (if (country.equals("FAVORITES", true)) "我的收藏池" else country) else "全部国家"
             val ip = when (ipType) {
                 "residential" -> "住宅宽带"
                 "hosting" -> "机房托管"
                 else -> "全部网络"
+            }
+            val purity = when (purityLevel) {
+                "pure_residential" -> "极度纯净家宽(评分<=15)"
+                "clean" -> "清洁低风险(评分<=35)"
+                "datacenter" -> "高速机房"
+                else -> "不限纯净度"
+            }
+            val mode = when (connectMode) {
+                "zero_tun" -> "免TUN直连"
+                "kernel" -> "内核TUN"
+                else -> "智能自适应"
             }
             val ul = when (unlockFilter) {
                 "ai" -> "智能服务全通过"
@@ -290,13 +316,13 @@ data class DynamicGroupCard(
                 else -> "不限"
             }
             val fb = when (fallbackPolicy) {
-                "favorites" -> "⭐ 收藏组"
-                "auto_low_latency" -> "⚡ 最低延迟"
-                "auto_speed" -> "🚀 最高带宽"
+                "favorites" -> "收藏组"
+                "auto_low_latency" -> "最低延迟"
+                "auto_speed" -> "最高带宽"
                 "none" -> "关闭"
                 else -> fallbackPolicy
             }
-            return "国家目标：$c\n网络类型：$ip\n解锁要求：$ul；兜底级联：$fb\n维持数量：$targetCount 个并发，评估周期：$intervalMinutes 分钟"
+            return "国家目标：$c\n网络与纯净：$ip • $purity • $mode\n解锁要求：$ul；兜底级联：$fb\n维持数量：$targetCount 个并发，评估周期：$intervalMinutes 分钟"
         }
 }
 
@@ -335,6 +361,14 @@ data class NodeCandidate(
     val speedBps: Long = 0,
     val ipType: String = "unknown",
     val isFavorite: Boolean = false,
+    val isResidential: Boolean = false,
+    val isHosting: Boolean = false,
+    val riskScore: Float = -1.0f,
+    val riskLevel: String = "unknown",
+    val riskLabel: String = "",
+    val fraudFlags: List<String> = emptyList(),
+    val sstpPort: Int = 0,
+    val resConfidence: Int = 0,
     val openai: String = "unknown",
     val claude: String = "unknown",
     val gemini: String = "unknown",
@@ -349,11 +383,17 @@ data class NodeCandidate(
         get() = "%.1f Mb/s".format(speedBps / 1000000.0)
 
     val ipTypeDisplay: String
-        get() = when (ipType) {
-            "residential" -> "原生家宽"
-            "hosting" -> "机房托管"
+        get() = when {
+            isResidential || ipType == "residential" -> "原生家宽"
+            isHosting || ipType == "hosting" || ipType == "datacenter" -> "机房托管"
             else -> "普通网络"
         }
+
+    val riskDisplay: String
+        get() = if (riskScore >= 0) "评分: %.1f (${riskLabel.ifEmpty { riskLevel }})".format(riskScore) else "待评"
+
+    val sstpDisplay: String
+        get() = if (sstpPort > 0) " [免TUN: $sstpPort]" else ""
 
     val unlockDisplay: String
         get() {
@@ -370,7 +410,7 @@ data class NodeCandidate(
         }
 
     val description: String
-        get() = "运营商：${isp.ifEmpty { "骨干运营商" }}，信誉评分 $score\n属性：$ipTypeDisplay，速度 $speedMbStr\n实测解锁：$unlockDisplay"
+        get() = "运营商：${isp.ifEmpty { "骨干运营商" }}，信誉评分 $score\n属性：$ipTypeDisplay$sstpDisplay，风险：$riskDisplay，速度 $speedMbStr\n实测解锁：$unlockDisplay"
 }
 
 data class BlacklistRecord(

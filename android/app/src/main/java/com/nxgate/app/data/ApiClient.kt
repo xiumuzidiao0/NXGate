@@ -184,18 +184,23 @@ class ApiClient {
                 val activeNode = vpnObj?.optString("active_node_id", "") ?: ""
                 val status = vpnObj?.optString("status", "disconnected") ?: "disconnected"
                 val uptimeSec = vpnObj?.optLong("uptime_seconds", 0) ?: 0
+                val isZeroTun = vpnObj?.optBoolean("zero_tun", false) ?: false
+                val driverMode = vpnObj?.optString("driver_mode", if (isZeroTun) "userland" else "kernel") ?: if (isZeroTun) "userland" else "kernel"
 
                 val hours = uptimeSec / 3600
                 val mins = (uptimeSec % 3600) / 60
                 val uptimeStr = if (hours > 0) "${hours}小时${mins}分" else "${mins}分钟"
 
                 val isConnected = status == "connected"
+                val devLabel = if (isZeroTun) "主网关 (免TUN)" else "主网卡零号 (tun0)"
                 val masterInfo = MasterGatewayInfo(
-                    devName = "主网卡零号 (tun0)",
+                    devName = devLabel,
                     nodeName = if (activeNode.isNotEmpty()) activeNode else "未连接",
                     uptimeStr = uptimeStr,
                     status = if (isConnected) "断流检测通过" else "未连接",
-                    isConnected = isConnected
+                    isConnected = isConnected,
+                    isZeroTun = isZeroTun,
+                    driverMode = driverMode
                 )
 
                 // 2. Real-time Traffic snapshot
@@ -233,6 +238,13 @@ class ApiClient {
                         val throughputBps = unlockObj?.optLong("throughput_bps", 0) ?: 0
                         val throughputPassed = unlockObj?.optBoolean("throughput_passed", true) ?: true
 
+                        val isUserland = obj.optBoolean("is_userland", false) || devName.startsWith("sstp")
+                        val isResidential = nodeObj?.optBoolean("is_residential", false) ?: false
+                        val isHosting = nodeObj?.optBoolean("is_hosting", false) ?: (nodeObj?.optString("ip_type") == "hosting" || nodeObj?.optString("ip_type") == "datacenter")
+                        val riskScore = nodeObj?.optDouble("risk_score", -1.0)?.toFloat() ?: -1.0f
+                        val riskLevel = nodeObj?.optString("risk_level", "unknown") ?: "unknown"
+                        val riskLabel = nodeObj?.optString("risk_label", "") ?: ""
+
                         tunnelsList.add(
                             TunnelItem(
                                 id = id,
@@ -246,6 +258,12 @@ class ApiClient {
                                 country = country,
                                 throughputBps = throughputBps,
                                 throughputPassed = throughputPassed,
+                                isUserland = isUserland,
+                                isResidential = isResidential,
+                                isHosting = isHosting,
+                                riskScore = riskScore,
+                                riskLevel = riskLevel,
+                                riskLabel = riskLabel,
                                 openai = unlockObj?.optString("openai", "unknown") ?: "unknown",
                                 claude = unlockObj?.optString("claude", "unknown") ?: "unknown",
                                 gemini = unlockObj?.optString("gemini", "unknown") ?: "unknown",
@@ -488,6 +506,8 @@ class ApiClient {
                             isSystem = obj.optBoolean("is_system", false),
                             country = obj.optString("country", "JP"),
                             ipType = obj.optString("ip_type", "residential"),
+                            purityLevel = obj.optString("purity_level", "any"),
+                            connectMode = obj.optString("connect_mode", "any"),
                             unlockFilter = obj.optString("unlock_filter", "ai"),
                             sortBy = obj.optString("sort_by", "latency"),
                             targetCount = obj.optInt("target_count", 3),
@@ -516,6 +536,8 @@ class ApiClient {
                 put("is_system", group.isSystem)
                 put("country", group.country)
                 put("ip_type", group.ipType)
+                put("purity_level", group.purityLevel)
+                put("connect_mode", group.connectMode)
                 put("unlock_filter", group.unlockFilter)
                 put("sort_by", group.sortBy)
                 put("fallback_policy", group.fallbackPolicy)
@@ -715,6 +737,21 @@ class ApiClient {
                     val cloudflare = unlockObj?.optString("cloudflare", "unknown") ?: "unknown"
                     val netflix = unlockObj?.optString("netflix", "unknown") ?: "unknown"
 
+                    val isResidential = obj.optBoolean("is_residential", false)
+                    val isHosting = obj.optBoolean("is_hosting", false) || (ipType == "hosting" || ipType == "datacenter")
+                    val riskScore = obj.optDouble("risk_score", -1.0).toFloat()
+                    val riskLevel = obj.optString("risk_level", "unknown")
+                    val riskLabel = obj.optString("risk_label", "")
+                    val sstpPort = obj.optInt("sstp_port", 0)
+                    val resConfidence = obj.optInt("res_confidence", 0)
+                    val fraudFlagsArr = obj.optJSONArray("fraud_flags")
+                    val fraudFlags = mutableListOf<String>()
+                    if (fraudFlagsArr != null) {
+                        for (k in 0 until fraudFlagsArr.length()) {
+                            fraudFlags.add(fraudFlagsArr.optString(k))
+                        }
+                    }
+
                     list.add(
                         NodeCandidate(
                             id = id,
@@ -728,6 +765,14 @@ class ApiClient {
                             speedBps = speed,
                             ipType = ipType,
                             isFavorite = isFav,
+                            isResidential = isResidential,
+                            isHosting = isHosting,
+                            riskScore = riskScore,
+                            riskLevel = riskLevel,
+                            riskLabel = riskLabel,
+                            fraudFlags = fraudFlags,
+                            sstpPort = sstpPort,
+                            resConfidence = resConfidence,
                             openai = openai,
                             claude = claude,
                             gemini = gemini,

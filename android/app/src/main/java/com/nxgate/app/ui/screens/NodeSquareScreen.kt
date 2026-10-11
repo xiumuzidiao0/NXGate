@@ -220,7 +220,7 @@ fun FullNodeCard(
                 }
             }
 
-            // Row 2: ISP + IP Type Badge
+            // Row 2: ISP + SSTP Pre-warm Port + IP Type + Risk Score
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -232,28 +232,64 @@ fun FullNodeCard(
                     color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.weight(1f)
                 )
-                val isRes = node.ipType == "residential"
-                Surface(
-                    shape = RoundedCornerShape(6.dp),
-                    color = if (isRes) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainer
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    if (node.sstpPort > 0) {
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = MaterialTheme.colorScheme.tertiaryContainer
+                        ) {
+                            Text(
+                                text = "免TUN ${node.sstpPort}",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+
+                    val isRes = node.isResidential || node.ipType == "residential"
+                    val isDc = node.isHosting || node.ipType == "hosting" || node.ipType == "datacenter"
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = if (isRes) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainer
                     ) {
-                        Icon(
-                            imageVector = if (isRes) Icons.Rounded.Home else Icons.Rounded.Domain,
-                            contentDescription = null,
-                            tint = if (isRes) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.size(12.dp)
-                        )
-                        Spacer(Modifier.width(3.dp))
                         Text(
-                            text = if (isRes) "原生家宽" else "机房托管",
+                            text = if (isRes) "原生家宽" else if (isDc) "机房托管" else "普通网络",
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Medium,
-                            color = if (isRes) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+                            color = if (isRes) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
                         )
+                    }
+
+                    if (node.riskScore >= 0) {
+                        val riskBg = when {
+                            node.riskScore <= 15 -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                            node.riskScore <= 35 -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
+                            else -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)
+                        }
+                        val riskColor = when {
+                            node.riskScore <= 15 -> MaterialTheme.colorScheme.primary
+                            node.riskScore <= 35 -> MaterialTheme.colorScheme.secondary
+                            else -> MaterialTheme.colorScheme.error
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = riskBg
+                        ) {
+                            Text(
+                                text = "风控 %.1f".format(node.riskScore),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = riskColor,
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                            )
+                        }
                     }
                 }
             }
@@ -354,7 +390,7 @@ fun NodeSquareScreen(
     var searchQuery by remember { mutableStateOf("") }
     var isSearchActive by remember { mutableStateOf(false) }
 
-    // Quick filter chips (包含我的收藏)
+    // Quick filter chips (包含我的收藏与新机制免TUN/纯净度过滤)
     var selectedChipIndex by remember { mutableIntStateOf(0) }
     val chipList = listOf(
         strings.filterAll,
@@ -362,7 +398,9 @@ fun NodeSquareScreen(
         strings.filterJapan,
         strings.filterUS,
         strings.filterResidential,
-        strings.filterTripleAI
+        strings.filterTripleAI,
+        if (strings == AppStringsEn) "Zero-TUN" else "免TUN直连",
+        if (strings == AppStringsEn) "Pure IP" else "极净低风控"
     )
 
     // Full nodes list from server (dynamically loaded)
@@ -492,8 +530,8 @@ fun NodeSquareScreen(
                         node.countryShort.equals(countryCode, ignoreCase = true)
 
                 val matchesIpType = when (ipKey) {
-                    "residential" -> node.ipType == "residential"
-                    "hosting" -> node.ipType == "hosting"
+                    "residential" -> node.isResidential || node.ipType == "residential"
+                    "hosting" -> node.isHosting || node.ipType == "hosting" || node.ipType == "datacenter"
                     else -> true
                 }
 
@@ -501,8 +539,10 @@ fun NodeSquareScreen(
                     1 -> node.isFavorite
                     2 -> node.countryShort.equals("JP", ignoreCase = true)
                     3 -> node.countryShort.equals("US", ignoreCase = true)
-                    4 -> node.ipType == "residential"
+                    4 -> node.isResidential || node.ipType == "residential"
                     5 -> node.openai == "unlocked" && node.claude == "unlocked" && node.gemini == "unlocked"
+                    6 -> node.sstpPort > 0
+                    7 -> (node.riskScore in 0.0f..15.0f) || node.riskLevel == "pure"
                     else -> true
                 }
                 matchesQuery && matchesCountry && matchesIpType && matchesChip
