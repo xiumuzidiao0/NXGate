@@ -437,7 +437,8 @@ import { I18N } from './i18n.js';
                             const pingStr = pingVal > 0 ? `<span class="ping-ok">${pingVal}ms</span>` : '';
                             const statusStr = t.status === 'connected' ? (isEn ? 'Online' : '在线') : (t.status === 'connecting' ? (isEn ? 'Connecting' : '连接中') : (isEn ? 'Disconnected' : '断开'));
 
-                            const modeBadge = t.is_userland
+                            const isZeroTun = !!t.is_userland || (typeof t.dev_name === 'string' && t.dev_name.startsWith('sstp'));
+                            const modeBadge = isZeroTun
                                 ? `<span class="badge badge-warning badge-mini" title="${isEn ? 'Userland Zero-TUN direct connection' : '用户态免TUN直连'}">⚡ ${isEn ? 'Zero-TUN' : '免TUN'}</span>`
                                 : `<span class="badge badge-info badge-mini" title="${isEn ? 'Kernel TUN virtual network device' : '内核TUN虚拟网卡'}">🔷 ${isEn ? 'TUN' : '内核TUN'}</span>`;
 

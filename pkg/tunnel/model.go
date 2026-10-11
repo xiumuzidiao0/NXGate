@@ -157,16 +157,20 @@ func (t *Tunnel) Snapshot() *Tunnel {
 	}
 
 	return &Tunnel{
-		ID:            t.ID,
-		DevName:       t.DevName,
-		DevIndex:      t.DevIndex,
-		Node:          t.Node,
-		Status:        t.Status,
-		Message:       t.Message,
-		ConnectedAt:   t.ConnectedAt,
-		Uptime:        uptime,
-		LatencyMs:     t.LatencyMs,
-		Unlock:        unlockCopy,
-		CircuitBroken: !t.circuitBrokenUntil.IsZero() && time.Now().Before(t.circuitBrokenUntil),
+		ID:             t.ID,
+		DevName:        t.DevName,
+		DevIndex:       t.DevIndex,
+		Node:           t.Node,
+		Status:         t.Status,
+		Message:        t.Message,
+		ConnectedAt:    t.ConnectedAt,
+		Uptime:         uptime,
+		LatencyMs:      t.LatencyMs,
+		Unlock:         unlockCopy,
+		CircuitBroken:  !t.circuitBrokenUntil.IsZero() && time.Now().Before(t.circuitBrokenUntil),
+		IsUserland:     t.IsUserland,
+		Dialer:         t.Dialer,
+		OpenPacketConn: t.OpenPacketConn,
+		Closer:         t.Closer,
 	}
 }

@@ -163,11 +163,14 @@ func TestCleanupTunnelIsIdempotentAndReleasesDevice(t *testing.T) {
 }
 
 func TestTunnelSnapshotCopiesUnlock(t *testing.T) {
-	tun := &Tunnel{ID: "tun-unlock", Status: StatusConnected}
+	tun := &Tunnel{ID: "tun-unlock", Status: StatusConnected, IsUserland: true}
 	result := &UnlockResult{OpenAI: StatusUnlocked, CheckedAt: time.Now()}
 	tun.SetUnlock(result)
 
 	snapshot := tun.Snapshot()
+	if !snapshot.IsUserland {
+		t.Fatal("snapshot did not copy IsUserland")
+	}
 	result.OpenAI = StatusBlocked
 	if snapshot.Unlock == nil || snapshot.Unlock.OpenAI != StatusUnlocked {
 		t.Fatal("snapshot retained a mutable unlock pointer")
