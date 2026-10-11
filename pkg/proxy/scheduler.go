@@ -6,7 +6,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"aimili-vpngate-go/pkg/nodes"
 	"aimili-vpngate-go/pkg/tunnel"
 )
 
@@ -21,7 +20,6 @@ const (
 
 type TunnelSelector interface {
 	SelectTunnel(port int, boundIDs []string, boundGroupIDs []string, policy PortPolicy, intervalSec int) *tunnel.Tunnel
-	SelectTunnelForRule(rule PortRule) *tunnel.Tunnel
 }
 
 type DefaultScheduler struct {
@@ -38,16 +36,6 @@ func NewScheduler(pool *tunnel.Pool, dm *tunnel.DynamicGroupManager) *DefaultSch
 }
 
 func (s *DefaultScheduler) SelectTunnel(port int, boundIDs []string, boundGroupIDs []string, policy PortPolicy, intervalSec int) *tunnel.Tunnel {
-	return s.SelectTunnelForRule(PortRule{
-		Port:            port,
-		BoundTunnelIDs:  boundIDs,
-		BoundGroupIDs:   boundGroupIDs,
-		Policy:          policy,
-		IntervalSeconds: intervalSec,
-	})
-}
-
-func (s *DefaultScheduler) SelectTunnelForRule(rule PortRule) *tunnel.Tunnel {
 	if s.pool == nil {
 		return nil
 	}
@@ -55,9 +43,9 @@ func (s *DefaultScheduler) SelectTunnelForRule(rule PortRule) *tunnel.Tunnel {
 	seen := make(map[string]bool)
 	var healthy []*tunnel.Tunnel
 
-	// 1. Resolve tunnels from bound dynamic groups
-	if s.dynamicMgr != nil && len(rule.BoundGroupIDs) > 0 {
-		groupTunnels := s.dynamicMgr.GetTunnelsForGroups(rule.BoundGroupIDs)
+	// 1. Resolve tunnels from bound dynamic groups (which already enforce PurityLevel, ConnectMode, Country, etc.)
+	if s.dynamicMgr != nil && len(boundGroupIDs) > 0 {
+		groupTunnels := s.dynamicMgr.GetTunnelsForGroups(boundGroupIDs)
 		for _, t := range groupTunnels {
 			if t.IsHealthy() && !seen[t.ID] {
 				healthy = append(healthy, t)
@@ -67,8 +55,8 @@ func (s *DefaultScheduler) SelectTunnelForRule(rule PortRule) *tunnel.Tunnel {
 	}
 
 	// 2. Resolve tunnels from explicitly bound static IDs
-	if len(rule.BoundTunnelIDs) > 0 {
-		staticTunnels := s.pool.GetHealthyTunnels(rule.BoundTunnelIDs)
+	if len(boundIDs) > 0 {
+		staticTunnels := s.pool.GetHealthyTunnels(boundIDs)
 		for _, t := range staticTunnels {
 			if t.IsHealthy() && !seen[t.ID] {
 				healthy = append(healthy, t)
@@ -112,75 +100,7 @@ func (s *DefaultScheduler) SelectTunnelForRule(rule PortRule) *tunnel.Tunnel {
 		}
 	}
 
-	// 3. Filter by ConnectMode (tun vs zero_tun)
-	filtered := filterTunnelsByConnectMode(healthy, rule.ConnectMode)
-
-	// 4. Filter by PurityLevel (pure_residential, clean, datacenter)
-	purityFiltered := filterTunnelsByPurity(filtered, rule.PurityLevel)
-
-	if len(purityFiltered) > 0 {
-		healthy = purityFiltered
-	} else {
-		// No tunnel matched the purity/mode criteria
-		if rule.StrictMatch {
-			// In strict mode, do not degrade! Refuse routing to prevent risk pollution
-			return nil
-		}
-		// Graceful degradation: prefer connect_mode filtered if non-empty, otherwise healthy
-		if len(filtered) > 0 {
-			healthy = filtered
-		}
-	}
-
-	return s.selectFromHealthy(healthy, rule.Policy, rule.IntervalSeconds)
-}
-
-func filterTunnelsByConnectMode(tunnels []*tunnel.Tunnel, mode string) []*tunnel.Tunnel {
-	if mode == "" || mode == "all" {
-		return tunnels
-	}
-	var res []*tunnel.Tunnel
-	for _, t := range tunnels {
-		if mode == "tun" && !t.IsUserland {
-			res = append(res, t)
-		} else if (mode == "zero_tun" || mode == "sstp") && t.IsUserland {
-			res = append(res, t)
-		}
-	}
-	return res
-}
-
-func filterTunnelsByPurity(tunnels []*tunnel.Tunnel, purity string) []*tunnel.Tunnel {
-	if purity == "" || purity == "any" {
-		return tunnels
-	}
-	var res []*tunnel.Tunnel
-	for _, t := range tunnels {
-		if t == nil || t.Node == nil {
-			continue
-		}
-		n := t.Node
-		switch purity {
-		case "pure_residential":
-			// Highly pure residential: is_residential && (risk_score <= 15 or pure)
-			if n.IsResidential && (n.RiskScore <= 15 || n.RiskLevel == nodes.RiskLevelPure) {
-				res = append(res, t)
-			}
-		case "clean":
-			// Clean / low risk: risk_score <= 35 or clean/pure
-			if n.RiskScore <= 35 || n.RiskLevel == nodes.RiskLevelPure || n.RiskLevel == nodes.RiskLevelClean {
-				res = append(res, t)
-			}
-		case "datacenter":
-			// High speed datacenter: is_hosting or ip_type hosting/datacenter
-			if n.IsHosting || n.IPType == "hosting" || n.IPType == "datacenter" {
-				res = append(res, t)
-			}
-		default:
-			res = append(res, t)
-		}
-	}
-	return res
+	return s.selectFromHealthy(healthy, policy, intervalSec)
 }
 
 func (s *DefaultScheduler) selectFromHealthy(healthy []*tunnel.Tunnel, policy PortPolicy, intervalSec int) *tunnel.Tunnel {

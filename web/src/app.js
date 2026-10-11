@@ -2331,27 +2331,6 @@ import { I18N } from './i18n.js';
                     authBadge = `<span class="auth-note text-accent">${isEn ? 'Custom: ' : '独立账号: '}${escapeHtml(r.auth_user || (isEn ? 'Not Set' : '未设'))}</span>`;
                 }
 
-                let constraintBadges = [];
-                if (r.connect_mode === 'tun') {
-                    constraintBadges.push(`<span class="badge badge-info badge-mini">${isEn ? 'Kernel TUN' : '🔷 仅内核TUN'}</span>`);
-                } else if (r.connect_mode === 'zero_tun') {
-                    constraintBadges.push(`<span class="badge badge-warning badge-mini">${isEn ? '⚡ Zero-TUN' : '⚡ 仅免TUN'}</span>`);
-                }
-
-                if (r.purity_level === 'pure_residential') {
-                    constraintBadges.push(`<span class="badge badge-pure badge-mini">${isEn ? 'Pure Res' : '🏡 仅纯净住宅'}</span>`);
-                } else if (r.purity_level === 'clean') {
-                    constraintBadges.push(`<span class="badge badge-info badge-mini">${isEn ? 'Clean IP' : '🛡️ 纯净/低风险'}</span>`);
-                } else if (r.purity_level === 'datacenter') {
-                    constraintBadges.push(`<span class="badge badge-muted badge-mini">${isEn ? 'Datacenter' : '🏢 仅高速机房'}</span>`);
-                }
-
-                if (r.strict_match) {
-                    constraintBadges.push(`<span class="badge badge-danger badge-mini">${isEn ? 'Strict' : '🚫 严格匹配'}</span>`);
-                }
-
-                const constraintHtml = constraintBadges.length > 0 ? constraintBadges.join(' ') : `<span class="auth-note">${isEn ? 'Unrestricted' : '不限形态/纯净度'}</span>`;
-
                 let boundBadges = [];
                 if (r.bound_group_ids && r.bound_group_ids.length > 0) {
                     r.bound_group_ids.forEach(gid => {
@@ -2407,10 +2386,6 @@ import { I18N } from './i18n.js';
                                 <div class="port-card-val">${policyBadge}</div>
                             </div>
                             <div class="port-card-col">
-                                <span class="port-card-label">${isEn ? 'Egress Constraints' : '形态与纯净度约束'}</span>
-                                <div class="port-card-val">${constraintHtml}</div>
-                            </div>
-                            <div class="port-card-col">
                                 <span class="port-card-label">${isEn ? 'Bound Egress / Exit Groups' : '绑定出口 / 动态出口组'}</span>
                                 <div class="port-card-val">${boundHtml}</div>
                             </div>
@@ -2434,12 +2409,6 @@ import { I18N } from './i18n.js';
             selectAuthMode('random');
             document.getElementById('rule-auth-user').value = '';
             document.getElementById('rule-auth-pass').value = '';
-            const cmEl = document.getElementById('rule-connect-mode');
-            if (cmEl) cmEl.value = 'all';
-            const plEl = document.getElementById('rule-purity-level');
-            if (plEl) plEl.value = 'any';
-            const smEl = document.getElementById('rule-strict-match');
-            if (smEl) smEl.checked = false;
             renderTunnelCheckboxes([], []);
             suggestNextPort();
             openEditorDrawer('port-edit-card');
@@ -2459,12 +2428,6 @@ import { I18N } from './i18n.js';
             selectAuthMode(aMode);
             document.getElementById('rule-auth-user').value = rule.auth_user || '';
             document.getElementById('rule-auth-pass').value = rule.auth_pass || '';
-            const cmEl = document.getElementById('rule-connect-mode');
-            if (cmEl) cmEl.value = rule.connect_mode || 'all';
-            const plEl = document.getElementById('rule-purity-level');
-            if (plEl) plEl.value = rule.purity_level || 'any';
-            const smEl = document.getElementById('rule-strict-match');
-            if (smEl) smEl.checked = !!rule.strict_match;
             renderTunnelCheckboxes(rule.bound_tunnel_ids || [], rule.bound_group_ids || []);
             openEditorDrawer('port-edit-card');
         }
@@ -2632,10 +2595,7 @@ import { I18N } from './i18n.js';
                 interval_seconds: interval,
                 auth_mode: authMode,
                 auth_user: authUser,
-                auth_pass: authPass,
-                connect_mode: document.getElementById('rule-connect-mode')?.value || 'all',
-                purity_level: document.getElementById('rule-purity-level')?.value || 'any',
-                strict_match: !!document.getElementById('rule-strict-match')?.checked
+                auth_pass: authPass
             };
 
             let updatedRules = currentPortRules ? [...currentPortRules] : [];
