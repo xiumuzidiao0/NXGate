@@ -1350,6 +1350,13 @@
                 </select>
             </div>
             <div>
+                <label class="form-label" data-i18n="dg.mode_label">节点连接方式</label>
+                <select id="dg-connect-mode" class="input-field w-full">
+                    <option value="tun" selected data-i18n="dg.mode_tun">内核虚拟网卡模式 (TUN · 需要 root / /dev/net/tun)</option>
+                    <option value="zero_tun" data-i18n="dg.mode_zero_tun">⚡ 免 TUN 用户态轻量模式 (SSTP 443 · 零网卡/免root)</option>
+                </select>
+            </div>
+            <div>
                 <label class="form-label" data-i18n="dg.iptype_label">目标网络类型</label>
                 <select id="dg-iptype" class="input-field w-full" >
                     <option value="all" data-i18n="nodes.iptype_all">不限类型</option>

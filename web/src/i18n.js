@@ -230,6 +230,9 @@ export const I18N = {
                 'pe.save_rule': '确认保存规则',
 
                 'dg.title': '新增动态出口组',
+                'dg.mode_label': '节点连接方式',
+                'dg.mode_tun': '内核虚拟网卡模式 (TUN · OpenVPN)',
+                'dg.mode_zero_tun': '⚡ 免 TUN 用户态轻量模式 (SSTP 443)',
                 'dg.name_label': '出口组名称',
                 'dg.name_ph': '例如: 日本Top3住宅组',
                 'dg.country_label': '目标国家/地区',
@@ -544,6 +547,9 @@ export const I18N = {
                 'pe.save_rule': 'Save Rule',
 
                 'dg.title': 'New Dynamic Exit Group',
+                'dg.mode_label': 'Node Connection Mode',
+                'dg.mode_tun': 'Kernel TUN Mode (OpenVPN)',
+                'dg.mode_zero_tun': '⚡ Zero-TUN Userland Mode (SSTP 443)',
                 'dg.name_label': 'Exit Group Name',
                 'dg.name_ph': 'e.g. Japan Top 3 Residential',
                 'dg.country_label': 'Target Country / Region',

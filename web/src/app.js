@@ -572,29 +572,18 @@ import { I18N } from './i18n.js';
                     worldCopyJump: true
                 }).setView([25, 0], 2);
 
-                // 1. Add 100% offline local vector landmass (completely avoids any external network requirement)
+                // 1. Add 100% offline local vector landmass (completely avoids any external network or API key requirement)
                 if (window.WORLD_LAND) {
                     L.geoJSON(window.WORLD_LAND, {
                         style: {
                             fillColor: '#172554',
-                            fillOpacity: 0.9,
-                            color: '#1e3a8a',
-                            weight: 1,
+                            fillOpacity: 0.95,
+                            color: '#2563eb',
+                            weight: 1.2,
                             lineJoin: 'round'
                         }
                     }).addTo(nodesMap);
                 }
-
-                // 2. Add CartoDB Dark Matter tile layer (never use OSM tile.openstreetmap.org which returned 403)
-                const darkTile = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png', {
-                    subdomains: 'abcd',
-                    maxZoom: 19,
-                    opacity: 0.7
-                });
-                darkTile.on('tileerror', function() {
-                    // Quietly ignore tile error so offline vector landmass continues working
-                });
-                darkTile.addTo(nodesMap);
 
                 nodesMarkerGroup = L.featureGroup().addTo(nodesMap);
             } catch (err) {
@@ -1264,6 +1253,10 @@ import { I18N } from './i18n.js';
 
                 const favBadge = `<span class="badge badge-accent">⭐ ${isEn ? 'Favorites' : '收藏组'}</span>`;
                 const sysBadge = isSys ? `<span class="badge badge-system">${isEn ? 'Primary Gateway (tun0)' : '系统主连网关 (tun0)'}</span>` : (g.country === 'FAVORITES' ? favBadge : `<span class="badge badge-accent">Top ${g.target_count} ${isEn ? 'Tunnels' : '隧道'}</span>`);
+                const isZeroTun = g.connect_mode === 'zero_tun' || g.connect_mode === 'sstp';
+                const modeBadge = isZeroTun ?
+                    `<span class="badge badge-accent" style="font-size:10px">⚡ ${isEn ? 'Zero-TUN' : '免TUN (SSTP)'}</span>` :
+                    `<span class="badge badge-mini" style="font-size:10px">${isEn ? 'Kernel TUN' : '内核 TUN'}</span>`;
                 const deleteBtn = isSys ? '' : `<button class="btn btn-danger btn-xs" data-action="deleteDynamicGroup" data-args="${jsonAttr([g.id])}">${isEn ? 'Delete' : '删除'}</button>`;
                 const editLabel = isSys ? (isEn ? 'Configure Strategy' : '配置主连策略') : (isEn ? 'Edit' : '编辑');
 
@@ -1274,9 +1267,11 @@ import { I18N } from './i18n.js';
                                 <span class="badge ${statusClass}"><span class="status-dot"></span> ${escapeHtml(statusText)}</span>
                                 <strong class="dynamic-group-name">${escapeHtml(g.name)}</strong>
                                 ${sysBadge}
+                                ${modeBadge}
                                 ${fallbackBadge}
                             </div>
                             <div class="dynamic-group-meta">
+                                <span>${isEn ? 'Driver: ' : '连接方式: '}<strong class="text-strong">${isZeroTun ? (isEn ? 'Zero-TUN' : '免TUN用户态') : (isEn ? 'Kernel TUN' : '内核虚拟网卡')}</strong></span>
                                 <span>${isEn ? 'Target: ' : '目标: '}<strong class="text-strong">${escapeHtml(countryStr)}</strong></span>
                                 <span>${isEn ? 'Type: ' : '类型: '}<strong class="text-strong">${escapeHtml(ipTypeText)}</strong></span>
                                 ${unlockText}
@@ -1299,6 +1294,8 @@ import { I18N } from './i18n.js';
             editingGroupId = null;
             document.getElementById('dynamic-group-edit-title').innerText = '新建动态出口组';
             document.getElementById('dg-name').value = '';
+            const modeEl = document.getElementById('dg-connect-mode');
+            if (modeEl) modeEl.value = 'tun';
             document.getElementById('dg-country').value = 'JP';
             document.getElementById('dg-iptype').value = 'residential';
             document.getElementById('dg-unlock').value = 'none';
@@ -1317,13 +1314,15 @@ import { I18N } from './i18n.js';
             editingGroupId = id;
             const isSys = g.is_system || g.id === 'system-primary';
             if (isSys) {
-                document.getElementById('dynamic-group-edit-title').innerText = '配置主出口自动轮换策略 (tun0)';
+                document.getElementById('dynamic-group-edit-title').innerText = '配置主出口自动轮换策略';
                 document.getElementById('dg-count-container').classList.add('hidden');
             } else {
                 document.getElementById('dynamic-group-edit-title').innerText = `编辑出口组: ${g.name}`;
                 document.getElementById('dg-count-container').classList.remove('hidden');
             }
             document.getElementById('dg-name').value = g.name;
+            const modeEl = document.getElementById('dg-connect-mode');
+            if (modeEl) modeEl.value = g.connect_mode || 'tun';
             document.getElementById('dg-country').value = g.country || '';
             document.getElementById('dg-iptype').value = g.ip_type || 'all';
             document.getElementById('dg-unlock').value = g.unlock_filter || 'none';
@@ -1340,6 +1339,7 @@ import { I18N } from './i18n.js';
         async function saveDynamicGroup() {
             const name = document.getElementById('dg-name').value.trim();
             if (!name) { tAlert('请输入出口组名称', 'Please enter an exit group name'); return; }
+            const connectMode = document.getElementById('dg-connect-mode')?.value || 'tun';
             const country = document.getElementById('dg-country').value;
             const ipType = document.getElementById('dg-iptype').value;
             const unlockFilter = document.getElementById('dg-unlock').value;
@@ -1353,6 +1353,7 @@ import { I18N } from './i18n.js';
                 name: name,
                 enabled: true,
                 is_system: editingGroupId === 'system-primary',
+                connect_mode: connectMode,
                 country: country,
                 ip_type: ipType,
                 unlock_filter: unlockFilter,

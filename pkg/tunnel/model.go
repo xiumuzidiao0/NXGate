@@ -2,6 +2,8 @@ package tunnel
 
 import (
 	"context"
+	"io"
+	"net"
 	"os/exec"
 	"sync"
 	"time"
@@ -30,6 +32,9 @@ type Tunnel struct {
 	LatencyMs     int           `json:"latency_ms"`       // real-time probe latency
 	Unlock        *UnlockResult `json:"unlock,omitempty"` // AI and Streaming unlock probe status
 	CircuitBroken bool          `json:"circuit_broken"`   // true if in cooldown due to consecutive failures
+	IsUserland    bool          `json:"is_userland,omitempty"` // true if pure userland SSTP (Zero-TUN)
+	Dialer        func(ctx context.Context, network, addr string) (net.Conn, error) `json:"-"`
+	Closer        io.Closer     `json:"-"`
 
 	// Internal lifecycle management
 	mu                 sync.RWMutex

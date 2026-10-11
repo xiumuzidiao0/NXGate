@@ -172,7 +172,7 @@ func (s *Server) handleConnect(w http.ResponseWriter, r *http.Request) {
 	}
 
 	go func() {
-		_ = s.vpn.ConnectWithMode(target, mode)
+		_ = s.vpn.ConnectWithMode(target, string(mode))
 	}()
 
 	s.writeJSON(w, http.StatusOK, map[string]any{

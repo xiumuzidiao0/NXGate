@@ -21,6 +21,12 @@ func (m *mockPrimaryConnector) Connect(target *nodes.Node) error {
 	return nil
 }
 
+func (m *mockPrimaryConnector) ConnectWithMode(target *nodes.Node, mode string) error {
+	m.connectedNode = target
+	m.status = "connected"
+	return nil
+}
+
 func (m *mockPrimaryConnector) GetActiveNode() *nodes.Node {
 	return m.connectedNode
 }

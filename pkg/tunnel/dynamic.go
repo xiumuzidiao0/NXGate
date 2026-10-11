@@ -23,6 +23,7 @@ type DynamicGroup struct {
 	Name            string    `json:"name"`              // e.g. "日本Top3住宅隧道组"
 	Enabled         bool      `json:"enabled"`           // 是否启用自动自适应维护
 	IsSystem        bool      `json:"is_system"`         // 是否为系统主出口专用组
+	ConnectMode     string    `json:"connect_mode,omitempty"` // "tun" (内核虚拟网卡模式) or "zero_tun" (用户态免TUN模式)
 	Country         string    `json:"country"`           // "JP", "US", or "" for 全部
 	IPType          string    `json:"ip_type"`           // "residential", "hosting", "all"
 	UnlockFilter    string    `json:"unlock_filter"`     // "none" (不限), "ai" (OpenAI/Claude), "streaming" (Netflix/Google), "all" (全解锁)
@@ -39,6 +40,7 @@ type DynamicGroup struct {
 
 type PrimaryConnector interface {
 	Connect(target *nodes.Node) error
+	ConnectWithMode(target *nodes.Node, mode string) error
 	GetActiveNode() *nodes.Node
 	GetStatus() string
 }
@@ -545,13 +547,19 @@ func (m *DynamicGroupManager) EvaluateGroup(ctx context.Context, g *DynamicGroup
 			}
 
 			attemptCount++
-			stats.LogInfo("DynamicGroup", "[%s] 递补启动新出口 (目标: %d, 仍缺: %d): 节点 %s (%s, 延迟: %dms, 带宽: %.1fMbps)",
-				g.Name, targetN, needed, n.ID, n.CountryShort, n.LatencyMs, float64(n.Speed)/1000000.0)
+			stats.LogInfo("DynamicGroup", "[%s] 递补启动新出口 (目标: %d, 仍缺: %d): 节点 %s (%s, 模式: %s, 延迟: %dms, 带宽: %.1fMbps)",
+				g.Name, targetN, needed, n.ID, n.CountryShort, g.ConnectMode, n.LatencyMs, float64(n.Speed)/1000000.0)
 
-			newTun, err := m.pool.StartTunnel(n)
+			var newTun *Tunnel
+			var err error
+			if g.ConnectMode == "zero_tun" || g.ConnectMode == "sstp" {
+				newTun, err = m.pool.StartUserlandTunnel(n)
+			} else {
+				newTun, err = m.pool.StartTunnel(n)
+			}
 			if err != nil || newTun == nil {
 				stats.LogWarn("DynamicGroup", "[%s] 启动候选节点 %s 失败: %v，尝试下一个候选", g.Name, n.ID, err)
-				if err != nil && !strings.Contains(err.Error(), "并发隧道已达上限") {
+				if err != nil && !strings.Contains(err.Error(), "并发隧道已达上限") && !strings.Contains(err.Error(), "并发出口已达上限") {
 					m.nodePool.Blacklist().Mark(n, fmt.Sprintf("启动失败: %v", err), 600*time.Second)
 				}
 				continue
@@ -572,9 +580,13 @@ func (m *DynamicGroupManager) EvaluateGroup(ctx context.Context, g *DynamicGroup
 			}
 
 			if connected {
-				// Verify genuine outbound Internet connectivity through this tunnel
-				time.Sleep(300 * time.Millisecond)
-				if CheckTunnelConnectivity(newTun.DevName, 3*time.Second) {
+				// Verify genuine outbound Internet connectivity through this tunnel (skip device route check for userland SSTP)
+				connOK := true
+				if !newTun.IsUserland {
+					time.Sleep(300 * time.Millisecond)
+					connOK = CheckTunnelConnectivity(newTun.DevName, 3*time.Second)
+				}
+				if connOK {
 					// 严苛物理入网闸门：若配置了解锁过滤（如三大 AI 全通），立即通过网卡物理实测
 					if g.UnlockFilter != "" && g.UnlockFilter != "none" && m.pool.UnlockDetector() != nil {
 						probeCtx, probeCancel := context.WithTimeout(ctx, 8*time.Second)
@@ -727,7 +739,7 @@ func (m *DynamicGroupManager) evaluateAll(ctx context.Context) {
 					continue
 				}
 				// Active egress verification: ensure traffic actually flows out to internet
-				if !CheckTunnelConnectivity(t.DevName, 2*time.Second) {
+				if !t.IsUserland && !CheckTunnelConnectivity(t.DevName, 2*time.Second) {
 					stats.LogWarn("DynamicGroup", "[%s] 出口隧道 %s (%s) 探测公网不通，标记失效并触发换线", g.Name, t.ID, t.DevName)
 					t.TripCircuitBreaker(60 * time.Second)
 					continue
@@ -857,15 +869,23 @@ func (m *DynamicGroupManager) evaluatePrimarySystemGroup(ctx context.Context, g 
 
 	// Trigger primary connection to the best node
 	if m.primaryConnector != nil {
-		stats.LogInfo("DynamicGroup", "[%s] 主出口自适应组触发自适应连接 -> 节点: %s (%s)...",
-			g.Name, best.ID, best.CountryShort)
-		err := m.primaryConnector.Connect(best)
+		targetMode := "kernel"
+		if g.ConnectMode == "zero_tun" || g.ConnectMode == "sstp" {
+			targetMode = "userland"
+		}
+		stats.LogInfo("DynamicGroup", "[%s] 主出口自适应组触发自适应连接 -> 节点: %s (%s, 模式: %s)...",
+			g.Name, best.ID, best.CountryShort, targetMode)
+		err := m.primaryConnector.ConnectWithMode(best, targetMode)
 		m.mu.Lock()
 		g.LastEvaluatedAt = time.Now()
 		if err != nil {
 			g.StatusText = fmt.Sprintf("主网关连接失败: %v", err)
 		} else {
-			g.StatusText = fmt.Sprintf("主网关正在建立: %s (%s, tun0)", best.IP, best.CountryShort)
+			if targetMode == "userland" {
+				g.StatusText = fmt.Sprintf("主网关建立中: %s (%s, 免TUN)", best.IP, best.CountryShort)
+			} else {
+				g.StatusText = fmt.Sprintf("主网关正在建立: %s (%s, tun0)", best.IP, best.CountryShort)
+			}
 		}
 		m.saveLocked()
 		m.mu.Unlock()

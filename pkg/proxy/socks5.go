@@ -180,6 +180,10 @@ func handleSocks5(client net.Conn, auth *Authenticator, devName string, tun *tun
 			dialCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			upstream, err = dialer[0](dialCtx, "tcp", targetAddr)
 			cancel()
+		} else if tun != nil && tun.Dialer != nil {
+			dialCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			upstream, err = tun.Dialer(dialCtx, "tcp", targetAddr)
+			cancel()
 		} else {
 			upstream, err = dialUpstream(targetAddr, devName, 10*time.Second)
 		}

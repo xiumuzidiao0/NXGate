@@ -52,6 +52,10 @@ func handleConnect(client net.Conn, req *http.Request, devName string, tun *tunn
 		dialCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		upstream, err = dialer[0](dialCtx, "tcp", targetAddr)
 		cancel()
+	} else if tun != nil && tun.Dialer != nil {
+		dialCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		upstream, err = tun.Dialer(dialCtx, "tcp", targetAddr)
+		cancel()
 	} else {
 		upstream, err = dialUpstream(targetAddr, devName, 10*time.Second)
 	}
@@ -92,6 +96,10 @@ func handlePlainHTTP(client net.Conn, req *http.Request, devName string, tun *tu
 	if len(dialer) > 0 && dialer[0] != nil {
 		dialCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		upstream, err = dialer[0](dialCtx, "tcp", host)
+		cancel()
+	} else if tun != nil && tun.Dialer != nil {
+		dialCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		upstream, err = tun.Dialer(dialCtx, "tcp", host)
 		cancel()
 	} else {
 		upstream, err = dialUpstream(host, devName, 10*time.Second)

@@ -137,11 +137,11 @@ func (m *Manager) Snapshot() StateSnapshot {
 }
 
 func (m *Manager) Connect(target *nodes.Node) error {
-	return m.ConnectWithMode(target, DriverKernel)
+	return m.ConnectWithMode(target, string(DriverKernel))
 }
 
-func (m *Manager) ConnectWithMode(target *nodes.Node, mode DriverMode) error {
-	if mode == DriverUserland {
+func (m *Manager) ConnectWithMode(target *nodes.Node, mode string) error {
+	if mode == string(DriverUserland) || mode == "zero_tun" || mode == "sstp" {
 		return m.ConnectUserland(target)
 	}
 
@@ -388,7 +388,7 @@ func (m *Manager) TriggerAutoFailover() {
 
 	if best != nil {
 		stats.LogInfo("VPN", "自动切换至新主节点: %s (%s, 模式: %s)", best.ID, best.CountryShort, currentMode)
-		_ = m.ConnectWithMode(best, currentMode)
+		_ = m.ConnectWithMode(best, string(currentMode))
 	} else {
 		stats.LogError("VPN", "自动故障转移失败: 无任何候选节点可用")
 	}
@@ -474,7 +474,7 @@ func (m *Manager) StartAutoRotator(ctx context.Context) {
 				if best != nil && best.ID != currID {
 					stats.LogInfo("Rotator", "触发定时自动轮换策略 (周期: %d分钟)，正在平滑切换至新节点: %s (%s, 模式: %s)...",
 						settings.AutoRotateMinutes, best.ID, best.CountryShort, currentMode)
-					_ = m.ConnectWithMode(best, currentMode)
+					_ = m.ConnectWithMode(best, string(currentMode))
 					lastRotated = time.Now()
 				}
 			}

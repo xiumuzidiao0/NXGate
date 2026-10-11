@@ -18,6 +18,7 @@ import (
 
 	"aimili-vpngate-go/pkg/config"
 	"aimili-vpngate-go/pkg/nodes"
+	"aimili-vpngate-go/pkg/sstp"
 	"aimili-vpngate-go/pkg/stats"
 )
 
@@ -137,6 +138,81 @@ func (p *Pool) StartTunnel(node *nodes.Node) (*Tunnel, error) {
 	}
 
 	return p.startTunnelInternalLocked(node, devIdx)
+}
+
+// StartUserlandTunnel starts a pure userland SSTP (Zero-TUN) tunnel without creating any Linux kernel TUN devices.
+func (p *Pool) StartUserlandTunnel(node *nodes.Node) (*Tunnel, error) {
+	p.mu.Lock()
+
+	// Check if already connecting or connected to this node
+	for _, t := range p.tunnels {
+		status := t.GetStatus()
+		if t.Node != nil && t.Node.ID == node.ID && (status == StatusConnected || status == StatusConnecting) {
+			p.mu.Unlock()
+			return t, fmt.Errorf("节点 %s 已经在运行中 (设备: %s)", node.ID, t.DevName)
+		}
+	}
+
+	devIdx := p.allocConcurrentDevIndexLocked()
+	if devIdx < 0 {
+		p.mu.Unlock()
+		return nil, fmt.Errorf("并发出口已达上限 (最多63个并发出口)")
+	}
+
+	p.nextIDSeq++
+	tunnelID := fmt.Sprintf("tun-%d", p.nextIDSeq)
+	devName := fmt.Sprintf("sstp%d", devIdx)
+
+	initialLatency := 0
+	if node != nil {
+		if node.LatencyMs > 0 {
+			initialLatency = node.LatencyMs
+		} else if node.Ping > 0 {
+			initialLatency = node.Ping
+		}
+	}
+
+	tun := &Tunnel{
+		ID:         tunnelID,
+		DevName:    devName,
+		DevIndex:   devIdx,
+		Node:       node,
+		Status:     StatusConnecting,
+		Message:    "正在通过用户态免 TUN (SSTP 443) 建立直连...",
+		LatencyMs:  initialLatency,
+		IsUserland: true,
+		done:       make(chan struct{}),
+	}
+	p.tunnels[tunnelID] = tun
+	p.mu.Unlock()
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+		defer cancel()
+
+		st, err := sstp.Connect(ctx, node.IP, 443, "vpn", "vpn")
+		if err != nil {
+			tun.mu.Lock()
+			tun.Status = StatusFailed
+			tun.Message = fmt.Sprintf("SSTP 免TUN连接失败: %v", err)
+			tun.mu.Unlock()
+			stats.LogWarn("TunnelPool", "用户态免 TUN 直连失败 [%s]: %v", node.IP, err)
+			p.cleanupTunnel(tun, tunnelID)
+			return
+		}
+
+		tun.mu.Lock()
+		tun.Status = StatusConnected
+		tun.ConnectedAt = time.Now()
+		tun.Message = fmt.Sprintf("用户态免 TUN 已就绪 (虚拟 IP: %s, 443)", st.AssignedIP())
+		tun.Dialer = st.Dial
+		tun.Closer = st
+		tun.mu.Unlock()
+
+		stats.LogInfo("TunnelPool", "用户态免 TUN 隧道 [%s] (%s) 已连接就绪", tunnelID, devName)
+	}()
+
+	return tun, nil
 }
 
 func (p *Pool) startTunnelInternalLocked(node *nodes.Node, devIdx int) (*Tunnel, error) {
@@ -450,6 +526,9 @@ func (p *Pool) cleanupTunnel(t *Tunnel, tunnelID string) {
 		}
 		if confPath != "" {
 			_ = os.Remove(confPath)
+		}
+		if t.Closer != nil {
+			_ = t.Closer.Close()
 		}
 		if interfaceReady {
 			if err := teardownTunnelInterface(devName, devIdx); err != nil {
