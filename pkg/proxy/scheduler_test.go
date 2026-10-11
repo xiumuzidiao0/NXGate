@@ -37,3 +37,18 @@ func TestScheduler(t *testing.T) {
 		t.Fatalf("expected Least-RTT to pick lowest latency tunnel tun-2 (30ms), got %s (%d ms)", tlr.ID, tlr.LatencyMs)
 	}
 }
+
+func TestSchedulerSystemPrimaryFallback(t *testing.T) {
+	if !isOnlySystemPrimary(nil, []string{"system-primary"}) {
+		t.Fatal("expected isOnlySystemPrimary to be true for [system-primary]")
+	}
+	if isOnlySystemPrimary([]string{"tun-1"}, []string{"system-primary"}) {
+		t.Fatal("expected isOnlySystemPrimary to be false when boundIDs is non-empty")
+	}
+	if isOnlySystemPrimary(nil, []string{"system-primary", "dg-123"}) {
+		t.Fatal("expected isOnlySystemPrimary to be false when multiple groups bound")
+	}
+	if isOnlySystemPrimary(nil, []string{"dg-123"}) {
+		t.Fatal("expected isOnlySystemPrimary to be false for non-primary group")
+	}
+}

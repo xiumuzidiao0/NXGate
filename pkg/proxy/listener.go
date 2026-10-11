@@ -193,24 +193,34 @@ func (l *PortListener) dispatch(client net.Conn) {
 		}
 	}
 
-	// 2. Check if userland dialer (SSTP zero-TUN) is active
+	// 2. Resolve tunnel from scheduler if custom proxy was not used
 	var userlandPacketConn func() (net.PacketConn, error)
-	l.mu.Lock()
-	uDialer := l.userlandDialer
-	uPacketConn := l.userlandPacketConn
-	l.mu.Unlock()
-	if dialer == nil && uDialer != nil {
-		dialer = uDialer
-	}
-	if uPacketConn != nil {
-		userlandPacketConn = uPacketConn
-	}
-
-	// 3. Fall back to standard tunnel scheduler
 	if dialer == nil && l.scheduler != nil {
 		if tun := l.scheduler.SelectTunnel(l.rule.Port, l.rule.BoundTunnelIDs, l.rule.BoundGroupIDs, l.rule.Policy, l.rule.IntervalSeconds); tun != nil {
 			selectedTun = tun
 			devName = tun.DevName
+			if tun.IsUserland {
+				if tun.Dialer != nil {
+					dialer = tun.Dialer
+				}
+				if tun.OpenPacketConn != nil {
+					userlandPacketConn = tun.OpenPacketConn
+				}
+			}
+		}
+	}
+
+	// 3. Fall back to primary userland dialer if neither tunnel nor custom proxy was selected
+	if dialer == nil && selectedTun == nil {
+		l.mu.Lock()
+		uDialer := l.userlandDialer
+		uPacketConn := l.userlandPacketConn
+		l.mu.Unlock()
+		if uDialer != nil {
+			dialer = uDialer
+		}
+		if userlandPacketConn == nil && uPacketConn != nil {
+			userlandPacketConn = uPacketConn
 		}
 	}
 

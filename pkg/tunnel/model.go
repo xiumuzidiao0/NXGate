@@ -61,6 +61,9 @@ func (t *Tunnel) GetStatus() TunnelStatus {
 func (t *Tunnel) IsHealthy() bool {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
+	if t.IsUserland {
+		return t.Status == StatusConnected && t.Dialer != nil
+	}
 	return t.Status == StatusConnected
 }
 
@@ -68,6 +71,9 @@ func (t *Tunnel) IsAvailable() bool {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	if t.Status != StatusConnected {
+		return false
+	}
+	if t.IsUserland && t.Dialer == nil {
 		return false
 	}
 	if !t.circuitBrokenUntil.IsZero() && time.Now().Before(t.circuitBrokenUntil) {

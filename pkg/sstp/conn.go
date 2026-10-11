@@ -242,20 +242,23 @@ func (c *TCPConn) handleIncoming(pkt *ParsedTCPPacket) {
 
 	// Remote closed with FIN
 	if pkt.Flags&TCPFlagFIN != 0 {
-		c.peerClosed = true
-		c.ack = pkt.Seq + 1
-		c.readCond.Broadcast()
+		finSeq := pkt.Seq + uint32(payloadLen)
+		if int32(finSeq-c.ack) <= 0 {
+			c.peerClosed = true
+			c.ack = finSeq + 1
+			c.readCond.Broadcast()
 
-		// Send FIN-ACK reply immediately
-		finAck := BuildIPv4TCPPacket(
-			c.localIP, c.remoteIP,
-			c.localPort, c.remotePort,
-			c.seq, c.ack,
-			TCPFlagACK|TCPFlagFIN,
-			nil,
-		)
-		if finAck != nil {
-			_ = c.tunnel.sendRaw(finAck)
+			// Send FIN-ACK reply immediately
+			finAck := BuildIPv4TCPPacket(
+				c.localIP, c.remoteIP,
+				c.localPort, c.remotePort,
+				c.seq, c.ack,
+				TCPFlagACK|TCPFlagFIN,
+				nil,
+			)
+			if finAck != nil {
+				_ = c.tunnel.sendRaw(finAck)
+			}
 		}
 	}
 }

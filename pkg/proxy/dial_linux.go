@@ -5,8 +5,11 @@ package proxy
 import (
 	"context"
 	"net"
+	"strings"
 	"syscall"
 	"time"
+
+	"aimili-vpngate-go/pkg/dns"
 )
 
 func getInterfaceIPv4(devName string) net.IP {
@@ -144,10 +147,18 @@ func resolveUDPAddrThroughTunnel(ctx context.Context, host string, port int, dev
 		return &net.UDPAddr{IP: ip, Port: port}, nil
 	}
 
+	// Try DoH resolver first to avoid local DNS pollution and bypass lack of physical netdev
+	dohCtx, dohCancel := context.WithTimeout(ctx, 3*time.Second)
+	ips, err := dns.Default().LookupIPv4(dohCtx, host)
+	dohCancel()
+	if err == nil && len(ips) > 0 {
+		return &net.UDPAddr{IP: ips[0], Port: port}, nil
+	}
+
 	resolver := &net.Resolver{
 		PreferGo: true,
 	}
-	if devName != "" {
+	if devName != "" && !strings.HasPrefix(devName, "sstp") {
 		resolver.Dial = func(ctx context.Context, network, address string) (net.Conn, error) {
 			dnsDialer := net.Dialer{
 				Timeout: 4 * time.Second,
@@ -171,7 +182,7 @@ func resolveUDPAddrThroughTunnel(ctx context.Context, host string, port int, dev
 		}
 	}
 
-	ips, err := resolver.LookupIP(ctx, "ip4", host)
+	ips, err = resolver.LookupIP(ctx, "ip4", host)
 	if err != nil || len(ips) == 0 {
 		ips, err = net.DefaultResolver.LookupIP(ctx, "ip4", host)
 		if err != nil || len(ips) == 0 {

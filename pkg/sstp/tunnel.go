@@ -606,11 +606,17 @@ func (t *Tunnel) Dial(ctx context.Context, network, addr string) (net.Conn, erro
 
 	// Allocate unique ephemeral port
 	var srcPort uint16
-	for {
-		srcPort = uint16(30000 + rand.Intn(30000))
-		if t.pending[srcPort] == nil {
+	for i := 0; i < 1000; i++ {
+		candidate := uint16(30000 + rand.Intn(30000))
+		sessKey := (uint32(candidate) << 16) | uint32(targetPort)
+		if t.pending[candidate] == nil && t.sessions[sessKey] == nil {
+			srcPort = candidate
 			break
 		}
+	}
+	if srcPort == 0 {
+		t.mu.Unlock()
+		return nil, errors.New("no ephemeral port available for dial")
 	}
 
 	initSeq := rand.Uint32()
