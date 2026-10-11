@@ -24,6 +24,7 @@ type Node struct {
 	ConfigData     string    `json:"-"` // Raw ovpn config string, omit from general API json
 	Proto          string    `json:"proto"`
 	Port           int       `json:"port"`
+	SSTPPort       int       `json:"sstp_port,omitempty"` // 预热探测已验证可用的 SSTP 监听端口
 	LatencyMs      int       `json:"latency_ms"` // Real-time measured TCP ping in ms (-1 if unreachable)
 	LastChecked    time.Time `json:"last_checked"`
 

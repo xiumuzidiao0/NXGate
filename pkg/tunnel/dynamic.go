@@ -590,7 +590,7 @@ func (m *DynamicGroupManager) EvaluateGroup(ctx context.Context, g *DynamicGroup
 					// 严苛物理入网闸门：若配置了解锁过滤（如三大 AI 全通），立即通过网卡物理实测
 					if g.UnlockFilter != "" && g.UnlockFilter != "none" && m.pool.UnlockDetector() != nil {
 						probeCtx, probeCancel := context.WithTimeout(ctx, 8*time.Second)
-						unlockRes := m.pool.UnlockDetector().ProbeTunnel(probeCtx, newTun.DevName, n.IP)
+						unlockRes := m.pool.UnlockDetector().ProbeTunnelInstance(probeCtx, newTun)
 						probeCancel()
 						newTun.SetUnlock(unlockRes)
 						if !unlockRes.MatchFilter(g.UnlockFilter) {
@@ -834,7 +834,7 @@ func (m *DynamicGroupManager) evaluatePrimarySystemGroup(ctx context.Context, g 
 		if currUnlock == nil || !currUnlock.IsProbed {
 			if m.pool.UnlockDetector() != nil {
 				probeCtx, probeCancel := context.WithTimeout(ctx, 8*time.Second)
-				currUnlock = m.pool.UnlockDetector().ProbeTunnel(probeCtx, primaryTun.DevName, currentActiveNode.IP)
+				currUnlock = m.pool.UnlockDetector().ProbeTunnelInstance(probeCtx, primaryTun)
 				probeCancel()
 				primaryTun.SetUnlock(currUnlock)
 			}

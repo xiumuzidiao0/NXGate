@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"sync"
 	"testing"
 	"time"
 
@@ -487,5 +488,182 @@ func TestPortListenerWithRandomProxyAuth(t *testing.T) {
 	}
 	if auth.Verify("vpn_random", "wrongpassword") {
 		t.Fatal("expected wrong password to fail")
+	}
+}
+
+type mockUserlandPacket struct {
+	data []byte
+	addr net.Addr
+}
+
+type mockUserlandPacketConn struct {
+	inCh        chan mockUserlandPacket
+	sentPackets [][]byte
+	targetAddrs []net.Addr
+	closed      bool
+	mu          sync.Mutex
+}
+
+func newMockUserlandPacketConn() *mockUserlandPacketConn {
+	return &mockUserlandPacketConn{
+		inCh: make(chan mockUserlandPacket, 16),
+	}
+}
+
+func (m *mockUserlandPacketConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
+	pkt, ok := <-m.inCh
+	if !ok {
+		return 0, nil, io.EOF
+	}
+	n = copy(p, pkt.data)
+	return n, pkt.addr, nil
+}
+
+func (m *mockUserlandPacketConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
+	m.mu.Lock()
+	cp := make([]byte, len(p))
+	copy(cp, p)
+	m.sentPackets = append(m.sentPackets, cp)
+	m.targetAddrs = append(m.targetAddrs, addr)
+	m.mu.Unlock()
+
+	// Simulate echo reply back
+	resp := append([]byte("echo:"), p...)
+	m.inCh <- mockUserlandPacket{
+		data: resp,
+		addr: addr,
+	}
+	return len(p), nil
+}
+
+func (m *mockUserlandPacketConn) Close() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if !m.closed {
+		m.closed = true
+		close(m.inCh)
+	}
+	return nil
+}
+
+func (m *mockUserlandPacketConn) LocalAddr() net.Addr {
+	return &net.UDPAddr{IP: net.ParseIP("10.211.1.2"), Port: 54321}
+}
+func (m *mockUserlandPacketConn) SetDeadline(t time.Time) error      { return nil }
+func (m *mockUserlandPacketConn) SetReadDeadline(t time.Time) error  { return nil }
+func (m *mockUserlandPacketConn) SetWriteDeadline(t time.Time) error { return nil }
+
+func TestPortListenerSocks5UserlandUDPAssociate(t *testing.T) {
+	mockPktConn := newMockUserlandPacketConn()
+	defer mockPktConn.Close()
+
+	cfg := &config.Config{
+		ProxyHost:           "127.0.0.1",
+		ProxyMaxConnections: 64,
+	}
+
+	rule := PortRule{
+		Port:     0,
+		Enabled:  true,
+		AuthMode: "none",
+	}
+
+	listener := NewPortListener(rule, cfg, nil)
+	listener.SetUserlandPacketConn(func() (net.PacketConn, error) {
+		return mockPktConn, nil
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go func() {
+		_ = listener.Start(ctx)
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+
+	listenerPort := 0
+	for i := 0; i < 20; i++ {
+		listener.mu.Lock()
+		if listener.listener != nil {
+			listenerPort = listener.listener.Addr().(*net.TCPAddr).Port
+		}
+		listener.mu.Unlock()
+		if listenerPort > 0 {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if listenerPort == 0 {
+		t.Fatal("listener failed to bind port")
+	}
+	defer listener.Close()
+
+	// 2. SOCKS5 TCP client handshake
+	tcpConn, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", listenerPort))
+	if err != nil {
+		t.Fatalf("dial listener failed: %v", err)
+	}
+	defer tcpConn.Close()
+
+	_, _ = tcpConn.Write([]byte{0x05, 0x01, 0x00})
+	resp := make([]byte, 2)
+	if _, err := io.ReadFull(tcpConn, resp); err != nil || resp[1] != 0x00 {
+		t.Fatalf("handshake failed: %v", resp)
+	}
+
+	// 3. UDP Associate request
+	_, _ = tcpConn.Write([]byte{0x05, 0x03, 0x00, 0x01, 0, 0, 0, 0, 0, 0})
+	assocResp := make([]byte, 10)
+	if _, err := io.ReadFull(tcpConn, assocResp); err != nil || assocResp[1] != 0x00 {
+		t.Fatalf("udp associate failed: %v", assocResp)
+	}
+
+	relayIP := net.IP(assocResp[4:8])
+	relayPort := int(binary.BigEndian.Uint16(assocResp[8:10]))
+
+	clientUDP, err := net.ListenUDP("udp4", nil)
+	if err != nil {
+		t.Fatalf("failed to create client udp: %v", err)
+	}
+	defer clientUDP.Close()
+
+	// 4. Send UDP payload via SOCKS5 relay
+	payload := []byte("hello-userland-udp")
+	reqPacket := make([]byte, 10+len(payload))
+	reqPacket[0] = 0x00
+	reqPacket[1] = 0x00
+	reqPacket[2] = 0x00
+	reqPacket[3] = 0x01
+	copy(reqPacket[4:8], net.ParseIP("1.1.1.1").To4())
+	binary.BigEndian.PutUint16(reqPacket[8:10], 53)
+	copy(reqPacket[10:], payload)
+
+	relayAddr := &net.UDPAddr{IP: relayIP, Port: relayPort}
+	_, err = clientUDP.WriteTo(reqPacket, relayAddr)
+	if err != nil {
+		t.Fatalf("client write to relay failed: %v", err)
+	}
+
+	// 5. Read echoed response at client
+	_ = clientUDP.SetReadDeadline(time.Now().Add(2 * time.Second))
+	recvBuf := make([]byte, 2048)
+	rn, _, err := clientUDP.ReadFrom(recvBuf)
+	if err != nil {
+		t.Fatalf("client receive echoed response failed: %v", err)
+	}
+	expectedEcho := "echo:hello-userland-udp"
+	if rn < 10 || string(recvBuf[10:rn]) != expectedEcho {
+		t.Fatalf("client received unexpected response: %q", string(recvBuf[10:rn]))
+	}
+
+	// 6. Verify mock packet conn recorded the sent packet
+	mockPktConn.mu.Lock()
+	defer mockPktConn.mu.Unlock()
+	if len(mockPktConn.sentPackets) != 1 {
+		t.Fatalf("expected 1 packet sent to userland packetConn, got %d", len(mockPktConn.sentPackets))
+	}
+	if string(mockPktConn.sentPackets[0]) != string(payload) {
+		t.Fatalf("expected payload %q, got %q", string(payload), string(mockPktConn.sentPackets[0]))
 	}
 }

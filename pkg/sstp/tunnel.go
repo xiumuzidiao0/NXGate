@@ -36,7 +36,8 @@ type Tunnel struct {
 	gatewayIP  net.IP
 
 	mu         sync.RWMutex
-	sessions   map[uint32]*TCPConn // key: (localPort << 16) | remotePort
+	sessions   map[uint32]*TCPConn          // key: (localPort << 16) | remotePort
+	udpConns   map[uint16]*UDPConn          // key: localPort
 	pending    map[uint16]*pendingHandshake // key: srcPort
 	writeMu    sync.Mutex
 	closed     bool
@@ -45,6 +46,10 @@ type Tunnel struct {
 }
 
 func ResolveCandidatePorts(targetPort int, proto string) []int {
+	return ResolveCandidatePortsWithPreferred(targetPort, 0)
+}
+
+func ResolveCandidatePortsWithPreferred(targetPort int, preferredPort int) []int {
 	var candidates []int
 	seen := make(map[int]bool)
 
@@ -53,6 +58,11 @@ func ResolveCandidatePorts(targetPort int, proto string) []int {
 			candidates = append(candidates, p)
 			seen[p] = true
 		}
+	}
+
+	// 0. Highest priority: pre-warmed / explicitly verified SSTP port
+	if preferredPort > 0 {
+		add(preferredPort)
 	}
 
 	// 1. If targetPort is valid, prioritize it!
@@ -68,8 +78,103 @@ func ResolveCandidatePorts(targetPort int, proto string) []int {
 	return candidates
 }
 
+// FastProbeSSTPPort tests whether a given host:port accepts SSTP_DUPLEX_POST over TLS.
+func FastProbeSSTPPort(ctx context.Context, host string, port int, timeout time.Duration) bool {
+	if port <= 0 || port > 65535 {
+		return false
+	}
+	if timeout <= 0 {
+		timeout = 2500 * time.Millisecond
+	}
+
+	dialer := &net.Dialer{Timeout: timeout}
+	rawConn, err := dialer.DialContext(ctx, "tcp", net.JoinHostPort(host, strconv.Itoa(port)))
+	if err != nil {
+		return false
+	}
+	defer rawConn.Close()
+
+	_ = rawConn.SetDeadline(time.Now().Add(timeout))
+
+	tlsConfig := &tls.Config{
+		InsecureSkipVerify: true,
+		ServerName:         host,
+	}
+	tlsConn := tls.Client(rawConn, tlsConfig)
+	if err := tlsConn.HandshakeContext(ctx); err != nil {
+		return false
+	}
+	defer tlsConn.Close()
+
+	req := fmt.Sprintf("SSTP_DUPLEX_POST /sbox/sstp HTTP/1.1\r\nContent-Length: 18446744073709551615\r\nHost: %s\r\n\r\n", host)
+	if _, err := tlsConn.Write([]byte(req)); err != nil {
+		return false
+	}
+
+	reader := bufio.NewReader(tlsConn)
+	respLine, err := reader.ReadString('\n')
+	if err != nil {
+		return false
+	}
+
+	if strings.Contains(respLine, "200") {
+		return true
+	}
+	return false
+}
+
+// DetectSSTPPort concurrently probes candidate ports and returns the first verified SSTP port, or 0.
+func DetectSSTPPort(ctx context.Context, host string, candidatePorts []int, timeout time.Duration) int {
+	if len(candidatePorts) == 0 {
+		return 0
+	}
+	probeCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	resultCh := make(chan int, len(candidatePorts))
+	var wg sync.WaitGroup
+
+	for _, p := range candidatePorts {
+		wg.Add(1)
+		go func(port int) {
+			defer wg.Done()
+			if FastProbeSSTPPort(probeCtx, host, port, timeout) {
+				select {
+				case resultCh <- port:
+					cancel()
+				default:
+				}
+			}
+		}(p)
+	}
+
+	go func() {
+		wg.Wait()
+		close(resultCh)
+	}()
+
+	select {
+	case <-ctx.Done():
+		select {
+		case port := <-resultCh:
+			return port
+		default:
+			return 0
+		}
+	case port, ok := <-resultCh:
+		if ok {
+			return port
+		}
+		return 0
+	}
+}
+
 func ConnectNode(ctx context.Context, host string, targetPort int, proto string, user, pass string) (*Tunnel, error) {
-	ports := ResolveCandidatePorts(targetPort, proto)
+	return ConnectNodeWithPreferred(ctx, host, 0, targetPort, proto, user, pass)
+}
+
+func ConnectNodeWithPreferred(ctx context.Context, host string, preferredPort int, targetPort int, proto string, user, pass string) (*Tunnel, error) {
+	ports := ResolveCandidatePortsWithPreferred(targetPort, preferredPort)
 	var lastErr error
 
 	for _, p := range ports {
@@ -126,6 +231,7 @@ func Connect(ctx context.Context, host string, port int, user, pass string) (*Tu
 		password:  pass,
 		tlsConn:   tlsConn,
 		sessions:  make(map[uint32]*TCPConn),
+		udpConns:  make(map[uint16]*UDPConn),
 		pending:   make(map[uint16]*pendingHandshake),
 		closeCh:   make(chan struct{}),
 	}
@@ -334,32 +440,52 @@ func (t *Tunnel) readLoop() {
 		}
 
 		ipPacket := body[offset+2:]
-		tcpPkt, err := ParseIncomingIPv4TCP(ipPacket)
-		if err != nil {
+		if len(ipPacket) < 20 {
 			continue
 		}
 
-		// Check if this packet belongs to a pending dialing handshake
-		t.mu.RLock()
-		pending := t.pending[tcpPkt.DstPort]
-		t.mu.RUnlock()
-
-		if pending != nil && pending.targetPort == tcpPkt.SrcPort {
-			select {
-			case pending.respCh <- tcpPkt:
-			default:
+		protoNum := ipPacket[9]
+		if protoNum == 6 { // TCP
+			tcpPkt, err := ParseIncomingIPv4TCP(ipPacket)
+			if err != nil {
+				continue
 			}
-			continue
-		}
 
-		// Route to active TCP connection
-		sessKey := (uint32(tcpPkt.DstPort) << 16) | uint32(tcpPkt.SrcPort)
-		t.mu.RLock()
-		sess := t.sessions[sessKey]
-		t.mu.RUnlock()
+			// Check if this packet belongs to a pending dialing handshake
+			t.mu.RLock()
+			pending := t.pending[tcpPkt.DstPort]
+			t.mu.RUnlock()
 
-		if sess != nil {
-			sess.handleIncoming(tcpPkt)
+			if pending != nil && pending.targetPort == tcpPkt.SrcPort {
+				select {
+				case pending.respCh <- tcpPkt:
+				default:
+				}
+				continue
+			}
+
+			// Route to active TCP connection
+			sessKey := (uint32(tcpPkt.DstPort) << 16) | uint32(tcpPkt.SrcPort)
+			t.mu.RLock()
+			sess := t.sessions[sessKey]
+			t.mu.RUnlock()
+
+			if sess != nil {
+				sess.handleIncoming(tcpPkt)
+			}
+		} else if protoNum == 17 { // UDP
+			udpPkt, err := ParseIncomingIPv4UDP(ipPacket)
+			if err != nil {
+				continue
+			}
+
+			t.mu.RLock()
+			uConn := t.udpConns[udpPkt.DstPort]
+			t.mu.RUnlock()
+
+			if uConn != nil {
+				uConn.handleIncoming(udpPkt)
+			}
 		}
 	}
 }
@@ -406,6 +532,36 @@ func (t *Tunnel) deregisterConn(localPort, remotePort uint16) {
 	key := (uint32(localPort) << 16) | uint32(remotePort)
 	t.mu.Lock()
 	delete(t.sessions, key)
+	t.mu.Unlock()
+}
+
+func (t *Tunnel) OpenPacketConn() (net.PacketConn, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.closed {
+		return nil, ErrTunnelClosed
+	}
+
+	var port uint16
+	for i := 0; i < 100; i++ {
+		candidate := uint16(40000 + rand.Intn(25000))
+		if _, exists := t.udpConns[candidate]; !exists {
+			port = candidate
+			break
+		}
+	}
+	if port == 0 {
+		return nil, errors.New("no free udp port available")
+	}
+
+	uConn := newUDPConn(t, t.assignedIP, port)
+	t.udpConns[port] = uConn
+	return uConn, nil
+}
+
+func (t *Tunnel) removeUDPConn(port uint16) {
+	t.mu.Lock()
+	delete(t.udpConns, port)
 	t.mu.Unlock()
 }
 
@@ -543,12 +699,27 @@ func (t *Tunnel) Close() error {
 		t.closed = true
 		close(t.closeCh)
 
-		// Terminate all sessions
+		// Terminate all TCP sessions
+		tcpToClose := make([]*TCPConn, 0, len(t.sessions))
 		for _, sess := range t.sessions {
-			_ = sess.Close()
+			tcpToClose = append(tcpToClose, sess)
 		}
 		t.sessions = make(map[uint32]*TCPConn)
+
+		// Terminate all UDP sessions
+		udpToClose := make([]*UDPConn, 0, len(t.udpConns))
+		for _, u := range t.udpConns {
+			udpToClose = append(udpToClose, u)
+		}
+		t.udpConns = make(map[uint16]*UDPConn)
 		t.mu.Unlock()
+
+		for _, sess := range tcpToClose {
+			_ = sess.Close()
+		}
+		for _, u := range udpToClose {
+			_ = u.Close()
+		}
 
 		if t.tlsConn != nil {
 			_ = t.tlsConn.Close()

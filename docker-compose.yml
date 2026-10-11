@@ -1,0 +1,22 @@
+services:
+  nxgate:
+    image: ghcr.io/xiumuzidiao0/nxgate:latest
+    build: .
+    container_name: nxgate
+    restart: unless-stopped
+    # 纯用户态免 TUN 模式（无需任何 --privileged、无需 CAP_NET_ADMIN、无需 /dev/net/tun）
+    ports:
+      - "8787:8787"  # Web 管理控制台
+      - "7928:7928"  # SOCKS5 / HTTP 多出口矩阵代理端口
+    volumes:
+      - ./data:/app/data
+    environment:
+      - DATA_DIR=/app/data
+      - UI_HOST=0.0.0.0
+      - UI_PORT=8787
+      - LOCAL_PROXY_HOST=0.0.0.0
+      - LOCAL_PROXY_PORT=7928
+      # 可选自定义后台路径与认证（默认随机安全路径）
+      # - UI_ENTER_PATH=/enter
+      # - UI_USER=admin
+      # - UI_PASS=your_password

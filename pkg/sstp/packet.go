@@ -103,6 +103,56 @@ func InternetChecksum(data []byte, offset, length int) uint16 {
 	return ^uint16(sum)
 }
 
+func tcpChecksum(srcIP, dstIP []byte, tcpSeg []byte) uint16 {
+	var sum uint32
+	sum += uint32(binary.BigEndian.Uint16(srcIP[0:2]))
+	sum += uint32(binary.BigEndian.Uint16(srcIP[2:4]))
+	sum += uint32(binary.BigEndian.Uint16(dstIP[0:2]))
+	sum += uint32(binary.BigEndian.Uint16(dstIP[2:4]))
+	sum += uint32(6) // TCP
+	sum += uint32(len(tcpSeg))
+
+	end := len(tcpSeg)
+	for i := 0; i < end-1; i += 2 {
+		sum += uint32(binary.BigEndian.Uint16(tcpSeg[i : i+2]))
+	}
+	if end%2 == 1 {
+		sum += uint32(tcpSeg[end-1]) << 8
+	}
+
+	for sum > 0xffff {
+		sum = (sum & 0xffff) + (sum >> 16)
+	}
+	return ^uint16(sum)
+}
+
+func udpChecksum(srcIP, dstIP []byte, udpSeg []byte) uint16 {
+	var sum uint32
+	sum += uint32(binary.BigEndian.Uint16(srcIP[0:2]))
+	sum += uint32(binary.BigEndian.Uint16(srcIP[2:4]))
+	sum += uint32(binary.BigEndian.Uint16(dstIP[0:2]))
+	sum += uint32(binary.BigEndian.Uint16(dstIP[2:4]))
+	sum += uint32(17) // UDP
+	sum += uint32(len(udpSeg))
+
+	end := len(udpSeg)
+	for i := 0; i < end-1; i += 2 {
+		sum += uint32(binary.BigEndian.Uint16(udpSeg[i : i+2]))
+	}
+	if end%2 == 1 {
+		sum += uint32(udpSeg[end-1]) << 8
+	}
+
+	for sum > 0xffff {
+		sum = (sum & 0xffff) + (sum >> 16)
+	}
+	chk := ^uint16(sum)
+	if chk == 0 {
+		return 0xffff
+	}
+	return chk
+}
+
 func BuildIPv4TCPPacket(srcIP, dstIP net.IP, srcPort, dstPort uint16, seq, ack uint32, flags byte, payload []byte) []byte {
 	sIPv4 := srcIP.To4()
 	dIPv4 := dstIP.To4()
@@ -110,57 +160,51 @@ func BuildIPv4TCPPacket(srcIP, dstIP net.IP, srcPort, dstPort uint16, seq, ack u
 		return nil
 	}
 
-	tcpLen := 20 + len(payload)
-	ipLen := 20 + tcpLen
+	totalLen := 48 + len(payload)
+	pkt := make([]byte, totalLen)
 
-	// IP Header (20 bytes)
-	ipHdr := make([]byte, 20)
-	ipHdr[0] = 0x45 // Version 4, IHL 5
-	ipHdr[1] = 0x00 // DSCP / ECN
-	binary.BigEndian.PutUint16(ipHdr[2:4], uint16(ipLen))
-	binary.BigEndian.PutUint16(ipHdr[4:6], uint16(rand.Intn(60000)+1000))
-	binary.BigEndian.PutUint16(ipHdr[6:8], 0x4000) // DF flag
-	ipHdr[8] = 64                                  // TTL
-	ipHdr[9] = 6                                   // Protocol TCP
-	copy(ipHdr[12:16], sIPv4)
-	copy(ipHdr[16:20], dIPv4)
-	ipChk := InternetChecksum(ipHdr, 0, 20)
-	binary.BigEndian.PutUint16(ipHdr[10:12], ipChk)
+	// 1. SSTP Data Header (6 bytes)
+	pkt[0] = SSTPVersion
+	pkt[1] = SSTPFlagData
+	binary.BigEndian.PutUint16(pkt[2:4], uint16(totalLen)|0x8000)
+	pkt[4] = 0xff
+	pkt[5] = 0x03
 
-	// TCP Pseudo Header + TCP Segment for Checksum
-	pseudo := make([]byte, 12+tcpLen)
-	copy(pseudo[0:4], sIPv4)
-	copy(pseudo[4:8], dIPv4)
-	pseudo[9] = 6 // TCP
-	binary.BigEndian.PutUint16(pseudo[10:12], uint16(tcpLen))
+	// 2. PPP Protocol (2 bytes): 0x0021 IPv4
+	binary.BigEndian.PutUint16(pkt[6:8], ProtoIPv4)
 
-	// TCP Header
-	tcpSeg := pseudo[12:]
-	binary.BigEndian.PutUint16(tcpSeg[0:2], srcPort)
-	binary.BigEndian.PutUint16(tcpSeg[2:4], dstPort)
-	binary.BigEndian.PutUint32(tcpSeg[4:8], seq)
-	binary.BigEndian.PutUint32(tcpSeg[8:12], ack)
-	tcpSeg[12] = 0x50 // Data offset 5 (20 bytes), reserved 0
-	tcpSeg[13] = flags
-	binary.BigEndian.PutUint16(tcpSeg[14:16], 65535) // Window size
+	// 3. IPv4 Header (20 bytes: pkt[8:28])
+	ipLen := uint16(40 + len(payload))
+	pkt[8] = 0x45 // Version 4, IHL 5
+	pkt[9] = 0x00
+	binary.BigEndian.PutUint16(pkt[10:12], ipLen)
+	binary.BigEndian.PutUint16(pkt[12:14], uint16(rand.Intn(60000)+1000))
+	binary.BigEndian.PutUint16(pkt[14:16], 0x4000) // DF flag
+	pkt[16] = 64                                  // TTL
+	pkt[17] = 6                                   // Protocol TCP
+	copy(pkt[20:24], sIPv4)
+	copy(pkt[24:28], dIPv4)
+	ipChk := InternetChecksum(pkt[8:28], 0, 20)
+	binary.BigEndian.PutUint16(pkt[18:20], ipChk)
+
+	// 4. TCP Header (20 bytes: pkt[28:48]) + Payload (pkt[48:])
+	binary.BigEndian.PutUint16(pkt[28:30], srcPort)
+	binary.BigEndian.PutUint16(pkt[30:32], dstPort)
+	binary.BigEndian.PutUint32(pkt[32:36], seq)
+	binary.BigEndian.PutUint32(pkt[36:40], ack)
+	pkt[40] = 0x50 // Data offset 5 (20 bytes)
+	pkt[41] = flags
+	binary.BigEndian.PutUint16(pkt[42:44], 65535) // Window size
+	// Checksum placeholder at pkt[44:46] is 0
+
 	if len(payload) > 0 {
-		copy(tcpSeg[20:], payload)
+		copy(pkt[48:], payload)
 	}
 
-	tcpChk := InternetChecksum(pseudo, 0, len(pseudo))
-	binary.BigEndian.PutUint16(tcpSeg[16:18], tcpChk)
+	tcpChk := tcpChecksum(sIPv4, dIPv4, pkt[28:])
+	binary.BigEndian.PutUint16(pkt[44:46], tcpChk)
 
-	// Combine into full IPv4 packet
-	fullIP := make([]byte, ipLen)
-	copy(fullIP[:20], ipHdr)
-	copy(fullIP[20:], tcpSeg)
-
-	// PPP framing (protocol 0x0021 = IPv4)
-	pppFrame := make([]byte, 2+ipLen)
-	binary.BigEndian.PutUint16(pppFrame[0:2], ProtoIPv4)
-	copy(pppFrame[2:], fullIP)
-
-	return BuildDataPacket(pppFrame)
+	return pkt
 }
 
 type ParsedTCPPacket struct {
@@ -212,6 +256,101 @@ func ParseIncomingIPv4TCP(ipPacket []byte) (*ParsedTCPPacket, error) {
 		Seq:     seq,
 		Ack:     ack,
 		Flags:   flags,
+		Payload: payload,
+	}, nil
+}
+
+type ParsedUDPPacket struct {
+	SrcIP   net.IP
+	DstIP   net.IP
+	SrcPort uint16
+	DstPort uint16
+	Payload []byte
+}
+
+func BuildIPv4UDPPacket(srcIP, dstIP net.IP, srcPort, dstPort uint16, payload []byte) []byte {
+	sIPv4 := srcIP.To4()
+	dIPv4 := dstIP.To4()
+	if sIPv4 == nil || dIPv4 == nil {
+		return nil
+	}
+
+	totalLen := 36 + len(payload)
+	pkt := make([]byte, totalLen)
+
+	// 1. SSTP Data Header (6 bytes)
+	pkt[0] = SSTPVersion
+	pkt[1] = SSTPFlagData
+	binary.BigEndian.PutUint16(pkt[2:4], uint16(totalLen)|0x8000)
+	pkt[4] = 0xff
+	pkt[5] = 0x03
+
+	// 2. PPP Protocol (2 bytes): 0x0021 IPv4
+	binary.BigEndian.PutUint16(pkt[6:8], ProtoIPv4)
+
+	// 3. IPv4 Header (20 bytes: pkt[8:28])
+	ipLen := uint16(28 + len(payload))
+	pkt[8] = 0x45 // Version 4, IHL 5
+	pkt[9] = 0x00
+	binary.BigEndian.PutUint16(pkt[10:12], ipLen)
+	binary.BigEndian.PutUint16(pkt[12:14], uint16(rand.Intn(60000)+1000))
+	binary.BigEndian.PutUint16(pkt[14:16], 0x4000) // DF flag
+	pkt[16] = 64                                  // TTL
+	pkt[17] = 17                                  // Protocol UDP
+	copy(pkt[20:24], sIPv4)
+	copy(pkt[24:28], dIPv4)
+	ipChk := InternetChecksum(pkt[8:28], 0, 20)
+	binary.BigEndian.PutUint16(pkt[18:20], ipChk)
+
+	// 4. UDP Header (8 bytes: pkt[28:36]) + Payload (pkt[36:])
+	udpLen := uint16(8 + len(payload))
+	binary.BigEndian.PutUint16(pkt[28:30], srcPort)
+	binary.BigEndian.PutUint16(pkt[30:32], dstPort)
+	binary.BigEndian.PutUint16(pkt[32:34], udpLen)
+	// Checksum placeholder at pkt[34:36] is 0
+
+	if len(payload) > 0 {
+		copy(pkt[36:], payload)
+	}
+
+	udpChk := udpChecksum(sIPv4, dIPv4, pkt[28:])
+	binary.BigEndian.PutUint16(pkt[34:36], udpChk)
+
+	return pkt
+}
+
+func ParseIncomingIPv4UDP(ipPacket []byte) (*ParsedUDPPacket, error) {
+	if len(ipPacket) < 28 { // 20 IP + 8 UDP
+		return nil, errors.New("packet too short")
+	}
+	if ipPacket[0]>>4 != 4 {
+		return nil, errors.New("not IPv4")
+	}
+	ipHdrLen := int(ipPacket[0]&0x0f) * 4
+	if len(ipPacket) < ipHdrLen+8 {
+		return nil, errors.New("truncated IPv4 header")
+	}
+	if ipPacket[9] != 17 { // UDP
+		return nil, errors.New("not UDP protocol")
+	}
+
+	srcIP := net.IPv4(ipPacket[12], ipPacket[13], ipPacket[14], ipPacket[15])
+	dstIP := net.IPv4(ipPacket[16], ipPacket[17], ipPacket[18], ipPacket[19])
+
+	udpHdr := ipPacket[ipHdrLen:]
+	srcPort := binary.BigEndian.Uint16(udpHdr[0:2])
+	dstPort := binary.BigEndian.Uint16(udpHdr[2:4])
+	udpLen := int(binary.BigEndian.Uint16(udpHdr[4:6]))
+	if udpLen < 8 || len(udpHdr) < udpLen {
+		return nil, errors.New("invalid or truncated UDP length")
+	}
+	payload := udpHdr[8:udpLen]
+
+	return &ParsedUDPPacket{
+		SrcIP:   srcIP,
+		DstIP:   dstIP,
+		SrcPort: srcPort,
+		DstPort: dstPort,
 		Payload: payload,
 	}, nil
 }

@@ -35,6 +35,7 @@ type PortListener struct {
 	scheduler      TunnelSelector
 	customProxyMgr *CustomProxyManager
 	userlandDialer func(ctx context.Context, network, addr string) (net.Conn, error)
+	userlandPacketConn func() (net.PacketConn, error)
 	listener       net.Listener
 	sem            chan struct{}
 	cancel         context.CancelFunc
@@ -70,6 +71,12 @@ func (l *PortListener) SetUserlandDialer(dialer func(ctx context.Context, networ
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.userlandDialer = dialer
+}
+
+func (l *PortListener) SetUserlandPacketConn(packetConn func() (net.PacketConn, error)) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.userlandPacketConn = packetConn
 }
 
 func (l *PortListener) getAuthenticator() *Authenticator {
@@ -187,13 +194,16 @@ func (l *PortListener) dispatch(client net.Conn) {
 	}
 
 	// 2. Check if userland dialer (SSTP zero-TUN) is active
-	if dialer == nil {
-		l.mu.Lock()
-		uDialer := l.userlandDialer
-		l.mu.Unlock()
-		if uDialer != nil {
-			dialer = uDialer
-		}
+	var userlandPacketConn func() (net.PacketConn, error)
+	l.mu.Lock()
+	uDialer := l.userlandDialer
+	uPacketConn := l.userlandPacketConn
+	l.mu.Unlock()
+	if dialer == nil && uDialer != nil {
+		dialer = uDialer
+	}
+	if uPacketConn != nil {
+		userlandPacketConn = uPacketConn
 	}
 
 	// 3. Fall back to standard tunnel scheduler
@@ -205,7 +215,7 @@ func (l *PortListener) dispatch(client net.Conn) {
 	}
 
 	if firstByte[0] == socks5Version {
-		_ = handleSocks5(bConn, auth, devName, selectedTun, dialer)
+		_ = handleSocks5(bConn, auth, devName, selectedTun, dialer, userlandPacketConn)
 	} else {
 		_ = handleHTTP(bConn, br, auth, devName, selectedTun, dialer)
 	}

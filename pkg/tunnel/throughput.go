@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"time"
 )
@@ -67,8 +68,27 @@ func CheckThroughputWithRetry(devName string, cfg ThroughputConfig) ThroughputRe
 	return checkThroughput(devName, cfg, cfg.MaxAttempts)
 }
 
+// CheckThroughputWithDialer performs throughput testing via a custom dialer (e.g. userland Zero-TUN)
+func CheckThroughputWithDialer(dialer func(ctx context.Context, network, addr string) (net.Conn, error), cfg ThroughputConfig) ThroughputResult {
+	for attempt := 1; attempt <= cfg.MaxAttempts; attempt++ {
+		result := checkThroughputWithClient(newDialerHTTPClient(dialer, cfg.Timeout), cfg, attempt)
+		if result.Passed {
+			return result
+		}
+		if result.Error != nil && result.BytesRead == 0 {
+			return result
+		}
+	}
+	return checkThroughputWithClient(newDialerHTTPClient(dialer, cfg.Timeout), cfg, cfg.MaxAttempts)
+}
+
 // checkThroughput performs a single throughput test on a tunnel interface
 func checkThroughput(devName string, cfg ThroughputConfig, attempt int) ThroughputResult {
+	return checkThroughputWithClient(newTunnelHTTPClient(devName, cfg.Timeout), cfg, attempt)
+}
+
+// checkThroughputWithClient performs a single throughput test using an arbitrary HTTP client
+func checkThroughputWithClient(client *http.Client, cfg ThroughputConfig, attempt int) ThroughputResult {
 	result := ThroughputResult{
 		Attempt: attempt,
 		Passed:  false,
@@ -77,7 +97,6 @@ func checkThroughput(devName string, cfg ThroughputConfig, attempt int) Throughp
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.Timeout)
 	defer cancel()
 
-	client := newTunnelHTTPClient(devName, cfg.Timeout)
 	req, err := http.NewRequestWithContext(ctx, "GET", cfg.TestURL, nil)
 	if err != nil {
 		result.Error = fmt.Errorf("create request failed: %w", err)

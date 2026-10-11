@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -224,20 +225,71 @@ func (d *UnlockDetector) EvaluateNodeUnlock(node *nodes.Node) *UnlockResult {
 	return res
 }
 
-func (d *UnlockDetector) ProbeTunnel(ctx context.Context, devName string, ip string) *UnlockResult {
-	result := &UnlockResult{
-		IP:        ip,
-		OpenAI:    StatusUnknown,
-		Claude:    StatusUnknown,
-		Gemini:    StatusUnknown,
-		Google:    StatusUnknown,
-		Cloudflare: StatusUnknown,
-		Netflix:   StatusUnknown,
-		IsProbed:  true,
-		CheckedAt: time.Now(),
+func newDialerHTTPClient(dialer func(ctx context.Context, network, addr string) (net.Conn, error), timeout time.Duration) *http.Client {
+	transport := &http.Transport{
+		Proxy:                 nil,
+		DialContext:           dialer,
+		TLSHandshakeTimeout:   timeout,
+		ResponseHeaderTimeout: timeout,
+		DisableKeepAlives:     true,
 	}
+	return &http.Client{
+		Transport: transport,
+		Timeout:   timeout,
+	}
+}
 
+func (d *UnlockDetector) ProbeTunnel(ctx context.Context, devName string, ip string) *UnlockResult {
 	client := newTunnelHTTPClient(devName, 6*time.Second)
+	return d.probeWithClient(ctx, client, devName, ip, func() ThroughputResult {
+		return CheckThroughputWithRetry(devName, DefaultThroughputConfig())
+	})
+}
+
+// ProbeWithDialer performs real physical unlock and throughput testing using a custom dialer (e.g. userland Zero-TUN).
+func (d *UnlockDetector) ProbeWithDialer(ctx context.Context, dialer func(ctx context.Context, network, addr string) (net.Conn, error), ip string, label string) *UnlockResult {
+	if label == "" {
+		label = "userland"
+	}
+	client := newDialerHTTPClient(dialer, 6*time.Second)
+	return d.probeWithClient(ctx, client, label, ip, func() ThroughputResult {
+		return CheckThroughputWithDialer(dialer, DefaultThroughputConfig())
+	})
+}
+
+// ProbeTunnelInstance dispatches probe execution to device binding or userland dialer depending on tunnel type.
+func (d *UnlockDetector) ProbeTunnelInstance(ctx context.Context, t *Tunnel) *UnlockResult {
+	if t == nil {
+		return nil
+	}
+	t.mu.RLock()
+	isUserland := t.IsUserland
+	dialer := t.Dialer
+	devName := t.DevName
+	var ip string
+	if t.Node != nil {
+		ip = t.Node.IP
+	}
+	t.mu.RUnlock()
+
+	if isUserland && dialer != nil {
+		return d.ProbeWithDialer(ctx, dialer, ip, devName)
+	}
+	return d.ProbeTunnel(ctx, devName, ip)
+}
+
+func (d *UnlockDetector) probeWithClient(ctx context.Context, client *http.Client, devLabel string, ip string, throughputFn func() ThroughputResult) *UnlockResult {
+	result := &UnlockResult{
+		IP:         ip,
+		OpenAI:     StatusUnknown,
+		Claude:     StatusUnknown,
+		Gemini:     StatusUnknown,
+		Google:     StatusUnknown,
+		Cloudflare: StatusUnknown,
+		Netflix:    StatusUnknown,
+		IsProbed:   true,
+		CheckedAt:  time.Now(),
+	}
 
 	var wg sync.WaitGroup
 	wg.Add(6)
@@ -466,12 +518,17 @@ func (d *UnlockDetector) ProbeTunnel(ctx context.Context, devName string, ip str
 
 	// 🔥 Phase 4: Throughput check (freesub inspired)
 	// Detect "connected but dead" nodes with zero bandwidth
-	throughputResult := CheckThroughputWithRetry(devName, DefaultThroughputConfig())
+	var throughputResult ThroughputResult
+	if throughputFn != nil {
+		throughputResult = throughputFn()
+	} else {
+		throughputResult = ThroughputResult{Passed: true}
+	}
 	result.ThroughputPassed = throughputResult.Passed
 	result.ThroughputBytesPerSec = throughputResult.BytesPerSecond
 
 	if !throughputResult.Passed {
-		stats.LogWarn("UnlockDetector", "[%s:%s] 断流检测失败: %s", devName, ip, throughputResult.String())
+		stats.LogWarn("UnlockDetector", "[%s:%s] 断流检测失败: %s", devLabel, ip, throughputResult.String())
 		// Downgrade all unlock statuses to blocked if throughput fails
 		result.OpenAI = StatusBlocked
 		result.Claude = StatusBlocked
@@ -480,7 +537,7 @@ func (d *UnlockDetector) ProbeTunnel(ctx context.Context, devName string, ip str
 		result.Cloudflare = StatusBlocked
 		result.Netflix = StatusBlocked
 	} else {
-		stats.LogInfo("UnlockDetector", "[%s:%s] 吞吐量检测通过: %s", devName, ip, throughputResult.String())
+		stats.LogInfo("UnlockDetector", "[%s:%s] 吞吐量检测通过: %s", devLabel, ip, throughputResult.String())
 	}
 
 	// Update cache with real physical probe result
@@ -490,7 +547,7 @@ func (d *UnlockDetector) ProbeTunnel(ctx context.Context, devName string, ip str
 	d.mu.Unlock()
 
 	stats.LogInfo("UnlockDetector", "[%s:%s] 实测解锁结果: ChatGPT=%s, Claude=%s, Gemini=%s, Google=%s, Cloudflare=%s, Netflix=%s, Throughput=%s",
-		devName, ip, result.OpenAI, result.Claude, result.Gemini, result.Google, result.Cloudflare, result.Netflix, throughputResult.String())
+		devLabel, ip, result.OpenAI, result.Claude, result.Gemini, result.Google, result.Cloudflare, result.Netflix, throughputResult.String())
 
 	return result
 }

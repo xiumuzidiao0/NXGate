@@ -116,3 +116,47 @@ func TestPPPLCPAndPAPPackets(t *testing.T) {
 		t.Fatalf("unexpected PAP code/id")
 	}
 }
+
+func TestIPv4UDPPacketRoundTrip(t *testing.T) {
+	srcIP := net.ParseIP("10.211.1.2")
+	dstIP := net.ParseIP("8.8.8.8")
+	payload := []byte{0x12, 0x34, 0x01, 0x00, 0x00, 0x01, 0x00, 0x00} // DNS query stub
+
+	rawPacket := BuildIPv4UDPPacket(
+		srcIP, dstIP,
+		53123, 53,
+		payload,
+	)
+	if rawPacket == nil {
+		t.Fatalf("failed to build IPv4 UDP packet")
+	}
+
+	// SSTP Data Header (6 bytes) + PPP Header (2 bytes) = 8 bytes prefix
+	if len(rawPacket) < 8+28+len(payload) {
+		t.Fatalf("packet too short: %d", len(rawPacket))
+	}
+
+	pppProto := binary.BigEndian.Uint16(rawPacket[6:8])
+	if pppProto != ProtoIPv4 {
+		t.Fatalf("expected ProtoIPv4, got 0x%04x", pppProto)
+	}
+
+	ipBytes := rawPacket[8:]
+	parsed, err := ParseIncomingIPv4UDP(ipBytes)
+	if err != nil {
+		t.Fatalf("failed to parse IPv4 UDP packet: %v", err)
+	}
+
+	if !parsed.SrcIP.Equal(srcIP) {
+		t.Fatalf("expected src ip %s, got %s", srcIP, parsed.SrcIP)
+	}
+	if !parsed.DstIP.Equal(dstIP) {
+		t.Fatalf("expected dst ip %s, got %s", dstIP, parsed.DstIP)
+	}
+	if parsed.SrcPort != 53123 || parsed.DstPort != 53 {
+		t.Fatalf("expected ports 53123->53, got %d->%d", parsed.SrcPort, parsed.DstPort)
+	}
+	if !bytes.Equal(parsed.Payload, payload) {
+		t.Fatalf("payload mismatch")
+	}
+}

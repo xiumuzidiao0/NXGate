@@ -40,7 +40,14 @@ const (
 	repAtypNotSupport    = 0x08
 )
 
-func handleSocks5(client net.Conn, auth *Authenticator, devName string, tun *tunnel.Tunnel, dialer ...func(ctx context.Context, network, addr string) (net.Conn, error)) error {
+func handleSocks5(client net.Conn, auth *Authenticator, devName string, tun *tunnel.Tunnel, dialer func(ctx context.Context, network, addr string) (net.Conn, error), userlandPacketConn ...func() (net.PacketConn, error)) error {
+	var uPacketConn func() (net.PacketConn, error)
+	if len(userlandPacketConn) > 0 {
+		uPacketConn = userlandPacketConn[0]
+	}
+	if uPacketConn == nil && tun != nil && tun.IsUserland && tun.OpenPacketConn != nil {
+		uPacketConn = tun.OpenPacketConn
+	}
 	// 1. Negotiation
 	// Client sends: VER (1 byte) | NMETHODS (1 byte) | METHODS (1-255 bytes)
 	verBuf := make([]byte, 1)
@@ -176,9 +183,9 @@ func handleSocks5(client net.Conn, auth *Authenticator, devName string, tun *tun
 
 		// 3. Connect to upstream via selected tunnel devName or custom dialer
 		var upstream net.Conn
-		if len(dialer) > 0 && dialer[0] != nil {
+		if dialer != nil {
 			dialCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			upstream, err = dialer[0](dialCtx, "tcp", targetAddr)
+			upstream, err = dialer(dialCtx, "tcp", targetAddr)
 			cancel()
 		} else if tun != nil && tun.Dialer != nil {
 			dialCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -212,7 +219,7 @@ func handleSocks5(client net.Conn, auth *Authenticator, devName string, tun *tun
 		return nil
 
 	case cmdUdpAssociate:
-		return handleSocks5UDPAssociate(client, reqHeader[3], devName, tun)
+		return handleSocks5UDPAssociate(client, reqHeader[3], devName, tun, uPacketConn)
 
 	default:
 		_, _ = client.Write([]byte{socks5Version, repCommandNotSupport, 0x00, atypIPv4, 0, 0, 0, 0, 0, 0})
@@ -257,7 +264,7 @@ func readSocks5Address(r io.Reader, atyp byte) (string, uint16, error) {
 	return targetHost, targetPort, nil
 }
 
-func handleSocks5UDPAssociate(client net.Conn, atyp byte, devName string, tun *tunnel.Tunnel) error {
+func handleSocks5UDPAssociate(client net.Conn, atyp byte, devName string, tun *tunnel.Tunnel, userlandPacketConn func() (net.PacketConn, error)) error {
 	// 1. Read advertised client source address/port (usually 0.0.0.0:0)
 	_, _, err := readSocks5Address(client, atyp)
 	if err != nil {
@@ -326,11 +333,29 @@ func handleSocks5UDPAssociate(client net.Conn, atyp byte, devName string, tun *t
 		return err
 	}
 
-	// 4. Create upstream UDP socket bound to target tunnel devName
-	upstreamConn, err := createBoundUDPSocket(devName)
-	if err != nil {
-		stats.LogWarn("Proxy", "UDP Associate 创建物理网卡套接字失败: %v", err)
-		return fmt.Errorf("create bound udp socket failed: %w", err)
+	// 4. Create upstream UDP socket bound to target tunnel devName or userland packetConn
+	var upstreamConn net.PacketConn
+	if userlandPacketConn != nil {
+		uConn, err := userlandPacketConn()
+		if err != nil {
+			stats.LogWarn("Proxy", "UDP Associate 创建用户态 UDP 套接字失败: %v", err)
+			return fmt.Errorf("create userland udp socket failed: %w", err)
+		}
+		upstreamConn = uConn
+	} else if tun != nil && tun.IsUserland && tun.OpenPacketConn != nil {
+		uConn, err := tun.OpenPacketConn()
+		if err != nil {
+			stats.LogWarn("Proxy", "UDP Associate 创建用户态 UDP 套接字失败: %v", err)
+			return fmt.Errorf("create userland udp socket failed: %w", err)
+		}
+		upstreamConn = uConn
+	} else {
+		var err error
+		upstreamConn, err = createBoundUDPSocket(devName)
+		if err != nil {
+			stats.LogWarn("Proxy", "UDP Associate 创建物理网卡套接字失败: %v", err)
+			return fmt.Errorf("create bound udp socket failed: %w", err)
+		}
 	}
 	defer upstreamConn.Close()
 

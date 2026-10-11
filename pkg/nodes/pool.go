@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"aimili-vpngate-go/pkg/config"
+	"aimili-vpngate-go/pkg/sstp"
 	"aimili-vpngate-go/pkg/stats"
 )
 
@@ -553,10 +554,75 @@ func (np *NodePool) ProbeNodes(ctx context.Context, nodeList []*Node) {
 	// Re-sort candidates and persist updated probe latencies
 	np.mu.Lock()
 	np.rebuildCandidatesLocked()
+	candidatesCopy := make([]*Node, len(np.candidates))
+	copy(candidatesCopy, np.candidates)
 	np.saveStoreLocked()
 	np.mu.Unlock()
 
 	stats.LogInfo("Probe", "全量节点测速完成！")
+
+	if len(candidatesCopy) > 0 {
+		go np.PreWarmSSTPPorts(ctx, candidatesCopy)
+	}
+}
+
+// PreWarmSSTPPorts checks and caches SSTP listening ports on top responsive candidate nodes in the background.
+func (np *NodePool) PreWarmSSTPPorts(ctx context.Context, nodes []*Node) {
+	if len(nodes) == 0 {
+		return
+	}
+	limit := 30
+	var toCheck []*Node
+	for _, n := range nodes {
+		np.mu.RLock()
+		unprobed := n.SSTPPort == 0 && n.LatencyMs > 0
+		np.mu.RUnlock()
+		if unprobed {
+			toCheck = append(toCheck, n)
+			if len(toCheck) >= limit {
+				break
+			}
+		}
+	}
+
+	if len(toCheck) == 0 {
+		return
+	}
+
+	sem := make(chan struct{}, 6)
+	var wg sync.WaitGroup
+
+	for _, n := range toCheck {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
+		wg.Add(1)
+		go func(target *Node) {
+			defer wg.Done()
+			select {
+			case <-ctx.Done():
+				return
+			case sem <- struct{}{}:
+			}
+			defer func() { <-sem }()
+
+			ports := sstp.ResolveCandidatePorts(target.Port, target.Proto)
+			foundPort := sstp.DetectSSTPPort(ctx, target.IP, ports, 2*time.Second)
+			if foundPort > 0 {
+				np.mu.Lock()
+				target.SSTPPort = foundPort
+				np.mu.Unlock()
+			}
+		}(n)
+	}
+	wg.Wait()
+
+	np.mu.Lock()
+	np.saveStoreLocked()
+	np.mu.Unlock()
 }
 
 func (np *NodePool) ProbeSpecificNodes(ctx context.Context, ids []string) []*Node {

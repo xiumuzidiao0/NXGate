@@ -1,7 +1,12 @@
 package tunnel
 
 import (
+	"context"
+	"net"
+	"net/http"
+	"net/http/httptest"
 	"testing"
+	"time"
 
 	"aimili-vpngate-go/pkg/nodes"
 )
@@ -207,5 +212,48 @@ func TestFullUnlockValidation(t *testing.T) {
 
 	if claudeBlockedWithStreaming.MatchFilter("full") {
 		t.Error("AI 未全通的节点不应通过 full 过滤器")
+	}
+}
+
+func TestUnlockDetectorProbeWithDialer(t *testing.T) {
+	detector := NewUnlockDetector(t.TempDir())
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status":"ok"}`))
+	}))
+	defer server.Close()
+
+	dialer := func(ctx context.Context, network, addr string) (net.Conn, error) {
+		return net.Dial(network, server.Listener.Addr().String())
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	res := detector.ProbeWithDialer(ctx, dialer, "198.51.100.1", "test-userland")
+	if res == nil {
+		t.Fatal("expected non-nil UnlockResult from ProbeWithDialer")
+	}
+	if !res.IsProbed {
+		t.Fatal("expected IsProbed to be true")
+	}
+	if res.IP != "198.51.100.1" {
+		t.Fatalf("expected IP 198.51.100.1, got %s", res.IP)
+	}
+
+	// Also verify ProbeTunnelInstance with userland tunnel
+	tun := &Tunnel{
+		DevName:    "sstp-tun0",
+		IsUserland: true,
+		Dialer:     dialer,
+		Node: &nodes.Node{
+			IP: "198.51.100.1",
+		},
+	}
+	instRes := detector.ProbeTunnelInstance(ctx, tun)
+	if instRes == nil || !instRes.IsProbed {
+		t.Fatal("expected valid result from ProbeTunnelInstance for userland tunnel")
 	}
 }

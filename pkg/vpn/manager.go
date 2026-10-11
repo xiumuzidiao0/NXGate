@@ -16,6 +16,7 @@ import (
 
 type UserlandProxyAttacher interface {
 	SetUserlandDialer(dialer func(ctx context.Context, network, addr string) (net.Conn, error))
+	SetUserlandPacketConn(packetConn func() (net.PacketConn, error))
 }
 
 type Manager struct {
@@ -156,6 +157,7 @@ func (m *Manager) ConnectWithMode(target *nodes.Node, mode string) error {
 	}
 	if m.attacher != nil {
 		m.attacher.SetUserlandDialer(nil)
+		m.attacher.SetUserlandPacketConn(nil)
 	}
 
 	// Stop previous primary tunnel if running
@@ -287,6 +289,7 @@ func (m *Manager) ConnectUserland(target *nodes.Node) error {
 	}
 	if m.attacher != nil {
 		m.attacher.SetUserlandDialer(nil)
+		m.attacher.SetUserlandPacketConn(nil)
 	}
 
 	m.activeNode = target
@@ -302,7 +305,7 @@ func (m *Manager) ConnectUserland(target *nodes.Node) error {
 		ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 		defer cancel()
 
-		tun, err := sstp.ConnectNode(ctx, target.IP, target.Port, target.Proto, "vpn", "vpn")
+		tun, err := sstp.ConnectNodeWithPreferred(ctx, target.IP, target.SSTPPort, target.Port, target.Proto, "vpn", "vpn")
 		if err != nil {
 			m.mu.Lock()
 			if m.epoch == currentEpoch {
@@ -317,6 +320,9 @@ func (m *Manager) ConnectUserland(target *nodes.Node) error {
 			stats.LogWarn("VPN", "用户态直连 %s 失败: %v", target.IP, err)
 			go m.TriggerAutoFailover()
 			return
+		}
+		if target != nil {
+			target.SSTPPort = tun.Port()
 		}
 
 		m.mu.Lock()
@@ -334,6 +340,7 @@ func (m *Manager) ConnectUserland(target *nodes.Node) error {
 
 		if m.attacher != nil {
 			m.attacher.SetUserlandDialer(tun.Dial)
+			m.attacher.SetUserlandPacketConn(tun.OpenPacketConn)
 		}
 
 		stats.LogInfo("VPN", "用户态免 TUN 直连就绪: %s (%s), 虚拟 IP: %s, 端口: %d", target.ID, target.CountryShort, tun.AssignedIP(), tun.Port())
@@ -351,6 +358,7 @@ func (m *Manager) Disconnect(reason string) {
 	}
 	if m.attacher != nil {
 		m.attacher.SetUserlandDialer(nil)
+		m.attacher.SetUserlandPacketConn(nil)
 	}
 	if m.primaryID != "" && m.tunnelPool != nil {
 		_ = m.tunnelPool.StopTunnel(m.primaryID)

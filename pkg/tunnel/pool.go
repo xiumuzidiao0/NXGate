@@ -190,7 +190,7 @@ func (p *Pool) StartUserlandTunnel(node *nodes.Node) (*Tunnel, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 		defer cancel()
 
-		st, err := sstp.ConnectNode(ctx, node.IP, node.Port, node.Proto, "vpn", "vpn")
+		st, err := sstp.ConnectNodeWithPreferred(ctx, node.IP, node.SSTPPort, node.Port, node.Proto, "vpn", "vpn")
 		if err != nil {
 			tun.mu.Lock()
 			tun.Status = StatusFailed
@@ -200,12 +200,16 @@ func (p *Pool) StartUserlandTunnel(node *nodes.Node) (*Tunnel, error) {
 			p.cleanupTunnel(tun, tunnelID)
 			return
 		}
+		if node != nil {
+			node.SSTPPort = st.Port()
+		}
 
 		tun.mu.Lock()
 		tun.Status = StatusConnected
 		tun.ConnectedAt = time.Now()
 		tun.Message = fmt.Sprintf("用户态免 TUN 已就绪 (虚拟 IP: %s, 端口: %d)", st.AssignedIP(), st.Port())
 		tun.Dialer = st.Dial
+		tun.OpenPacketConn = st.OpenPacketConn
 		tun.Closer = st
 		tun.mu.Unlock()
 
@@ -441,7 +445,7 @@ func (p *Pool) probeUnlock(tunnelID string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	res := p.unlockDetector.ProbeTunnel(ctx, t.DevName, t.Node.IP)
+	res := p.unlockDetector.ProbeTunnelInstance(ctx, t)
 	t.SetUnlock(res)
 }
 

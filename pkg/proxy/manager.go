@@ -22,6 +22,7 @@ type MultiPortManager struct {
 	scheduler      TunnelSelector
 	customProxyMgr *CustomProxyManager
 	userlandDialer func(ctx context.Context, network, addr string) (net.Conn, error)
+	userlandPacketConn func() (net.PacketConn, error)
 
 	mu        sync.RWMutex
 	listeners map[int]*PortListener
@@ -109,6 +110,15 @@ func (m *MultiPortManager) SetUserlandDialer(dialer func(ctx context.Context, ne
 	}
 }
 
+func (m *MultiPortManager) SetUserlandPacketConn(packetConn func() (net.PacketConn, error)) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.userlandPacketConn = packetConn
+	for _, l := range m.listeners {
+		l.SetUserlandPacketConn(packetConn)
+	}
+}
+
 func (m *MultiPortManager) GetCustomProxyManager() *CustomProxyManager {
 	return m.customProxyMgr
 }
@@ -124,6 +134,9 @@ func (m *MultiPortManager) startListenerLocked(rule PortRule) {
 	}
 	if m.userlandDialer != nil {
 		listener.SetUserlandDialer(m.userlandDialer)
+	}
+	if m.userlandPacketConn != nil {
+		listener.SetUserlandPacketConn(m.userlandPacketConn)
 	}
 	m.listeners[rule.Port] = listener
 	go func() {
