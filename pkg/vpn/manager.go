@@ -3,19 +3,28 @@ package vpn
 import (
 	"context"
 	"fmt"
+	"net"
 	"sync"
 	"time"
 
 	"aimili-vpngate-go/pkg/config"
 	"aimili-vpngate-go/pkg/nodes"
+	"aimili-vpngate-go/pkg/sstp"
 	"aimili-vpngate-go/pkg/stats"
 	"aimili-vpngate-go/pkg/tunnel"
 )
+
+type UserlandProxyAttacher interface {
+	SetUserlandDialer(dialer func(ctx context.Context, network, addr string) (net.Conn, error))
+}
 
 type Manager struct {
 	cfg        *config.Config
 	pool       *nodes.NodePool
 	tunnelPool *tunnel.Pool
+	attacher   UserlandProxyAttacher
+	sstpTunnel *sstp.Tunnel
+	driverMode DriverMode
 
 	mu           sync.RWMutex
 	epoch        uint64
@@ -33,9 +42,16 @@ func NewManager(cfg *config.Config, pool *nodes.NodePool, tp *tunnel.Pool) *Mana
 		cfg:         cfg,
 		pool:        pool,
 		tunnelPool:  tp,
+		driverMode:  DriverKernel,
 		status:      StatusDisconnected,
 		lastMessage: "VPN 服务已就绪，未连接",
 	}
+}
+
+func (m *Manager) SetProxyAttacher(attacher UserlandProxyAttacher) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.attacher = attacher
 }
 
 func (m *Manager) Snapshot() StateSnapshot {
@@ -74,11 +90,43 @@ func (m *Manager) Snapshot() StateSnapshot {
 		activeID = activeNode.ID
 	}
 
+	driverMode := m.driverMode
+	if driverMode == "" {
+		driverMode = DriverKernel
+	}
+
+	if driverMode == DriverUserland {
+		if m.sstpTunnel != nil && m.sstpTunnel.IsHealthy() {
+			status = StatusConnected
+		}
+	} else if m.primaryID != "" && m.tunnelPool != nil {
+		if t := m.tunnelPool.GetTunnel(m.primaryID); t != nil {
+			if t.Status == tunnel.StatusConnected {
+				status = StatusConnected
+			} else if t.Status == tunnel.StatusConnecting {
+				status = StatusConnecting
+			} else if t.Status == tunnel.StatusFailed {
+				status = StatusFailed
+			}
+			activeNode = t.Node
+			connectedAt = t.ConnectedAt
+			if t.Message != "" {
+				lastMsg = t.Message
+			}
+		}
+	}
+
+	if status == StatusConnected && !connectedAt.IsZero() {
+		uptime = int64(time.Since(connectedAt).Seconds())
+	}
+
 	return StateSnapshot{
 		Status:         status,
 		StatusText:     string(status),
 		ActiveNodeID:   activeID,
 		ActiveNode:     activeNode,
+		DriverMode:     driverMode,
+		ZeroTUN:        driverMode == DriverUserland,
 		TunnelReady:    status == StatusConnected,
 		ProxyReady:     true,
 		ConnectedAt:    connectedAt,
@@ -89,9 +137,26 @@ func (m *Manager) Snapshot() StateSnapshot {
 }
 
 func (m *Manager) Connect(target *nodes.Node) error {
+	return m.ConnectWithMode(target, DriverKernel)
+}
+
+func (m *Manager) ConnectWithMode(target *nodes.Node, mode DriverMode) error {
+	if mode == DriverUserland {
+		return m.ConnectUserland(target)
+	}
+
 	m.mu.Lock()
 	m.epoch++
 	currentEpoch := m.epoch
+
+	// Clean up previous userland sstp tunnel if active
+	if m.sstpTunnel != nil {
+		_ = m.sstpTunnel.Close()
+		m.sstpTunnel = nil
+	}
+	if m.attacher != nil {
+		m.attacher.SetUserlandDialer(nil)
+	}
 
 	// Stop previous primary tunnel if running
 	if m.primaryID != "" && m.tunnelPool != nil {
@@ -99,10 +164,11 @@ func (m *Manager) Connect(target *nodes.Node) error {
 		m.primaryID = ""
 	}
 
+	m.driverMode = DriverKernel
 	m.activeNode = target
 	m.status = StatusConnecting
 	m.isConnecting = true
-	m.lastMessage = fmt.Sprintf("正在发起对节点 %s (%s) 的连接...", target.ID, target.CountryShort)
+	m.lastMessage = fmt.Sprintf("正在发起对节点 %s (%s) 的内核 OpenVPN 连接...", target.ID, target.CountryShort)
 	m.mu.Unlock()
 
 	stats.LogInfo("VPN", "开始连接主节点: %s (%s %s)", target.ID, target.CountryShort, target.HostName)
@@ -204,9 +270,85 @@ func (m *Manager) Connect(target *nodes.Node) error {
 	return nil
 }
 
+func (m *Manager) ConnectUserland(target *nodes.Node) error {
+	m.mu.Lock()
+	m.epoch++
+	currentEpoch := m.epoch
+
+	// Stop previous primary openvpn tunnel if running
+	if m.primaryID != "" && m.tunnelPool != nil {
+		_ = m.tunnelPool.StopTunnel(m.primaryID)
+		m.primaryID = ""
+	}
+	// Stop previous sstp tunnel if running
+	if m.sstpTunnel != nil {
+		_ = m.sstpTunnel.Close()
+		m.sstpTunnel = nil
+	}
+	if m.attacher != nil {
+		m.attacher.SetUserlandDialer(nil)
+	}
+
+	m.activeNode = target
+	m.driverMode = DriverUserland
+	m.status = StatusConnecting
+	m.isConnecting = true
+	m.lastMessage = fmt.Sprintf("正在通过用户态 SSTP (免 TUN) 连接 %s (%s)...", target.ID, target.CountryShort)
+	m.mu.Unlock()
+
+	stats.LogInfo("VPN", "开始用户态免 TUN 直连: %s (%s %s:443)", target.ID, target.CountryShort, target.IP)
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+		defer cancel()
+
+		tun, err := sstp.Connect(ctx, target.IP, 443, "vpn", "vpn")
+		if err != nil {
+			m.mu.Lock()
+			if m.epoch == currentEpoch {
+				m.status = StatusFailed
+				m.isConnecting = false
+				m.lastMessage = fmt.Sprintf("用户态 SSTP 直连失败: %v", err)
+			}
+			m.mu.Unlock()
+			stats.LogWarn("VPN", "用户态直连 %s 失败: %v", target.IP, err)
+			go m.TriggerAutoFailover()
+			return
+		}
+
+		m.mu.Lock()
+		if m.epoch != currentEpoch {
+			_ = tun.Close()
+			m.mu.Unlock()
+			return
+		}
+		m.sstpTunnel = tun
+		m.status = StatusConnected
+		m.isConnecting = false
+		m.connectedAt = time.Now()
+		m.lastMessage = fmt.Sprintf("用户态免 TUN 直连已就绪 (虚拟 IP: %s, 端口 443)", tun.AssignedIP())
+		m.mu.Unlock()
+
+		if m.attacher != nil {
+			m.attacher.SetUserlandDialer(tun.Dial)
+		}
+
+		stats.LogInfo("VPN", "用户态免 TUN 直连就绪: %s (%s), 虚拟 IP: %s", target.ID, target.CountryShort, tun.AssignedIP())
+	}()
+
+	return nil
+}
+
 func (m *Manager) Disconnect(reason string) {
 	m.mu.Lock()
 	m.epoch++
+	if m.sstpTunnel != nil {
+		_ = m.sstpTunnel.Close()
+		m.sstpTunnel = nil
+	}
+	if m.attacher != nil {
+		m.attacher.SetUserlandDialer(nil)
+	}
 	if m.primaryID != "" && m.tunnelPool != nil {
 		_ = m.tunnelPool.StopTunnel(m.primaryID)
 		m.primaryID = ""
@@ -240,9 +382,13 @@ func (m *Manager) TriggerAutoFailover() {
 		best = m.pool.SelectBest()
 	}
 
+	m.mu.RLock()
+	currentMode := m.driverMode
+	m.mu.RUnlock()
+
 	if best != nil {
-		stats.LogInfo("VPN", "自动切换至新主节点: %s (%s)", best.ID, best.CountryShort)
-		_ = m.Connect(best)
+		stats.LogInfo("VPN", "自动切换至新主节点: %s (%s, 模式: %s)", best.ID, best.CountryShort, currentMode)
+		_ = m.ConnectWithMode(best, currentMode)
 	} else {
 		stats.LogError("VPN", "自动故障转移失败: 无任何候选节点可用")
 	}
@@ -260,9 +406,19 @@ func (m *Manager) StartHealthChecker(ctx context.Context) {
 			case <-ticker.C:
 				m.mu.RLock()
 				status := m.status
+				dMode := m.driverMode
+				sTun := m.sstpTunnel
 				m.mu.RUnlock()
 
 				if status != StatusConnected {
+					continue
+				}
+
+				if dMode == DriverUserland {
+					if sTun == nil || !sTun.IsHealthy() {
+						stats.LogWarn("Health", "心跳检测未通过：用户态 SSTP 链路已中断，触发自动切换")
+						go m.TriggerAutoFailover()
+					}
 					continue
 				}
 
@@ -307,6 +463,7 @@ func (m *Manager) StartAutoRotator(ctx context.Context) {
 				if m.activeNode != nil {
 					currID = m.activeNode.ID
 				}
+				currentMode := m.driverMode
 				m.mu.RUnlock()
 
 				if status != StatusConnected {
@@ -315,9 +472,9 @@ func (m *Manager) StartAutoRotator(ctx context.Context) {
 
 				best := m.pool.SelectBestWithFilter(settings.AutoRotateIPType, settings.DiscoveryCountries, true)
 				if best != nil && best.ID != currID {
-					stats.LogInfo("Rotator", "触发定时自动轮换策略 (周期: %d分钟)，正在平滑切换至新节点: %s (%s)...",
-						settings.AutoRotateMinutes, best.ID, best.CountryShort)
-					_ = m.Connect(best)
+					stats.LogInfo("Rotator", "触发定时自动轮换策略 (周期: %d分钟)，正在平滑切换至新节点: %s (%s, 模式: %s)...",
+						settings.AutoRotateMinutes, best.ID, best.CountryShort, currentMode)
+					_ = m.ConnectWithMode(best, currentMode)
 					lastRotated = time.Now()
 				}
 			}

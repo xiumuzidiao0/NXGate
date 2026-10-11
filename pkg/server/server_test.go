@@ -167,6 +167,25 @@ func TestServerAPI(t *testing.T) {
 		t.Fatalf("expected blacklist remove 200, got %d", wBLRm.Code)
 	}
 
+	// Test handleConnect with Mode sstp and kernel
+	srv.pool.SetCandidatesForTest([]*nodes.Node{
+		{
+			ID:           "test-node-sstp",
+			IP:           "1.2.3.4",
+			CountryShort: "JP",
+		},
+	})
+	connectJSON := `{"node_id":"test-node-sstp","mode":"sstp"}`
+	reqConn := httptest.NewRequest("POST", "/api/connect", strings.NewReader(connectJSON))
+	wConn := httptest.NewRecorder()
+	srv.handleConnect(wConn, reqConn)
+	if wConn.Code != http.StatusOK {
+		t.Fatalf("expected 200 for handleConnect sstp, got %d", wConn.Code)
+	}
+	if !strings.Contains(wConn.Body.String(), `"driver_mode":"userland"`) {
+		t.Fatalf("expected userland driver mode in response, got: %s", wConn.Body.String())
+	}
+
 	reqBLClear := httptest.NewRequest("POST", "/api/blacklist/clear", nil)
 	wBLClear := httptest.NewRecorder()
 	srv.handleBlacklistClear(wBLClear, reqBLClear)

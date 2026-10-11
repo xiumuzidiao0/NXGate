@@ -16,6 +16,7 @@ import (
 	"aimili-vpngate-go/pkg/proxy"
 	"aimili-vpngate-go/pkg/stats"
 	"aimili-vpngate-go/pkg/tunnel"
+	"aimili-vpngate-go/pkg/vpn"
 )
 
 type StatusResponse struct {
@@ -143,6 +144,7 @@ func (s *Server) handleToggleFavorite(w http.ResponseWriter, r *http.Request) {
 
 type ConnectRequest struct {
 	NodeID string `json:"node_id"`
+	Mode   string `json:"mode,omitempty"`
 }
 
 func (s *Server) handleConnect(w http.ResponseWriter, r *http.Request) {
@@ -164,15 +166,21 @@ func (s *Server) handleConnect(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	mode := vpn.DriverKernel
+	if req.Mode == "sstp" || req.Mode == "userland" || req.Mode == "zero_tun" {
+		mode = vpn.DriverUserland
+	}
+
 	go func() {
-		_ = s.vpn.Connect(target)
+		_ = s.vpn.ConnectWithMode(target, mode)
 	}()
 
 	s.writeJSON(w, http.StatusOK, map[string]any{
-		"message": "已发起连接请求",
-		"node_id": target.ID,
-		"ip":      target.IP,
-		"country": target.CountryShort,
+		"message":     "已发起连接请求",
+		"node_id":     target.ID,
+		"ip":          target.IP,
+		"country":     target.CountryShort,
+		"driver_mode": string(mode),
 	})
 }
 

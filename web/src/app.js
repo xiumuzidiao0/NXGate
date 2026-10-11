@@ -320,27 +320,35 @@ import { I18N } from './i18n.js';
                 // Status Badge & Buttons
                 const badge = document.getElementById('conn-badge');
                 const btnConnect = document.getElementById('btn-quick-connect');
+                const btnConnectSstp = document.getElementById('btn-quick-connect-sstp');
                 const btnDisconnect = document.getElementById('btn-disconnect');
 
+                const isEn = getLanguage() === 'en';
                 badge.className = 'badge ' + (vpn.status || 'disconnected');
                 if (vpn.status === 'connected') {
-                    badge.innerHTML = `<span class="status-dot"></span> ${t('header.connected')}`;
-                    btnConnect.classList.add('hidden');
+                    const modeTag = vpn.zero_tun ? (isEn ? 'Zero-TUN' : '免TUN') : (isEn ? 'TUN' : '内核');
+                    badge.innerHTML = `<span class="status-dot"></span> ${t('header.connected')} <span class="badge-mini" style="margin-left:4px;font-size:10px;opacity:0.85">${modeTag}</span>`;
+                    if (btnConnect) btnConnect.classList.add('hidden');
+                    if (btnConnectSstp) btnConnectSstp.classList.add('hidden');
                     btnDisconnect.classList.remove('hidden');
                 } else if (vpn.status === 'connecting' || vpn.status === 'reconnecting') {
                     badge.innerHTML = `<span class="status-dot"></span> ${t('header.connecting')}`;
-                    btnConnect.disabled = true;
+                    if (btnConnect) btnConnect.disabled = true;
+                    if (btnConnectSstp) btnConnectSstp.disabled = true;
                     btnDisconnect.classList.remove('hidden');
                 } else {
                     badge.innerHTML = `<span class="status-dot"></span> ${t('header.disconnected')}`;
-                    btnConnect.classList.remove('hidden');
-                    btnConnect.disabled = false;
+                    if (btnConnect) { btnConnect.classList.remove('hidden'); btnConnect.disabled = false; }
+                    if (btnConnectSstp) { btnConnectSstp.classList.remove('hidden'); btnConnectSstp.disabled = false; }
                     btnDisconnect.classList.add('hidden');
                 }
 
                 // Info card
-                const isEn = getLanguage() === 'en';
-                document.getElementById('vpn-status-text').innerText = vpn.status === 'connected' ? (isEn ? 'Connected' : '已连接') : (vpn.status_text || vpn.status || (isEn ? 'Disconnected' : '未连接'));
+                let statusLabel = vpn.status === 'connected' ? (isEn ? 'Connected' : '已连接') : (vpn.status_text || vpn.status || (isEn ? 'Disconnected' : '未连接'));
+                if (vpn.status === 'connected' && vpn.zero_tun) {
+                    statusLabel += isEn ? ' · Zero-TUN (SSTP 443)' : ' · 用户态免TUN (SSTP 443)';
+                }
+                document.getElementById('vpn-status-text').innerText = statusLabel;
                 document.getElementById('vpn-node-ip').innerText = vpn.active_node ? `${vpn.active_node.ip}:${vpn.active_node.port}` : '-';
 
                 if (vpn.active_node) {
@@ -673,9 +681,14 @@ import { I18N } from './i18n.js';
                             <span class="map-popup-label">${isEn ? 'Latency / Speed' : '实测延迟 / 带宽'}</span>
                             <span class="map-popup-val">${latencyText} · ${(Number(node.speed || 0) / 1000000).toFixed(1)}M</span>
                         </div>
-                        <button type="button" class="btn btn-sm ${isPrimary ? 'btn-outline' : ''} map-popup-btn" data-action="connectToNode" data-args="${jsonAttr([node.id])}">
-                            ${isPrimary ? (isEn ? 'Current Primary' : '当前已连接') : (isEn ? 'Connect to this Egress' : '设为主网关出口')}
-                        </button>
+                        <div style="display:flex;gap:6px;margin-top:6px">
+                            <button type="button" class="btn btn-sm ${isPrimary && !currentState?.vpn?.zero_tun ? 'btn-outline' : ''} map-popup-btn" style="flex:1" data-action="connectToNode" data-args="${jsonAttr([node.id, 'kernel'])}">
+                                ${isPrimary && !currentState?.vpn?.zero_tun ? (isEn ? 'Kernel Exit' : '当前内核连') : (isEn ? 'Kernel' : '内核直连')}
+                            </button>
+                            <button type="button" class="btn btn-sm ${isPrimary && currentState?.vpn?.zero_tun ? 'btn-outline' : ''} map-popup-btn" style="flex:1" data-action="connectToNode" data-args="${jsonAttr([node.id, 'sstp'])}">
+                                ⚡${isPrimary && currentState?.vpn?.zero_tun ? (isEn ? 'Zero-TUN Exit' : '当前免TUN') : (isEn ? 'Zero-TUN' : '免TUN直连')}
+                            </button>
+                        </div>
                     </div>
                 `;
 
@@ -864,14 +877,18 @@ import { I18N } from './i18n.js';
                         </td>
                         <td data-label="${isEn ? 'Actions' : '操作'}" class="text-right">
                             ${isCurrent ?
-                                `<span class="badge connected"><span class="status-dot"></span> ${isEn ? 'Primary' : '当前主连'}</span>` :
+                                `<div class="action-group">
+                                    <span class="badge connected"><span class="status-dot"></span> ${isEn ? (currentState?.vpn?.zero_tun ? 'Zero-TUN' : 'Primary') : (currentState?.vpn?.zero_tun ? '当前免TUN' : '当前主连')}</span>
+                                    <button class="btn btn-danger btn-xs" data-action="disconnectVPN">${isEn ? 'Disconnect' : '断开'}</button>
+                                </div>` :
                                 (activeTun ?
                                     `<div class="action-group">
                                         <span class="badge badge-current"><span class="status-dot"></span> ${escapeHtml(activeTun.dev_name)}</span>
                                         <button class="btn btn-danger btn-xs" data-action="stopTunnel" data-args="${jsonAttr([activeTun.id])}">${isEn ? 'Disconnect' : '断开'}</button>
                                     </div>` :
                                     `<div class="action-group">
-                                        <button class="btn btn-xs" data-action="connectToNode" data-args="${jsonAttr([n.id])}" title="${isEn ? 'Set as primary gateway exit' : '设置为主网关出口'}">${isEn ? 'Primary' : '主连'}</button>
+                                        <button class="btn btn-xs" data-action="connectToNode" data-args="${jsonAttr([n.id, 'kernel'])}" title="${isEn ? 'Connect via OpenVPN (kernel TUN)' : '内核 OpenVPN 直连'}">${isEn ? 'Kernel' : '内核连'}</button>
+                                        <button class="btn btn-outline btn-xs" data-action="connectToNode" data-args="${jsonAttr([n.id, 'sstp'])}" title="${isEn ? 'Zero-TUN userland direct connect via SSTP 443' : '纯用户态免虚拟网卡直连 (SSTP 443)'}">⚡${isEn ? 'ZeroTUN' : '免TUN'}</button>
                                         <button class="btn btn-outline btn-xs" data-action="startNewTunnel" data-args="${jsonAttr([n.id])}" title="${isEn ? 'Launch as new independent tunnel exit' : '启动为新的独立并发出口'}">${isEn ? '+Tunnel' : '+并发'}</button>
                                         <button class="btn btn-outline btn-xs btn-icon-danger" data-action="addNodeToBlacklist" data-args="${jsonAttr([n.id, n.ip, n.country_short])}" title="${isEn ? 'Blacklist node for 24h' : '屏蔽/拉黑此节点24小时'}">×</button>
                                     </div>`
@@ -931,18 +948,24 @@ import { I18N } from './i18n.js';
             }, 700);
         }
 
-        async function quickConnect() {
-            appendLog({ level: 'INFO', module: 'Action', message: '正在请求快速连接最优节点...' });
-            await fetch('/api/connect', { method: 'POST' });
-            fetchStatus();
-        }
-
-        async function connectToNode(nodeId) {
-            appendLog({ level: 'INFO', module: 'Action', message: `正在请求切换至节点: ${nodeId}...` });
+        async function quickConnect(mode = 'kernel') {
+            const isUserland = mode === 'sstp' || mode === 'userland';
+            appendLog({ level: 'INFO', module: 'Action', message: isUserland ? '正在请求快速免 TUN 直连最优节点 (SSTP 443)...' : '正在请求快速连接最优节点 (内核模式)...' });
             await fetch('/api/connect', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ node_id: nodeId })
+                body: JSON.stringify({ mode: isUserland ? 'sstp' : 'kernel' })
+            });
+            fetchStatus();
+        }
+
+        async function connectToNode(nodeId, mode = 'kernel') {
+            const isUserland = mode === 'sstp' || mode === 'userland';
+            appendLog({ level: 'INFO', module: 'Action', message: `正在请求切换至节点: ${nodeId} [${isUserland ? '免 TUN 用户态 SSTP' : '内核 OpenVPN'}]...` });
+            await fetch('/api/connect', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ node_id: nodeId, mode: isUserland ? 'sstp' : 'kernel' })
             });
             fetchStatus();
         }

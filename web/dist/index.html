@@ -92,9 +92,13 @@
                         <svg aria-hidden="true" viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
                         <span data-i18n="header.mobile_app">手机 App 绑定</span>
                     </button>
-                    <button id="btn-quick-connect" class="btn" data-action="quickConnect">
+                    <button id="btn-quick-connect" class="btn" data-action="quickConnect" data-args="[&quot;kernel&quot;]">
                         <svg aria-hidden="true" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
                         <span data-i18n="header.quick_connect">智能连接最优节点</span>
+                    </button>
+                    <button id="btn-quick-connect-sstp" class="btn btn-outline" data-action="quickConnect" data-args="[&quot;sstp&quot;]" title="纯用户态免虚拟网卡直连 (无需 root/TUN)">
+                        <svg aria-hidden="true" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                        <span data-i18n="header.quick_connect_sstp">⚡免TUN直连</span>
                     </button>
                     <button id="btn-disconnect" class="btn btn-danger hidden" data-action="disconnectVPN" hidden>
                         <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>

@@ -16,11 +16,20 @@ const (
 	StatusFailed       ConnectionStatus = "failed"
 )
 
+type DriverMode string
+
+const (
+	DriverKernel   DriverMode = "kernel"   // OpenVPN / Linux tun0
+	DriverUserland DriverMode = "userland" // SSTP / Zero-TUN
+)
+
 type StateSnapshot struct {
 	Status         ConnectionStatus `json:"status"`
 	StatusText     string           `json:"status_text"`
 	ActiveNodeID   string           `json:"active_node_id"`
 	ActiveNode     *nodes.Node      `json:"active_node,omitempty"`
+	DriverMode     DriverMode       `json:"driver_mode"`
+	ZeroTUN        bool             `json:"zero_tun"`
 	TunnelReady    bool             `json:"tunnel_ready"`
 	ProxyReady     bool             `json:"proxy_ready"`
 	ConnectedAt    time.Time        `json:"connected_at,omitempty"`

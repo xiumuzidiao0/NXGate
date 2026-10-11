@@ -34,6 +34,7 @@ type PortListener struct {
 	host           string
 	scheduler      TunnelSelector
 	customProxyMgr *CustomProxyManager
+	userlandDialer func(ctx context.Context, network, addr string) (net.Conn, error)
 	listener       net.Listener
 	sem            chan struct{}
 	cancel         context.CancelFunc
@@ -63,6 +64,12 @@ func NewPortListener(rule PortRule, cfg *config.Config, scheduler TunnelSelector
 
 func (l *PortListener) SetCustomProxyManager(m *CustomProxyManager) {
 	l.customProxyMgr = m
+}
+
+func (l *PortListener) SetUserlandDialer(dialer func(ctx context.Context, network, addr string) (net.Conn, error)) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.userlandDialer = dialer
 }
 
 func (l *PortListener) getAuthenticator() *Authenticator {
@@ -179,7 +186,17 @@ func (l *PortListener) dispatch(client net.Conn) {
 		}
 	}
 
-	// 2. Fall back to standard tunnel scheduler
+	// 2. Check if userland dialer (SSTP zero-TUN) is active
+	if dialer == nil {
+		l.mu.Lock()
+		uDialer := l.userlandDialer
+		l.mu.Unlock()
+		if uDialer != nil {
+			dialer = uDialer
+		}
+	}
+
+	// 3. Fall back to standard tunnel scheduler
 	if dialer == nil && l.scheduler != nil {
 		if tun := l.scheduler.SelectTunnel(l.rule.Port, l.rule.BoundTunnelIDs, l.rule.BoundGroupIDs, l.rule.Policy, l.rule.IntervalSeconds); tun != nil {
 			selectedTun = tun

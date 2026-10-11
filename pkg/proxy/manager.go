@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,6 +21,7 @@ type MultiPortManager struct {
 	dynamicMgr *tunnel.DynamicGroupManager
 	scheduler      TunnelSelector
 	customProxyMgr *CustomProxyManager
+	userlandDialer func(ctx context.Context, network, addr string) (net.Conn, error)
 
 	mu        sync.RWMutex
 	listeners map[int]*PortListener
@@ -98,6 +100,15 @@ func (m *MultiPortManager) StartAll() {
 	}
 }
 
+func (m *MultiPortManager) SetUserlandDialer(dialer func(ctx context.Context, network, addr string) (net.Conn, error)) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.userlandDialer = dialer
+	for _, l := range m.listeners {
+		l.SetUserlandDialer(dialer)
+	}
+}
+
 func (m *MultiPortManager) GetCustomProxyManager() *CustomProxyManager {
 	return m.customProxyMgr
 }
@@ -110,6 +121,9 @@ func (m *MultiPortManager) startListenerLocked(rule PortRule) {
 	listener := NewPortListener(rule, m.cfg, m.scheduler)
 	if m.customProxyMgr != nil {
 		listener.SetCustomProxyManager(m.customProxyMgr)
+	}
+	if m.userlandDialer != nil {
+		listener.SetUserlandDialer(m.userlandDialer)
 	}
 	m.listeners[rule.Port] = listener
 	go func() {
