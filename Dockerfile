@@ -1,5 +1,5 @@
 # Stage 1: Build the binary
-FROM golang:1.24-alpine AS builder
+FROM golang:alpine AS builder
 
 WORKDIR /src
 COPY . .
