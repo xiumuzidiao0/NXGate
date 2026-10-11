@@ -3,6 +3,7 @@ FROM golang:1.24-alpine AS builder
 
 WORKDIR /src
 COPY . .
+ENV GOTOOLCHAIN=auto
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /bin/nxgate ./cmd/nxgate
 
 # Stage 2: Minimal runtime image (<25MB)
