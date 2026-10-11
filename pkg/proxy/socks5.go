@@ -40,7 +40,7 @@ const (
 	repAtypNotSupport    = 0x08
 )
 
-func handleSocks5(client net.Conn, auth *Authenticator, devName string, tun *tunnel.Tunnel) error {
+func handleSocks5(client net.Conn, auth *Authenticator, devName string, tun *tunnel.Tunnel, dialer ...func(ctx context.Context, network, addr string) (net.Conn, error)) error {
 	// 1. Negotiation
 	// Client sends: VER (1 byte) | NMETHODS (1 byte) | METHODS (1-255 bytes)
 	verBuf := make([]byte, 1)
@@ -174,8 +174,15 @@ func handleSocks5(client net.Conn, auth *Authenticator, devName string, tun *tun
 		}
 		targetAddr := net.JoinHostPort(targetHost, strconv.Itoa(int(targetPort)))
 
-		// 3. Connect to upstream via selected tunnel devName
-		upstream, err := dialUpstream(targetAddr, devName, 10*time.Second)
+		// 3. Connect to upstream via selected tunnel devName or custom dialer
+		var upstream net.Conn
+		if len(dialer) > 0 && dialer[0] != nil {
+			dialCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			upstream, err = dialer[0](dialCtx, "tcp", targetAddr)
+			cancel()
+		} else {
+			upstream, err = dialUpstream(targetAddr, devName, 10*time.Second)
+		}
 		if err != nil {
 			if tun != nil {
 				tun.RecordFailure()

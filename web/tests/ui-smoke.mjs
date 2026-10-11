@@ -93,6 +93,12 @@ const nodes = [{
   is_favorite: true,
   ip_type: "residential",
   isp: "Example Fiber",
+  latitude: 35.6762,
+  longitude: 139.6503,
+  risk_score: 0.12,
+  risk_level: "pure",
+  risk_label: "极度纯净",
+  fraud_flags: ["vpn"],
   unlock: { openai: "unlocked", claude: "unlocked", netflix: "unlocked", google: "unlocked" },
 }];
 
@@ -377,12 +383,16 @@ try {
         [...element.attributes].some((attribute) => attribute.name.startsWith("on"))
       ).length,
       favoriteFilter: document.querySelector("#chip-fav")?.classList.contains("active"),
+      hasNodesMap: !!document.querySelector("#global-nodes-map"),
+      hasMapBadge: !!document.querySelector("#map-active-badge"),
       fontReady: document.fonts.check("14px Geist"),
     }));
     if (!drawerOpen) failures.push(`${viewport}px: editor drawer did not open`);
     if (metrics.overflow) failures.push(`${viewport}px: horizontal overflow`);
     if (metrics.inlineHandlers !== 0) failures.push(`${viewport}px: inline handlers remain`);
     if (!metrics.favoriteFilter) failures.push(`${viewport}px: filter action failed`);
+    if (!metrics.hasNodesMap) failures.push(`${viewport}px: global-nodes-map element not found`);
+    if (!metrics.hasMapBadge) failures.push(`${viewport}px: map-active-badge element not found`);
     if (!metrics.fontReady) failures.push(`${viewport}px: Geist font did not load`);
     if (errors.length) failures.push(`${viewport}px console: ${errors.join("; ")}`);
     if (screenshotDir) {

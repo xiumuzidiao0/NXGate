@@ -80,6 +80,10 @@ func (s *Server) Start(ctx context.Context) error {
 	mux.HandleFunc("POST /api/tunnels/stop", s.handleStopTunnel)
 	mux.HandleFunc("GET /api/proxy/ports", s.handleGetPortRules)
 	mux.HandleFunc("POST /api/proxy/ports", s.handleSetPortRules)
+	mux.HandleFunc("GET /api/custom-proxies", s.handleGetCustomProxies)
+	mux.HandleFunc("POST /api/custom-proxies", s.handleAddCustomProxies)
+	mux.HandleFunc("POST /api/custom-proxies/test", s.handleTestCustomProxies)
+	mux.HandleFunc("DELETE /api/custom-proxies", s.handleDeleteCustomProxy)
 
 	// Dynamic Auto-Managed Tunnel Groups APIs
 	mux.HandleFunc("GET /api/tunnel-groups", s.handleListTunnelGroups)

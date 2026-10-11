@@ -20,12 +20,15 @@ type IPCacheEntry struct {
 	ISP           string    `json:"isp"`
 	City          string    `json:"city"`
 	Region        string    `json:"region"`
+	Lat           float64   `json:"lat"`
+	Lon           float64   `json:"lon"`
 	ASN           int       `json:"asn"`
 	RDNS          string    `json:"rdns"`
 	IsHosting     bool      `json:"is_hosting"`
 	IsResidential bool      `json:"is_residential"`
 	ResConfidence int       `json:"res_confidence"`
 	ResReason     string    `json:"res_reason"`
+	Proxy         bool      `json:"proxy"`
 	CachedAt      time.Time `json:"cached_at"`
 }
 
@@ -88,18 +91,20 @@ func (e *IPEnricher) saveCacheLocked() {
 }
 
 type ipApiItem struct {
-	Status     string `json:"status"`
-	Query      string `json:"query"`
-	Country    string `json:"country"`
-	RegionName string `json:"regionName"`
-	City       string `json:"city"`
-	ISP        string `json:"isp"`
-	Org        string `json:"org"`
-	AS         string `json:"as"`      // "AS15169 Google LLC"
-	Reverse    string `json:"reverse"` // rDNS
-	Hosting    bool   `json:"hosting"`
-	Mobile     bool   `json:"mobile"`
-	Proxy      bool   `json:"proxy"`
+	Status     string  `json:"status"`
+	Query      string  `json:"query"`
+	Country    string  `json:"country"`
+	RegionName string  `json:"regionName"`
+	City       string  `json:"city"`
+	Lat        float64 `json:"lat"`
+	Lon        float64 `json:"lon"`
+	ISP        string  `json:"isp"`
+	Org        string  `json:"org"`
+	AS         string  `json:"as"`      // "AS15169 Google LLC"
+	Reverse    string  `json:"reverse"` // rDNS
+	Hosting    bool    `json:"hosting"`
+	Mobile     bool    `json:"mobile"`
+	Proxy      bool    `json:"proxy"`
 }
 
 func (e *IPEnricher) EnrichNodes(ctx context.Context, nodeList []*Node) {
@@ -117,12 +122,20 @@ func (e *IPEnricher) EnrichNodes(ctx context.Context, nodeList []*Node) {
 			n.ISP = entry.ISP
 			n.City = entry.City
 			n.Region = entry.Region
+			n.Latitude = entry.Lat
+			n.Longitude = entry.Lon
 			n.ASN = entry.ASN
 			n.RDNS = entry.RDNS
 			n.IsHosting = entry.IsHosting
 			n.IsResidential = entry.IsResidential
 			n.ResConfidence = entry.ResConfidence
 			n.ResReason = entry.ResReason
+
+			risk := CalculateRisk(n, entry.Proxy)
+			n.RiskScore = risk.Score
+			n.RiskLevel = risk.Level
+			n.RiskLabel = risk.Label
+			n.FraudFlags = risk.FraudFlags
 		} else {
 			toQuery = append(toQuery, n.IP)
 		}
@@ -150,7 +163,7 @@ func (e *IPEnricher) EnrichNodes(ctx context.Context, nodeList []*Node) {
 		}
 
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-			"http://ip-api.com/batch?lang=zh-CN&fields=status,query,country,regionName,city,isp,org,as,reverse,hosting,mobile,proxy",
+			"http://ip-api.com/batch?lang=zh-CN&fields=status,query,country,regionName,city,lat,lon,isp,org,as,reverse,hosting,mobile,proxy",
 			bytes.NewReader(reqBytes))
 		if err != nil {
 			continue
@@ -214,12 +227,15 @@ func (e *IPEnricher) EnrichNodes(ctx context.Context, nodeList []*Node) {
 				ISP:           ispName,
 				City:          item.City,
 				Region:        item.RegionName,
+				Lat:           item.Lat,
+				Lon:           item.Lon,
 				ASN:           asn,
 				RDNS:          item.Reverse,
 				IsHosting:     item.Hosting,
 				IsResidential: isResidential,
 				ResConfidence: classification.Confidence,
 				ResReason:     classification.Reason,
+				Proxy:         item.Proxy,
 				CachedAt:      time.Now(),
 			}
 			newResults[item.Query] = entry
@@ -244,14 +260,27 @@ func (e *IPEnricher) EnrichNodes(ctx context.Context, nodeList []*Node) {
 			n.ISP = entry.ISP
 			n.City = entry.City
 			n.Region = entry.Region
+			n.Latitude = entry.Lat
+			n.Longitude = entry.Lon
 			n.ASN = entry.ASN
 			n.RDNS = entry.RDNS
 			n.IsHosting = entry.IsHosting
 			n.IsResidential = entry.IsResidential
 			n.ResConfidence = entry.ResConfidence
 			n.ResReason = entry.ResReason
+
+			risk := CalculateRisk(n, entry.Proxy)
+			n.RiskScore = risk.Score
+			n.RiskLevel = risk.Level
+			n.RiskLabel = risk.Label
+			n.FraudFlags = risk.FraudFlags
 		} else if n.IPType == "" {
 			n.IPType = "unknown"
+			risk := CalculateRisk(n, false)
+			n.RiskScore = risk.Score
+			n.RiskLevel = risk.Level
+			n.RiskLabel = risk.Label
+			n.FraudFlags = risk.FraudFlags
 		}
 	}
 

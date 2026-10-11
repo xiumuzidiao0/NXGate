@@ -2664,6 +2664,210 @@ button {
             color: var(--success);
         }
 
+        /* Global Egress Topology Map */
+        .map-card {
+            margin-bottom: var(--space-4);
+            border-color: var(--border-soft);
+            background: var(--surface-2);
+        }
+        .map-container-wrap {
+            position: relative;
+            width: 100%;
+            height: 320px;
+            background: #09111d;
+            border-radius: var(--radius-md);
+            overflow: hidden;
+            transition: height var(--trans-normal), opacity var(--trans-normal);
+        }
+        .map-container-wrap.is-collapsed {
+            height: 0;
+            opacity: 0;
+            pointer-events: none;
+        }
+        .global-nodes-map {
+            width: 100%;
+            height: 100%;
+            background: #09111d;
+        }
+        .global-nodes-map .leaflet-tile-pane {
+            filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.96) saturate(0.88);
+        }
+        .leaflet-container {
+            font-family: inherit !important;
+            background: #09111d !important;
+        }
+        .leaflet-control-zoom {
+            display: none !important;
+        }
+        .leaflet-control-attribution {
+            background: rgba(9, 17, 29, 0.78) !important;
+            backdrop-filter: blur(8px);
+            color: var(--text-muted) !important;
+            border-radius: 6px 0 0 0;
+            font-size: 10px !important;
+        }
+        .leaflet-control-attribution a {
+            color: inherit !important;
+        }
+
+        /* Custom Vector Location Pins */
+        .node-pin-wrapper {
+            background: transparent;
+            border: 0;
+        }
+        .node-pin {
+            position: relative;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            border: 2px solid #ffffff;
+            box-shadow: 0 0 10px rgba(0,0,0,0.6);
+            cursor: pointer;
+            transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .node-pin:hover {
+            transform: scale(1.4);
+            z-index: 1000 !important;
+        }
+        .node-pin.pin-primary {
+            background: #10b981;
+            border-color: #ecfdf5;
+            box-shadow: 0 0 14px #10b981;
+            animation: pin-pulse 2s infinite;
+        }
+        .node-pin.pin-dynamic {
+            background: #06b6d4;
+            border-color: #cffafe;
+            box-shadow: 0 0 12px #06b6d4;
+            animation: pin-pulse 2.5s infinite;
+        }
+        .node-pin.pin-pure {
+            background: #8b5cf6;
+            border-color: #f3e8ff;
+            box-shadow: 0 0 10px #8b5cf6;
+        }
+        .node-pin.pin-clean {
+            background: #3b82f6;
+            border-color: #dbeafe;
+        }
+        .node-pin.pin-elevated {
+            background: #f59e0b;
+            border-color: #fef3c7;
+        }
+        .node-pin.pin-high {
+            background: #f97316;
+            border-color: #ffedd5;
+        }
+        .node-pin.pin-critical {
+            background: #ef4444;
+            border-color: #fee2e2;
+        }
+
+        @keyframes pin-pulse {
+            0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+            70% { box-shadow: 0 0 0 12px rgba(16, 185, 129, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+        }
+
+        /* Map Popup Styling */
+        .leaflet-popup-content-wrapper {
+            background: var(--surface-2) !important;
+            color: var(--text-main) !important;
+            border: 1px solid var(--border-soft) !important;
+            border-radius: var(--radius-md) !important;
+            box-shadow: var(--shadow-lg) !important;
+            backdrop-filter: blur(12px);
+            padding: 0 !important;
+        }
+        .leaflet-popup-content {
+            margin: 0 !important;
+            padding: 12px 14px !important;
+            min-width: 220px;
+            max-width: 290px;
+            font-size: 12px;
+            line-height: 1.5;
+        }
+        .leaflet-popup-tip {
+            background: var(--surface-2) !important;
+            border: 1px solid var(--border-soft) !important;
+        }
+        .map-popup-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            margin-bottom: 8px;
+            border-bottom: 1px solid var(--border-subtle);
+            padding-bottom: 6px;
+        }
+        .map-popup-title {
+            font-weight: 700;
+            font-size: 13px;
+            color: var(--text-main);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .map-popup-body {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        .map-popup-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+            font-size: 11px;
+        }
+        .map-popup-label {
+            color: var(--text-muted);
+        }
+        .map-popup-val {
+            font-weight: 600;
+            color: var(--text-main);
+        }
+        .map-popup-btn {
+            margin-top: 8px;
+            width: 100%;
+        }
+
+        /* Risk Badges */
+        .risk-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 1px 6px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 600;
+        }
+        .risk-badge.pure {
+            background: rgba(139, 92, 246, 0.15);
+            color: #a78bfa;
+            border: 1px solid rgba(139, 92, 246, 0.3);
+        }
+        .risk-badge.clean {
+            background: rgba(59, 130, 246, 0.15);
+            color: #60a5fa;
+            border: 1px solid rgba(59, 130, 246, 0.3);
+        }
+        .risk-badge.elevated {
+            background: rgba(245, 158, 11, 0.15);
+            color: #fbbf24;
+            border: 1px solid rgba(245, 158, 11, 0.3);
+        }
+        .risk-badge.high {
+            background: rgba(249, 115, 22, 0.15);
+            color: #fb923c;
+            border: 1px solid rgba(249, 115, 22, 0.3);
+        }
+        .risk-badge.critical {
+            background: rgba(239, 68, 68, 0.15);
+            color: #f87171;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
         @media (prefers-reduced-motion: reduce) {
             html {
                 scroll-behavior: auto;

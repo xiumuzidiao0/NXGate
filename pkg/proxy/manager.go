@@ -18,7 +18,8 @@ type MultiPortManager struct {
 	cfg        *config.Config
 	tunnelPool *tunnel.Pool
 	dynamicMgr *tunnel.DynamicGroupManager
-	scheduler  TunnelSelector
+	scheduler      TunnelSelector
+	customProxyMgr *CustomProxyManager
 
 	mu        sync.RWMutex
 	listeners map[int]*PortListener
@@ -31,14 +32,15 @@ type MultiPortManager struct {
 func NewMultiPortManager(cfg *config.Config, tp *tunnel.Pool, dm *tunnel.DynamicGroupManager) *MultiPortManager {
 	ctx, cancel := context.WithCancel(context.Background())
 	m := &MultiPortManager{
-		cfg:        cfg,
-		tunnelPool: tp,
-		dynamicMgr: dm,
-		scheduler:  NewScheduler(tp, dm),
-		listeners:  make(map[int]*PortListener),
-		rulesPath:  filepath.Join(cfg.DataDir, "port_rules.json"),
-		ctx:        ctx,
-		cancel:     cancel,
+		cfg:            cfg,
+		tunnelPool:     tp,
+		dynamicMgr:     dm,
+		scheduler:      NewScheduler(tp, dm),
+		customProxyMgr: NewCustomProxyManager(cfg.DataDir),
+		listeners:      make(map[int]*PortListener),
+		rulesPath:      filepath.Join(cfg.DataDir, "port_rules.json"),
+		ctx:            ctx,
+		cancel:         cancel,
 	}
 	m.loadRules()
 	return m
@@ -96,12 +98,19 @@ func (m *MultiPortManager) StartAll() {
 	}
 }
 
+func (m *MultiPortManager) GetCustomProxyManager() *CustomProxyManager {
+	return m.customProxyMgr
+}
+
 func (m *MultiPortManager) startListenerLocked(rule PortRule) {
 	if _, exists := m.listeners[rule.Port]; exists {
 		return
 	}
 
 	listener := NewPortListener(rule, m.cfg, m.scheduler)
+	if m.customProxyMgr != nil {
+		listener.SetCustomProxyManager(m.customProxyMgr)
+	}
 	m.listeners[rule.Port] = listener
 	go func() {
 		if err := listener.Start(m.ctx); err != nil {

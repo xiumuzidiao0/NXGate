@@ -487,6 +487,159 @@ import { I18N } from './i18n.js';
             } catch (err) {}
         }
 
+        let nodesMap = null;
+        let nodesMarkerGroup = null;
+        let isMapCollapsed = false;
+
+        function initNodesMap() {
+            if (nodesMap) return;
+            const container = document.getElementById('global-nodes-map');
+            if (!container || !window.L) return;
+
+            try {
+                nodesMap = L.map('global-nodes-map', {
+                    zoomControl: false,
+                    attributionControl: true,
+                    minZoom: 1,
+                    maxZoom: 18
+                }).setView([25, 10], 2);
+
+                if (nodesMap.attributionControl) {
+                    nodesMap.attributionControl.setPrefix(false);
+                }
+
+                L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    maxZoom: 18,
+                    attribution: '© OpenStreetMap'
+                }).addTo(nodesMap);
+
+                nodesMarkerGroup = L.featureGroup().addTo(nodesMap);
+            } catch (err) {
+                console.warn('Map initialization deferred or failed:', err);
+            }
+        }
+
+        function updateNodesMapMarkers(nodesToRender) {
+            initNodesMap();
+            if (!nodesMap || !nodesMarkerGroup || !window.L) return;
+            nodesMarkerGroup.clearLayers();
+
+            const nodesList = nodesToRender || allNodes || [];
+            const isEn = getLanguage() === 'en';
+            let activeExitCount = 0;
+            let pinnedCount = 0;
+
+            const primaryId = currentState?.vpn?.active_node_id;
+            const primaryIp = currentState?.vpn?.active_node?.ip;
+            const dynamicTunnels = (currentState?.tunnels || []);
+
+            nodesList.forEach(node => {
+                if (!node || !Number.isFinite(node.latitude) || !Number.isFinite(node.longitude)) return;
+                if (node.latitude === 0 && node.longitude === 0) return;
+
+                pinnedCount++;
+                const isPrimary = primaryId === node.id || (primaryIp && primaryIp === node.ip);
+                const isDynamic = dynamicTunnels.some(t => t.node && (t.node.id === node.id || t.node.ip === node.ip));
+                if (isPrimary || isDynamic) activeExitCount++;
+
+                let pinClass = 'pin-clean';
+                if (isPrimary) {
+                    pinClass = 'pin-primary';
+                } else if (isDynamic) {
+                    pinClass = 'pin-dynamic';
+                } else if (node.risk_level === 'pure') {
+                    pinClass = 'pin-pure';
+                } else if (node.risk_level === 'elevated') {
+                    pinClass = 'pin-elevated';
+                } else if (node.risk_level === 'high') {
+                    pinClass = 'pin-high';
+                } else if (node.risk_level === 'critical') {
+                    pinClass = 'pin-critical';
+                }
+
+                const icon = L.divIcon({
+                    className: 'node-pin-wrapper',
+                    html: `<div class="node-pin ${pinClass}" title="${escapeHtml(node.ip || '')} (${escapeHtml(node.city || node.country_long || '')})"></div>`,
+                    iconSize: [16, 16],
+                    iconAnchor: [8, 8],
+                    popupAnchor: [0, -8]
+                });
+
+                const marker = L.marker([node.latitude, node.longitude], { icon });
+
+                const latencyText = node.latency_ms > 0 ? `${node.latency_ms} ms` : (node.ping > 0 ? `${node.ping} ms` : (isEn ? 'Unknown' : '未知'));
+                const riskLabel = node.risk_label || (isEn ? 'Clean' : '纯净住宅');
+                const riskLevel = node.risk_level || 'clean';
+
+                const popupHtml = `
+                    <div class="map-popup-header">
+                        <span class="map-popup-title">
+                            ${getCountryFlagSVG(node.country_short)}
+                            <span>${escapeHtml(getCountryName(node.country_short))} · ${escapeHtml(node.city || '')}</span>
+                        </span>
+                        <span class="risk-badge ${escapeHtml(riskLevel)}">${escapeHtml(riskLabel)}</span>
+                    </div>
+                    <div class="map-popup-body">
+                        <div class="map-popup-row">
+                            <span class="map-popup-label">${isEn ? 'Endpoint' : '出口端点'}</span>
+                            <span class="map-popup-val">${escapeHtml(node.ip || '')}:${node.port} (${escapeHtml(String(node.proto || 'UDP').toUpperCase())})</span>
+                        </div>
+                        <div class="map-popup-row">
+                            <span class="map-popup-label">${isEn ? 'Network' : '运营商/ISP'}</span>
+                            <span class="map-popup-val" style="font-size:10px">${escapeHtml(node.isp || node.operator || (isEn ? 'Residential' : '住宅宽带'))}</span>
+                        </div>
+                        <div class="map-popup-row">
+                            <span class="map-popup-label">${isEn ? 'Latency / Speed' : '实测延迟 / 带宽'}</span>
+                            <span class="map-popup-val">${latencyText} · ${(Number(node.speed || 0) / 1000000).toFixed(1)}M</span>
+                        </div>
+                        <button type="button" class="btn btn-sm ${isPrimary ? 'btn-outline' : ''} map-popup-btn" data-action="connectToNode" data-args="${jsonAttr([node.id])}">
+                            ${isPrimary ? (isEn ? 'Current Primary' : '当前已连接') : (isEn ? 'Connect to this Egress' : '设为主网关出口')}
+                        </button>
+                    </div>
+                `;
+
+                marker.bindPopup(popupHtml, { minWidth: 220, maxWidth: 290 });
+                nodesMarkerGroup.addLayer(marker);
+            });
+
+            const badgeEl = document.getElementById('map-active-badge');
+            if (badgeEl) {
+                badgeEl.innerText = `${activeExitCount} ${isEn ? 'Active' : '活跃出口'} · ${pinnedCount} ${isEn ? 'Mapped' : '打点'}`;
+            }
+        }
+
+        function resetMapView() {
+            if (!nodesMap) return;
+            if (nodesMarkerGroup && nodesMarkerGroup.getLayers().length > 0) {
+                try {
+                    nodesMap.fitBounds(nodesMarkerGroup.getBounds().pad(0.15));
+                } catch (e) {
+                    nodesMap.setView([25, 10], 2);
+                }
+            } else {
+                nodesMap.setView([25, 10], 2);
+            }
+        }
+
+        function toggleMapCollapse() {
+            const wrap = document.getElementById('map-container-wrap');
+            const icon = document.getElementById('map-collapse-icon');
+            const text = document.getElementById('map-collapse-text');
+            if (!wrap) return;
+
+            isMapCollapsed = !isMapCollapsed;
+            if (isMapCollapsed) {
+                wrap.classList.add('is-collapsed');
+                if (text) text.innerText = getLanguage() === 'en' ? 'Expand' : '展开';
+                if (icon) icon.innerHTML = '<polyline points="6 9 12 15 18 9"/>';
+            } else {
+                wrap.classList.remove('is-collapsed');
+                if (text) text.innerText = getLanguage() === 'en' ? 'Collapse' : '收起';
+                if (icon) icon.innerHTML = '<polyline points="18 15 12 9 6 15"/>';
+                setTimeout(() => { if (nodesMap) nodesMap.invalidateSize(); }, 250);
+            }
+        }
+
         function renderNodes() {
             const tbody = document.getElementById('nodes-tbody');
             const search = document.getElementById('search-filter').value.toLowerCase();
@@ -502,6 +655,7 @@ import { I18N } from './i18n.js';
                 // Quick Chips Filter Logic
                 if (activeQuickFilter === 'fav' && !n.is_favorite) return false;
                 if (activeQuickFilter === 'res' && n.ip_type !== 'residential') return false;
+                if (activeQuickFilter === 'pure' && n.risk_level !== 'pure') return false;
                 if (activeQuickFilter === 'host' && n.ip_type !== 'hosting') return false;
                 if (activeQuickFilter === 'fast' && (n.latency_ms <= 0 || n.latency_ms >= 150)) return false;
                 if (activeQuickFilter === 'ai') {
@@ -556,6 +710,8 @@ import { I18N } from './i18n.js';
             const isEn = getLanguage() === 'en';
             document.getElementById('filtered-count').innerText = `${isEn ? 'Showing ' : '已筛选出 '}${filtered.length} / ${allNodes.length} ${isEn ? 'nodes' : '个节点'}`;
 
+            updateNodesMapMarkers(filtered);
+
             if (filtered.length === 0) {
                 tbody.innerHTML = `<tr><td colspan="9" class="empty-state">${isEn ? 'No nodes match the selected criteria' : '未找到匹配条件的节点'}</td></tr>`;
                 return;
@@ -593,6 +749,12 @@ import { I18N } from './i18n.js';
                 const unlockData = (cachedUnlockMap && cachedUnlockMap[n.ip]) || n.unlock;
                 const unlockInfo = unlockData ? renderUnlockBadges(unlockData) : `<span class="text-xs text-muted">${isEn ? 'Not Probed' : '未检测'}</span>`;
 
+                let riskBadge = '';
+                if (n.risk_level) {
+                    const riskLabel = n.risk_label || (n.risk_level === 'pure' ? (isEn ? 'Pure' : '极度纯净') : (isEn ? 'Clean' : '纯净住宅'));
+                    riskBadge = `<span class="risk-badge ${escapeHtml(n.risk_level)}" title="${isEn ? 'Risk Score' : '风险评分'}: ${n.risk_score || 0}%">${escapeHtml(riskLabel)}</span>`;
+                }
+
                 return `
                     <tr class="${isCurrent ? 'node-row-current' : (activeTun ? 'node-row-active' : '')}">
                         <td data-label="" class="text-center">
@@ -611,7 +773,7 @@ import { I18N } from './i18n.js';
                             <div class="node-endpoint">${escapeHtml(n.ip)}:${escapeHtml(n.port)}</div>
                             <span class="badge badge-proto">${escapeHtml(String(n.proto || '').toUpperCase())}</span>
                         </td>
-                        <td data-label="${isEn ? 'Type' : '网络类型'}">${typeTag}${ispInfo}</td>
+                        <td data-label="${isEn ? 'Type' : '网络类型'}">${typeTag} ${riskBadge}${ispInfo}</td>
                         <td data-label="${isEn ? 'Latency' : '延迟'}">${latencyBadge}</td>
                         <td data-label="${isEn ? 'Reputation' : '信誉'}">${repBadge}</td>
                         <td data-label="${isEn ? 'Unlocks' : '解锁能力'}">${unlockInfo}</td>
@@ -2368,7 +2530,12 @@ import { I18N } from './i18n.js';
                 fetchDynamicGroups();
             }
             if (viewName === 'settings') loadSettingsForm();
-            if (viewName === 'nodes') { updateCountryFilter(); renderNodes(); }
+            if (viewName === 'nodes') {
+                updateCountryFilter();
+                renderNodes();
+                initNodesMap();
+                setTimeout(() => { if (nodesMap) nodesMap.invalidateSize(); }, 150);
+            }
 
             if (window.scrollY > 0) {
                 window.scrollTo({ top: 0, behavior: 'instant' });
@@ -3659,7 +3826,9 @@ import { I18N } from './i18n.js';
             applyAgePublicKey,
             onAgeToggleChanged,
             toggleLanguage,
-            onUiLanguageChanged
+            onUiLanguageChanged,
+            resetMapView,
+            toggleMapCollapse
         };
 
         function runDataAction(element, dataKey, event) {

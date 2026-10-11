@@ -32,6 +32,8 @@ type Node struct {
 	ISP             string        `json:"isp"`
 	City            string        `json:"city"`
 	Region          string        `json:"region"`
+	Latitude        float64       `json:"latitude"`
+	Longitude       float64       `json:"longitude"`
 	ASN             int           `json:"asn"`            // 自治系统编号
 	RDNS            string        `json:"rdns,omitempty"` // 反向DNS记录
 	IsHosting       bool          `json:"is_hosting"`
@@ -40,6 +42,10 @@ type Node struct {
 	ResReason       string        `json:"res_reason"`     // 家宽判定依据
 	IsFavorite      bool          `json:"is_favorite"`
 	ReputationScore int           `json:"reputation_score"` // 历史综合稳定性信誉评分 (0-100)
+	RiskScore       float64       `json:"risk_score"`       // 综合风险评分 (0.0 ~ 100.0)
+	RiskLevel       RiskLevel     `json:"risk_level"`       // pure / clean / elevated / high / critical
+	RiskLabel       string        `json:"risk_label"`       // 极度纯净 / 纯净住宅 / 轻微风险 / 高风险 / 极度危险
+	FraudFlags      []string      `json:"fraud_flags,omitempty"` // 命中风险标签 (bogon, datacenter, proxy...)
 	Unlock          *UnlockResult `json:"unlock,omitempty"` // AI与主流流媒体解锁状态
 
 	// 增量更新与生命周期跟踪

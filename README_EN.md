@@ -152,15 +152,18 @@ Out of thousands of global candidate endpoints, NXGate filters for high-reliabil
   - **Single WebUI Port Delivery**: Distributes Universal (Base64/Raw) and Clash Meta (YAML) subscriptions directly through the WebUI port without secondary Python or Caddy listeners.
   - **Random SubToken Protection**: Dedicated 16-character random security token protects subscription endpoints (`/<token>/api/singbox/subscription` and `/sub/<token>`), returning hidden 404s to unauthorized scanners.
   - **age End-to-End Encryption (RFC 5234 / RFC 7405)**: Supports modern `X25519` and post-quantum `MLKEM768-X25519` recipients. When enabled, subscriptions are emitted as armored age ciphertext, preventing intermediate interception and caching leaks.
-- **7×24h Watchdog**:
-  Monitors daemon health every 30 seconds and automatically initiates cold-start recovery if an unrecoverable state or OOM occurs.
+- **7×24h Watchdog & Advanced Network Intelligence**:
+  - Monitors daemon health every 30 seconds and automatically initiates cold-start recovery if an unrecoverable state or OOM occurs.
+  - **Multi-Dimensional Risk & Abuse Scoring**: Evaluates exit node purity into 5 tiers (Pure Residential, Clean, Elevated, High, Critical) using Bogon checks, ASN reputation, and residential heuristics.
+  - **Custom Egress Proxy Ingestion (SOCKS5/HTTP)**: Ingest external commercial residential proxies with RFC 1928 client handshakes, active RTT latency checks, and seamless multi-port routing matrix multiplexing.
+  - **Dual-Engine DoH Resolver (Cloudflare + Google)**: High-performance DNS-over-HTTPS resolution with in-memory TTL caching and automatic failover, eliminating local ISP DNS poisoning.
 
 ---
 
 ### 6. Client Matrix (SPA Web Console & Android Native App)
 
-- **Responsive 5-View SPA Console**:
-  Embedded in the binary via `go:embed`. Features deep space palette, real-time SVG waveform charts, interactive port matrix, node square with multi-attribute filtering, and comprehensive system settings.
+- **Responsive 5-View SPA Console & Global Topology Map**:
+  Embedded in the binary via `go:embed`. Features an interactive **Global Egress Topology Map (Leaflet.js)** with pulsing exit pins, rich popup inspection cards, deep space palette, real-time SVG waveform charts, interactive port matrix, node square with multi-attribute filtering, and comprehensive system settings.
 - **Material 3 Android Management App (`com.nxgate.app`)**:
   - Native Jetpack Compose architecture with Monet wallpaper dynamic color support;
   - Adaptive 5-destination navigation (Dashboard, Monitoring, Routing, Nodes, System);

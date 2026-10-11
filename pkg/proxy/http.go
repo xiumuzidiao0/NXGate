@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"net"
 	"net/http"
@@ -21,7 +22,7 @@ const (
 	connectionEstablishedResponse = "HTTP/1.1 200 Connection Established\r\n\r\n"
 )
 
-func handleHTTP(client net.Conn, br *bufio.Reader, auth *Authenticator, devName string, tun *tunnel.Tunnel) error {
+func handleHTTP(client net.Conn, br *bufio.Reader, auth *Authenticator, devName string, tun *tunnel.Tunnel, dialer ...func(ctx context.Context, network, addr string) (net.Conn, error)) error {
 	req, err := http.ReadRequest(br)
 	if err != nil {
 		return fmt.Errorf("failed to read http request: %w", err)
@@ -33,19 +34,27 @@ func handleHTTP(client net.Conn, br *bufio.Reader, auth *Authenticator, devName 
 	}
 
 	if req.Method == http.MethodConnect {
-		return handleConnect(client, req, devName, tun)
+		return handleConnect(client, req, devName, tun, dialer...)
 	}
 
-	return handlePlainHTTP(client, req, devName, tun)
+	return handlePlainHTTP(client, req, devName, tun, dialer...)
 }
 
-func handleConnect(client net.Conn, req *http.Request, devName string, tun *tunnel.Tunnel) error {
+func handleConnect(client net.Conn, req *http.Request, devName string, tun *tunnel.Tunnel, dialer ...func(ctx context.Context, network, addr string) (net.Conn, error)) error {
 	targetAddr := req.RequestURI
 	if !strings.Contains(targetAddr, ":") {
 		targetAddr = net.JoinHostPort(targetAddr, "443")
 	}
 
-	upstream, err := dialUpstream(targetAddr, devName, 10*time.Second)
+	var upstream net.Conn
+	var err error
+	if len(dialer) > 0 && dialer[0] != nil {
+		dialCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		upstream, err = dialer[0](dialCtx, "tcp", targetAddr)
+		cancel()
+	} else {
+		upstream, err = dialUpstream(targetAddr, devName, 10*time.Second)
+	}
 	if err != nil {
 		if tun != nil {
 			tun.RecordFailure()
@@ -69,7 +78,7 @@ func handleConnect(client net.Conn, req *http.Request, devName string, tun *tunn
 	return nil
 }
 
-func handlePlainHTTP(client net.Conn, req *http.Request, devName string, tun *tunnel.Tunnel) error {
+func handlePlainHTTP(client net.Conn, req *http.Request, devName string, tun *tunnel.Tunnel, dialer ...func(ctx context.Context, network, addr string) (net.Conn, error)) error {
 	host := req.URL.Host
 	if host == "" {
 		host = req.Host
@@ -78,7 +87,15 @@ func handlePlainHTTP(client net.Conn, req *http.Request, devName string, tun *tu
 		host = net.JoinHostPort(host, "80")
 	}
 
-	upstream, err := dialUpstream(host, devName, 10*time.Second)
+	var upstream net.Conn
+	var err error
+	if len(dialer) > 0 && dialer[0] != nil {
+		dialCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		upstream, err = dialer[0](dialCtx, "tcp", host)
+		cancel()
+	} else {
+		upstream, err = dialUpstream(host, devName, 10*time.Second)
+	}
 	if err != nil {
 		if tun != nil {
 			tun.RecordFailure()

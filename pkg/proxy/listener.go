@@ -16,27 +16,29 @@ import (
 )
 
 type PortRule struct {
-	Port            int        `json:"port"`
-	Enabled         bool       `json:"enabled"`
-	BoundTunnelIDs  []string   `json:"bound_tunnel_ids"`
-	BoundGroupIDs   []string   `json:"bound_group_ids"` // Dynamic group IDs
-	Policy          PortPolicy `json:"policy"`
-	IntervalSeconds int        `json:"interval_seconds"`
-	AuthMode        string     `json:"auth_mode"` // "random", "custom", "none" (legacy "default_web")
-	AuthUser        string     `json:"auth_user"`
-	AuthPass        string     `json:"auth_pass"`
+	Port                int        `json:"port"`
+	Enabled             bool       `json:"enabled"`
+	BoundTunnelIDs      []string   `json:"bound_tunnel_ids"`
+	BoundGroupIDs       []string   `json:"bound_group_ids"` // Dynamic group IDs
+	BoundCustomProxyIDs []string   `json:"bound_custom_proxy_ids,omitempty"` // Custom external proxy IDs
+	Policy              PortPolicy `json:"policy"`
+	IntervalSeconds     int        `json:"interval_seconds"`
+	AuthMode            string     `json:"auth_mode"` // "random", "custom", "none" (legacy "default_web")
+	AuthUser            string     `json:"auth_user"`
+	AuthPass            string     `json:"auth_pass"`
 }
 
 type PortListener struct {
-	rule      PortRule
-	cfg       *config.Config
-	host      string
-	scheduler TunnelSelector
-	listener  net.Listener
-	sem       chan struct{}
-	cancel    context.CancelFunc
-	mu        sync.Mutex
-	closed    bool
+	rule           PortRule
+	cfg            *config.Config
+	host           string
+	scheduler      TunnelSelector
+	customProxyMgr *CustomProxyManager
+	listener       net.Listener
+	sem            chan struct{}
+	cancel         context.CancelFunc
+	mu             sync.Mutex
+	closed         bool
 }
 
 func NewPortListener(rule PortRule, cfg *config.Config, scheduler TunnelSelector) *PortListener {
@@ -57,6 +59,10 @@ func NewPortListener(rule PortRule, cfg *config.Config, scheduler TunnelSelector
 		scheduler: scheduler,
 		sem:       make(chan struct{}, maxConn),
 	}
+}
+
+func (l *PortListener) SetCustomProxyManager(m *CustomProxyManager) {
+	l.customProxyMgr = m
 }
 
 func (l *PortListener) getAuthenticator() *Authenticator {
@@ -153,10 +159,28 @@ func (l *PortListener) dispatch(client net.Conn) {
 
 	auth := l.getAuthenticator()
 
-	// Select destination tunnel device for this connection
+	var dialer func(ctx context.Context, network, addr string) (net.Conn, error)
 	devName := ""
 	var selectedTun *tunnel.Tunnel
-	if l.scheduler != nil {
+
+	// 1. Check if this port rule is bound to custom proxies
+	if len(l.rule.BoundCustomProxyIDs) > 0 && l.customProxyMgr != nil {
+		var candidates []*CustomProxy
+		for _, id := range l.rule.BoundCustomProxyIDs {
+			if cp := l.customProxyMgr.Get(id); cp != nil && cp.Enabled && cp.Healthy {
+				candidates = append(candidates, cp)
+			}
+		}
+		if len(candidates) > 0 {
+			chosen := candidates[time.Now().UnixNano()%int64(len(candidates))]
+			dialer = func(ctx context.Context, network, addr string) (net.Conn, error) {
+				return chosen.DialContext(ctx, network, addr)
+			}
+		}
+	}
+
+	// 2. Fall back to standard tunnel scheduler
+	if dialer == nil && l.scheduler != nil {
 		if tun := l.scheduler.SelectTunnel(l.rule.Port, l.rule.BoundTunnelIDs, l.rule.BoundGroupIDs, l.rule.Policy, l.rule.IntervalSeconds); tun != nil {
 			selectedTun = tun
 			devName = tun.DevName
@@ -164,9 +188,9 @@ func (l *PortListener) dispatch(client net.Conn) {
 	}
 
 	if firstByte[0] == socks5Version {
-		_ = handleSocks5(bConn, auth, devName, selectedTun)
+		_ = handleSocks5(bConn, auth, devName, selectedTun, dialer)
 	} else {
-		_ = handleHTTP(bConn, br, auth, devName, selectedTun)
+		_ = handleHTTP(bConn, br, auth, devName, selectedTun, dialer)
 	}
 }
 
