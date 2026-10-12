@@ -18,14 +18,16 @@ import (
 type CommandHandler func(cmd, args string) string
 
 type TelegramNotifier struct {
-	cfg    *config.Config
-	client *http.Client
-	lastID int64
+	cfg        *config.Config
+	client     *http.Client
+	lastID     int64
+	apiBaseURL string
 }
 
 func NewTelegramNotifier(cfg *config.Config) *TelegramNotifier {
 	return &TelegramNotifier{
-		cfg: cfg,
+		cfg:        cfg,
+		apiBaseURL: "https://api.telegram.org",
 		client: &http.Client{
 			Timeout: 35 * time.Second,
 		},
@@ -45,7 +47,11 @@ func (t *TelegramNotifier) SendMessage(text string) error {
 		return nil
 	}
 
-	apiURL := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", token)
+	baseURL := strings.TrimRight(strings.TrimSpace(t.apiBaseURL), "/")
+	if baseURL == "" {
+		baseURL = "https://api.telegram.org"
+	}
+	apiURL := fmt.Sprintf("%s/bot%s/sendMessage", baseURL, token)
 	payload := map[string]any{
 		"chat_id":    chatID,
 		"text":       text,
@@ -80,7 +86,7 @@ func (t *TelegramNotifier) SendMessage(text string) error {
 }
 
 func (t *TelegramNotifier) NotifyStartup(ver string, port int, path string) {
-	msg := fmt.Sprintf("🚀 <b>NXGate 代理网关已就绪</b>\n\n"+
+	msg := fmt.Sprintf("<b>NXGate 代理网关已就绪</b>\n\n"+
 		"<b>版本:</b> v%s\n"+
 		"<b>本地代理端口:</b> <code>%d</code> (HTTP/SOCKS5)\n"+
 		"<b>安全管理入口:</b> <code>/%s</code>\n"+
@@ -90,7 +96,7 @@ func (t *TelegramNotifier) NotifyStartup(ver string, port int, path string) {
 }
 
 func (t *TelegramNotifier) NotifyFailover(oldID, newID, country string) {
-	msg := fmt.Sprintf("⚠️ <b>节点故障自动转移通知</b>\n\n"+
+	msg := fmt.Sprintf("<b>节点故障自动转移通知</b>\n\n"+
 		"<b>原节点:</b> <code>%s</code> (异常中断)\n"+
 		"<b>新节点:</b> <code>%s</code> (%s)\n"+
 		"<b>状态:</b> 已平滑自动切换至新候选节点",
@@ -99,7 +105,7 @@ func (t *TelegramNotifier) NotifyFailover(oldID, newID, country string) {
 }
 
 func (t *TelegramNotifier) NotifyPoolAlert(groupName string, msgDetail string) {
-	msg := fmt.Sprintf("🚨 <b>自适应隧道组告警</b>\n\n"+
+	msg := fmt.Sprintf("<b>自适应隧道组告警</b>\n\n"+
 		"<b>隧道组:</b> %s\n"+
 		"<b>详情:</b> %s\n"+
 		"<b>建议:</b> 请检查 VPS 外网连通性或在控制台刷新节点源",
@@ -141,7 +147,11 @@ func (t *TelegramNotifier) StartPolling(ctx context.Context, handler CommandHand
 				continue
 			}
 
-			reqURL := fmt.Sprintf("https://api.telegram.org/bot%s/getUpdates?offset=%d&timeout=15", token, t.lastID+1)
+			baseURL := strings.TrimRight(strings.TrimSpace(t.apiBaseURL), "/")
+			if baseURL == "" {
+				baseURL = "https://api.telegram.org"
+			}
+			reqURL := fmt.Sprintf("%s/bot%s/getUpdates?offset=%d&timeout=15", baseURL, token, t.lastID+1)
 			req, err := http.NewRequestWithContext(ctx, "GET", reqURL, nil)
 			if err != nil {
 				time.Sleep(5 * time.Second)

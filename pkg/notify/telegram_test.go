@@ -35,13 +35,25 @@ func TestTelegramNotifierMock(t *testing.T) {
 	}
 
 	notifier := NewTelegramNotifier(cfg)
+	if notifier.apiBaseURL != "https://api.telegram.org" {
+		t.Fatalf("expected default apiBaseURL to be https://api.telegram.org, got %s", notifier.apiBaseURL)
+	}
+	notifier.apiBaseURL = ts.URL
 	notifier.client = ts.Client()
 
 	// Direct test of format functions
 	notifier.NotifyStartup("2.3.0", 7928, "enter")
+	if !strings.Contains(sentMsg, "NXGate 代理网关已就绪") {
+		t.Fatalf("unexpected sentMsg for NotifyStartup: %s", sentMsg)
+	}
 	notifier.NotifyFailover("node1", "node2", "JP")
+	if !strings.Contains(sentMsg, "节点故障自动转移通知") {
+		t.Fatalf("unexpected sentMsg for NotifyFailover: %s", sentMsg)
+	}
 	notifier.NotifyPoolAlert("JP-Group", "0 nodes alive")
-	_ = sentMsg
+	if !strings.Contains(sentMsg, "自适应隧道组告警") {
+		t.Fatalf("unexpected sentMsg for NotifyPoolAlert: %s", sentMsg)
+	}
 
 	// Verify command handler
 	handler := func(cmd, args string) string {

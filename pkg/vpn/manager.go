@@ -4,6 +4,10 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"os"
+	"os/exec"
+	"runtime"
+	"strings"
 	"sync"
 	"time"
 
@@ -38,12 +42,48 @@ type Manager struct {
 	isConnecting bool
 }
 
+// AutoDetectDriverMode inspects system environment and capabilities to select appropriate driver mode.
+func AutoDetectDriverMode(cfg *config.Config) DriverMode {
+	// 1. Explicit override via DRIVER_MODE env var
+	envMode := strings.ToLower(strings.TrimSpace(os.Getenv("DRIVER_MODE")))
+	if envMode == string(DriverUserland) || envMode == "zero_tun" || envMode == "sstp" {
+		return DriverUserland
+	}
+	if envMode == string(DriverKernel) || envMode == "tun" || envMode == "openvpn" {
+		return DriverKernel
+	}
+
+	// 2. Non-Linux OS lacks Linux table 100+N and OpenVPN isolation routes
+	if runtime.GOOS != "linux" {
+		return DriverUserland
+	}
+
+	// 3. Inspect /dev/net/tun availability
+	if err := CheckTUNDevice(); err != nil {
+		stats.LogWarn("VPN", "检测到系统缺失 /dev/net/tun 设备 (%v)，网络驱动自动降级为用户态免 TUN 模式", err)
+		return DriverUserland
+	}
+
+	// 4. Inspect openvpn command binary
+	openvpnCmd := "openvpn"
+	if cfg != nil && cfg.OpenVPNCommand != "" {
+		openvpnCmd = cfg.OpenVPNCommand
+	}
+	if _, err := exec.LookPath(openvpnCmd); err != nil {
+		stats.LogWarn("VPN", "未检测到 OpenVPN 可执行文件 (%s: %v)，网络驱动自动降级为用户态免 TUN 模式", openvpnCmd, err)
+		return DriverUserland
+	}
+
+	return DriverKernel
+}
+
 func NewManager(cfg *config.Config, pool *nodes.NodePool, tp *tunnel.Pool) *Manager {
+	initialMode := AutoDetectDriverMode(cfg)
 	return &Manager{
 		cfg:         cfg,
 		pool:        pool,
 		tunnelPool:  tp,
-		driverMode:  DriverKernel,
+		driverMode:  initialMode,
 		status:      StatusDisconnected,
 		lastMessage: "VPN 服务已就绪，未连接",
 	}
@@ -138,11 +178,34 @@ func (m *Manager) Snapshot() StateSnapshot {
 }
 
 func (m *Manager) Connect(target *nodes.Node) error {
-	return m.ConnectWithMode(target, string(DriverKernel))
+	m.mu.RLock()
+	mode := m.driverMode
+	m.mu.RUnlock()
+	return m.ConnectWithMode(target, string(mode))
 }
 
 func (m *Manager) ConnectWithMode(target *nodes.Node, mode string) error {
+	if mode == "" || mode == "auto" {
+		m.mu.RLock()
+		mode = string(m.driverMode)
+		m.mu.RUnlock()
+	}
+
 	if mode == string(DriverUserland) || mode == "zero_tun" || mode == "sstp" {
+		return m.ConnectUserland(target)
+	}
+
+	// Validate kernel dependencies before attempting kernel connection; auto-downgrade to userland if missing
+	if err := CheckTUNDevice(); err != nil {
+		stats.LogWarn("VPN", "系统不支持内核 TUN (%v)，主网关自适应降级为用户态免 TUN 模式", err)
+		return m.ConnectUserland(target)
+	}
+	openvpnCmd := "openvpn"
+	if m.cfg != nil && m.cfg.OpenVPNCommand != "" {
+		openvpnCmd = m.cfg.OpenVPNCommand
+	}
+	if _, err := exec.LookPath(openvpnCmd); err != nil {
+		stats.LogWarn("VPN", "系统未安装 OpenVPN (%s: %v)，主网关自适应降级为用户态免 TUN 模式", openvpnCmd, err)
 		return m.ConnectUserland(target)
 	}
 
@@ -509,6 +572,18 @@ func (m *Manager) DriverMode() DriverMode {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.driverMode
+}
+
+func (m *Manager) GetDefaultDriverMode() DriverMode {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.driverMode
+}
+
+func (m *Manager) IsZeroTun() bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.driverMode == DriverUserland
 }
 
 func (m *Manager) ConnectedAt() time.Time {

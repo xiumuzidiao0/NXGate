@@ -84,16 +84,29 @@ type SettingsDTO struct {
 	TelegramChatID     string   `json:"telegram_chat_id"`
 }
 
-func getEnv(key, defaultVal string) string {
+func getEnv(key, defaultVal string, fallbackKeys ...string) string {
 	val := os.Getenv(key)
-	if val == "" {
-		return defaultVal
+	if val != "" {
+		return strings.TrimSpace(val)
 	}
-	return strings.TrimSpace(val)
+	for _, fb := range fallbackKeys {
+		if fbVal := os.Getenv(fb); fbVal != "" {
+			return strings.TrimSpace(fbVal)
+		}
+	}
+	return defaultVal
 }
 
-func getEnvInt(key string, defaultVal, minVal, maxVal int) int {
+func getEnvInt(key string, defaultVal, minVal, maxVal int, fallbackKeys ...string) int {
 	raw := os.Getenv(key)
+	if raw == "" {
+		for _, fb := range fallbackKeys {
+			if fbVal := os.Getenv(fb); fbVal != "" {
+				raw = fbVal
+				break
+			}
+		}
+	}
 	if raw == "" {
 		return defaultVal
 	}
@@ -202,8 +215,8 @@ func LoadConfig() *Config {
 		}
 	}
 
-	proxyUser := getEnv("LOCAL_PROXY_USER", "")
-	proxyPass := getEnv("LOCAL_PROXY_PASS", "")
+	proxyUser := getEnv("LOCAL_PROXY_USER", "", "PROXY_USER")
+	proxyPass := getEnv("LOCAL_PROXY_PASS", "", "PROXY_PASS")
 	proxyAuthFile := filepath.Join(dataDir, "proxy_auth.txt")
 	if proxyUser == "" || proxyPass == "" {
 		if data, err := os.ReadFile(proxyAuthFile); err == nil {
@@ -241,13 +254,20 @@ func LoadConfig() *Config {
 		AgeEncryptEnabled: ageEncryptEnabled,
 		AgePublicKey:      agePublicKey,
 
-		ProxyHost:           getEnv("LOCAL_PROXY_HOST", "127.0.0.1"),
-		ProxyPort:           getEnvInt("LOCAL_PROXY_PORT", 7928, 1, 65535),
+		ProxyHost:           getEnv("LOCAL_PROXY_HOST", "127.0.0.1", "PROXY_HOST"),
+		ProxyPort:           getEnvInt("LOCAL_PROXY_PORT", 7928, 1, 65535, "PROXY_PORT"),
 		ProxyUser:           proxyUser,
 		ProxyPass:           proxyPass,
-		ProxyMaxConnections: getEnvInt("LOCAL_PROXY_MAX_CONNECTIONS", 512, 16, 4096),
+		ProxyMaxConnections: getEnvInt("LOCAL_PROXY_MAX_CONNECTIONS", 512, 16, 4096, "PROXY_MAX_CONNECTIONS"),
 
-		FetchInterval:      time.Duration(getEnvInt("FETCH_INTERVAL_SECONDS", 900, 60, 86400)) * time.Second,
+		FetchInterval: func() time.Duration {
+			fetchSec := getEnvInt("FETCH_INTERVAL_SECONDS", 0, 60, 86400)
+			if fetchSec == 0 {
+				fetchMin := getEnvInt("FETCH_INTERVAL_MINUTES", 15, 1, 1440)
+				fetchSec = fetchMin * 60
+			}
+			return time.Duration(fetchSec) * time.Second
+		}(),
 		CheckInterval:      time.Duration(getEnvInt("CHECK_INTERVAL_SECONDS", 20, 5, 300)) * time.Second,
 		TargetValidNodes:   getEnvInt("TARGET_VALID_NODES", 5, 1, 50),
 		MaxScanRows:        getEnvInt("MAX_SCAN_ROWS", 1000, 10, 5000),
@@ -260,7 +280,7 @@ func LoadConfig() *Config {
 		TelegramBotToken: getEnv("TELEGRAM_BOT_TOKEN", ""),
 		TelegramChatID:   getEnv("TELEGRAM_CHAT_ID", ""),
 
-		OpenVPNCommand:  getEnv("OPENVPN_CMD", "openvpn"),
+		OpenVPNCommand:  getEnv("OPENVPN_CMD", "openvpn", "OPENVPN_COMMAND"),
 		OpenVPNAuthUser: getEnv("OPENVPN_AUTH_USER", "vpn"),
 		OpenVPNAuthPass: getEnv("OPENVPN_AUTH_PASS", "vpn"),
 
@@ -335,16 +355,24 @@ func (c *Config) IsUIAuthEnabled() bool {
 
 func (c *Config) UpdateSettings(dto SettingsDTO) error {
 	for name, value := range map[string]string{
-		"ui_path":            dto.UIPath,
-		"ui_username":        dto.UIUsername,
-		"ui_password":        dto.UIPassword,
-		"proxy_user":         dto.ProxyUser,
-		"proxy_pass":         dto.ProxyPass,
-		"telegram_bot_token": dto.TelegramBotToken,
-		"telegram_chat_id":   dto.TelegramChatID,
+		"ui_path":             dto.UIPath,
+		"ui_username":         dto.UIUsername,
+		"ui_password":         dto.UIPassword,
+		"sub_token":           dto.SubToken,
+		"proxy_user":          dto.ProxyUser,
+		"proxy_pass":          dto.ProxyPass,
+		"telegram_bot_token":  dto.TelegramBotToken,
+		"telegram_chat_id":    dto.TelegramChatID,
+		"age_public_key":      dto.AgePublicKey,
+		"auto_rotate_ip_type": dto.AutoRotateIPType,
 	} {
 		if strings.ContainsAny(value, "\r\n") {
 			return fmt.Errorf("%s 不能包含换行符", name)
+		}
+	}
+	for _, country := range dto.DiscoveryCountries {
+		if strings.ContainsAny(country, "\r\n") {
+			return fmt.Errorf("discovery_countries 不能包含换行符")
 		}
 	}
 

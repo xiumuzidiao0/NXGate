@@ -32,7 +32,7 @@ BIN_PATH="${INSTALL_DIR}/nxgate"
 CONFIG_FILE="${INSTALL_DIR}/config.env"
 SERVICE_FILE="/etc/systemd/system/nxgate.service"
 GITHUB_REPO="https://github.com/xiumuzidiao0/NXGate.git"
-DEFAULT_VERSION="2.6.5.9"
+DEFAULT_VERSION="2.6.5.10"
 REQUIRED_GO_VERSION="1.25.13"
 
 get_app_version() {
@@ -265,18 +265,18 @@ ensure_go() {
     echo 'export PATH="/usr/local/go/bin:$PATH"' >> /etc/profile
 }
 
-# 辅助生成随机字符串与密码
+# 辅助生成随机字符串与密码 (连续流式读取，消除熵池截断)
 rand_str() {
     local len="${1:-8}"
-    head -c 32 /dev/urandom | tr -dc 'A-Za-z0-9' | head -c "$len" || echo "aimili"
+    LC_ALL=C tr -dc 'A-Za-z0-9' < /dev/urandom | head -c "$len" || echo "aimili"
 }
 
 rand_pass() {
     local len="${1:-12}"
-    head -c 32 /dev/urandom | tr -dc 'A-Za-z0-9' | head -c "$len" || echo "nxgate123"
+    LC_ALL=C tr -dc 'A-Za-z0-9' < /dev/urandom | head -c "$len" || echo "nxgate123"
 }
 
-# 兼容管道执行与终端直接执行的用户输入函数
+# 兼容管道执行与终端直接执行的用户输入函数 (使用安全 printf -v 赋值，杜绝 eval 注入)
 prompt_input() {
     local prompt_msg="$1"
     local default_val="$2"
@@ -285,14 +285,14 @@ prompt_input() {
 
     if [ -t 0 ]; then
         read -p "$prompt_msg" input_val
-    elif [ -c /dev/tty ]; then
-        read -p "$prompt_msg" input_val </dev/tty
+    elif [ -c /dev/tty ] && [ -r /dev/tty ]; then
+        read -p "$prompt_msg" input_val </dev/tty 2>/dev/null || true
     fi
 
     if [ -z "$input_val" ]; then
-        eval "$result_var=\"$default_val\""
+        printf -v "$result_var" '%s' "$default_val"
     else
-        eval "$result_var=\"$input_val\""
+        printf -v "$result_var" '%s' "$input_val"
     fi
 }
 
