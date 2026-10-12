@@ -612,7 +612,7 @@ fun ServerConsoleScreen(
                                         .padding(20.dp),
                                     verticalArrangement = Arrangement.Center
                                 ) {
-                                    val isZeroTun = masterInfo.isZeroTun || masterTunnel?.isUserland == true
+                                    val isZeroTun = masterInfo.isZeroTun || masterTunnel?.isUserland == true || masterInfo.driverMode == "userland" || (masterTunnel?.devName?.startsWith("sstp") == true)
                                     val titleText = if (strings == AppStringsEn) {
                                         if (isZeroTun) "Primary Gateway (Zero-TUN SSTP)" else "Primary Gateway (Kernel TUN tun0)"
                                     } else {
@@ -771,7 +771,7 @@ fun ServerConsoleScreen(
                                 .padding(20.dp),
                             verticalArrangement = Arrangement.Center
                         ) {
-                            val isZeroTun = masterInfo.isZeroTun || masterTunnel?.isUserland == true
+                            val isZeroTun = masterInfo.isZeroTun || masterTunnel?.isUserland == true || masterInfo.driverMode == "userland" || (masterTunnel?.devName?.startsWith("sstp") == true)
                             val titleText = if (strings == AppStringsEn) {
                                 if (isZeroTun) "Primary Gateway (Zero-TUN SSTP)" else "Primary Gateway (Kernel TUN tun0)"
                             } else {
