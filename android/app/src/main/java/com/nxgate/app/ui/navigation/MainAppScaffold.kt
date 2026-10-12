@@ -102,43 +102,8 @@ fun MainAppScaffold() {
         )
     }
 
-    // Swipe gesture handling between screens
-    var dragOffset by remember { mutableFloatStateOf(0f) }
-    val dragThreshold = 90f
-
-    val swipeState = rememberDraggableState { delta ->
-        dragOffset += delta
-        if (dragOffset > dragThreshold) {
-            dragOffset = 0f
-            // Swipe right
-            when (currentDestination) {
-                AppNavDestination.Monitoring -> currentDestination = AppNavDestination.Dashboard
-                AppNavDestination.Routing -> currentDestination = AppNavDestination.Monitoring
-                AppNavDestination.Nodes -> currentDestination = AppNavDestination.Routing
-                AppNavDestination.System -> currentDestination = AppNavDestination.Nodes
-                AppNavDestination.Dashboard -> {}
-            }
-        } else if (dragOffset < -dragThreshold) {
-            dragOffset = 0f
-            // Swipe left
-            when (currentDestination) {
-                AppNavDestination.Dashboard -> currentDestination = AppNavDestination.Monitoring
-                AppNavDestination.Monitoring -> currentDestination = AppNavDestination.Routing
-                AppNavDestination.Routing -> currentDestination = AppNavDestination.Nodes
-                AppNavDestination.Nodes -> currentDestination = AppNavDestination.System
-                AppNavDestination.System -> {}
-            }
-        }
-    }
-
     Scaffold(
-        modifier = Modifier
-            .fillMaxSize()
-            .draggable(
-                state = swipeState,
-                orientation = Orientation.Horizontal,
-                onDragStopped = { dragOffset = 0f }
-            ),
+        modifier = Modifier.fillMaxSize(),
         bottomBar = {
             if (!isSettingsOpen && !useNavRail) {
                 NavigationBar(

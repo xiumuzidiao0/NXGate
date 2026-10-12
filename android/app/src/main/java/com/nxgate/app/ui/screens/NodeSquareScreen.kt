@@ -313,9 +313,11 @@ fun FullNodeCard(
                 )
             }
 
-            // Row 4: AI & Streaming Unlock Badges Row
+            // Row 4: AI & Streaming Unlock Badges Row (可横滑防小屏溢出)
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {

@@ -475,7 +475,7 @@ fun MatrixPipelineTab(
                                 .padding(16.dp),
                             verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            // Row 1: 状态指示点 + PORT + 协议徽章 + 一键复制 + 编辑/删除/开关
+                            // Row 1: Header (状态指示点 + PORT + 协议徽章 + 编辑/删除/开关)
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -515,49 +515,8 @@ fun MatrixPipelineTab(
 
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    horizontalArrangement = Arrangement.spacedBy(2.dp)
                                 ) {
-                                    val httpUrl = "http://$srvHost:${rule.port}"
-                                    val socks5Url = "socks5://$srvHost:${rule.port}"
-
-                                    Surface(
-                                        shape = RoundedCornerShape(6.dp),
-                                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                                        modifier = Modifier.clickable {
-                                            clipboardManager.setText(AnnotatedString(httpUrl))
-                                            Toast.makeText(context, if (isEn) "Copied $httpUrl" else "已复制 $httpUrl", Toast.LENGTH_SHORT).show()
-                                        }
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                        ) {
-                                            Icon(Icons.Rounded.ContentCopy, contentDescription = null, modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                                            Text(httpUrl, style = MaterialTheme.typography.labelSmall, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurface)
-                                        }
-                                    }
-
-                                    Surface(
-                                        shape = RoundedCornerShape(6.dp),
-                                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                                        modifier = Modifier.clickable {
-                                            clipboardManager.setText(AnnotatedString(socks5Url))
-                                            Toast.makeText(context, if (isEn) "Copied $socks5Url" else "已复制 $socks5Url", Toast.LENGTH_SHORT).show()
-                                        }
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                        ) {
-                                            Icon(Icons.Rounded.ContentCopy, contentDescription = null, modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                                            Text(socks5Url, style = MaterialTheme.typography.labelSmall, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurface)
-                                        }
-                                    }
-
                                     IconButton(
                                         onClick = { onEditRule(rule) },
                                         modifier = Modifier.size(32.dp)
@@ -582,6 +541,55 @@ fun MatrixPipelineTab(
                                             tint = if (rule.enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
                                             modifier = Modifier.size(28.dp)
                                         )
+                                    }
+                                }
+                            }
+
+                            // Row 2: 一键复制代理地址 (单行横向滚动，小屏绝不越界或换行挤压)
+                            val httpUrl = "http://$srvHost:${rule.port}"
+                            val socks5Url = "socks5://$srvHost:${rule.port}"
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                                    modifier = Modifier.clickable {
+                                        clipboardManager.setText(AnnotatedString(httpUrl))
+                                        Toast.makeText(context, if (isEn) "Copied $httpUrl" else "已复制 $httpUrl", Toast.LENGTH_SHORT).show()
+                                    }
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Icon(Icons.Rounded.ContentCopy, contentDescription = null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
+                                        Text(httpUrl, style = MaterialTheme.typography.labelSmall, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurface)
+                                    }
+                                }
+
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                                    modifier = Modifier.clickable {
+                                        clipboardManager.setText(AnnotatedString(socks5Url))
+                                        Toast.makeText(context, if (isEn) "Copied $socks5Url" else "已复制 $socks5Url", Toast.LENGTH_SHORT).show()
+                                    }
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Icon(Icons.Rounded.ContentCopy, contentDescription = null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
+                                        Text(socks5Url, style = MaterialTheme.typography.labelSmall, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurface)
                                     }
                                 }
                             }

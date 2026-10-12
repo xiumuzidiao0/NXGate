@@ -3,6 +3,7 @@ package com.nxgate.app.ui.screens
 import android.content.res.Configuration
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -239,9 +240,11 @@ fun TunnelChipCard(
                 )
             }
 
-            // Row 3: AI & Streaming unlock badges
+            // Row 3: AI & Streaming unlock badges (可横滑防小屏溢出)
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -753,11 +756,9 @@ fun ServerConsoleScreen(
                         liveTraffic = liveTraffic
                     )
 
-                    // 2. 系统主出口网关填充卡片（高 158dp）
+                    // 2. 系统主出口网关自适应卡片 (高度自适应内容，避免小屏文字裁剪)
                     Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(158.dp),
+                        modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(20.dp),
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.surfaceContainer
@@ -767,7 +768,7 @@ fun ServerConsoleScreen(
                     ) {
                         Column(
                             modifier = Modifier
-                                .fillMaxSize()
+                                .fillMaxWidth()
                                 .padding(20.dp),
                             verticalArrangement = Arrangement.Center
                         ) {
