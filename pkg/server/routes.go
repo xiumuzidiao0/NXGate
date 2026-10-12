@@ -45,37 +45,7 @@ func (s *Server) buildStatusResponse() StatusResponse {
 		proxyHost = "[" + proxyHost + "]"
 	}
 
-	var tunnels []*tunnel.Tunnel
-	if s.tunnelPool != nil {
-		tunnels = s.tunnelPool.ListTunnels()
-	}
-	// Synthesize primary userland Zero-TUN egress so it is properly exposed in active tunnels and metrics
-	if s.vpn != nil && s.vpn.DriverMode() == vpn.DriverUserland && s.vpn.GetStatus() == string(vpn.StatusConnected) {
-		activeNode := s.vpn.GetActiveNode()
-		if activeNode != nil {
-			var unlockRes *nodes.UnlockResult
-			if s.tunnelPool != nil && s.tunnelPool.UnlockDetector() != nil {
-				unlockRes = s.tunnelPool.UnlockDetector().GetUnlock(activeNode.IP)
-			}
-			if unlockRes == nil {
-				unlockRes = activeNode.Unlock
-			}
-
-			primaryUserland := &tunnel.Tunnel{
-				ID:          "primary-userland",
-				DevName:     fmt.Sprintf("sstp-%d", activeNode.Port),
-				DevIndex:    0,
-				Node:        activeNode,
-				Status:      tunnel.StatusConnected,
-				Message:     "系统主连网关 (用户态免TUN直连)",
-				ConnectedAt: s.vpn.ConnectedAt(),
-				LatencyMs:   activeNode.LatencyMs,
-				IsUserland:  true,
-				Unlock:      unlockRes,
-			}
-			tunnels = append([]*tunnel.Tunnel{primaryUserland}, tunnels...)
-		}
-	}
+	tunnels := s.getActiveTunnels()
 	var portRules []proxy.PortRule
 	if s.portMgr != nil {
 		portRules = s.portMgr.GetRules()
@@ -406,12 +376,43 @@ func (s *Server) handleUpdateSettings(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handleListTunnels(w http.ResponseWriter, r *http.Request) {
-	if s.tunnelPool == nil {
-		s.writeJSON(w, http.StatusOK, []*tunnel.Tunnel{})
-		return
+func (s *Server) getActiveTunnels() []*tunnel.Tunnel {
+	var tunnels []*tunnel.Tunnel
+	if s.tunnelPool != nil {
+		tunnels = s.tunnelPool.ListTunnels()
 	}
-	s.writeJSON(w, http.StatusOK, s.tunnelPool.ListTunnels())
+	// Synthesize primary userland Zero-TUN egress so it is properly exposed in active tunnels and metrics
+	if s.vpn != nil && s.vpn.DriverMode() == vpn.DriverUserland && s.vpn.GetStatus() == string(vpn.StatusConnected) {
+		activeNode := s.vpn.GetActiveNode()
+		if activeNode != nil {
+			var unlockRes *nodes.UnlockResult
+			if s.tunnelPool != nil && s.tunnelPool.UnlockDetector() != nil {
+				unlockRes = s.tunnelPool.UnlockDetector().GetUnlock(activeNode.IP)
+			}
+			if unlockRes == nil {
+				unlockRes = activeNode.Unlock
+			}
+
+			primaryUserland := &tunnel.Tunnel{
+				ID:          "primary-userland",
+				DevName:     fmt.Sprintf("sstp-%d", activeNode.Port),
+				DevIndex:    0,
+				Node:        activeNode,
+				Status:      tunnel.StatusConnected,
+				Message:     "系统主连网关 (用户态免TUN直连)",
+				ConnectedAt: s.vpn.ConnectedAt(),
+				LatencyMs:   activeNode.LatencyMs,
+				IsUserland:  true,
+				Unlock:      unlockRes,
+			}
+			tunnels = append([]*tunnel.Tunnel{primaryUserland}, tunnels...)
+		}
+	}
+	return tunnels
+}
+
+func (s *Server) handleListTunnels(w http.ResponseWriter, r *http.Request) {
+	s.writeJSON(w, http.StatusOK, s.getActiveTunnels())
 }
 
 type StartTunnelRequest struct {

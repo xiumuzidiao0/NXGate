@@ -21,7 +21,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Lan
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.ToggleOff
@@ -37,7 +39,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -366,7 +370,7 @@ fun MatrixPipelineTab(
                                                                 border = BorderStroke(1.dp, pillColor.copy(alpha = 0.3f))
                                                             ) {
                                                                 Text(
-                                                                    text = "⚡ ${leaf.latency}ms",
+                                                                    text = "${leaf.latency}ms",
                                                                     style = MaterialTheme.typography.labelSmall,
                                                                     fontWeight = FontWeight.Bold,
                                                                     color = pillColor,
@@ -451,32 +455,187 @@ fun MatrixPipelineTab(
                 )
             }
         } else {
-            // 端口列表项
-            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            val clipboardManager = LocalClipboardManager.current
+            val srvHost = activeServer?.host?.trim()?.removePrefix("http://")?.removePrefix("https://")?.substringBefore(":") ?: "127.0.0.1"
+
+            // 端口规则卡片列表 (与 WebUI 保持一致，包含 HTTP/SOCKS5 一键复制、三列策略状态呈现与编辑/删除)
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 portRules.forEachIndexed { index, rule ->
-                    ConnectedListItem(
-                        index = index,
-                        total = portRules.size,
-                        headline = rule.title,
-                        supportingText = rule.subtitle,
-                        leadingIcon = Icons.Rounded.Lan,
-                        trailingContent = {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                IconButton(onClick = { onToggleRuleEnabled(index, rule) }) {
-                                    Icon(
-                                        imageVector = if (rule.enabled) Icons.Rounded.ToggleOn else Icons.Rounded.ToggleOff,
-                                        contentDescription = if (isEn) "Toggle switch" else "切换开关",
-                                        tint = if (rule.enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-                                        modifier = Modifier.size(32.dp)
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainer
+                        ),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            // Row 1: 状态指示点 + PORT + 协议徽章 + 一键复制 + 编辑/删除/开关
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(8.dp)
+                                            .background(
+                                                if (rule.enabled) Color(0xFF10B981) else Color(0xFF6B7280),
+                                                CircleShape
+                                            )
                                     )
+                                    Text(
+                                        text = "PORT ${rule.port}",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Surface(
+                                        shape = RoundedCornerShape(4.dp),
+                                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
+                                    ) {
+                                        Text(
+                                            text = "HTTP / SOCKS5",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
                                 }
-                                IconButton(onClick = { onDeleteRule(rule) }) {
-                                    Icon(Icons.Rounded.Delete, contentDescription = if (isEn) "Delete" else "删除端口规则", tint = MaterialTheme.colorScheme.error)
+
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    val httpUrl = "http://$srvHost:${rule.port}"
+                                    val socks5Url = "socks5://$srvHost:${rule.port}"
+
+                                    Surface(
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                                        modifier = Modifier.clickable {
+                                            clipboardManager.setText(AnnotatedString(httpUrl))
+                                            Toast.makeText(context, if (isEn) "Copied $httpUrl" else "已复制 $httpUrl", Toast.LENGTH_SHORT).show()
+                                        }
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            Icon(Icons.Rounded.ContentCopy, contentDescription = null, modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text(httpUrl, style = MaterialTheme.typography.labelSmall, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurface)
+                                        }
+                                    }
+
+                                    Surface(
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                                        modifier = Modifier.clickable {
+                                            clipboardManager.setText(AnnotatedString(socks5Url))
+                                            Toast.makeText(context, if (isEn) "Copied $socks5Url" else "已复制 $socks5Url", Toast.LENGTH_SHORT).show()
+                                        }
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            Icon(Icons.Rounded.ContentCopy, contentDescription = null, modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text(socks5Url, style = MaterialTheme.typography.labelSmall, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurface)
+                                        }
+                                    }
+
+                                    IconButton(
+                                        onClick = { onEditRule(rule) },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(Icons.Rounded.Edit, contentDescription = if (isEn) "Edit" else "编辑", modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+                                    }
+
+                                    IconButton(
+                                        onClick = { onDeleteRule(rule) },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(Icons.Rounded.Delete, contentDescription = if (isEn) "Delete" else "删除", modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.error)
+                                    }
+
+                                    IconButton(
+                                        onClick = { onToggleRuleEnabled(index, rule) },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = if (rule.enabled) Icons.Rounded.ToggleOn else Icons.Rounded.ToggleOff,
+                                            contentDescription = null,
+                                            tint = if (rule.enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                                            modifier = Modifier.size(28.dp)
+                                        )
+                                    }
                                 }
                             }
-                        },
-                        onClick = { onEditRule(rule) }
-                    )
+
+                            // Row 2: 3-column details (Policy, Bound Exit, Auth)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.Top
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = if (isEn) "Routing Policy" else "分流调度策略",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        text = rule.policyDisplay,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = if (isEn) "Bound Exit Pool" else "绑定出口/动态出口组",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        text = rule.bindingDisplay,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = if (isEn) "Auth Status" else "代理鉴权状态",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        text = rule.authDisplay,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }

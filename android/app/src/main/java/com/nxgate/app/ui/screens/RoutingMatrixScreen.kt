@@ -483,7 +483,7 @@ fun RoutingMatrixScreen(
                             0 -> {
                                 val allStreams = remember(portRules, dynamicGroups, tunnels, masterInfo, isEn, activeServer) {
                                     val sysPrimaryGroup = dynamicGroups.find { it.isSystem || it.id == "system-primary" }
-                                    val masterTunnel = tunnels.find { it.isMaster }
+                                    val masterTunnel = tunnels.find { it.isMaster || it.id == "primary-userland" || it.devIndex == 0 }
                                     val masterLoc = formatNodeLocation(masterTunnel?.country ?: masterInfo.country, masterTunnel?.countryLong ?: masterInfo.countryLong, isEn)
                                     val masterIp = (masterTunnel?.nodeIp ?: masterInfo.nodeIp.ifEmpty { activeServer?.exitIp ?: "" }).ifEmpty { if (isEn) "Connected" else "已连通" }
                                     val masterPort = if ((masterTunnel?.nodePort ?: 0) > 0) masterTunnel!!.nodePort else 443
@@ -491,7 +491,7 @@ fun RoutingMatrixScreen(
                                     val masterLeaves = if (masterIp != "未连接" && masterIp.isNotEmpty()) {
                                         listOf(
                                             PipelineLeaf(
-                                                devName = "tun0",
+                                                devName = masterTunnel?.devName ?: (if (masterInfo.isZeroTun) "sstp-1422" else "tun0"),
                                                 locText = if (masterLoc.isNotEmpty()) masterLoc else (if (isEn) "Primary Gateway" else "系统主出口"),
                                                 ipWithPort = "$masterIp:$masterPort",
                                                 latency = masterLat,
@@ -539,6 +539,12 @@ fun RoutingMatrixScreen(
                                         val leaves = if (matchedGroups.isNotEmpty()) {
                                             val allActiveTids = matchedGroups.flatMap { it.activeTunnelIds }
                                             var activeTuns = tunnels.filter { allActiveTids.contains(it.id) || allActiveTids.contains(it.devName) }
+                                            if (activeTuns.isEmpty() && matchedGroups.any { it.isSystem || it.id == "system-primary" }) {
+                                                val prim = tunnels.find { it.isMaster || it.id == "primary-userland" || it.devIndex == 0 }
+                                                if (prim != null) {
+                                                    activeTuns = listOf(prim)
+                                                }
+                                            }
                                             if (activeTuns.isEmpty() && matchedGroup != null) {
                                                 val byCountry = tunnels.filter { it.country.equals(matchedGroup.country, true) }
                                                 if (byCountry.isNotEmpty()) {
@@ -546,15 +552,16 @@ fun RoutingMatrixScreen(
                                                 } else if (matchedGroup.country.equals(masterInfo.country, true) && masterInfo.nodeIp.isNotEmpty()) {
                                                     activeTuns = listOf(
                                                         TunnelItem(
-                                                            id = "tunnel-0",
-                                                            devName = "tun0",
+                                                            id = "primary-userland",
+                                                            devName = if (masterInfo.isZeroTun) "sstp-1422" else "tun0",
                                                             devIndex = 0,
                                                             status = if (masterInfo.isConnected) "connected" else "connecting",
                                                             nodeIp = masterInfo.nodeIp,
                                                             nodePort = 443,
                                                             country = masterInfo.country,
                                                             countryLong = masterInfo.countryLong,
-                                                            latencyMs = masterInfo.latencyMs
+                                                            latencyMs = masterInfo.latencyMs,
+                                                            isUserland = masterInfo.isZeroTun
                                                         )
                                                     )
                                                 }
@@ -575,6 +582,8 @@ fun RoutingMatrixScreen(
                                                         netflix = t.netflix
                                                     )
                                                 }
+                                            } else if (matchedGroups.any { it.isSystem || it.id == "system-primary" } && masterLeaves.isNotEmpty()) {
+                                                masterLeaves
                                             } else {
                                                 val groupCountries = matchedGroups.map { it.country }.filter { it.isNotEmpty() }
                                                 countryHint = if (groupCountries.isNotEmpty()) {
