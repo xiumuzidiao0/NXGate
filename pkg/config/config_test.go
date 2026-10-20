@@ -12,8 +12,8 @@ func TestLoadConfigUsesLoopbackAndSecureDataDir(t *testing.T) {
 	t.Setenv("LOCAL_PROXY_HOST", "")
 
 	cfg := LoadConfig()
-	if cfg.UIHost != "::" && cfg.UIHost != "0.0.0.0" {
-		t.Fatalf("expected wildcard UI host for public web access, got %q", cfg.UIHost)
+	if cfg.UIHost != "127.0.0.1" {
+		t.Fatalf("expected loopback UI host, got %q", cfg.UIHost)
 	}
 	if cfg.ProxyHost != "127.0.0.1" {
 		t.Fatalf("expected loopback proxy host, got %q", cfg.ProxyHost)

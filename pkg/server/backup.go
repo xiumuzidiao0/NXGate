@@ -75,12 +75,28 @@ func (s *Server) handleImportBackup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	restoredCount := 0
+	var restoreErrors []string
 
 	// 1. Restore Settings if provided
 	if pkg.Settings != nil {
 		if err := s.cfg.UpdateSettings(*pkg.Settings); err == nil {
 			restoredCount++
+		} else {
+			restoreErrors = append(restoreErrors, "settings: "+err.Error())
 		}
+	}
+
+	if len(pkg.DynamicGroups) > 0 && s.dynamicMgr == nil {
+		restoreErrors = append(restoreErrors, "dynamic group manager unavailable")
+	}
+	if len(pkg.PortRules) > 0 && s.portMgr == nil {
+		restoreErrors = append(restoreErrors, "port rule manager unavailable")
+	}
+	if len(pkg.Favorites) > 0 && (s.pool == nil || s.pool.Favorites() == nil) {
+		restoreErrors = append(restoreErrors, "favorites unavailable")
+	}
+	if len(pkg.Blacklist) > 0 && (s.pool == nil || s.pool.Blacklist() == nil) {
+		restoreErrors = append(restoreErrors, "blacklist unavailable")
 	}
 
 	// 2. Restore Favorites if provided
@@ -94,6 +110,10 @@ func (s *Server) handleImportBackup(w http.ResponseWriter, r *http.Request) {
 	// 3. Restore Blacklist if provided
 	if s.pool != nil && s.pool.Blacklist() != nil && len(pkg.Blacklist) > 0 {
 		for _, b := range pkg.Blacklist {
+			if b == nil {
+				restoreErrors = append(restoreErrors, "nil blacklist entry")
+				continue
+			}
 			if b.IsPermanent {
 				s.pool.Blacklist().MarkManualWithOptions(b.ID, b.IP, b.Country, b.Reason, 0, b.Scope, true)
 			} else {
@@ -106,15 +126,25 @@ func (s *Server) handleImportBackup(w http.ResponseWriter, r *http.Request) {
 	// 4. Restore Dynamic Groups if provided
 	if s.dynamicMgr != nil && len(pkg.DynamicGroups) > 0 {
 		for _, g := range pkg.DynamicGroups {
-			_ = s.dynamicMgr.SaveGroup(g)
+			if g == nil {
+				restoreErrors = append(restoreErrors, "nil dynamic group")
+				continue
+			}
+			if err := s.dynamicMgr.SaveGroup(g); err != nil {
+				restoreErrors = append(restoreErrors, "group: "+err.Error())
+			} else {
+				restoredCount++
+			}
 		}
-		restoredCount++
 	}
 
 	// 5. Restore Port Rules if provided
 	if s.portMgr != nil && len(pkg.PortRules) > 0 {
-		_ = s.portMgr.ApplyRules(pkg.PortRules)
-		restoredCount++
+		if err := s.portMgr.ApplyRules(pkg.PortRules); err != nil {
+			restoreErrors = append(restoreErrors, "port rules: "+err.Error())
+		} else {
+			restoredCount++
+		}
 	}
 
 	// Rebuild candidates to reflect restored blacklists and favorites
@@ -122,6 +152,10 @@ func (s *Server) handleImportBackup(w http.ResponseWriter, r *http.Request) {
 		s.pool.RebuildCandidates()
 	}
 
+	if len(restoreErrors) > 0 {
+		s.writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "partial": restoredCount > 0, "errors": restoreErrors, "restored_items": restoredCount})
+		return
+	}
 	s.writeJSON(w, http.StatusOK, map[string]any{
 		"ok":             true,
 		"message":        "全量配置已成功导入并生效！",

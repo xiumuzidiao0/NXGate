@@ -16,12 +16,12 @@ import (
 )
 
 type MultiPortManager struct {
-	cfg        *config.Config
-	tunnelPool *tunnel.Pool
-	dynamicMgr *tunnel.DynamicGroupManager
-	scheduler      TunnelSelector
-	customProxyMgr *CustomProxyManager
-	userlandDialer func(ctx context.Context, network, addr string) (net.Conn, error)
+	cfg                *config.Config
+	tunnelPool         *tunnel.Pool
+	dynamicMgr         *tunnel.DynamicGroupManager
+	scheduler          TunnelSelector
+	customProxyMgr     *CustomProxyManager
+	userlandDialer     func(ctx context.Context, network, addr string) (net.Conn, error)
 	userlandPacketConn func() (net.PacketConn, error)
 
 	mu        sync.RWMutex
@@ -75,19 +75,30 @@ func (m *MultiPortManager) loadRules() {
 			AuthMode:        "random",
 		},
 	}
-	m.saveRulesLocked()
+	m.saveRulesLocked(m.rules)
 }
 
-func (m *MultiPortManager) saveRulesLocked() {
-	data, err := json.MarshalIndent(m.rules, "", "  ")
+func (m *MultiPortManager) saveRulesLocked(rules []PortRule) error {
+	data, err := json.MarshalIndent(rules, "", "  ")
 	if err != nil {
-		return
+		return err
 	}
-	tmp := m.rulesPath + ".tmp"
-	if err := os.WriteFile(tmp, data, 0600); err == nil {
-		_ = os.Chmod(tmp, 0600)
-		_ = os.Rename(tmp, m.rulesPath)
+	f, err := os.CreateTemp(filepath.Dir(m.rulesPath), ".port-rules-*")
+	if err != nil {
+		return err
 	}
+	defer os.Remove(f.Name())
+	if _, err = f.Write(data); err == nil {
+		err = f.Sync()
+	}
+	closeErr := f.Close()
+	if err != nil {
+		return err
+	}
+	if closeErr != nil {
+		return closeErr
+	}
+	return os.Rename(f.Name(), m.rulesPath)
 }
 
 func (m *MultiPortManager) StartAll() {
@@ -172,11 +183,16 @@ func (m *MultiPortManager) ApplyRules(newRules []PortRule) error {
 		if r.AuthMode == "custom" {
 			u := strings.TrimSpace(r.AuthUser)
 			p := strings.TrimSpace(r.AuthPass)
-			if (u != "" && p == "") || (u == "" && p != "") {
+			if u == "" || p == "" {
 				return fmt.Errorf("端口 %d 的自定义认证模式必须同时填写用户名和密码，或选择免密模式", r.Port)
 			}
 		}
 		portMap[r.Port] = true
+	}
+
+	// Persist before changing live listeners; a failed restore must not report success.
+	if err := m.saveRulesLocked(newRules); err != nil {
+		return fmt.Errorf("save port rules: %w", err)
 	}
 
 	// Stop listeners for removed ports
@@ -200,7 +216,6 @@ func (m *MultiPortManager) ApplyRules(newRules []PortRule) error {
 	}
 
 	m.rules = newRules
-	m.saveRulesLocked()
 	stats.LogInfo("ProxyManager", "已成功应用并更新 %d 条多端口代理分流规则", len(newRules))
 	return nil
 }

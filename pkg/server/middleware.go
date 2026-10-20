@@ -64,7 +64,7 @@ func (m *Middleware) BasicAuth(next http.Handler) http.Handler {
 
 		// Allow subscription clients (Clash / Mihomo / Shadowrocket) to fetch subscription
 		// without HTTP Basic Auth if accessed via verified secret path or with a valid token.
-		if strings.HasPrefix(r.URL.Path, "/api/singbox/subscription") {
+		if isPublicSubscriptionRequest(r, r.URL.Path) {
 			if v, ok := r.Context().Value(secretPathVerifiedKey).(bool); ok && v {
 				next.ServeHTTP(w, r)
 				return
@@ -110,7 +110,7 @@ func (m *Middleware) SecretPathGuard(next http.Handler) http.Handler {
 
 		// 1. Direct subscription fetch with valid query token bypasses secret path prefix
 		token := r.URL.Query().Get("token")
-		if strings.HasPrefix(reqPath, "/api/singbox/subscription") && token != "" {
+		if isPublicSubscriptionRequest(r, reqPath) && token != "" {
 			if (subToken != "" && token == subToken) || (secret != "" && token == secret) {
 				ctx := context.WithValue(r.Context(), secretPathVerifiedKey, true)
 				next.ServeHTTP(w, r.WithContext(ctx))
@@ -147,7 +147,7 @@ func (m *Middleware) SecretPathGuard(next http.Handler) http.Handler {
 		// 3. Subscription under random subToken safe path: /<sub_token>/api/singbox/subscription...
 		if subToken != "" {
 			subPrefix := "/" + subToken + "/"
-			if strings.HasPrefix(reqPath, subPrefix) && strings.HasPrefix(reqPath[len(subPrefix)-1:], "/api/singbox/subscription") {
+			if strings.HasPrefix(reqPath, subPrefix) && isPublicSubscriptionRequest(r, reqPath[len(subPrefix)-1:]) {
 				r2 := new(http.Request)
 				*r2 = *r
 				r2.URL.Path = "/" + strings.TrimPrefix(reqPath, subPrefix)
@@ -209,4 +209,16 @@ func (m *Middleware) SecretPathGuard(next http.Handler) http.Handler {
 		// Reject all unauthorized access with generic 404
 		http.NotFound(w, r)
 	})
+}
+
+// A subscription token must never authenticate management operations below the same prefix.
+func isPublicSubscriptionRequest(r *http.Request, path string) bool {
+	if r.Method != http.MethodGet {
+		return false
+	}
+	switch path {
+	case "/api/singbox/subscription", "/api/singbox/subscription/raw", "/api/singbox/subscription/clash":
+		return true
+	}
+	return false
 }

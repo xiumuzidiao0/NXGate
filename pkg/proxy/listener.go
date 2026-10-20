@@ -19,7 +19,7 @@ type PortRule struct {
 	Port                int        `json:"port"`
 	Enabled             bool       `json:"enabled"`
 	BoundTunnelIDs      []string   `json:"bound_tunnel_ids"`
-	BoundGroupIDs       []string   `json:"bound_group_ids"` // Dynamic group IDs
+	BoundGroupIDs       []string   `json:"bound_group_ids"`                  // Dynamic group IDs
 	BoundCustomProxyIDs []string   `json:"bound_custom_proxy_ids,omitempty"` // Custom external proxy IDs
 	Policy              PortPolicy `json:"policy"`
 	IntervalSeconds     int        `json:"interval_seconds"`
@@ -29,18 +29,18 @@ type PortRule struct {
 }
 
 type PortListener struct {
-	rule           PortRule
-	cfg            *config.Config
-	host           string
-	scheduler      TunnelSelector
-	customProxyMgr *CustomProxyManager
-	userlandDialer func(ctx context.Context, network, addr string) (net.Conn, error)
+	rule               PortRule
+	cfg                *config.Config
+	host               string
+	scheduler          TunnelSelector
+	customProxyMgr     *CustomProxyManager
+	userlandDialer     func(ctx context.Context, network, addr string) (net.Conn, error)
 	userlandPacketConn func() (net.PacketConn, error)
-	listener       net.Listener
-	sem            chan struct{}
-	cancel         context.CancelFunc
-	mu             sync.Mutex
-	closed         bool
+	listener           net.Listener
+	sem                chan struct{}
+	cancel             context.CancelFunc
+	mu                 sync.Mutex
+	closed             bool
 }
 
 func NewPortListener(rule PortRule, cfg *config.Config, scheduler TunnelSelector) *PortListener {
@@ -85,7 +85,11 @@ func (l *PortListener) getAuthenticator() *Authenticator {
 		return NewAuthenticator("", "") // Disabled
 	}
 	if mode == "custom" {
-		return NewAuthenticator(l.rule.AuthUser, l.rule.AuthPass)
+		a := NewAuthenticator(l.rule.AuthUser, l.rule.AuthPass)
+		if !a.IsEnabled() {
+			return &Authenticator{enabled: true, denyAll: true}
+		}
+		return a
 	}
 	// "random" (and legacy "default_web"): use independent persistent random proxy credentials
 	user, pass := l.cfg.GetProxyCredentials()
@@ -159,6 +163,7 @@ func (l *PortListener) Start(ctx context.Context) error {
 }
 
 func (l *PortListener) dispatch(client net.Conn) {
+	defer client.Close()
 	br := bufio.NewReader(client)
 
 	firstByte, err := br.Peek(1)
@@ -195,7 +200,7 @@ func (l *PortListener) dispatch(client net.Conn) {
 
 	// 2. Resolve tunnel from scheduler if custom proxy was not used
 	var userlandPacketConn func() (net.PacketConn, error)
-	if dialer == nil && l.scheduler != nil {
+	if dialer == nil && len(l.rule.BoundCustomProxyIDs) == 0 && l.scheduler != nil {
 		if tun := l.scheduler.SelectTunnel(l.rule.Port, l.rule.BoundTunnelIDs, l.rule.BoundGroupIDs, l.rule.Policy, l.rule.IntervalSeconds); tun != nil {
 			selectedTun = tun
 			devName = tun.DevName
@@ -211,7 +216,8 @@ func (l *PortListener) dispatch(client net.Conn) {
 	}
 
 	// 3. Fall back to primary userland dialer if neither tunnel nor custom proxy was selected
-	if dialer == nil && selectedTun == nil {
+	if dialer == nil && selectedTun == nil && len(l.rule.BoundCustomProxyIDs) == 0 &&
+		(len(l.rule.BoundTunnelIDs) == 0 && len(l.rule.BoundGroupIDs) == 0 || isOnlySystemPrimary(l.rule.BoundTunnelIDs, l.rule.BoundGroupIDs)) {
 		l.mu.Lock()
 		uDialer := l.userlandDialer
 		uPacketConn := l.userlandPacketConn

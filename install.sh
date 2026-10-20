@@ -173,16 +173,16 @@ install_dependencies() {
     echo -e "\n${YELLOW}[1/4] 正在安装系统基础依赖...${PLAIN}"
     if [ "$PKG_MGR" = "apt-get" ]; then
         apt-get update -q || true
-        apt-get install -y openvpn curl git ca-certificates iptables iproute2 psmisc
+        apt-get install -y jq openvpn curl git ca-certificates iptables iproute2 psmisc
     elif [ "$PKG_MGR" = "apk" ]; then
         apk update || true
-        apk add openvpn curl git ca-certificates iptables iproute2 psmisc bash
+        apk add jq openvpn curl git ca-certificates iptables iproute2 psmisc bash
     elif [ "$PKG_MGR" = "dnf" ] || [ "$PKG_MGR" = "yum" ]; then
         if [ "$OS_TYPE" != "fedora" ] && [ "$OS_TYPE" != "amzn" ]; then
             $PKG_MGR install -y epel-release || true
         fi
-        $PKG_MGR install -y openvpn curl git ca-certificates iptables iproute psmisc || \
-        $PKG_MGR install -y openvpn curl git ca-certificates iptables iproute2 psmisc
+        $PKG_MGR install -y jq openvpn curl git ca-certificates iptables iproute psmisc || \
+        $PKG_MGR install -y jq openvpn curl git ca-certificates iptables iproute2 psmisc
     fi
     ensure_ssh_firewall_and_routing_safety
 }
@@ -375,7 +375,7 @@ configure_install_params() {
     cat > "${CONFIG_FILE}" <<EOF
 # NXGate 运行环境变量配置
 DATA_DIR=${INSTALL_DIR}/data
-UI_HOST=::
+UI_HOST=127.0.0.1
 UI_PORT=${custom_web_port}
 UI_PATH=${custom_path}
 UI_USERNAME=${custom_user}
@@ -606,24 +606,61 @@ EOF
     configure_firewall "${web_port}"
 }
 
-# 9. 读取配置中的指定项
+# 9. JSON 是网页设置的权威源；EnvironmentFile 只负责初始化及其他变量。
+settings_json_key() {
+    case "$1" in
+        UI_PORT) echo ui_port ;;
+        UI_PATH) echo ui_path ;;
+        UI_USERNAME) echo ui_username ;;
+        UI_PASSWORD) echo ui_password ;;
+        LOCAL_PROXY_PORT) echo proxy_port ;;
+        *) return 0 ;;
+    esac
+}
+settings_json_path() {
+    local data_dir
+    data_dir=$(grep '^DATA_DIR=' "${CONFIG_FILE}" 2>/dev/null | head -1 | cut -d= -f2- | tr -d '\r')
+    data_dir=${data_dir:-${INSTALL_DIR}/data}
+    case "$data_dir" in /*) ;; *) data_dir="${INSTALL_DIR}/${data_dir}" ;; esac
+    printf '%s/settings.json' "$data_dir"
+}
 get_config_val() {
-    local key="$1"
+    local key="$1" json_key settings_file
+    json_key=$(settings_json_key "$key")
+    settings_file=$(settings_json_path)
+    if [ -n "$json_key" ] && [ -f "$settings_file" ]; then
+        command -v jq >/dev/null || { echo "读取持久化设置需要 jq；请先安装 jq" >&2; return 1; }
+        jq -er --arg key "$json_key" '.[$key]' "$settings_file"
+        return
+    fi
     if [ -f "${CONFIG_FILE}" ]; then
         grep "^${key}=" "${CONFIG_FILE}" | cut -d'=' -f2- | tr -d '\r\n'
     fi
 }
 
-# 10. 更新配置中的指定项
+# 10. 已有持久化设置时写入同一权威源，避免 CLI 改密后重启恢复旧密码。
 set_config_val() {
-    local key="$1"
-    local val="$2"
-    if [ -f "${CONFIG_FILE}" ]; then
-        if grep -q "^${key}=" "${CONFIG_FILE}"; then
-            sed -i "s|^${key}=.*|${key}=${val}|g" "${CONFIG_FILE}"
-        else
-            echo "${key}=${val}" >> "${CONFIG_FILE}"
+    local key="$1" val="$2" json_key settings_file tmp
+    [[ "$val" != *$'\n'* && "$val" != *$'\r'* ]] || { echo "配置值不能含换行符" >&2; return 1; }
+    json_key=$(settings_json_key "$key")
+    settings_file=$(settings_json_path)
+    if [ -n "$json_key" ] && [ -f "$settings_file" ]; then
+        command -v jq >/dev/null || { echo "更新持久化设置需要 jq；请先安装 jq" >&2; return 1; }
+        tmp=$(mktemp "${settings_file}.XXXXXX") || return 1
+        if ! jq --arg key "$json_key" --arg value "$val" \
+            '.[$key] = (if $key == "ui_port" or $key == "proxy_port" then ($value|tonumber) else $value end)' \
+            "$settings_file" > "$tmp"; then
+            rm -f "$tmp"; return 1
         fi
+        chmod 600 "$tmp" && mv -f "$tmp" "$settings_file"
+        return
+    fi
+    if [ -f "${CONFIG_FILE}" ]; then
+        tmp=$(mktemp "${CONFIG_FILE}.XXXXXX") || return 1
+        # Do not interpolate passwords into sed expressions (/, &, and | are valid password characters).
+        grep -v "^${key}=" "$CONFIG_FILE" > "$tmp" || true
+        printf '%s=%s\n' "$key" "$val" >> "$tmp"
+        chmod 600 "$tmp" && mv -f "$tmp" "$CONFIG_FILE"
     fi
 }
 
@@ -649,7 +686,7 @@ print_install_success() {
     echo -e "\n${GREEN}==================================================================${PLAIN}"
     echo -e "${GREEN}        🎉 NXGate (自适应多出口路由网关 v${ver}) 安装部署完成！        ${PLAIN}"
     echo -e "${GREEN}==================================================================${PLAIN}"
-    echo -e " ${BOLD}Web 管理控制台${PLAIN} : ${CYAN}http://${ip}:${port}/${path}/${PLAIN}"
+    echo -e " ${BOLD}Web 管理控制台${PLAIN} : ${CYAN}http://127.0.0.1:${port}/${path}/${PLAIN}"
     echo -e " ${BOLD}管理账号${PLAIN}       : ${YELLOW}${user}${PLAIN}"
     echo -e " ${BOLD}管理密码${PLAIN}       : ${YELLOW}${pass}${PLAIN}"
     echo -e " ${BOLD}本地自适应代理${PLAIN} : ${GREEN}127.0.0.1:${proxy_port}${PLAIN} (HTTP/HTTPS/SOCKS5 单端口)"
@@ -657,7 +694,7 @@ print_install_success() {
     echo -e " ${BOLD}当前程序版本${PLAIN}   : ${YELLOW}v${ver}${PLAIN}"
     echo -e " ${BOLD}终端管理命令${PLAIN}   : 在终端随时输入 ${CYAN}nx${PLAIN} 唤出管理控制中心"
     echo -e " ${YELLOW}⚠️ 访问提示${PLAIN}       : 1. 访问时请务必带上后缀路径: ${CYAN}/${path}/${PLAIN} (未带路径将隐藏返回 404)"
-    echo -e "                   2. 请确认云厂商控制台安全组已放行 ${CYAN}TCP ${port}${PLAIN} 入站端口"
+    echo -e "                   2. 默认仅回环访问；请用 SSH 隧道或 TLS 反代，不要直接放行后台端口"
     echo -e "${GREEN}==================================================================${PLAIN}\n"
 }
 

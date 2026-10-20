@@ -524,13 +524,27 @@ func (s *Server) getSubscriptionToken() string {
 }
 
 func (s *Server) getAgeRecipient(r *http.Request) string {
-	if q := strings.TrimSpace(r.URL.Query().Get("age_recipient")); q != "" {
-		return q
-	}
-	if s.cfg.AgeEncryptEnabled && strings.TrimSpace(s.cfg.AgePublicKey) != "" {
+	if s.cfg.AgeEncryptEnabled {
 		return strings.TrimSpace(s.cfg.AgePublicKey)
 	}
-	return ""
+	return strings.TrimSpace(r.URL.Query().Get("age_recipient"))
+}
+
+// writeEncryptedSubscription returns true whenever encryption was requested, including failure.
+func (s *Server) writeEncryptedSubscription(w http.ResponseWriter, r *http.Request, data []byte, filename string) bool {
+	recipient := s.getAgeRecipient(r)
+	if !s.cfg.AgeEncryptEnabled && recipient == "" {
+		return false
+	}
+	enc, err := EncryptWithAge(data, recipient)
+	if err != nil {
+		http.Error(w, "subscription encryption failed", http.StatusInternalServerError)
+		return true
+	}
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Disposition", "attachment; filename=\""+filename+"\"")
+	_, _ = w.Write(enc)
+	return true
 }
 
 func appendFilterParams(baseURL string, r *http.Request) string {
@@ -620,14 +634,8 @@ func (s *Server) handleSingBoxRawSub(w http.ResponseWriter, r *http.Request) {
 	urls := GenerateRawSubscription(nodes, serverHost)
 	rawText := strings.Join(urls, "\n")
 
-	if recipient := s.getAgeRecipient(r); recipient != "" {
-		if enc, err := EncryptWithAge([]byte(rawText), recipient); err == nil {
-			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-			w.Header().Set("Content-Disposition", "attachment; filename=\"singbox-sub.age\"")
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write(enc)
-			return
-		}
+	if s.writeEncryptedSubscription(w, r, []byte(rawText), "singbox-sub.age") {
+		return
 	}
 
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
@@ -652,14 +660,8 @@ func (s *Server) handleSingBoxClashSub(w http.ResponseWriter, r *http.Request) {
 
 	yamlContent := GenerateClashYAML(nodes, serverHost)
 
-	if recipient := s.getAgeRecipient(r); recipient != "" {
-		if enc, err := EncryptWithAge([]byte(yamlContent), recipient); err == nil {
-			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-			w.Header().Set("Content-Disposition", "attachment; filename=\"singbox-clash.yaml.age\"")
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write(enc)
-			return
-		}
+	if s.writeEncryptedSubscription(w, r, []byte(yamlContent), "singbox-clash.yaml.age") {
+		return
 	}
 
 	w.Header().Set("Content-Type", "text/yaml; charset=utf-8")
@@ -696,14 +698,8 @@ func (s *Server) handleSingBoxGetSub(w http.ResponseWriter, r *http.Request) {
 	if format == "raw" || format == "text" {
 		urls := GenerateRawSubscription(nodes, serverHost)
 		rawText := strings.Join(urls, "\n")
-		if recipient := s.getAgeRecipient(r); recipient != "" {
-			if enc, err := EncryptWithAge([]byte(rawText), recipient); err == nil {
-				w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-				w.Header().Set("Content-Disposition", "attachment; filename=\"singbox-sub.age\"")
-				w.WriteHeader(http.StatusOK)
-				_, _ = w.Write(enc)
-				return
-			}
+		if s.writeEncryptedSubscription(w, r, []byte(rawText), "singbox-sub.age") {
+			return
 		}
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.Header().Set("Content-Disposition", "attachment; filename=\"singbox-sub.txt\"")
@@ -719,14 +715,8 @@ func (s *Server) handleSingBoxGetSub(w http.ResponseWriter, r *http.Request) {
 
 	if format == "base64" || format == "b64" || isSubClient || (!strings.Contains(accept, "application/json") && format != "json") {
 		b64Content := GenerateBase64Subscription(nodes, serverHost)
-		if recipient := s.getAgeRecipient(r); recipient != "" {
-			if enc, err := EncryptWithAge([]byte(b64Content), recipient); err == nil {
-				w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-				w.Header().Set("Content-Disposition", "attachment; filename=\"singbox-sub.b64.age\"")
-				w.WriteHeader(http.StatusOK)
-				_, _ = w.Write(enc)
-				return
-			}
+		if s.writeEncryptedSubscription(w, r, []byte(b64Content), "singbox-sub.b64.age") {
+			return
 		}
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.Header().Set("Content-Disposition", "attachment; filename=\"singbox-sub.txt\"")
@@ -741,7 +731,7 @@ func (s *Server) handleSingBoxGetSub(w http.ResponseWriter, r *http.Request) {
 	clashURL := s.buildClashSubURL(r)
 
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(&singbox.SubResponse{
+	payload := &singbox.SubResponse{
 		OK:                true,
 		Enabled:           true,
 		SubURL:            genericURL,
@@ -752,7 +742,16 @@ func (s *Server) handleSingBoxGetSub(w http.ResponseWriter, r *http.Request) {
 		AgePublicKey:      s.cfg.AgePublicKey,
 		NodeCount:         len(nodes),
 		Nodes:             urls,
-	})
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		http.Error(w, "subscription encoding failed", 500)
+		return
+	}
+	if s.writeEncryptedSubscription(w, r, data, "singbox-sub.json.age") {
+		return
+	}
+	_, _ = w.Write(data)
 }
 
 func (s *Server) handleSingBoxSyncSub(w http.ResponseWriter, r *http.Request) {
@@ -763,4 +762,17 @@ func (s *Server) handleSingBoxSyncSub(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleSingBoxInitSub(w http.ResponseWriter, r *http.Request) {
 	// Native subscription is always initialized and ready without third-party web servers
 	s.handleSingBoxGetSub(w, r)
+}
+
+// Admin-only metadata endpoint for management clients. No node connection credentials.
+func (s *Server) handleSubscriptionInfo(w http.ResponseWriter, r *http.Request) {
+	nodes, err := s.prepareSubscriptionNodes(r.Context(), r)
+	if err != nil {
+		s.writeError(w, 500, "subscription metadata unavailable")
+		return
+	}
+	s.writeJSON(w, http.StatusOK, map[string]any{
+		"ok": true, "sub_url": s.buildGenericSubURL(r), "clash_sub_url": s.buildClashSubURL(r),
+		"node_count": len(nodes), "age_encrypt_enabled": s.cfg.AgeEncryptEnabled, "age_public_key": s.cfg.AgePublicKey,
+	})
 }

@@ -9,6 +9,7 @@ import (
 
 type Authenticator struct {
 	enabled  bool
+	denyAll  bool
 	username string
 	password string
 }
@@ -28,6 +29,9 @@ func (a *Authenticator) IsEnabled() bool {
 }
 
 func (a *Authenticator) Verify(user, pass string) bool {
+	if a.denyAll {
+		return false
+	}
 	if !a.enabled {
 		return true
 	}

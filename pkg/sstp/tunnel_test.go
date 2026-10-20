@@ -8,8 +8,12 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/pem"
 	"math/big"
 	"net"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -76,6 +80,12 @@ func TestResolveCandidatePortsWithPreferred(t *testing.T) {
 
 func TestFastProbeAndDetectSSTPPort(t *testing.T) {
 	tlsCfg := generateTestTLSConfig(t)
+	caFile := filepath.Join(t.TempDir(), "root.pem")
+	if err := os.WriteFile(caFile, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: tlsCfg.Certificates[0].Certificate[0]}), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("SSL_CERT_FILE", caFile)
+	t.Setenv("SSL_CERT_DIR", t.TempDir())
 	listener, err := tls.Listen("tcp", "127.0.0.1:0", tlsCfg)
 	if err != nil {
 		t.Fatalf("listen tls failed: %v", err)
@@ -125,5 +135,37 @@ func TestFastProbeAndDetectSSTPPort(t *testing.T) {
 	detected := DetectSSTPPort(ctx, "127.0.0.1", []int{1, 2, serverPort, 3}, 1*time.Second)
 	if detected != serverPort {
 		t.Fatalf("DetectSSTPPort expected %d, got %d", serverPort, detected)
+	}
+}
+
+func TestSecuritySSTPRejectsUntrustedCertificate(t *testing.T) {
+	// A separate self-signed certificate is not the explicitly trusted fixture above.
+	listener, err := tls.Listen("tcp", "127.0.0.1:0", generateTestTLSConfig(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	go func() {
+		for {
+			c, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			go func(c net.Conn) { defer c.Close(); _ = c.(*tls.Conn).Handshake() }(c)
+		}
+	}()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	port := listener.Addr().(*net.TCPAddr).Port
+	if FastProbeSSTPPort(ctx, "127.0.0.1", port, time.Second) {
+		t.Fatal("probe accepted untrusted certificate")
+	}
+	tun, err := Connect(ctx, "127.0.0.1", port, "test", "test")
+	if tun != nil {
+		tun.Close()
+		t.Fatal("connection accepted untrusted certificate")
+	}
+	if err == nil || !strings.Contains(err.Error(), "certificate") {
+		t.Fatal("expected TLS certificate rejection", err)
 	}
 }

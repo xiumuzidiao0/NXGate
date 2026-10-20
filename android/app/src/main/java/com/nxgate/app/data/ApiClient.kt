@@ -675,7 +675,7 @@ class ApiClient {
         val fallbackGeneric = "${profile.baseUrl}/api/singbox/subscription"
         val fallbackClash = "${profile.baseUrl}/api/singbox/subscription/clash"
         try {
-            executeCall(profile, "/api/singbox/subscription?format=json").use { response ->
+            executeCall(profile, "/api/singbox/subscription-info").use { response ->
                 if (response.isSuccessful) {
                     val body = response.body?.string() ?: "{}"
                     val json = JSONObject(body)

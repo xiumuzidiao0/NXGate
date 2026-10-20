@@ -4,12 +4,10 @@ package proxy
 
 import (
 	"context"
+	"fmt"
 	"net"
-	"strings"
 	"syscall"
 	"time"
-
-	"aimili-vpngate-go/pkg/dns"
 )
 
 func getInterfaceIPv4(devName string) net.IP {
@@ -35,6 +33,9 @@ func getInterfaceIPv4(devName string) net.IP {
 }
 
 func dialUpstream(targetAddr string, devName string, timeout time.Duration) (net.Conn, error) {
+	if devName == "" {
+		return nil, fmt.Errorf("no authorized tunnel available")
+	}
 	d := net.Dialer{
 		Timeout:   timeout,
 		KeepAlive: 30 * time.Second,
@@ -110,6 +111,9 @@ func dialUpstream(targetAddr string, devName string, timeout time.Duration) (net
 }
 
 func createBoundUDPSocket(devName string) (*net.UDPConn, error) {
+	if devName == "" {
+		return nil, fmt.Errorf("no authorized UDP tunnel available")
+	}
 	lc := net.ListenConfig{}
 	if devName != "" {
 		lc.Control = func(network, address string, c syscall.RawConn) error {
@@ -147,18 +151,14 @@ func resolveUDPAddrThroughTunnel(ctx context.Context, host string, port int, dev
 		return &net.UDPAddr{IP: ip, Port: port}, nil
 	}
 
-	// Try DoH resolver first to avoid local DNS pollution and bypass lack of physical netdev
-	dohCtx, dohCancel := context.WithTimeout(ctx, 3*time.Second)
-	ips, err := dns.Default().LookupIPv4(dohCtx, host)
-	dohCancel()
-	if err == nil && len(ips) > 0 {
-		return &net.UDPAddr{IP: ips[0], Port: port}, nil
+	if devName == "" {
+		return nil, fmt.Errorf("no tunnel DNS resolver available")
 	}
 
 	resolver := &net.Resolver{
 		PreferGo: true,
 	}
-	if devName != "" && !strings.HasPrefix(devName, "sstp") {
+	if devName != "" {
 		resolver.Dial = func(ctx context.Context, network, address string) (net.Conn, error) {
 			dnsDialer := net.Dialer{
 				Timeout: 4 * time.Second,
@@ -182,12 +182,12 @@ func resolveUDPAddrThroughTunnel(ctx context.Context, host string, port int, dev
 		}
 	}
 
-	ips, err = resolver.LookupIP(ctx, "ip4", host)
-	if err != nil || len(ips) == 0 {
-		ips, err = net.DefaultResolver.LookupIP(ctx, "ip4", host)
-		if err != nil || len(ips) == 0 {
-			return nil, err
-		}
+	ips, err := resolver.LookupIP(ctx, "ip4", host)
+	if err != nil {
+		return nil, err
+	}
+	if len(ips) == 0 {
+		return nil, fmt.Errorf("no IPv4 address for %s", host)
 	}
 	return &net.UDPAddr{IP: ips[0], Port: port}, nil
 }

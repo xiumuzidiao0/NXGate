@@ -4,20 +4,17 @@ package proxy
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"time"
 )
 
 func dialUpstream(targetAddr string, devName string, timeout time.Duration) (net.Conn, error) {
-	d := net.Dialer{
-		Timeout:   timeout,
-		KeepAlive: 30 * time.Second,
-	}
-	return d.Dial("tcp", targetAddr)
+	return nil, fmt.Errorf("device-bound TCP requires Linux; use an explicit userland dialer")
 }
 
 func createBoundUDPSocket(devName string) (*net.UDPConn, error) {
-	return net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4zero, Port: 0})
+	return nil, fmt.Errorf("device-bound UDP requires Linux; use an explicit userland packet connection")
 }
 
 func resolveUDPAddrThroughTunnel(ctx context.Context, host string, port int, devName string) (*net.UDPAddr, error) {
@@ -25,9 +22,5 @@ func resolveUDPAddrThroughTunnel(ctx context.Context, host string, port int, dev
 	if ip != nil {
 		return &net.UDPAddr{IP: ip, Port: port}, nil
 	}
-	ips, err := net.DefaultResolver.LookupIP(ctx, "ip4", host)
-	if err != nil || len(ips) == 0 {
-		return nil, err
-	}
-	return &net.UDPAddr{IP: ips[0], Port: port}, nil
+	return nil, fmt.Errorf("device-bound DNS requires Linux")
 }

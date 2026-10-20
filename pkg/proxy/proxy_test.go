@@ -63,7 +63,7 @@ func TestCleanPrivacyHeaders(t *testing.T) {
 	}
 }
 
-func TestGatewaySocks5AndHTTP(t *testing.T) {
+func TestPortListenerExplicitEgressSocks5AndHTTP(t *testing.T) {
 	// 1. Setup a dummy target TCP echo server
 	echoLn, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -102,7 +102,8 @@ func TestGatewaySocks5AndHTTP(t *testing.T) {
 	_ = ln.Close()
 	cfg.ProxyPort = gatewayPort
 
-	gw := NewGateway(cfg)
+	gw := NewPortListener(PortRule{Port: cfg.ProxyPort, AuthMode: "none"}, cfg, nil)
+	configureLocalTestEgress(gw)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -296,6 +297,7 @@ func TestPortListenerSocks5WithAuthAndUDP(t *testing.T) {
 	}
 
 	listener := NewPortListener(rule, cfg, nil)
+	configureLocalTestEgress(listener)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -417,6 +419,7 @@ func TestSocks5NoAuthAcceptsClientUserPassOffer(t *testing.T) {
 	}
 
 	listener := NewPortListener(rule, cfg, nil)
+	configureLocalTestEgress(listener)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -640,6 +643,17 @@ func TestPortListenerSocks5UserlandUDPAssociate(t *testing.T) {
 	copy(reqPacket[10:], payload)
 
 	relayAddr := &net.UDPAddr{IP: relayIP, Port: relayPort}
+	// A different loopback address is not the authenticated TCP peer and cannot claim the association.
+	foreignIP, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.ParseIP("127.0.0.2")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer foreignIP.Close()
+	_, _ = foreignIP.WriteTo(reqPacket, relayAddr)
+	_ = foreignIP.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
+	if _, _, err := foreignIP.ReadFrom(make([]byte, 2048)); err == nil {
+		t.Fatal("foreign IP got relay response")
+	}
 	_, err = clientUDP.WriteTo(reqPacket, relayAddr)
 	if err != nil {
 		t.Fatalf("client write to relay failed: %v", err)
@@ -657,6 +671,17 @@ func TestPortListenerSocks5UserlandUDPAssociate(t *testing.T) {
 		t.Fatalf("client received unexpected response: %q", string(recvBuf[10:rn]))
 	}
 
+	// After the first accepted packet, even another port on the correct IP is rejected.
+	foreignPort, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.ParseIP("127.0.0.1")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer foreignPort.Close()
+	_, _ = foreignPort.WriteTo(reqPacket, relayAddr)
+	_ = foreignPort.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
+	if _, _, err := foreignPort.ReadFrom(make([]byte, 2048)); err == nil {
+		t.Fatal("foreign port got relay response")
+	}
 	// 6. Verify mock packet conn recorded the sent packet
 	mockPktConn.mu.Lock()
 	defer mockPktConn.mu.Unlock()
@@ -666,4 +691,20 @@ func TestPortListenerSocks5UserlandUDPAssociate(t *testing.T) {
 	if string(mockPktConn.sentPackets[0]) != string(payload) {
 		t.Fatalf("expected payload %q, got %q", string(payload), string(mockPktConn.sentPackets[0]))
 	}
+}
+
+// Explicit loopback-only egress for protocol integration fixtures, not a production fallback.
+func configureLocalTestEgress(l *PortListener) {
+	l.SetUserlandDialer(func(ctx context.Context, network, addr string) (net.Conn, error) {
+		host, _, err := net.SplitHostPort(addr)
+		if err != nil {
+			return nil, err
+		}
+		ip := net.ParseIP(host)
+		if ip == nil || !ip.IsLoopback() {
+			return nil, fmt.Errorf("test fixture rejects non-loopback target")
+		}
+		return (&net.Dialer{}).DialContext(ctx, network, addr)
+	})
+	l.SetUserlandPacketConn(func() (net.PacketConn, error) { return net.ListenPacket("udp4", "127.0.0.1:0") })
 }

@@ -446,7 +446,8 @@ func (m *CustomProxyManager) AddOrUpdate(rawURL, tag string) (*CustomProxy, erro
 	m.mu.Unlock()
 
 	stats.LogInfo("ProxyManager", "已导入自定义外部代理: [%s] %s (%s)", p.Type, p.Host, p.ID)
-	return p, nil
+	snapshot := *p
+	return &snapshot, nil
 }
 
 // BatchImport imports multiple proxy lines at once.
@@ -486,7 +487,11 @@ func (m *CustomProxyManager) Delete(id string) bool {
 func (m *CustomProxyManager) Get(id string) *CustomProxy {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	return m.proxies[id]
+	if p := m.proxies[id]; p != nil {
+		c := *p
+		return &c
+	}
+	return nil
 }
 
 // List returns a slice of all registered custom proxies.
@@ -518,35 +523,49 @@ func (m *CustomProxyManager) GetHealthy() []*CustomProxy {
 	return list
 }
 
-// ProbeAll concurrently checks health for all registered proxies.
-func (m *CustomProxyManager) ProbeAll(ctx context.Context) []*CustomProxy {
+// Probe checks a detached copy and commits only if the definition was not replaced/deleted.
+func (m *CustomProxyManager) Probe(ctx context.Context, id string, timeout time.Duration) (*CustomProxy, error) {
 	m.mu.RLock()
-	var targets []*CustomProxy
-	for _, p := range m.proxies {
-		if p.Enabled {
-			targets = append(targets, p)
-		}
+	original := m.proxies[id]
+	if original == nil {
+		m.mu.RUnlock()
+		return nil, fmt.Errorf("proxy not found")
 	}
+	snapshot := *original
 	m.mu.RUnlock()
+	err := snapshot.Probe(ctx, timeout)
+	m.mu.Lock()
+	if m.proxies[id] == original {
+		// Replace, never mutate an object that may have been read by another probe.
+		result := snapshot
+		m.proxies[id] = &result
+		m.saveLocked()
+	}
+	m.mu.Unlock()
+	return &snapshot, err
+}
 
+// ProbeAll concurrently checks detached snapshots.
+func (m *CustomProxyManager) ProbeAll(ctx context.Context) []*CustomProxy {
+	targets := m.List()
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, 10)
-
 	for _, p := range targets {
+		if !p.Enabled {
+			continue
+		}
 		wg.Add(1)
-		go func(proxy *CustomProxy) {
+		go func(id string) {
 			defer wg.Done()
-			sem <- struct{}{}
+			select {
+			case sem <- struct{}{}:
+			case <-ctx.Done():
+				return
+			}
 			defer func() { <-sem }()
-			_ = proxy.Probe(ctx, 6*time.Second)
-		}(p)
+			_, _ = m.Probe(ctx, id, 6*time.Second)
+		}(p.ID)
 	}
-
 	wg.Wait()
-
-	m.mu.Lock()
-	m.saveLocked()
-	m.mu.Unlock()
-
 	return m.List()
 }

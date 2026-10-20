@@ -107,6 +107,7 @@ func (s *Server) Start(ctx context.Context) error {
 	mux.HandleFunc("POST /api/singbox/nodes", s.handleSingBoxAddNode)
 	mux.HandleFunc("POST /api/singbox/nodes/outbound", s.handleSingBoxSetOutbound)
 	mux.HandleFunc("DELETE /api/singbox/nodes", s.handleSingBoxDeleteNode)
+	mux.HandleFunc("GET /api/singbox/subscription-info", s.handleSubscriptionInfo)
 	mux.HandleFunc("GET /api/singbox/subscription", s.handleSingBoxGetSub)
 	mux.HandleFunc("GET /api/singbox/subscription/raw", s.handleSingBoxRawSub)
 	mux.HandleFunc("GET /api/singbox/subscription/clash", s.handleSingBoxClashSub)

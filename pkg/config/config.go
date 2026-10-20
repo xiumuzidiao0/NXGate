@@ -151,6 +151,28 @@ func LoadConfig() *Config {
 	// #nosec G302 -- 0700 is restrictive for a directory that contains config and credential files.
 	_ = os.Chmod(dataDir, 0700)
 
+	// Persisted UI settings take precedence over bootstrap environment values.
+	var persisted *SettingsDTO
+	saved, err := os.ReadFile(filepath.Join(dataDir, "settings.json"))
+	if err == nil {
+		var dto SettingsDTO
+		if err := json.Unmarshal(saved, &dto); err != nil {
+			panic(fmt.Errorf("invalid persisted settings: %w", err))
+		}
+		if strings.TrimSpace(dto.UIUsername) == "" || strings.TrimSpace(dto.UIPassword) == "" {
+			panic("persisted settings must contain nonempty UI credentials")
+		}
+		persisted = &dto
+	} else if !os.IsNotExist(err) {
+		panic(fmt.Errorf("read persisted settings: %w", err))
+	}
+	uiPassword := ""
+	if persisted != nil {
+		uiPassword = persisted.UIPassword
+	} else {
+		uiPassword = initialUIPassword(dataDir)
+	}
+
 	uiPath := getEnv("UI_PATH", "")
 	if uiPath == "" {
 		uiPath = getEnv("ADMIN_SECRET_PATH", "")
@@ -240,17 +262,17 @@ func LoadConfig() *Config {
 	_ = os.WriteFile(proxyAuthFile, []byte(proxyUser+":"+proxyPass), 0600)
 	_ = os.Chmod(proxyAuthFile, 0600)
 
-	return &Config{
+	cfg := &Config{
 		ApiURL:        getEnv("VPNGATE_API_HTTPS_URL", "https://www.vpngate.net/api/iphone/"),
 		MirrorURL:     getEnv("VPNGATE_MIRROR_HTTPS_URL", "https://baoweise-bot.github.io/aimili-vpngate/vpngate.csv"),
 		MirrorMetaURL: getEnv("VPNGATE_MIRROR_META_URL", "https://baoweise-bot.github.io/aimili-vpngate/vpngate.meta.json"),
 
-		UIHost:     getEnv("UI_HOST", "::"),
-		UIPort:     getEnvInt("UI_PORT", 8787, 1, 65535),
-		UIPath:     uiPath,
-		UIUsername: getEnv("UI_USERNAME", "admin"),
-		UIPassword: getEnv("UI_PASSWORD", "aimilivpn"),
-		SubToken:   subToken,
+		UIHost:            getEnv("UI_HOST", "127.0.0.1"),
+		UIPort:            getEnvInt("UI_PORT", 8787, 1, 65535),
+		UIPath:            uiPath,
+		UIUsername:        getEnv("UI_USERNAME", "admin"),
+		UIPassword:        uiPassword,
+		SubToken:          subToken,
 		AgeEncryptEnabled: ageEncryptEnabled,
 		AgePublicKey:      agePublicKey,
 
@@ -286,27 +308,30 @@ func LoadConfig() *Config {
 
 		DataDir: dataDir,
 	}
+	if persisted != nil {
+		cfg.applySettingsLocked(*persisted)
+	}
+	return cfg
+
 }
 
 func (c *Config) GetSettings() SettingsDTO {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
+	dto := c.settingsLocked()
+	dto.UIPassword = "" // never expose the management password through GET/backup
+	return dto
+}
+
+func (c *Config) settingsLocked() SettingsDTO {
 	return SettingsDTO{
-		UIPort:             c.UIPort,
-		UIPath:             c.UIPath,
-		UIUsername:         c.UIUsername,
-		SubToken:           c.GetSubscriptionToken(),
-		AgeEncryptEnabled:  c.AgeEncryptEnabled,
-		AgePublicKey:       c.AgePublicKey,
-		ProxyPort:          c.ProxyPort,
-		ProxyUser:          c.ProxyUser,
-		ProxyPass:          c.ProxyPass,
-		AutoRotateMinutes:  c.AutoRotateMinutes,
-		AutoRotateIPType:   c.AutoRotateIPType,
-		DiscoveryCountries: c.DiscoveryCountries,
-		TelegramBotToken:   c.TelegramBotToken,
-		TelegramChatID:     c.TelegramChatID,
+		UIPort: c.UIPort, UIPath: c.UIPath, UIUsername: c.UIUsername, UIPassword: c.UIPassword,
+		SubToken: c.SubToken, AgeEncryptEnabled: c.AgeEncryptEnabled, AgePublicKey: c.AgePublicKey,
+		ProxyPort: c.ProxyPort, ProxyUser: c.ProxyUser, ProxyPass: c.ProxyPass,
+		AutoRotateMinutes: c.AutoRotateMinutes, AutoRotateIPType: c.AutoRotateIPType,
+		DiscoveryCountries: append([]string(nil), c.DiscoveryCountries...),
+		TelegramBotToken:   c.TelegramBotToken, TelegramChatID: c.TelegramChatID,
 	}
 }
 
@@ -379,6 +404,21 @@ func (c *Config) UpdateSettings(dto SettingsDTO) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	pending := &Config{}
+	pending.applySettingsLocked(c.settingsLocked())
+	pending.applySettingsLocked(dto)
+	data, err := json.MarshalIndent(pending.settingsLocked(), "", "  ")
+	if err == nil {
+		err = atomicSettingsWrite(filepath.Join(c.DataDir, "settings.json"), data)
+	}
+	if err != nil {
+		return fmt.Errorf("persist settings: %w", err)
+	}
+	c.applySettingsLocked(dto)
+	return nil
+}
+
+func (c *Config) applySettingsLocked(dto SettingsDTO) {
 	if dto.UIPort > 0 && dto.UIPort < 65536 {
 		c.UIPort = dto.UIPort
 	}
@@ -390,9 +430,6 @@ func (c *Config) UpdateSettings(dto SettingsDTO) error {
 	}
 	if strings.TrimSpace(dto.SubToken) != "" {
 		c.SubToken = strings.Trim(strings.TrimSpace(dto.SubToken), "/")
-		subTokenFile := filepath.Join(c.DataDir, "sub_token.txt")
-		_ = os.WriteFile(subTokenFile, []byte(c.SubToken), 0600)
-		_ = os.Chmod(subTokenFile, 0600)
 	}
 	if strings.TrimSpace(dto.UIUsername) != "" {
 		c.UIUsername = strings.TrimSpace(dto.UIUsername)
@@ -419,79 +456,63 @@ func (c *Config) UpdateSettings(dto SettingsDTO) error {
 	c.TelegramChatID = strings.TrimSpace(dto.TelegramChatID)
 	c.AgeEncryptEnabled = dto.AgeEncryptEnabled
 	c.AgePublicKey = strings.TrimSpace(dto.AgePublicKey)
-	if c.AgePublicKey != "" {
-		ageKeyFile := filepath.Join(c.DataDir, "age_public_key.txt")
-		_ = os.WriteFile(ageKeyFile, []byte(c.AgePublicKey), 0600)
-		_ = os.Chmod(ageKeyFile, 0600)
-	}
-	if dto.ProxyPass != "" {
-		c.ProxyPass = strings.TrimSpace(dto.ProxyPass)
-	}
+}
 
-	// Persist to config.env
-	targetEnvPaths := []string{
-		"/opt/nxgate/config.env",
-		"/etc/nxgate/config.env",
-		"/opt/aimilivpn/config.env",
-		filepath.Join(c.DataDir, "../config.env"),
-		"config.env",
+// Atomic rename avoids truncated credentials on interruption. Never fall back to defaults on read errors.
+func atomicSettingsWrite(path string, data []byte) error {
+	f, err := os.CreateTemp(filepath.Dir(path), ".settings-*")
+	if err != nil {
+		return err
 	}
+	defer os.Remove(f.Name())
+	if _, err = f.Write(data); err == nil {
+		err = f.Sync()
+	}
+	closeErr := f.Close()
+	if err != nil {
+		return err
+	}
+	if closeErr != nil {
+		return closeErr
+	}
+	return os.Rename(f.Name(), path)
+}
 
-	for _, p := range targetEnvPaths {
-		dir := filepath.Dir(p)
-		if _, err := os.Stat(dir); err == nil {
-			content := fmt.Sprintf(`# NXGate 运行环境变量配置
-DATA_DIR=%s
-UI_HOST=%s
-UI_PORT=%d
-UI_PATH=%s
-UI_USERNAME=%s
-UI_PASSWORD=%s
-LOCAL_PROXY_HOST=%s
-LOCAL_PROXY_PORT=%d
-LOCAL_PROXY_USER=%s
-LOCAL_PROXY_PASS=%s
-LOCAL_PROXY_MAX_CONNECTIONS=%d
-CHECK_INTERVAL_SECONDS=%d
-FETCH_INTERVAL_SECONDS=%d
-TARGET_VALID_NODES=%d
-AUTO_ROTATE_INTERVAL_MINUTES=%d
-AUTO_ROTATE_IP_TYPE=%s
-DISCOVERY_COUNTRIES=%s
-TELEGRAM_BOT_TOKEN=%s
-TELEGRAM_CHAT_ID=%s
-AGE_ENCRYPT_ENABLED=%t
-AGE_PUBLIC_KEY=%s
-`,
-				c.DataDir,
-				c.UIHost,
-				c.UIPort,
-				c.UIPath,
-				c.UIUsername,
-				c.UIPassword,
-				c.ProxyHost,
-				c.ProxyPort,
-				c.ProxyUser,
-				c.ProxyPass,
-				c.ProxyMaxConnections,
-				int(c.CheckInterval.Seconds()),
-				int(c.FetchInterval.Seconds()),
-				c.TargetValidNodes,
-				c.AutoRotateMinutes,
-				c.AutoRotateIPType,
-				strings.Join(c.DiscoveryCountries, ","),
-				c.TelegramBotToken,
-				c.TelegramChatID,
-				c.AgeEncryptEnabled,
-				c.AgePublicKey,
-			)
-			if err := os.WriteFile(p, []byte(content), 0600); err != nil {
-				return fmt.Errorf("写入配置文件 %s 失败: %w", p, err)
-			}
-			_ = os.Chmod(p, 0600)
-			return nil
+func initialUIPassword(dataDir string) string {
+	if pass := getEnv("UI_PASSWORD", ""); pass != "" {
+		return pass
+	}
+	path := filepath.Join(dataDir, "ui_password.txt")
+	if data, err := os.ReadFile(path); err == nil {
+		if pass := strings.TrimSpace(string(data)); pass != "" {
+			return pass
 		}
+		panic("empty persisted UI password")
+	} else if !os.IsNotExist(err) {
+		panic(fmt.Errorf("read UI password: %w", err))
 	}
-
-	return fmt.Errorf("未找到可写的配置文件路径")
+	secret := make([]byte, 24)
+	if _, err := rand.Read(secret); err != nil {
+		panic(fmt.Errorf("generate UI password: %w", err))
+	}
+	pass := hex.EncodeToString(secret)
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	if os.IsExist(err) {
+		return initialUIPassword(dataDir)
+	}
+	if err != nil {
+		panic(fmt.Errorf("save UI password: %w", err))
+	}
+	_, err = f.WriteString(pass)
+	if err == nil {
+		err = f.Sync()
+	}
+	closeErr := f.Close()
+	if err != nil {
+		panic(err)
+	}
+	if closeErr != nil {
+		panic(closeErr)
+	}
+	return pass
 }

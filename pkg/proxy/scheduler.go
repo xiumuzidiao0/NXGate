@@ -22,13 +22,20 @@ type TunnelSelector interface {
 	SelectTunnel(port int, boundIDs []string, boundGroupIDs []string, policy PortPolicy, intervalSec int) *tunnel.Tunnel
 }
 
+type healthyTunnelPool interface {
+	GetHealthyTunnels([]string) []*tunnel.Tunnel
+}
+
 type DefaultScheduler struct {
-	pool       *tunnel.Pool
+	pool       healthyTunnelPool
 	dynamicMgr *tunnel.DynamicGroupManager
 	counter    atomic.Uint64
 }
 
 func NewScheduler(pool *tunnel.Pool, dm *tunnel.DynamicGroupManager) *DefaultScheduler {
+	if pool == nil {
+		return &DefaultScheduler{dynamicMgr: dm}
+	}
 	return &DefaultScheduler{
 		pool:       pool,
 		dynamicMgr: dm,
@@ -65,43 +72,17 @@ func (s *DefaultScheduler) SelectTunnel(port int, boundIDs []string, boundGroupI
 		}
 	}
 
-	// Fallback: if no specific bound tunnels were chosen, or if the bound static/group IDs have no healthy tunnels currently,
-	// automatically fallback to any healthy tunnel in the whole pool so proxy connections never black-hole
-	if len(healthy) == 0 {
-		if isOnlySystemPrimary(boundIDs, boundGroupIDs) {
-			return nil
-		}
+	// Explicit bindings are constraints, not preferences. Never escape the set.
+	if len(boundIDs) == 0 && len(boundGroupIDs) == 0 {
 		healthy = s.pool.GetHealthyTunnels(nil)
-		if len(healthy) == 0 {
-			return nil
-		}
 	}
-
-	// Filter by circuit breaker: prefer available (non-circuit-broken) tunnels
 	var available []*tunnel.Tunnel
 	for _, t := range healthy {
 		if t.IsAvailable() {
 			available = append(available, t)
 		}
 	}
-	if len(available) > 0 {
-		healthy = available
-	} else {
-		// All tunnels in the requested group/selection are currently circuit-broken or dead!
-		// Fallback to any available non-circuit-broken tunnel in the entire pool so requests never black-hole
-		poolTunnels := s.pool.GetHealthyTunnels(nil)
-		var poolAvailable []*tunnel.Tunnel
-		for _, t := range poolTunnels {
-			if t.IsAvailable() {
-				poolAvailable = append(poolAvailable, t)
-			}
-		}
-		if len(poolAvailable) > 0 {
-			healthy = poolAvailable
-		} else if len(poolTunnels) > 0 {
-			healthy = poolTunnels
-		}
-	}
+	healthy = available
 
 	return s.selectFromHealthy(healthy, policy, intervalSec)
 }

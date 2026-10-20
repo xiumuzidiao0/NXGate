@@ -264,12 +264,25 @@ func readSocks5Address(r io.Reader, atyp byte) (string, uint16, error) {
 	return targetHost, targetPort, nil
 }
 
-func handleSocks5UDPAssociate(client net.Conn, atyp byte, devName string, tun *tunnel.Tunnel, userlandPacketConn func() (net.PacketConn, error)) error {
+func handleSocks5UDPAssociate(client net.Conn, atyp byte, devName string, tun *tunnel.Tunnel, userlandPacketConn func() (net.PacketConn, error), dnsDialer ...func(context.Context, string, string) (net.Conn, error)) error {
 	// 1. Read advertised client source address/port (usually 0.0.0.0:0)
-	_, _, err := readSocks5Address(client, atyp)
+	advertisedHost, advertisedPort, err := readSocks5Address(client, atyp)
 	if err != nil {
 		_, _ = client.Write([]byte{socks5Version, repGeneralFailure, 0x00, atypIPv4, 0, 0, 0, 0, 0, 0})
 		return fmt.Errorf("read udp associate address failed: %w", err)
+	}
+
+	// RFC 1928: accept datagrams only from the authenticated TCP peer.
+	peer, ok := client.RemoteAddr().(*net.TCPAddr)
+	if !ok || peer.IP == nil {
+		return fmt.Errorf("UDP association requires a TCP peer")
+	}
+	if ip := net.ParseIP(advertisedHost); ip == nil || (!ip.IsUnspecified() && !ip.Equal(peer.IP)) {
+		return fmt.Errorf("UDP source address must match TCP peer")
+	}
+	if devName == "" && userlandPacketConn == nil && (tun == nil || !tun.IsUserland || tun.OpenPacketConn == nil) {
+		_, _ = client.Write([]byte{socks5Version, repGeneralFailure, 0, atypIPv4, 0, 0, 0, 0, 0, 0})
+		return fmt.Errorf("no authorized UDP egress")
 	}
 
 	// 2. Bind local UDP relay listener on the same IP network family as client TCP connection
@@ -380,6 +393,9 @@ func handleSocks5UDPAssociate(client net.Conn, atyp byte, devName string, tun *t
 
 	var clientUDPMu sync.RWMutex
 	var clientUDPAddr *net.UDPAddr
+	if advertisedPort != 0 {
+		clientUDPAddr = &net.UDPAddr{IP: peer.IP, Port: int(advertisedPort), Zone: peer.Zone}
+	}
 
 	// Relay Upstream -> Client
 	go func() {
@@ -443,16 +459,26 @@ func handleSocks5UDPAssociate(client net.Conn, atyp byte, devName string, tun *t
 			continue // Fragment not supported
 		}
 
-		if fromUDP, ok := fromAddr.(*net.UDPAddr); ok {
-			clientUDPMu.Lock()
-			clientUDPAddr = fromUDP
-			clientUDPMu.Unlock()
+		fromUDP, ok := fromAddr.(*net.UDPAddr)
+		if !ok || !fromUDP.IP.Equal(peer.IP) {
+			continue
 		}
-
-		targetUDPAddr, payload, err := parseSocks5UDPPacket(ctx, reqBuf[:n], devName)
+		clientUDPMu.RLock()
+		permitted := clientUDPAddr == nil || sameUDPPeer(clientUDPAddr, fromUDP)
+		clientUDPMu.RUnlock()
+		if !permitted {
+			continue
+		}
+		targetUDPAddr, payload, err := parseSocks5UDPPacket(ctx, reqBuf[:n], devName, dnsDialer...)
 		if err != nil || targetUDPAddr == nil || len(payload) == 0 {
 			continue
 		}
+		clientUDPMu.Lock()
+		if clientUDPAddr == nil {
+			copied := *fromUDP
+			clientUDPAddr = &copied
+		}
+		clientUDPMu.Unlock()
 
 		_, err = upstreamConn.WriteTo(payload, targetUDPAddr)
 		if err != nil {
@@ -501,7 +527,7 @@ func packSocks5UDPPacket(addr *net.UDPAddr, data []byte) []byte {
 	return nil
 }
 
-func parseSocks5UDPPacket(ctx context.Context, packet []byte, devName string) (*net.UDPAddr, []byte, error) {
+func parseSocks5UDPPacket(ctx context.Context, packet []byte, devName string, dnsDialer ...func(context.Context, string, string) (net.Conn, error)) (*net.UDPAddr, []byte, error) {
 	if len(packet) < 10 {
 		return nil, nil, errors.New("packet too short")
 	}
@@ -540,10 +566,33 @@ func parseSocks5UDPPacket(ctx context.Context, packet []byte, devName string) (*
 
 	payload := packet[offset:]
 
-	destAddr, err := resolveUDPAddrThroughTunnel(ctx, host, port, devName)
+	var destAddr *net.UDPAddr
+	var err error
+	if net.ParseIP(host) == nil && len(dnsDialer) > 0 && dnsDialer[0] != nil {
+		// Resolve through the selected userland/custom egress, never host DNS/DoH.
+		resolver := &net.Resolver{PreferGo: true, Dial: func(c context.Context, _, _ string) (net.Conn, error) {
+			return dnsDialer[0](c, "tcp", "1.1.1.1:53")
+		}}
+		dnsCtx, cancel := context.WithTimeout(ctx, 4*time.Second)
+		ips, lookupErr := resolver.LookupIP(dnsCtx, "ip4", host)
+		cancel()
+		if lookupErr != nil {
+			return nil, nil, lookupErr
+		}
+		if len(ips) == 0 {
+			return nil, nil, fmt.Errorf("no IPv4 address for %s", host)
+		}
+		destAddr = &net.UDPAddr{IP: ips[0], Port: port}
+	} else {
+		destAddr, err = resolveUDPAddrThroughTunnel(ctx, host, port, devName)
+	}
 	if err != nil {
 		return nil, nil, err
 	}
 
 	return destAddr, payload, nil
+}
+
+func sameUDPPeer(a, b *net.UDPAddr) bool {
+	return a != nil && b != nil && a.IP.Equal(b.IP) && a.Port == b.Port && a.Zone == b.Zone
 }

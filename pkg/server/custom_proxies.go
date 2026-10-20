@@ -121,7 +121,11 @@ func (s *Server) handleTestCustomProxies(w http.ResponseWriter, r *http.Request)
 			_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "proxy not found"})
 			return
 		}
-		err := p.Probe(ctx, 6*time.Second)
+		p, err := mgr.Probe(ctx, req.ID, 6*time.Second)
+		if p == nil {
+			s.writeError(w, http.StatusNotFound, "proxy removed during probe")
+			return
+		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"ok":         err == nil,
 			"healthy":    p.Healthy,

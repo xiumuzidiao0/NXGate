@@ -92,6 +92,7 @@ func (g *Gateway) Start(ctx context.Context) error {
 }
 
 func (g *Gateway) dispatch(client net.Conn) {
+	defer client.Close()
 	_ = client.SetDeadline(time.Now().Add(30 * time.Second))
 	br := bufio.NewReader(client)
 

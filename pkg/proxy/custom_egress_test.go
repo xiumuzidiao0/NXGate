@@ -355,7 +355,10 @@ func TestPortListener_RouteViaCustomProxy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AddOrUpdate: %v", err)
 	}
-	cp.Healthy = true // Mark healthy
+	// Mark the fixture definition healthy under the manager lock (Get/Add return snapshots).
+	mgr.mu.Lock()
+	mgr.proxies[cp.ID].Healthy = true
+	mgr.mu.Unlock()
 
 	// 4. Start PortListener on an ephemeral port, bound to this custom proxy
 	rule := PortRule{

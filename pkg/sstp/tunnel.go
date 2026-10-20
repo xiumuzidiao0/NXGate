@@ -36,14 +36,14 @@ type Tunnel struct {
 	assignedIP net.IP
 	gatewayIP  net.IP
 
-	mu         sync.RWMutex
-	sessions   map[uint32]*TCPConn          // key: (localPort << 16) | remotePort
-	udpConns   map[uint16]*UDPConn          // key: localPort
-	pending    map[uint16]*pendingHandshake // key: srcPort
-	writeMu    sync.Mutex
-	closed     bool
-	closeOnce  sync.Once
-	closeCh    chan struct{}
+	mu        sync.RWMutex
+	sessions  map[uint32]*TCPConn          // key: (localPort << 16) | remotePort
+	udpConns  map[uint16]*UDPConn          // key: localPort
+	pending   map[uint16]*pendingHandshake // key: srcPort
+	writeMu   sync.Mutex
+	closed    bool
+	closeOnce sync.Once
+	closeCh   chan struct{}
 }
 
 func ResolveCandidatePorts(targetPort int, proto string) []int {
@@ -98,8 +98,8 @@ func FastProbeSSTPPort(ctx context.Context, host string, port int, timeout time.
 	_ = rawConn.SetDeadline(time.Now().Add(timeout))
 
 	tlsConfig := &tls.Config{
-		InsecureSkipVerify: true,
-		ServerName:         host,
+		MinVersion: tls.VersionTLS12,
+		ServerName: host,
 	}
 	tlsConn := tls.Client(rawConn, tlsConfig)
 	if err := tlsConn.HandshakeContext(ctx); err != nil {
@@ -216,8 +216,8 @@ func Connect(ctx context.Context, host string, port int, user, pass string) (*Tu
 	}
 
 	tlsConfig := &tls.Config{
-		InsecureSkipVerify: true,
-		ServerName:         host,
+		MinVersion: tls.VersionTLS12,
+		ServerName: host,
 	}
 	tlsConn := tls.Client(rawConn, tlsConfig)
 	if err := tlsConn.HandshakeContext(ctx); err != nil {
@@ -226,15 +226,15 @@ func Connect(ctx context.Context, host string, port int, user, pass string) (*Tu
 	}
 
 	t := &Tunnel{
-		host:      host,
-		port:      port,
-		username:  user,
-		password:  pass,
-		tlsConn:   tlsConn,
-		sessions:  make(map[uint32]*TCPConn),
-		udpConns:  make(map[uint16]*UDPConn),
-		pending:   make(map[uint16]*pendingHandshake),
-		closeCh:   make(chan struct{}),
+		host:     host,
+		port:     port,
+		username: user,
+		password: pass,
+		tlsConn:  tlsConn,
+		sessions: make(map[uint32]*TCPConn),
+		udpConns: make(map[uint16]*UDPConn),
+		pending:  make(map[uint16]*pendingHandshake),
+		closeCh:  make(chan struct{}),
 	}
 
 	if err := t.performHandshake(ctx); err != nil {

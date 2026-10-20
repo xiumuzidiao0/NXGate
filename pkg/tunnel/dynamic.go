@@ -19,21 +19,21 @@ import (
 const SystemPrimaryGroupID = "system-primary"
 
 type DynamicGroup struct {
-	ID              string    `json:"id"`                // e.g. "dg-1" or "system-primary"
-	Name            string    `json:"name"`              // e.g. "日本Top3住宅隧道组"
-	Enabled         bool      `json:"enabled"`           // 是否启用自动自适应维护
-	IsSystem        bool      `json:"is_system"`         // 是否为系统主出口专用组
-	ConnectMode     string    `json:"connect_mode,omitempty"` // "tun" (内核虚拟网卡模式) or "zero_tun" (用户态免TUN模式)
-	Country         string    `json:"country"`           // "JP", "US", or "" for 全部
-	IPType          string    `json:"ip_type"`           // "residential", "hosting", "all"
-	PurityLevel     string    `json:"purity_level,omitempty"` // "any" (不限), "pure_residential" (仅极度纯净住宅 IP, Risk <= 15), "clean" (纯净/低风险 IP, Risk <= 35), "datacenter" (仅高速机房)
-	UnlockFilter    string    `json:"unlock_filter"`     // "none" (不限), "ai" (OpenAI/Claude), "streaming" (Netflix/Google), "all" (全解锁)
-	SortBy          string    `json:"sort_by"`           // "latency" (延迟优先), "speed" (带宽优先), "score" (评分优先)
-	TargetCount     int       `json:"target_count"`      // 维持并发隧道数 (主网关固定为 1, 其余组例如 3)
-	IntervalMinutes int       `json:"interval_minutes"`  // 重新评估与动态轮换周期 (分钟, 例如 15)
-	ActiveTunnelIDs []string  `json:"active_tunnel_ids"` // 当前此组维护的隧道 ID 列表
-	LastEvaluatedAt time.Time `json:"last_evaluated_at"` // 上次重新评估并轮换的时间
-	StatusText      string    `json:"status_text"`       // 状态摘要
+	ID              string    `json:"id"`                        // e.g. "dg-1" or "system-primary"
+	Name            string    `json:"name"`                      // e.g. "日本Top3住宅隧道组"
+	Enabled         bool      `json:"enabled"`                   // 是否启用自动自适应维护
+	IsSystem        bool      `json:"is_system"`                 // 是否为系统主出口专用组
+	ConnectMode     string    `json:"connect_mode,omitempty"`    // "tun" (内核虚拟网卡模式) or "zero_tun" (用户态免TUN模式)
+	Country         string    `json:"country"`                   // "JP", "US", or "" for 全部
+	IPType          string    `json:"ip_type"`                   // "residential", "hosting", "all"
+	PurityLevel     string    `json:"purity_level,omitempty"`    // "any" (不限), "pure_residential" (仅极度纯净住宅 IP, Risk <= 15), "clean" (纯净/低风险 IP, Risk <= 35), "datacenter" (仅高速机房)
+	UnlockFilter    string    `json:"unlock_filter"`             // "none" (不限), "ai" (OpenAI/Claude), "streaming" (Netflix/Google), "all" (全解锁)
+	SortBy          string    `json:"sort_by"`                   // "latency" (延迟优先), "speed" (带宽优先), "score" (评分优先)
+	TargetCount     int       `json:"target_count"`              // 维持并发隧道数 (主网关固定为 1, 其余组例如 3)
+	IntervalMinutes int       `json:"interval_minutes"`          // 重新评估与动态轮换周期 (分钟, 例如 15)
+	ActiveTunnelIDs []string  `json:"active_tunnel_ids"`         // 当前此组维护的隧道 ID 列表
+	LastEvaluatedAt time.Time `json:"last_evaluated_at"`         // 上次重新评估并轮换的时间
+	StatusText      string    `json:"status_text"`               // 状态摘要
 	FallbackPolicy  string    `json:"fallback_policy,omitempty"` // "none", "favorites", "auto_low_latency", "auto_speed", 或国家代码如 "JP"
 	InFallback      bool      `json:"in_fallback,omitempty"`     // 是否处于兜底级联降级运行状态
 	FallbackReason  string    `json:"fallback_reason,omitempty"` // 级联降级原因与说明
@@ -118,22 +118,31 @@ func (m *DynamicGroupManager) load() {
 	}
 }
 
-func (m *DynamicGroupManager) saveLocked() {
+func (m *DynamicGroupManager) saveLocked() error {
 	var list []*DynamicGroup
 	for _, g := range m.groups {
 		list = append(list, g)
 	}
-
 	data, err := json.MarshalIndent(list, "", "  ")
 	if err != nil {
-		return
+		return err
 	}
-
-	tmp := m.filePath + ".tmp"
-	if err := os.WriteFile(tmp, data, 0600); err == nil {
-		_ = os.Chmod(tmp, 0600)
-		_ = os.Rename(tmp, m.filePath)
+	f, err := os.CreateTemp(filepath.Dir(m.filePath), ".dynamic-groups-*")
+	if err != nil {
+		return err
 	}
+	defer os.Remove(f.Name())
+	if _, err = f.Write(data); err == nil {
+		err = f.Sync()
+	}
+	closeErr := f.Close()
+	if err != nil {
+		return err
+	}
+	if closeErr != nil {
+		return closeErr
+	}
+	return os.Rename(f.Name(), m.filePath)
 }
 
 func (m *DynamicGroupManager) ListGroups() []*DynamicGroup {
@@ -187,6 +196,9 @@ func (m *DynamicGroupManager) GetGroup(id string) *DynamicGroup {
 }
 
 func (m *DynamicGroupManager) SaveGroup(g *DynamicGroup) error {
+	if g == nil {
+		return fmt.Errorf("nil dynamic group")
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -232,8 +244,18 @@ func (m *DynamicGroupManager) SaveGroup(g *DynamicGroup) error {
 		g.FallbackPolicy = "none"
 	}
 
-	m.groups[g.ID] = g
-	m.saveLocked()
+	previous, existed := m.groups[g.ID]
+	snapshot := *g
+	snapshot.ActiveTunnelIDs = append([]string(nil), g.ActiveTunnelIDs...)
+	m.groups[g.ID] = &snapshot
+	if err := m.saveLocked(); err != nil {
+		if existed {
+			m.groups[g.ID] = previous
+		} else {
+			delete(m.groups, g.ID)
+		}
+		return fmt.Errorf("save dynamic group: %w", err)
+	}
 
 	// 注意：禁止将单个自适应组（如 system-primary）的局部国家偏好反向同步回全局的 DiscoveryCountries。
 	// 动态自适应组各司其职，拥有自己独立的国家与策略参数，全局节点池必须面向全球所有国家开放，
