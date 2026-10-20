@@ -69,12 +69,12 @@ type NodePool struct {
 
 	isRefreshing atomic.Bool
 	mu           sync.RWMutex
-	nodeStore   map[string]*Node // 全量持久化增量节点库 (主键: node.ID)
-	candidates  []*Node          // 当前有效、过滤并已排序的优质候选节点列表
-	allRawNodes []*Node          // 当前库中全部已知节点清单
-	lastUpdated time.Time
-	lastSource  string
-	lastStatus  string
+	nodeStore    map[string]*Node // 全量持久化增量节点库 (主键: node.ID)
+	candidates   []*Node          // 当前有效、过滤并已排序的优质候选节点列表
+	allRawNodes  []*Node          // 当前库中全部已知节点清单
+	lastUpdated  time.Time
+	lastSource   string
+	lastStatus   string
 }
 
 func NewNodePool(cfg *config.Config) *NodePool {
@@ -125,6 +125,14 @@ func (np *NodePool) loadStore() {
 			if n.LastSeen.IsZero() {
 				n.LastSeen = now
 			}
+			// Migrate pre-optimization UDP RTTs: neither source Ping nor UDP socket
+			// creation established a local RTT. Preserve actual connection history.
+			if strings.EqualFold(n.Proto, "udp") {
+				n.LatencyMs = 0
+				if n.ProbeStatus != "connected" {
+					n.ProbeStatus = "unknown"
+				}
+			}
 			// If stored unlock is unprobed prediction or older than 12h, clear it for fresh evaluation
 			if n.Unlock != nil && (!n.Unlock.IsProbed || now.Sub(n.Unlock.CheckedAt) > 12*time.Hour) {
 				n.Unlock = nil
@@ -172,7 +180,7 @@ func (np *NodePool) evictStaleNodesLocked(now time.Time) int {
 		}
 
 		// 2. Never evict currently reachable nodes
-		if n.LatencyMs > 0 {
+		if n.LatencyMs > 0 || (n.ProbeStatus == "connected" && !n.LastConnected.IsZero() && now.Sub(n.LastConnected) < 24*time.Hour) {
 			continue
 		}
 
@@ -199,7 +207,7 @@ func (np *NodePool) evictStaleNodesLocked(now time.Time) int {
 		}
 		var pruneList []evictCandidate
 		for id, n := range np.nodeStore {
-			if np.favorites.IsFavorite(id) || n.LatencyMs > 0 {
+			if np.favorites.IsFavorite(id) || n.LatencyMs > 0 || (n.ProbeStatus == "connected" && !n.LastConnected.IsZero() && now.Sub(n.LastConnected) < 24*time.Hour) {
 				continue // protect favorites and reachable nodes
 			}
 			pruneList = append(pruneList, evictCandidate{
@@ -252,9 +260,9 @@ func (np *NodePool) rebuildCandidatesLocked() {
 
 	// Stable multi-tier sorting:
 	// Priority 0: Favorites always on top
-	// Tier 0: Reachable nodes (LatencyMs > 0), sorted by Score desc, Ping asc
+	// Tier 0: TCP-reachable or previously connected nodes, sorted by Score desc, source Ping asc
 	// Tier 1: Un-probed / Ready nodes (LatencyMs == 0), sorted by Score desc, Ping asc
-	// Tier 2: Probe-failed nodes (LatencyMs < 0)
+	// Last tier: Probe-failed nodes (LatencyMs < 0)
 	sort.Slice(filtered, func(i, j int) bool {
 		a := filtered[i]
 		b := filtered[j]
@@ -267,14 +275,14 @@ func (np *NodePool) rebuildCandidatesLocked() {
 		}
 
 		tier := func(node *Node) int {
-			if node.LatencyMs > 0 {
+			if node.LatencyMs > 0 || node.ProbeStatus == "connected" {
 				if node.FailCount == 0 {
 					return 0 // Tier 0: 完全健康优质节点 (无失败历史)
 				}
 				return 1 // Tier 1: 可达但有偶发失败记录的降权节点
 			}
 			if node.LatencyMs == 0 {
-				return 2 // Tier 2: 端口已通但未测完整延迟的就绪节点
+				return 2 // Tier 2: 未验证节点，包括尚未握手的 UDP 候选
 			}
 			return 3 // Tier 3: 探测失败/死端口节点
 		}
@@ -307,6 +315,11 @@ func (np *NodePool) RecordSuccess(nodeID string) {
 	if n, ok := np.nodeStore[nodeID]; ok {
 		n.FailCount = 0
 		n.LastChecked = time.Now()
+		n.LastConnected = n.LastChecked
+		if n.LatencyMs < 0 {
+			n.LatencyMs = 0
+		} // A completed connection supersedes a failed TCP probe.
+		n.ProbeStatus = "connected"
 	}
 	if np.blacklist != nil {
 		np.blacklist.Reset(nodeID)
@@ -342,7 +355,7 @@ func (np *NodePool) MergeFreshNodesLocked(fresh []*Node, source string) (int, in
 			existing.Operator = n.Operator
 			existing.Message = n.Message
 			existing.LastSeen = now
-			existing.FailCount = 0 // Seen alive in official feed
+			// A feed appearance is not a successful local connection; preserve FailCount.
 			if n.ConfigData != "" {
 				existing.ConfigData = n.ConfigData
 			}
@@ -351,7 +364,6 @@ func (np *NodePool) MergeFreshNodesLocked(fresh []*Node, source string) (int, in
 			// Brand new node
 			n.FirstSeen = now
 			n.LastSeen = now
-			n.FailCount = 0
 			np.nodeStore[n.ID] = n
 			newCount++
 		}
@@ -408,7 +420,11 @@ func (np *NodePool) Refresh(ctx context.Context) error {
 	np.mu.Lock()
 	newCount, updatedCount, evictedCount := np.MergeFreshNodesLocked(nodes, result.Source)
 	currentFiltered := make([]*Node, len(np.candidates))
-	copy(currentFiltered, np.candidates)
+	for i, n := range np.candidates {
+		snapshot := *n
+		currentFiltered[i] = &snapshot
+	}
+	precheckStarted := time.Now()
 	np.mu.Unlock()
 
 	stats.LogInfo("Nodes", "节点池增量刷新完成 (新增: %d, 更新: %d, 淘汰失效: %d)，当前全量库: %d 个，优质热池: %d/%d 个 (来自: %s)",
@@ -417,11 +433,20 @@ func (np *NodePool) Refresh(ctx context.Context) error {
 	// Phase 1: Port Knock Pre-Filter (快速淘汰死端口，节省测速时间)
 	stats.LogInfo("Nodes", "🚪 端口预检：快速扫描热池 %d 个候选节点的 TCP 连通性...", len(currentFiltered))
 	reachableNodes := FilterReachableNodes(currentFiltered, 2500*time.Millisecond)
-	stats.LogInfo("Nodes", "✅ 端口预检完成：%d/%d 节点可达，已过滤 %d 个死端口",
+	stats.LogInfo("Nodes", "端口预检完成：保留 %d/%d 个候选 (含未验证 UDP)，过滤 %d 个失败端口",
 		len(reachableNodes), len(currentFiltered), len(currentFiltered)-len(reachableNodes))
 
-	// Rebuild candidates after port knock to float reachable nodes to the top immediately
+	// The filter owns snapshots; publish under the pool lock. Do not overwrite
+	// a real connection result recorded while the precheck was in flight.
 	np.mu.Lock()
+	for _, result := range currentFiltered {
+		if target := np.nodeStore[result.ID]; target != nil && !target.LastChecked.After(precheckStarted) {
+			target.LatencyMs = result.LatencyMs
+			target.ProbeStatus = result.ProbeStatus
+			target.LastChecked = result.LastChecked
+			target.FailCount = result.FailCount
+		}
+	}
 	np.rebuildCandidatesLocked()
 	currentCandidates := make([]*Node, len(np.candidates))
 	copy(currentCandidates, np.candidates)
@@ -432,7 +457,7 @@ func (np *NodePool) Refresh(ctx context.Context) error {
 	probeLimit := 50
 	var highPriorityNodes []*Node
 	for _, n := range currentCandidates {
-		if n.LatencyMs > 0 {
+		if n.LatencyMs > 0 || n.ProbeStatus == "connected" {
 			highPriorityNodes = append(highPriorityNodes, n)
 			if len(highPriorityNodes) >= probeLimit {
 				break
@@ -486,8 +511,20 @@ func (np *NodePool) ProbeNodes(ctx context.Context, nodeList []*Node) {
 			}
 			defer func() { <-sem }()
 
-			addr := net.JoinHostPort(target.IP, strconv.Itoa(target.Port))
-			isUDP := strings.ToLower(target.Proto) == "udp"
+			np.mu.Lock()
+			ip, port, proto := target.IP, target.Port, target.Proto
+			if strings.EqualFold(proto, "udp") {
+				// Opening a UDP socket proves nothing about the peer. Retain failures
+				// and real connection evidence, but discard legacy fabricated RTTs.
+				target.LatencyMs = 0
+				if target.ProbeStatus != "connected" {
+					target.ProbeStatus = "unknown"
+				}
+				np.mu.Unlock()
+				return
+			}
+			np.mu.Unlock()
+			addr := net.JoinHostPort(ip, strconv.Itoa(port))
 
 			// Layered timeout strategy: generous first attempt, strict retry
 			for attempt := 0; attempt < probeConfig.MaxAttempts; attempt++ {
@@ -499,40 +536,18 @@ func (np *NodePool) ProbeNodes(ctx context.Context, nodeList []*Node) {
 				start := time.Now()
 				var dialErr error
 
-				if isUDP {
-					timeout := strategy.UDPTimeout
-					udpConn, err := net.DialTimeout("udp", addr, timeout)
-					dialErr = err
-					if err == nil {
-						_ = udpConn.Close()
-						np.mu.Lock()
-						if target.Ping > 0 {
-							target.LatencyMs = target.Ping
-						} else {
-							target.LatencyMs = 60
-						}
-						target.LastChecked = time.Now()
-						target.FailCount = 0
-						np.mu.Unlock()
-						return
-					}
-				} else {
-					timeout := strategy.TCPTimeout
-					conn, err := net.DialTimeout("tcp", addr, timeout)
-					dialErr = err
-					if err == nil {
-						_ = conn.Close()
-						latency := int(time.Since(start).Milliseconds())
-						if latency <= 0 {
-							latency = 1
-						}
-						np.mu.Lock()
-						target.LatencyMs = latency
-						target.LastChecked = time.Now()
-						target.FailCount = 0
-						np.mu.Unlock()
-						return
-					}
+				conn, err := net.DialTimeout("tcp", addr, strategy.TCPTimeout)
+				dialErr = err
+				if err == nil {
+					_ = conn.Close()
+					latency := max(1, int(time.Since(start).Milliseconds()))
+					np.mu.Lock()
+					target.LatencyMs = latency
+					target.ProbeStatus = "reachable"
+					target.LastChecked = time.Now()
+					target.FailCount = 0
+					np.mu.Unlock()
+					return
 				}
 
 				// Log retry attempts for debugging
@@ -544,6 +559,7 @@ func (np *NodePool) ProbeNodes(ctx context.Context, nodeList []*Node) {
 			// All attempts failed
 			np.mu.Lock()
 			target.LatencyMs = -1
+			target.ProbeStatus = "unreachable"
 			target.LastChecked = time.Now()
 			target.FailCount++
 			np.mu.Unlock()
@@ -746,7 +762,7 @@ func (np *NodePool) SelectBestWithFilter(ipType string, countries []string, pref
 	if preferFavorites {
 		var favs []*Node
 		for _, n := range np.candidates {
-			if np.favorites.IsFavorite(n.ID) && matchesFilter(n) && n.LatencyMs > 0 {
+			if np.favorites.IsFavorite(n.ID) && matchesFilter(n) && (n.LatencyMs > 0 || n.ProbeStatus == "connected") {
 				favs = append(favs, n)
 			}
 		}
@@ -761,7 +777,7 @@ func (np *NodePool) SelectBestWithFilter(ipType string, countries []string, pref
 	// 2. Reachable nodes matching filter
 	var reachable []*Node
 	for _, n := range np.candidates {
-		if matchesFilter(n) && n.LatencyMs > 0 {
+		if matchesFilter(n) && (n.LatencyMs > 0 || n.ProbeStatus == "connected") {
 			reachable = append(reachable, n)
 		}
 	}
@@ -798,7 +814,7 @@ func (np *NodePool) SelectBestWithFilter(ipType string, countries []string, pref
 func (np *NodePool) selectBestLocked() *Node {
 	var reachable []*Node
 	for _, n := range np.candidates {
-		if !np.blacklist.IsBlacklisted(n.ID) && n.LatencyMs > 0 {
+		if !np.blacklist.IsBlacklisted(n.ID) && (n.LatencyMs > 0 || n.ProbeStatus == "connected") {
 			reachable = append(reachable, n)
 		}
 	}
@@ -938,6 +954,7 @@ func PortKnockTCP(ip string, port int, timeout time.Duration) (bool, time.Durati
 type PortKnockResult struct {
 	Node      *Node
 	Reachable bool
+	Unknown   bool // UDP requires a protocol handshake; not a successful port knock.
 	Latency   time.Duration
 	Error     error
 }
@@ -966,7 +983,7 @@ func BatchPortKnock(ctx context.Context, nodes []*Node, timeout time.Duration) [
 			defer func() { <-sem }()
 
 			if strings.ToLower(target.Proto) == "udp" {
-				results[idx] = PortKnockResult{Node: target, Reachable: true}
+				results[idx] = PortKnockResult{Node: target, Unknown: true}
 				return
 			}
 
@@ -984,8 +1001,9 @@ func BatchPortKnock(ctx context.Context, nodes []*Node, timeout time.Duration) [
 	return results
 }
 
-// FilterReachableNodes performs fast TCP port knock on all nodes to filter out dead ports.
-// This is much faster than full OpenVPN dial and reduces wasted connection attempts by ~90%.
+// FilterReachableNodes mutates caller-owned snapshots, not shared pool nodes.
+// It performs fast TCP port knock to filter out dead TCP ports.
+// UDP nodes remain candidates with unknown reachability until an actual connection succeeds.
 func FilterReachableNodes(nodes []*Node, timeout time.Duration) []*Node {
 	if len(nodes) == 0 {
 		return nodes
@@ -998,15 +1016,26 @@ func FilterReachableNodes(nodes []*Node, timeout time.Duration) []*Node {
 	var reachable []*Node
 	now := time.Now()
 	for _, res := range results {
+		if res.Unknown {
+			reachable = append(reachable, res.Node)
+			res.Node.LatencyMs = 0
+			if res.Node.ProbeStatus != "connected" {
+				res.Node.ProbeStatus = "unknown"
+			}
+			continue
+		}
 		if res.Reachable {
+			res.Node.ProbeStatus = "reachable"
 			reachable = append(reachable, res.Node)
 			if res.Latency > 0 {
-				res.Node.LatencyMs = int(res.Latency.Milliseconds())
+				res.Node.LatencyMs = max(1, int(res.Latency.Milliseconds()))
 				res.Node.LastChecked = now
 			}
 			res.Node.FailCount = 0
 		} else if strings.ToLower(res.Node.Proto) != "udp" {
 			res.Node.LatencyMs = -1
+			res.Node.ProbeStatus = "unreachable"
+			res.Node.LastChecked = now
 			res.Node.FailCount++
 		}
 	}

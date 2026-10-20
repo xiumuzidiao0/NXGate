@@ -24,8 +24,10 @@ type Node struct {
 	ConfigData     string    `json:"config_data,omitempty"` // Raw ovpn config string
 	Proto          string    `json:"proto"`
 	Port           int       `json:"port"`
-	SSTPPort       int       `json:"sstp_port,omitempty"` // 预热探测已验证可用的 SSTP 监听端口
-	LatencyMs      int       `json:"latency_ms"` // Real-time measured TCP ping in ms (-1 if unreachable)
+	SSTPPort       int       `json:"sstp_port,omitempty"`      // 预热探测已验证可用的 SSTP 监听端口
+	ProbeStatus    string    `json:"probe_status,omitempty"`   // unknown, reachable (TCP only), unreachable, connected
+	LastConnected  time.Time `json:"last_connected,omitempty"` // actual successful VPN connection, not source Ping
+	LatencyMs      int       `json:"latency_ms"`               // Real-time measured TCP ping in ms (-1 if unreachable)
 	LastChecked    time.Time `json:"last_checked"`
 
 	// IP 归属地与网络类型探测
@@ -42,12 +44,12 @@ type Node struct {
 	ResConfidence   int           `json:"res_confidence"` // 家宽判定置信度 (0-100)
 	ResReason       string        `json:"res_reason"`     // 家宽判定依据
 	IsFavorite      bool          `json:"is_favorite"`
-	ReputationScore int           `json:"reputation_score"` // 历史综合稳定性信誉评分 (0-100)
-	RiskScore       float64       `json:"risk_score"`       // 综合风险评分 (0.0 ~ 100.0)
-	RiskLevel       RiskLevel     `json:"risk_level"`       // pure / clean / elevated / high / critical
-	RiskLabel       string        `json:"risk_label"`       // 极度纯净 / 纯净住宅 / 轻微风险 / 高风险 / 极度危险
+	ReputationScore int           `json:"reputation_score"`      // 历史综合稳定性信誉评分 (0-100)
+	RiskScore       float64       `json:"risk_score"`            // 综合风险评分 (0.0 ~ 100.0)
+	RiskLevel       RiskLevel     `json:"risk_level"`            // pure / clean / elevated / high / critical
+	RiskLabel       string        `json:"risk_label"`            // 极度纯净 / 纯净住宅 / 轻微风险 / 高风险 / 极度危险
 	FraudFlags      []string      `json:"fraud_flags,omitempty"` // 命中风险标签 (bogon, datacenter, proxy...)
-	Unlock          *UnlockResult `json:"unlock,omitempty"` // AI与主流流媒体解锁状态
+	Unlock          *UnlockResult `json:"unlock,omitempty"`      // AI与主流流媒体解锁状态
 
 	// 增量更新与生命周期跟踪
 	FirstSeen time.Time `json:"first_seen,omitempty"`

@@ -3,6 +3,8 @@ package nodes
 import (
 	"context"
 	"errors"
+	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -36,6 +38,19 @@ func TestFetchNodesEarlyExit(t *testing.T) {
 	defer srv2.Close()
 
 	fetcher := NewFetcher(srv1.URL, srv2.URL, NewSnapshotManager(t.TempDir()))
+
+	// Production includes built-in public mirrors. Fixtures must never contact them.
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.Proxy = nil
+	transport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+		host, _, err := net.SplitHostPort(addr)
+		if err != nil || host != "127.0.0.1" {
+			return nil, fmt.Errorf("non-local test dial blocked: %s", addr)
+		}
+		return (&net.Dialer{}).DialContext(ctx, network, addr)
+	}
+	defer transport.CloseIdleConnections()
+	fetcher.client.Transport = transport
 
 	start := time.Now()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

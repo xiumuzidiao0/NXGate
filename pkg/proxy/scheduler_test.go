@@ -1,7 +1,11 @@
 package proxy
 
 import (
+	"aimili-vpngate-go/pkg/config"
+	"path/filepath"
+	"sync"
 	"testing"
+	"time"
 
 	"aimili-vpngate-go/pkg/nodes"
 	"aimili-vpngate-go/pkg/tunnel"
@@ -50,5 +54,85 @@ func TestSchedulerSystemPrimaryFallback(t *testing.T) {
 	}
 	if isOnlySystemPrimary(nil, []string{"dg-123"}) {
 		t.Fatal("expected isOnlySystemPrimary to be false for non-primary group")
+	}
+}
+
+func TestOptimizationIntervalIdentity(t *testing.T) {
+	now := time.Unix(100, 0)
+	s := &DefaultScheduler{now: func() time.Time { return now }}
+	a, b, c := &tunnel.Tunnel{ID: "a"}, &tunnel.Tunnel{ID: "b"}, &tunnel.Tunnel{ID: "c"}
+	choose := func(ts []*tunnel.Tunnel) *tunnel.Tunnel { return s.selectForPort(8000, "rule", ts, PolicyInterval, 10) }
+	first := choose([]*tunnel.Tunnel{b, a})
+	if first.ID != "a" {
+		t.Fatal(first)
+	}
+	for i := 0; i < 100; i++ {
+		if choose([]*tunnel.Tunnel{c, b, a}).ID != "a" {
+			t.Fatal("changed within period")
+		}
+	}
+	now = now.Add(10 * time.Second)
+	if choose([]*tunnel.Tunnel{b, a}).ID != "b" {
+		t.Fatal("did not rotate")
+	}
+	if choose([]*tunnel.Tunnel{a}).ID != "a" {
+		t.Fatal("failed tunnel retained")
+	}
+	if choose(nil) != nil {
+		t.Fatal("must fail closed")
+	}
+	s.ResetPort(8000)
+	if len(s.states) != 0 {
+		t.Fatal("rule retained")
+	}
+}
+func TestOptimizationRoundRobinPorts(t *testing.T) {
+	s := &DefaultScheduler{}
+	ts := []*tunnel.Tunnel{{ID: "b"}, {ID: "a"}}
+	if s.selectForPort(1, "rule", ts, PolicyRoundRobin, 0).ID != "a" {
+		t.Fatal("first")
+	}
+	if s.selectForPort(2, "rule", ts, PolicyRoundRobin, 0).ID != "a" {
+		t.Fatal("ports coupled")
+	}
+	if s.selectForPort(1, "rule", ts, PolicyRoundRobin, 0).ID != "b" {
+		t.Fatal("not advanced")
+	}
+	if s.selectForPort(1, "changed", ts, PolicyRoundRobin, 0).ID != "a" {
+		t.Fatal("rule did not reset")
+	}
+	var wg sync.WaitGroup
+	for i := 0; i < 20; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 100; j++ {
+				s.selectForPort(2, "rule", ts, PolicyInterval, 5)
+			}
+		}()
+	}
+	wg.Wait()
+}
+
+func TestOptimizationRuleStateLifecycle(t *testing.T) {
+	scheduler := &DefaultScheduler{}
+	manager := &MultiPortManager{cfg: &config.Config{}, scheduler: scheduler, rulesPath: filepath.Join(t.TempDir(), "rules.json"), listeners: make(map[int]*PortListener)}
+	rule := PortRule{Port: 8000, Enabled: false, Policy: PolicyInterval}
+	if err := manager.ApplyRules([]PortRule{rule}); err != nil {
+		t.Fatal(err)
+	}
+	tunnels := []*tunnel.Tunnel{{ID: "a"}, {ID: "b"}}
+	scheduler.selectForPort(8000, "fixture", tunnels, PolicyRoundRobin, 0)
+	if err := manager.ApplyRules([]PortRule{rule, {Port: 8001, Enabled: false}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := scheduler.selectForPort(8000, "fixture", tunnels, PolicyRoundRobin, 0); got.ID != "b" {
+		t.Fatal("unchanged port state reset")
+	}
+	if err := manager.ApplyRules(nil); err != nil {
+		t.Fatal(err)
+	}
+	if len(scheduler.states) != 0 {
+		t.Fatal("removed rule state retained")
 	}
 }

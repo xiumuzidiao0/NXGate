@@ -1,167 +1,93 @@
 package nodes
 
 import (
+	"aimili-vpngate-go/pkg/config"
 	"context"
+	"net"
 	"testing"
 	"time"
 )
 
+func localPort(t *testing.T) (net.Listener, int) {
+	t.Helper()
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { l.Close() })
+	return l, l.Addr().(*net.TCPAddr).Port
+}
 func TestPortKnockTCP(t *testing.T) {
-	tests := []struct {
-		name       string
-		ip         string
-		port       int
-		timeout    time.Duration
-		wantReach  bool
-		wantLatLow time.Duration
-	}{
-		{
-			name:       "Google DNS should be reachable on port 53",
-			ip:         "8.8.8.8",
-			port:       53,
-			timeout:    2 * time.Second,
-			wantReach:  true,
-			wantLatLow: 2 * time.Second,
-		},
-		{
-			name:       "Cloudflare DNS should be reachable on port 53",
-			ip:         "1.1.1.1",
-			port:       53,
-			timeout:    2 * time.Second,
-			wantReach:  true,
-			wantLatLow: 2 * time.Second,
-		},
-		{
-			name:       "Unused local port should fail",
-			ip:         "127.0.0.1",
-			port:       59999,
-			timeout:    500 * time.Millisecond,
-			wantReach:  false,
-			wantLatLow: 1 * time.Second,
-		},
+	l, p := localPort(t)
+	ok, _, err := PortKnockTCP("127.0.0.1", p, time.Second)
+	if !ok || err != nil {
+		t.Fatal(ok, err)
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			reachable, latency, err := PortKnockTCP(tt.ip, tt.port, tt.timeout)
-
-			if reachable != tt.wantReach {
-				t.Errorf("PortKnockTCP() reachable = %v, want %v (err: %v)", reachable, tt.wantReach, err)
-			}
-
-			if latency > tt.wantLatLow {
-				t.Errorf("PortKnockTCP() latency = %v, want < %v", latency, tt.wantLatLow)
-			}
-
-			if reachable && err != nil {
-				t.Errorf("PortKnockTCP() reachable but got error: %v", err)
-			}
-		})
+	l.Close()
+	ok, _, err = PortKnockTCP("127.0.0.1", p, time.Second)
+	if ok || err == nil {
+		t.Fatal("closed TCP accepted")
 	}
 }
-
+func TestOptimizationUDPUnknown(t *testing.T) {
+	udp, err := net.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := udp.LocalAddr().(*net.UDPAddr).Port
+	udp.Close()
+	n := &Node{ID: "udp", IP: "127.0.0.1", Port: port, Proto: "udp", Ping: 42, LatencyMs: 60, FailCount: 3}
+	results := BatchPortKnock(context.Background(), []*Node{n}, time.Second)
+	if results[0].Reachable || !results[0].Unknown {
+		t.Fatal(results)
+	}
+	pool := NewNodePool(&config.Config{DataDir: t.TempDir()})
+	pool.MergeFreshNodesLocked([]*Node{n}, "fixture")
+	pool.ProbeNodes(context.Background(), []*Node{n})
+	if n.LatencyMs != 0 || n.FailCount != 3 || n.ProbeStatus != "unknown" || n.Ping != 42 {
+		t.Fatalf("fabricated result: %+v", n)
+	}
+	owned := *n
+	if got := FilterReachableNodes([]*Node{&owned}, time.Second); len(got) != 1 || owned.FailCount != 3 {
+		t.Fatal("unknown UDP discarded or failure erased")
+	}
+	pool.RecordSuccess(n.ID)
+	pool.ProbeNodes(context.Background(), []*Node{n})
+	if n.ProbeStatus != "connected" || n.LastConnected.IsZero() || n.LatencyMs != 0 {
+		t.Fatal("lost connection evidence")
+	}
+}
 func TestBatchPortKnock(t *testing.T) {
-	nodes := []*Node{
-		{
-			HostName:     "Google DNS",
-			IP:           "8.8.8.8",
-			Proto:        "tcp",
-			Port:         53,
-			CountryLong:  "United States",
-			CountryShort: "US",
-		},
-		{
-			HostName:     "Cloudflare DNS",
-			IP:           "1.1.1.1",
-			Proto:        "tcp",
-			Port:         53,
-			CountryLong:  "United States",
-			CountryShort: "US",
-		},
-		{
-			HostName:     "Dead Node",
-			IP:           "127.0.0.1",
-			Proto:        "tcp",
-			Port:         59999,
-			CountryLong:  "Unknown",
-			CountryShort: "XX",
-		},
+	_, p := localPort(t)
+	// A retained open listener and a deliberately closed listener provide deterministic results.
+	closed, dead := localPort(t)
+	closed.Close()
+	ns := []*Node{{IP: "127.0.0.1", Port: p, Proto: "tcp"}, {IP: "127.0.0.1", Port: dead, Proto: "tcp"}}
+	rs := BatchPortKnock(context.Background(), ns, time.Second)
+	if len(rs) != 2 || !rs[0].Reachable || rs[1].Reachable {
+		t.Fatal(rs)
 	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	results := BatchPortKnock(ctx, nodes, 2*time.Second)
-
-	if len(results) != len(nodes) {
-		t.Fatalf("BatchPortKnock() returned %d results, want %d", len(results), len(nodes))
-	}
-
-	// Check that at least the public DNS servers are reachable
-	reachableCount := 0
-	for _, r := range results {
-		if r.Reachable {
-			reachableCount++
-		}
-	}
-
-	if reachableCount < 2 {
-		t.Errorf("BatchPortKnock() only %d nodes reachable, expected at least 2", reachableCount)
+	got := FilterReachableNodes(ns, time.Second)
+	if len(got) != 1 || got[0] != ns[0] || ns[0].LatencyMs < 1 || ns[1].LatencyMs != -1 {
+		t.Fatal(got)
 	}
 }
 
-func TestFilterReachableNodes(t *testing.T) {
-	nodes := []*Node{
-		{
-			HostName:     "Google DNS",
-			IP:           "8.8.8.8",
-			Proto:        "tcp",
-			Port:         53,
-			CountryLong:  "United States",
-			CountryShort: "US",
-		},
-		{
-			HostName:     "Dead Node",
-			IP:           "127.0.0.1",
-			Proto:        "tcp",
-			Port:         59999,
-			CountryLong:  "Unknown",
-			CountryShort: "XX",
-		},
+func TestOptimizationActualConnectionSupersedesProbeFailure(t *testing.T) {
+	pool := NewNodePool(&config.Config{DataDir: t.TempDir()})
+	n := &Node{ID: "actual", Proto: "udp", LatencyMs: -1, ProbeStatus: "unreachable", FailCount: 3}
+	pool.MergeFreshNodesLocked([]*Node{n}, "fixture")
+	pool.RecordSuccess(n.ID)
+	if n.LatencyMs != 0 || n.ProbeStatus != "connected" || n.LastConnected.IsZero() || n.FailCount != 0 {
+		t.Fatalf("lost successful connection: %+v", n)
 	}
-
-	reachable := FilterReachableNodes(nodes, 2*time.Second)
-
-	if len(reachable) < 1 {
-		t.Errorf("FilterReachableNodes() returned %d nodes, expected at least 1", len(reachable))
+	n.LastSeen = time.Now().Add(-48 * time.Hour)
+	if pool.evictStaleNodesLocked(time.Now()) != 0 {
+		t.Fatal("recent successful UDP candidate evicted")
 	}
-
-	// Verify the reachable node is the Google DNS one
-	if len(reachable) > 0 && reachable[0].IP != "8.8.8.8" {
-		t.Errorf("FilterReachableNodes() expected first reachable node to be 8.8.8.8, got %s", reachable[0].IP)
-	}
-}
-
-func TestPortKnockTimeout(t *testing.T) {
-	// Test that timeout is respected
-	start := time.Now()
-	timeout := 400 * time.Millisecond
-
-	// Try to connect to an unroutable Class E address
-	reachable, latency, _ := PortKnockTCP("240.0.0.1", 9999, timeout)
-
-	elapsed := time.Since(start)
-
-	if reachable {
-		t.Error("PortKnockTCP() should not be reachable for non-routable IP")
-	}
-
-	// Allow some margin for timeout accuracy (+-300ms)
-	if elapsed > timeout+300*time.Millisecond {
-		t.Errorf("PortKnockTCP() took %v, expected around %v", elapsed, timeout)
-	}
-
-	if latency > timeout+300*time.Millisecond {
-		t.Errorf("PortKnockTCP() latency %v exceeds timeout %v", latency, timeout)
+	pool.saveStoreLocked()
+	reloaded := NewNodePool(&config.Config{DataDir: pool.cfg.DataDir}).GetNodeByID(n.ID)
+	if reloaded == nil || reloaded.ProbeStatus != "connected" || reloaded.LatencyMs != 0 {
+		t.Fatal("stored connection evidence lost")
 	}
 }

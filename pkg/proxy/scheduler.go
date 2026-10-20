@@ -2,8 +2,10 @@ package proxy
 
 import (
 	"crypto/rand"
+	"fmt"
 	"math/big"
-	"sync/atomic"
+	"sort"
+	"sync"
 	"time"
 
 	"aimili-vpngate-go/pkg/tunnel"
@@ -29,7 +31,23 @@ type healthyTunnelPool interface {
 type DefaultScheduler struct {
 	pool       healthyTunnelPool
 	dynamicMgr *tunnel.DynamicGroupManager
-	counter    atomic.Uint64
+	mu         sync.Mutex
+	states     map[int]*scheduleState
+	now        func() time.Time
+}
+
+type scheduleState struct {
+	signature string
+	counter   uint64
+	selected  string
+	expires   time.Time
+}
+
+// ResetPort discards a removed or replaced rule's routing state.
+func (s *DefaultScheduler) ResetPort(port int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.states, port)
 }
 
 func NewScheduler(pool *tunnel.Pool, dm *tunnel.DynamicGroupManager) *DefaultScheduler {
@@ -84,16 +102,39 @@ func (s *DefaultScheduler) SelectTunnel(port int, boundIDs []string, boundGroupI
 	}
 	healthy = available
 
-	return s.selectFromHealthy(healthy, policy, intervalSec)
+	ids := append([]string(nil), boundIDs...)
+	groups := append([]string(nil), boundGroupIDs...)
+	sort.Strings(ids)
+	sort.Strings(groups)
+	return s.selectForPort(port, fmt.Sprintf("%q/%q/%s/%d", ids, groups, policy, intervalSec), healthy, policy, intervalSec)
 }
 
 func (s *DefaultScheduler) selectFromHealthy(healthy []*tunnel.Tunnel, policy PortPolicy, intervalSec int) *tunnel.Tunnel {
+	return s.selectForPort(0, string(policy), healthy, policy, intervalSec)
+}
+
+func (s *DefaultScheduler) selectForPort(port int, signature string, healthy []*tunnel.Tunnel, policy PortPolicy, intervalSec int) *tunnel.Tunnel {
+	healthy = append([]*tunnel.Tunnel(nil), healthy...)
+	sort.Slice(healthy, func(i, j int) bool { return healthy[i].ID < healthy[j].ID })
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.states == nil {
+		s.states = make(map[int]*scheduleState)
+	}
+	state := s.states[port]
+	if state == nil || state.signature != signature {
+		state = &scheduleState{signature: signature}
+		s.states[port] = state
+	}
+	now := time.Now()
+	if s.now != nil {
+		now = s.now()
+	}
 	n := len(healthy)
 	if n == 0 {
+		state.selected = ""
+		state.expires = time.Time{}
 		return nil
-	}
-	if n == 1 {
-		return healthy[0]
 	}
 
 	switch policy {
@@ -117,7 +158,7 @@ func (s *DefaultScheduler) selectFromHealthy(healthy []*tunnel.Tunnel, policy Po
 			return candidates[0]
 		}
 		// #nosec G115 -- modulo bounds the result to slice length
-		idx := int(s.counter.Add(1) % uint64(len(candidates)))
+		idx := int(state.next() % uint64(len(candidates)))
 		return candidates[idx]
 
 	case PolicyRandom:
@@ -131,14 +172,30 @@ func (s *DefaultScheduler) selectFromHealthy(healthy []*tunnel.Tunnel, policy Po
 		if intervalSec <= 0 {
 			intervalSec = 300 // default 5 minutes
 		}
-		slot := (time.Now().Unix() / int64(intervalSec)) % int64(n)
-		return healthy[int(slot)]
+		if now.Before(state.expires) {
+			for _, t := range healthy {
+				if t.ID == state.selected {
+					return t
+				}
+			}
+		}
+		// Advance from the previous identity when the period expires, not a map index.
+		idx := 0
+		for i, t := range healthy {
+			if t.ID == state.selected {
+				idx = (i + 1) % n
+				break
+			}
+		}
+		state.selected = healthy[idx].ID
+		state.expires = now.Add(time.Duration(intervalSec) * time.Second)
+		return healthy[idx]
 
 	case PolicyRoundRobin:
 		fallthrough
 	default:
 		// #nosec G115 -- modulo bounds the result to the slice length.
-		idx := int(s.counter.Add(1) % uint64(n))
+		idx := int(state.next() % uint64(n))
 		return healthy[idx]
 	}
 }
@@ -165,3 +222,5 @@ func getTunnelRTT(t *tunnel.Tunnel) int {
 	}
 	return 9999
 }
+
+func (s *scheduleState) next() uint64 { n := s.counter; s.counter++; return n }

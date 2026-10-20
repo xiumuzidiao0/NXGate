@@ -487,9 +487,9 @@ func (m *DynamicGroupManager) EvaluateGroup(ctx context.Context, g *DynamicGroup
 		a := matched[i]
 		b := matched[j]
 
-		// Reachable nodes (LatencyMs > 0) MUST ALWAYS come before unreachable (LatencyMs <= 0)
-		aAvail := a.LatencyMs > 0
-		bAvail := b.LatencyMs > 0
+		// Preserve actual connection evidence without treating unknown UDP as a measured RTT.
+		aAvail := a.LatencyMs > 0 || a.ProbeStatus == "connected"
+		bAvail := b.LatencyMs > 0 || b.ProbeStatus == "connected"
 		if aAvail != bAvail {
 			return aAvail
 		}
@@ -505,7 +505,12 @@ func (m *DynamicGroupManager) EvaluateGroup(ctx context.Context, g *DynamicGroup
 
 		switch g.SortBy {
 		case "latency":
-			if aAvail && bAvail {
+			// Keep a strict ordering: measured RTTs, then connected-without-RTT.
+			// Mixing pairwise RTT and score comparisons creates ordering cycles.
+			if (a.LatencyMs > 0) != (b.LatencyMs > 0) {
+				return a.LatencyMs > 0
+			}
+			if a.LatencyMs > 0 && b.LatencyMs > 0 {
 				if a.LatencyMs != b.LatencyMs {
 					return a.LatencyMs < b.LatencyMs
 				}
@@ -524,7 +529,10 @@ func (m *DynamicGroupManager) EvaluateGroup(ctx context.Context, g *DynamicGroup
 			if a.Score != b.Score {
 				return a.Score > b.Score
 			}
-			if aAvail && bAvail {
+			if (a.LatencyMs > 0) != (b.LatencyMs > 0) {
+				return a.LatencyMs > 0
+			}
+			if a.LatencyMs > 0 && b.LatencyMs > 0 {
 				if a.LatencyMs != b.LatencyMs {
 					return a.LatencyMs < b.LatencyMs
 				}

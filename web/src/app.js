@@ -1,3 +1,4 @@
+import { createStatusTransport } from './status-transport.js';
 // Auto-detect secret path prefix from current browser location (e.g. /mysecret or /enter)
         const apiPrefix = (() => {
             const parts = window.location.pathname.split('/').filter(Boolean);
@@ -312,11 +313,27 @@ import { I18N } from './i18n.js';
             }
         }
 
+        let statusFetchInFlight = false;
+        let statusEventVersion = 0;
         async function fetchStatus() {
+            if (statusFetchInFlight) return;
+            statusFetchInFlight = true;
+            const eventVersion = statusEventVersion;
+            const controller = new AbortController();
+            const deadline = setTimeout(() => controller.abort(), 8000);
             try {
-                const res = await fetch('/api/status');
-                if (!res.ok) return;
-                const data = await res.json();
+                const res = await fetch('/api/status', { signal: controller.signal });
+                if (res.ok) {
+                    const data = await res.json();
+                    // Do not overwrite a newer pushed snapshot with an older HTTP response.
+                    if (eventVersion === statusEventVersion) renderStatus(data);
+                }
+            } catch (err) {
+                console.error("fetch status error:", err);
+            } finally { clearTimeout(deadline); statusFetchInFlight = false; }
+        }
+
+        function renderStatus(data) {
                 currentState = data;
 
                 const vpn = data.vpn || {};
@@ -477,10 +494,6 @@ import { I18N } from './i18n.js';
                         }).join('');
                     }
                 }
-
-            } catch (err) {
-                console.error("fetch status error:", err);
-            }
         }
 
         async function fetchNodes() {
@@ -701,7 +714,7 @@ import { I18N } from './i18n.js';
 
                 const marker = L.marker(coords, { icon });
 
-                const latencyText = node.latency_ms > 0 ? `${node.latency_ms} ms` : (node.ping > 0 ? `${node.ping} ms` : (isEn ? 'Unknown' : '未知'));
+                const latencyText = node.latency_ms > 0 ? `${node.latency_ms} ms` : (node.ping > 0 ? `${isEn ? "Source " : "来源 "}${node.ping} ms` : (isEn ? 'Unknown' : '未知'));
                 const riskLabel = node.risk_label || (isEn ? 'Clean' : '纯净住宅');
                 const riskLevel = node.risk_level || 'clean';
 
@@ -831,9 +844,10 @@ import { I18N } from './i18n.js';
 
             filtered.sort((a, b) => {
                 if (sortMode === 'latency_asc') {
-                    const aAvail = a.latency_ms > 0 ? 1 : (a.latency_ms === -1 ? -1 : 0);
-                    const bAvail = b.latency_ms > 0 ? 1 : (b.latency_ms === -1 ? -1 : 0);
+                    const aAvail = (a.latency_ms > 0 || a.probe_status === 'connected') ? 1 : (a.latency_ms === -1 ? -1 : 0);
+                    const bAvail = (b.latency_ms > 0 || b.probe_status === 'connected') ? 1 : (b.latency_ms === -1 ? -1 : 0);
                     if (aAvail !== bAvail) return bAvail - aAvail;
+                    if ((a.latency_ms > 0) !== (b.latency_ms > 0)) return a.latency_ms > 0 ? -1 : 1;
                     if (a.latency_ms > 0 && b.latency_ms > 0) return a.latency_ms - b.latency_ms;
                     return b.score - a.score;
                 } else if (sortMode === 'speed_desc') {
@@ -861,12 +875,14 @@ import { I18N } from './i18n.js';
                 const activeTun = (currentState && currentState.tunnels) ? currentState.tunnels.find(t => t.node && (t.node.id === n.id || t.node.ip === n.ip)) : null;
 
                 let latencyBadge = '';
-                if (n.latency_ms > 0) {
-                    latencyBadge = `<span class="badge latency-badge latency-available"><span class="status-dot"></span> ${isEn ? 'OK ' : '可用 '}${n.latency_ms} ms</span>`;
+                if (n.probe_status === 'connected' && n.latency_ms <= 0) {
+                    latencyBadge = `<span class="badge latency-badge latency-available">${isEn ? 'Connection succeeded' : '曾连接成功'}</span>`;
+                } else if (n.latency_ms > 0) {
+                    latencyBadge = `<span class="badge latency-badge latency-available"><span class="status-dot"></span> ${isEn ? 'TCP ' : 'TCP可达 '}${n.latency_ms} ms</span>`;
                 } else if (n.latency_ms === -1) {
                     latencyBadge = `<span class="badge latency-badge latency-timeout"><span class="status-dot"></span> ${isEn ? 'Timeout' : '超时不可达'}</span>`;
                 } else {
-                    latencyBadge = `<span class="badge latency-badge latency-unknown"><span class="status-dot"></span> ${isEn ? 'Untested' : '未测速'}</span>`;
+                    latencyBadge = `<span class="badge latency-badge latency-unknown"><span class="status-dot"></span> ${isEn ? 'Unverified' : '未验证'}</span>`;
                 }
 
                 const speedMbps = (n.speed / 1000000).toFixed(1) + ' Mbps';
@@ -1150,25 +1166,24 @@ import { I18N } from './i18n.js';
         }
 
         // Setup SSE connection
+        let statusTransport;
         function setupSSE() {
-            const es = new EventSource((apiPrefix || '') + '/api/events');
-            es.onopen = () => {
-                appendLog({ level: 'INFO', module: 'SSE', message: '已成功连通服务器实时推流总线' });
-            };
+            if (statusTransport) return;
+            statusTransport = createStatusTransport({
+                url: (apiPrefix || '') + '/api/events',
+                fetchStatus,
+                renderStatus: data => { statusEventVersion++; renderStatus(data); },
+                onOpen: () => appendLog({ level: 'INFO', module: 'SSE', message: '已成功连通服务器实时推流总线' })
+            });
+            const es = statusTransport.start();
+            if (!es) return;
             es.addEventListener('log', (e) => {
                 try {
                     const entry = JSON.parse(e.data);
                     appendLog(entry);
                 } catch(err){}
             });
-            es.addEventListener('status', (e) => {
-                try {
-                    const data = JSON.parse(e.data);
-                    currentState = data;
-                    fetchStatus();
-                } catch(err){}
-            });
-            es.onerror = () => {};
+
         }
 
         // Port Matrix Modal & Dynamic Groups
@@ -4107,7 +4122,7 @@ import { I18N } from './i18n.js';
                 switchView('dashboard');
             }
 
-            setInterval(fetchStatus, 2000);
+
             setInterval(fetchSingBoxOverview, 10000);
             setInterval(fetchNodes, 15000);
             setInterval(fetchUnlockCache, 30000);

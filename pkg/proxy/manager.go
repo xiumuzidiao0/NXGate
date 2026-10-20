@@ -195,6 +195,24 @@ func (m *MultiPortManager) ApplyRules(newRules []PortRule) error {
 		return fmt.Errorf("save port rules: %w", err)
 	}
 
+	// Keep unchanged ports stable across unrelated edits. Changed route signatures
+	// reset on selection; removed/new/disabled ports must discard previous state.
+	if scheduler, ok := m.scheduler.(*DefaultScheduler); ok {
+		previous := make(map[int]bool, len(m.rules))
+		for _, old := range m.rules {
+			previous[old.Port] = old.Enabled
+			if !portMap[old.Port] {
+				scheduler.ResetPort(old.Port)
+			}
+		}
+		for _, rule := range newRules {
+			enabled, existed := previous[rule.Port]
+			if !existed || enabled != rule.Enabled {
+				scheduler.ResetPort(rule.Port)
+			}
+		}
+	}
+
 	// Stop listeners for removed ports
 	for port := range m.listeners {
 		if !portMap[port] {

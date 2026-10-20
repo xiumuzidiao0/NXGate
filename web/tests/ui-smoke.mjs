@@ -21,6 +21,7 @@ function findChromium() {
     "/usr/bin/chromium-browser",
     "/usr/bin/google-chrome",
   ].filter(Boolean);
+  candidates.push(chromium.executablePath());
   return candidates.find((path) => existsSync(path));
 }
 
@@ -222,10 +223,36 @@ try {
       if (message.type() === "error") errors.push(message.text());
     });
     page.on("pageerror", (error) => errors.push(error.message));
-    await page.route("**/api/**", mockAPI);
+    let statusRequests = 0;
+    await page.route("**/api/**", route => {
+      if (new URL(route.request().url()).pathname.endsWith('/api/status')) statusRequests++;
+      return mockAPI(route);
+    });
+    await page.addInitScript(() => {
+      window.__statusSources = [];
+      window.EventSource = class {
+        constructor() { this.handlers = {}; window.__statusSources.push(this); setTimeout(() => this.onopen?.(), 0); }
+        addEventListener(name, callback) { this.handlers[name] = callback; }
+        close() {}
+      };
+    });
     await page.route("**/create-qr-code/**", (route) => route.fulfill({ status: 200, contentType: "image/png", body: Buffer.from("") }));
     await page.goto(`${baseURL}/#matrix`, { waitUntil: "domcontentloaded" });
     await page.waitForTimeout(500);
+    if (viewport === 390) {
+      const connectedCount = statusRequests;
+      await page.evaluate(data => window.__statusSources[0].handlers.status({data:JSON.stringify(data)}), status);
+      await page.waitForTimeout(2200);
+      if (statusRequests !== connectedCount) throw new Error('SSE triggered redundant status HTTP requests');
+      await page.evaluate(() => { window.__statusSources[0].onerror(); window.__statusSources[0].onerror(); });
+      await page.waitForTimeout(2200);
+      if (statusRequests !== connectedCount + 1) throw new Error('fallback polling missing or duplicated');
+      await page.evaluate(() => window.__statusSources[0].onopen());
+      const recoveredCount = statusRequests;
+      await page.waitForTimeout(2200);
+      if (statusRequests !== recoveredCount) throw new Error('polling persisted after SSE recovery');
+      if (await page.evaluate(() => window.__statusSources.length) !== 1) throw new Error('duplicate EventSource');
+    }
     await page.locator('[data-action="showAddPortForm"]').click();
     await page.waitForTimeout(250);
     const drawerOpen = await page.locator("#port-edit-card").evaluate((element) => element.classList.contains("open"));

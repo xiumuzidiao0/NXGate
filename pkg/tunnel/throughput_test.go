@@ -1,6 +1,12 @@
 package tunnel
 
 import (
+	"context"
+	"io"
+	"net"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -59,75 +65,30 @@ func TestThroughputResultString(t *testing.T) {
 	}
 }
 
-func TestCheckThroughput(t *testing.T) {
-	// This test requires actual network access
-	// Skip in CI or when network is unavailable
-	if testing.Short() {
-		t.Skip("Skipping network-dependent throughput test in short mode")
+func TestCheckThroughputLocalFixture(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(120 * time.Millisecond)
+		io.WriteString(w, strings.Repeat("x", 128*1024))
+	}))
+	defer srv.Close()
+	cfg := ThroughputConfig{TestURL: srv.URL, MinBytesPerSec: 1, Timeout: time.Second, MaxAttempts: 1, SampleDuration: time.Second, MinSampleBytes: 1}
+	dial := func(ctx context.Context, network, addr string) (net.Conn, error) {
+		return (&net.Dialer{}).DialContext(ctx, network, srv.Listener.Addr().String())
 	}
-
-	config := ThroughputConfig{
-		TestURL:        "https://speed.cloudflare.com/__down?bytes=524288", // 512KB
-		MinBytesPerSec: 10 * 1024,                                          // Very low threshold for test
-		Timeout:        10 * time.Second,
+	got := CheckThroughputWithDialer(dial, cfg)
+	if !got.Passed || got.BytesRead != 128*1024 {
+		t.Fatalf("%+v", got)
 	}
-
-	// Test with no device binding (direct connection)
-	result := CheckThroughputWithRetry("", config)
-
-	if !result.Passed || result.Error != nil {
-		t.Logf("Throughput check not passed (expected in offline/limited test environment): %s", result.String())
-		return
-	}
-
-	if result.BytesRead == 0 {
-		t.Error("Expected some bytes to be read")
-	}
-
-	if result.BytesPerSecond == 0 {
-		t.Error("Expected non-zero bytes per second")
-	}
-
-	t.Logf("Throughput test result: %s", result.String())
 }
-
-func TestCheckThroughputTimeout(t *testing.T) {
-	config := ThroughputConfig{
-		TestURL:        "https://speed.cloudflare.com/__down?bytes=10485760", // 10MB
-		MinBytesPerSec: 1000 * 1024,                                          // 1 MB/s
-		Timeout:        1 * time.Second,                                      // Very short timeout
+func TestCheckThroughputLocalTimeout(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { <-r.Context().Done() }))
+	defer srv.Close()
+	cfg := ThroughputConfig{TestURL: srv.URL, Timeout: 30 * time.Millisecond, MaxAttempts: 1, SampleDuration: time.Second}
+	dial := func(ctx context.Context, network, addr string) (net.Conn, error) {
+		return (&net.Dialer{}).DialContext(ctx, network, srv.Listener.Addr().String())
 	}
-
-	start := time.Now()
-	result := CheckThroughputWithRetry("", config)
-	elapsed := time.Since(start)
-
-	// Should respect timeout
-	if elapsed > 3*time.Second {
-		t.Errorf("CheckThroughputWithRetry took %v, expected < 3s", elapsed)
+	got := CheckThroughputWithDialer(dial, cfg)
+	if got.Error == nil || got.Passed {
+		t.Fatalf("%+v", got)
 	}
-
-	// May or may not pass depending on network speed
-	t.Logf("Timeout test result: %s (elapsed: %v)", result.String(), elapsed)
-}
-
-func TestCheckThroughputWithRetry(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping network-dependent retry test in short mode")
-	}
-
-	config := ThroughputConfig{
-		TestURL:        "https://speed.cloudflare.com/__down?bytes=262144", // 256KB
-		MinBytesPerSec: 10 * 1024,                                          // 10 KB/s minimum
-		Timeout:        8 * time.Second,
-	}
-
-	result := CheckThroughputWithRetry("", config)
-
-	if result.Error != nil {
-		t.Logf("Throughput retry test failed (may be expected): %v", result.Error)
-		return
-	}
-
-	t.Logf("Throughput retry result: %s", result.String())
 }
