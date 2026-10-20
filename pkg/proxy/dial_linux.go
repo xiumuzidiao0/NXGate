@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -57,47 +58,13 @@ func dialUpstream(targetAddr string, devName string, timeout time.Duration) (net
 	}
 
 	if devName != "" {
-		if ip4 := getInterfaceIPv4(devName); ip4 != nil {
+		ip4 := getInterfaceIPv4(devName)
+		if ip4 != nil {
 			d.LocalAddr = &net.TCPAddr{IP: ip4}
 		}
 
-		// Resolve DNS specifically over the target VPN tunnel device to prevent DNS leaks and host DNS pollution
-		d.Resolver = &net.Resolver{
-			PreferGo: true,
-			Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
-				dnsDialer := net.Dialer{
-					Timeout: 4 * time.Second,
-					Control: func(netw, addr string, c syscall.RawConn) error {
-						var operr error
-						fn := func(fd uintptr) {
-							if err := syscall.SetsockoptString(int(fd), syscall.SOL_SOCKET, syscall.SO_BINDTODEVICE, devName); err != nil {
-								operr = err
-							}
-						}
-						if err := c.Control(fn); err != nil {
-							return err
-						}
-						return operr
-					},
-				}
-				if ip4 := getInterfaceIPv4(devName); ip4 != nil {
-					dnsDialer.LocalAddr = &net.UDPAddr{IP: ip4}
-				}
+		d.Resolver = newTunnelResolver(devName, ip4)
 
-				dialProto := "udp"
-				if network == "tcp" {
-					dialProto = "tcp"
-				}
-				conn, err := dnsDialer.DialContext(ctx, dialProto, "8.8.8.8:53")
-				if err != nil {
-					conn, err = dnsDialer.DialContext(ctx, dialProto, "1.1.1.1:53")
-				}
-				if err != nil && dialProto == "udp" {
-					conn, err = dnsDialer.DialContext(ctx, "tcp", "1.1.1.1:53")
-				}
-				return conn, err
-			},
-		}
 	}
 
 	conn, err := d.Dial("tcp", targetAddr)
@@ -155,32 +122,7 @@ func resolveUDPAddrThroughTunnel(ctx context.Context, host string, port int, dev
 		return nil, fmt.Errorf("no tunnel DNS resolver available")
 	}
 
-	resolver := &net.Resolver{
-		PreferGo: true,
-	}
-	if devName != "" {
-		resolver.Dial = func(ctx context.Context, network, address string) (net.Conn, error) {
-			dnsDialer := net.Dialer{
-				Timeout: 4 * time.Second,
-				Control: func(netw, addr string, c syscall.RawConn) error {
-					var operr error
-					fn := func(fd uintptr) {
-						if err := syscall.SetsockoptString(int(fd), syscall.SOL_SOCKET, syscall.SO_BINDTODEVICE, devName); err != nil {
-							operr = err
-						}
-					}
-					if err := c.Control(fn); err != nil {
-						return err
-					}
-					return operr
-				},
-			}
-			if ip4 := getInterfaceIPv4(devName); ip4 != nil {
-				dnsDialer.LocalAddr = &net.UDPAddr{IP: ip4}
-			}
-			return dnsDialer.DialContext(ctx, "udp", "8.8.8.8:53")
-		}
-	}
+	resolver := newTunnelResolver(devName, getInterfaceIPv4(devName))
 
 	ips, err := resolver.LookupIP(ctx, "ip4", host)
 	if err != nil {
@@ -190,4 +132,47 @@ func resolveUDPAddrThroughTunnel(ctx context.Context, host string, port int, dev
 		return nil, fmt.Errorf("no IPv4 address for %s", host)
 	}
 	return &net.UDPAddr{IP: ips[0], Port: port}, nil
+}
+
+// Construct once per operation with a fresh interface address, not a process-global
+// cache keyed by reusable tunN names. This avoids stale routing after reconnect.
+// net.Resolver coalesces lookups in this operation. Never consult host DNS.
+func newTunnelResolver(devName string, localIP net.IP) *net.Resolver {
+	return &net.Resolver{PreferGo: true, Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
+		if devName == "" {
+			return nil, fmt.Errorf("no tunnel DNS resolver available")
+		}
+		dial := func(proto, target string) (net.Conn, error) {
+			d := net.Dialer{Timeout: 4 * time.Second, Control: func(_, _ string, c syscall.RawConn) error {
+				var sockErr error
+				err := c.Control(func(fd uintptr) {
+					sockErr = syscall.SetsockoptString(int(fd), syscall.SOL_SOCKET, syscall.SO_BINDTODEVICE, devName)
+				})
+				if err != nil {
+					return err
+				}
+				return sockErr
+			}}
+			if localIP != nil {
+				if proto == "tcp" {
+					d.LocalAddr = &net.TCPAddr{IP: localIP}
+				} else {
+					d.LocalAddr = &net.UDPAddr{IP: localIP}
+				}
+			}
+			return d.DialContext(ctx, proto, target)
+		}
+		proto := "udp"
+		if strings.HasPrefix(network, "tcp") {
+			proto = "tcp"
+		}
+		conn, err := dial(proto, "8.8.8.8:53")
+		if err != nil && ctx.Err() == nil {
+			conn, err = dial(proto, "1.1.1.1:53")
+		}
+		if err != nil && proto == "udp" && ctx.Err() == nil {
+			conn, err = dial("tcp", "1.1.1.1:53")
+		}
+		return conn, err
+	}}
 }

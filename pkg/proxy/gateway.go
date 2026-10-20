@@ -74,17 +74,23 @@ func (g *Gateway) Start(ctx context.Context) error {
 			continue
 		}
 
+		if !g.cfg.TryAcquireProxyConnection() {
+			_ = client.Close()
+			continue
+		}
 		select {
 		case g.sem <- struct{}{}:
 			stats.GetTrafficTracker().IncConn()
 			go func(c net.Conn) {
 				defer func() {
+					g.cfg.ReleaseProxyConnection()
 					<-g.sem
 					stats.GetTrafficTracker().DecConn()
 				}()
 				g.dispatch(c)
 			}(client)
 		default:
+			g.cfg.ReleaseProxyConnection()
 			stats.LogWarn("Gateway", "代理并发连接数已达上限 (%d)，丢弃新连接: %s", g.cfg.ProxyMaxConnections, client.RemoteAddr())
 			_ = client.Close()
 		}

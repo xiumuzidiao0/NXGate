@@ -1072,6 +1072,7 @@ import { I18N } from './i18n.js';
                 document.getElementById('cfg-username').value = data.ui_username || 'admin';
                 document.getElementById('cfg-password').value = '';
                 document.getElementById('cfg-proxy-port').value = data.proxy_port || 7928;
+ document.getElementById('cfg-proxy-global-max').value = data.proxy_global_max_connections ?? 1024;
                 document.getElementById('cfg-tg-token').value = data.telegram_bot_token || '';
                 document.getElementById('cfg-tg-chatid').value = data.telegram_chat_id || '';
                 const agePubEl = document.getElementById('cfg-age-pubkey');
@@ -1130,6 +1131,7 @@ import { I18N } from './i18n.js';
                 ui_path: webPath,
                 ui_username: user,
                 proxy_port: proxyPort,
+                proxy_global_max_connections: Number(document.getElementById('cfg-proxy-global-max').value),
                 telegram_bot_token: tgToken,
                 telegram_chat_id: tgChatID,
                 age_public_key: agePub,

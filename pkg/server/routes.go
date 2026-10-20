@@ -732,6 +732,8 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	_, _ = fmt.Fprintf(w, "# HELP nxgate_active_connections Current active proxy client connections\n")
 	_, _ = fmt.Fprintf(w, "# TYPE nxgate_active_connections gauge\n")
 	_, _ = fmt.Fprintf(w, "nxgate_active_connections %d\n", tr.ActiveConnections)
+	active, limit, rejected := s.cfg.ProxyConnectionStats()
+	fmt.Fprintf(w, "# TYPE nxgate_proxy_budget_active gauge\nnxgate_proxy_budget_active %d\n# TYPE nxgate_proxy_budget_limit gauge\nnxgate_proxy_budget_limit %d\n# TYPE nxgate_proxy_budget_rejected_total counter\nnxgate_proxy_budget_rejected_total %d\n", active, limit, rejected)
 
 	_, _ = fmt.Fprintf(w, "# HELP nxgate_vpn_connected Status of Primary VPN tunnel (1 = connected, 0 = disconnected)\n")
 	_, _ = fmt.Fprintf(w, "# TYPE nxgate_vpn_connected gauge\n")

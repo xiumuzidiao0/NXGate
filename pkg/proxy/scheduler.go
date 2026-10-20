@@ -1,10 +1,12 @@
 package proxy
 
 import (
-	"crypto/rand"
 	"fmt"
-	"math/big"
+	"math/rand/v2"
+	"slices"
 	"sort"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -94,7 +96,7 @@ func (s *DefaultScheduler) SelectTunnel(port int, boundIDs []string, boundGroupI
 	if len(boundIDs) == 0 && len(boundGroupIDs) == 0 {
 		healthy = s.pool.GetHealthyTunnels(nil)
 	}
-	var available []*tunnel.Tunnel
+	available := make([]*tunnel.Tunnel, 0, len(healthy))
 	for _, t := range healthy {
 		if t.IsAvailable() {
 			available = append(available, t)
@@ -102,6 +104,9 @@ func (s *DefaultScheduler) SelectTunnel(port int, boundIDs []string, boundGroupI
 	}
 	healthy = available
 
+	if len(boundIDs) == 0 && len(boundGroupIDs) == 0 {
+		return s.selectForPort(port, string(policy)+"/"+strconv.Itoa(intervalSec), healthy, policy, intervalSec)
+	}
 	ids := append([]string(nil), boundIDs...)
 	groups := append([]string(nil), boundGroupIDs...)
 	sort.Strings(ids)
@@ -110,12 +115,13 @@ func (s *DefaultScheduler) SelectTunnel(port int, boundIDs []string, boundGroupI
 }
 
 func (s *DefaultScheduler) selectFromHealthy(healthy []*tunnel.Tunnel, policy PortPolicy, intervalSec int) *tunnel.Tunnel {
-	return s.selectForPort(0, string(policy), healthy, policy, intervalSec)
+	return s.selectForPort(0, string(policy), append([]*tunnel.Tunnel(nil), healthy...), policy, intervalSec)
 }
 
 func (s *DefaultScheduler) selectForPort(port int, signature string, healthy []*tunnel.Tunnel, policy PortPolicy, intervalSec int) *tunnel.Tunnel {
-	healthy = append([]*tunnel.Tunnel(nil), healthy...)
-	sort.Slice(healthy, func(i, j int) bool { return healthy[i].ID < healthy[j].ID })
+	if policy != PolicyRandom {
+		slices.SortFunc(healthy, func(a, b *tunnel.Tunnel) int { return strings.Compare(a.ID, b.ID) })
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.states == nil {
@@ -162,11 +168,9 @@ func (s *DefaultScheduler) selectForPort(port int, signature string, healthy []*
 		return candidates[idx]
 
 	case PolicyRandom:
-		nBig, err := rand.Int(rand.Reader, big.NewInt(int64(n)))
-		if err == nil {
-			return healthy[int(nBig.Int64())]
-		}
-		return healthy[0]
+		// Exit balancing is not a security secret. math/rand/v2 top-level
+		// functions are concurrency safe; credential generation stays crypto/rand.
+		return healthy[rand.IntN(n)]
 
 	case PolicyInterval:
 		if intervalSec <= 0 {

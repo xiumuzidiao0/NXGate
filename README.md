@@ -373,3 +373,12 @@ cd web && npm test
 
 本项目采用 [GNU General Public License v3.0 (GPL-3.0)](LICENSE) 开源协议授权。
 引用或二次分发请遵循开源许可证要求保留原作者信息。
+
+
+### 本地安全与性能修订的资源预算
+
+本修订保留严格出口绑定、断线拒绝连接及 SSTP 证书验证。全局代理 TCP 并发预算默认 1024，所有多端口与 legacy gateway 共用，并保留每端口原有 512 上限。可通过 `LOCAL_PROXY_GLOBAL_MAX_CONNECTIONS=1024` 初始化，或网页设置/API `proxy_global_max_connections`（1–65536）修改；保存后的 `DATA_DIR/settings.json` 优先于环境变量。降低上限不踢掉现有连接，只拒绝新连接直至回落。默认预算按两个满载默认端口保守设定，不代表 RAM、FD 或整个 sing-box 的硬上限（独立 sing-box 入站不在该计数内）。`/metrics` 提供 `nxgate_proxy_budget_active`、`nxgate_proxy_budget_limit` 和拒绝累计数 `nxgate_proxy_budget_rejected_total`。
+
+DoH 每个 resolver 最多缓存 1024 个域名、128 个进行中域名查询，过期淘汰并合并相同冷查询；尊重返回 TTL（不超过一小时），不缓存失败/零 TTL。SSTP 每条隧道独占缓存和 DoH transport，关闭时取消与清空，且 DoH 连接走该隧道，不回退系统 DNS。TUN 使用绑定网卡及当前地址的 resolver，每次拨号重新捕获接口身份，不跨重连持久缓存，以免复用 `tunN` 导致串出口。
+
+动态组每轮最多 4 个健康探测、8 秒健康预算，总监控预算 12 秒；同一隧道短期结果共享，连续两次明确失败才熔断，超时/取消属于未知。恢复需两个成功样本且不提前解除原有 60 秒熔断。慢速补线独立进入有界去重 FIFO（64 组，满时后续轮次重试），单 worker 避免设备分配竞争，每组补线最多 90 秒；因此握手不会阻塞其他组的健康监控，但补线仍按顺序执行。没有重写 SSTP/TCP 协议栈，也不承诺真实 VPN 带宽倍率。

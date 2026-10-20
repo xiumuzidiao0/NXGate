@@ -10,6 +10,7 @@ import (
 	"io"
 	"math/rand"
 	"net"
+	"net/http"
 	"strconv"
 	"strings"
 	"sync"
@@ -36,14 +37,16 @@ type Tunnel struct {
 	assignedIP net.IP
 	gatewayIP  net.IP
 
-	mu        sync.RWMutex
-	sessions  map[uint32]*TCPConn          // key: (localPort << 16) | remotePort
-	udpConns  map[uint16]*UDPConn          // key: localPort
-	pending   map[uint16]*pendingHandshake // key: srcPort
-	writeMu   sync.Mutex
-	closed    bool
-	closeOnce sync.Once
-	closeCh   chan struct{}
+	mu           sync.RWMutex
+	sessions     map[uint32]*TCPConn          // key: (localPort << 16) | remotePort
+	udpConns     map[uint16]*UDPConn          // key: localPort
+	pending      map[uint16]*pendingHandshake // key: srcPort
+	writeMu      sync.Mutex
+	closed       bool
+	closeOnce    sync.Once
+	closeCh      chan struct{}
+	dnsResolver  *dns.DualEngineResolver
+	dnsTransport *http.Transport
 }
 
 func ResolveCandidatePorts(targetPort int, proto string) []int {
@@ -566,6 +569,31 @@ func (t *Tunnel) removeUDPConn(port uint16) {
 	t.mu.Unlock()
 }
 
+func (t *Tunnel) tunnelResolver() (*dns.DualEngineResolver, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.closed {
+		return nil, ErrTunnelClosed
+	}
+	if t.dnsResolver == nil {
+		transport := &http.Transport{
+			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				host, _, err := net.SplitHostPort(addr)
+				if err != nil || net.ParseIP(host) == nil {
+					return nil, fmt.Errorf("DoH bootstrap requires literal IP")
+				}
+				return t.Dial(ctx, "tcp4", addr)
+			},
+			TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12},
+			MaxIdleConns:    2, MaxIdleConnsPerHost: 1, MaxConnsPerHost: 4,
+			IdleConnTimeout: 30 * time.Second, TLSHandshakeTimeout: 3 * time.Second,
+		}
+		t.dnsTransport = transport
+		t.dnsResolver = dns.NewTunnelResolver([]string{dns.CloudflareDoHIP, dns.GoogleDoHIP}, &http.Client{Transport: transport, Timeout: 5 * time.Second})
+	}
+	return t.dnsResolver, nil
+}
+
 func (t *Tunnel) Dial(ctx context.Context, network, addr string) (net.Conn, error) {
 	if network != "tcp" && network != "tcp4" {
 		return nil, fmt.Errorf("unsupported network %q for sstp dialer", network)
@@ -581,21 +609,24 @@ func (t *Tunnel) Dial(ctx context.Context, network, addr string) (net.Conn, erro
 	}
 	targetPort := uint16(portInt)
 
-	// Resolve target IP (prioritize anti-pollution DoH resolver, fallback to system resolver)
+	// Resolve over this tunnel, never via host/system DNS. Per-instance cache
+	// and transport are discarded on Close; a replacement tunnel has a fresh namespace.
 	targetIP := net.ParseIP(host)
-	if targetIP == nil || targetIP.To4() == nil {
-		dohCtx, dohCancel := context.WithTimeout(ctx, 3*time.Second)
-		ips, err := dns.Default().LookupIPv4(dohCtx, host)
-		dohCancel()
+	if targetIP == nil {
+		resolver, err := t.tunnelResolver()
+		if err != nil {
+			return nil, err
+		}
+		ips, err := resolver.LookupIPv4(ctx, host)
 		if err != nil || len(ips) == 0 {
-			ips, err = net.DefaultResolver.LookupIP(ctx, "ip4", host)
-			if err != nil || len(ips) == 0 {
-				return nil, fmt.Errorf("resolve target host %q failed: %w", host, err)
-			}
+			return nil, fmt.Errorf("tunnel DNS for %q: %w", host, err)
 		}
 		targetIP = ips[0].To4()
 	} else {
 		targetIP = targetIP.To4()
+		if targetIP == nil {
+			return nil, fmt.Errorf("SSTP supports IPv4 targets only")
+		}
 	}
 
 	t.mu.Lock()
@@ -709,6 +740,10 @@ func (t *Tunnel) Close() error {
 	t.closeOnce.Do(func() {
 		t.mu.Lock()
 		t.closed = true
+		if t.dnsResolver != nil {
+			t.dnsResolver.Clear()
+		}
+		transport := t.dnsTransport
 		close(t.closeCh)
 
 		// Terminate all TCP sessions
@@ -725,6 +760,9 @@ func (t *Tunnel) Close() error {
 		}
 		t.udpConns = make(map[uint16]*UDPConn)
 		t.mu.Unlock()
+		if transport != nil {
+			transport.CloseIdleConnections()
+		}
 
 		for _, sess := range tcpToClose {
 			_ = sess.Close()

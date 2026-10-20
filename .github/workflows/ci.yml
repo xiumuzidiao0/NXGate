@@ -54,7 +54,7 @@ jobs:
           go test -v -count=1 ./...
 
       - name: Run Security and Optimization Race Regressions
-        run: go test -race ./pkg/config ./pkg/nodes ./pkg/proxy ./pkg/sstp ./pkg/server ./pkg/tunnel -run 'TestSecurity|TestOptimization' -count=1
+        run: go test -race ./pkg/dns ./pkg/config ./pkg/nodes ./pkg/proxy ./pkg/sstp ./pkg/server ./pkg/tunnel -run 'TestSecurity|TestOptimization' -count=1
 
       - name: Run sing-box API Regression Tests
         run: |

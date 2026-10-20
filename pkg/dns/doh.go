@@ -23,8 +23,10 @@ const (
 	TypeAAAA = "AAAA" // 28
 	TypeTXT  = "TXT"  // 16
 
-	MinCacheTTL = 15 * time.Second
-	MaxCacheTTL = 3600 * time.Second
+	MinCacheTTL          = 15 * time.Second
+	MaxCacheTTL          = 3600 * time.Second
+	DefaultCacheCapacity = 1024
+	maxPendingQueries    = 128
 )
 
 // DoHAnswer represents a single DNS record answer returned by Cloudflare/Google DoH JSON API.
@@ -55,11 +57,14 @@ type cacheEntry struct {
 // DualEngineResolver provides anti-pollution, high-availability DNS resolution via
 // Cloudflare and Google DoH, with graceful fallback to system resolver.
 type DualEngineResolver struct {
-	client     *http.Client
-	mu         sync.RWMutex
-	cache      map[string]*cacheEntry
-	endpoints  []string
-	systemFall *net.Resolver
+	client                          *http.Client
+	mu                              sync.RWMutex
+	cache                           map[string]*cacheEntry
+	endpoints                       []string
+	systemFall                      *net.Resolver
+	pending                         map[string]*lookupCall
+	capacity                        int
+	hits, misses, shared, evictions uint64
 }
 
 var (
@@ -91,7 +96,9 @@ func NewDualEngineResolver(endpoints []string, client *http.Client) *DualEngineR
 	return &DualEngineResolver{
 		client:     client,
 		cache:      make(map[string]*cacheEntry),
-		endpoints:  endpoints,
+		pending:    make(map[string]*lookupCall),
+		capacity:   DefaultCacheCapacity,
+		endpoints:  append([]string(nil), endpoints...),
 		systemFall: net.DefaultResolver,
 	}
 }
@@ -100,44 +107,134 @@ func stripBrackets(host string) string {
 	return strings.TrimSuffix(strings.TrimPrefix(host, "["), "]")
 }
 
-// LookupIP resolves a hostname to a list of IP addresses (IPv4 & IPv6).
-func (r *DualEngineResolver) LookupIP(ctx context.Context, host string) ([]net.IP, error) {
-	cleanHost := strings.TrimSpace(stripBrackets(host))
-	if cleanHost == "" {
-		return nil, fmt.Errorf("hostname cannot be empty")
-	}
+// Each resolver owns a cache namespace: never share one across distinct egresses.
+// NewTunnelResolver disables host DNS fallback; client must dial via that tunnel.
+func NewTunnelResolver(endpoints []string, client *http.Client) *DualEngineResolver {
+	r := NewDualEngineResolver(endpoints, client)
+	r.systemFall = nil
+	return r
+}
 
-	// 1. If it's already an IP address, return immediately
-	if ip := net.ParseIP(cleanHost); ip != nil {
-		return []net.IP{ip}, nil
-	}
+type lookupCall struct {
+	done    chan struct{}
+	cancel  context.CancelFunc
+	waiters int
+	ips     []net.IP
+	err     error
+}
 
-	// 2. Check local memory cache
+type CacheStats struct {
+	Hits, Misses, Shared, Evictions uint64
+	Entries, Pending                int
+}
+
+func (r *DualEngineResolver) Stats() CacheStats {
 	r.mu.RLock()
-	if entry, ok := r.cache[cleanHost]; ok && time.Now().Before(entry.expiresAt) {
-		r.mu.RUnlock()
-		return entry.ips, nil
-	}
-	r.mu.RUnlock()
+	defer r.mu.RUnlock()
+	return CacheStats{r.hits, r.misses, r.shared, r.evictions, len(r.cache), len(r.pending)}
+}
 
-	// 3. Query DoH endpoints with failover
-	ips, ttl, err := r.queryDoHWithFailover(ctx, cleanHost)
-	if err == nil && len(ips) > 0 {
-		r.saveCache(cleanHost, ips, ttl)
-		return ips, nil
+// Clear cancels in-flight work and prevents stale results from repopulating the cache.
+func (r *DualEngineResolver) Clear() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	clear(r.cache)
+	for key, c := range r.pending {
+		c.cancel()
+		delete(r.pending, key)
 	}
-
-	// 4. Fallback to system resolver
-	sysIPs, sysErr := r.systemFall.LookupIP(ctx, "ip", cleanHost)
-	if sysErr == nil && len(sysIPs) > 0 {
-		r.saveCache(cleanHost, sysIPs, 60*time.Second)
-		return sysIPs, nil
+}
+func cloneIPs(ips []net.IP) []net.IP {
+	out := make([]net.IP, len(ips))
+	for i, ip := range ips {
+		out[i] = append(net.IP(nil), ip...)
 	}
+	return out
+}
+func (r *DualEngineResolver) pruneLocked(now time.Time) {
+	for k, e := range r.cache {
+		if !now.Before(e.expiresAt) {
+			delete(r.cache, k)
+			r.evictions++
+		}
+	}
+}
 
-	if err != nil {
+// LookupIP coalesces concurrent cold queries without coupling one caller's deadline
+// to all others. All waiters gone cancels the worker; work has its own 10s ceiling.
+func (r *DualEngineResolver) LookupIP(ctx context.Context, host string) ([]net.IP, error) {
+	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	return nil, sysErr
+	host = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(stripBrackets(host)), "."))
+	if host == "" {
+		return nil, fmt.Errorf("hostname cannot be empty")
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return []net.IP{ip}, nil
+	}
+	r.mu.Lock()
+	r.pruneLocked(time.Now())
+	if e := r.cache[host]; e != nil {
+		r.hits++
+		ips := cloneIPs(e.ips)
+		r.mu.Unlock()
+		return ips, nil
+	}
+	r.misses++
+	c := r.pending[host]
+	if c == nil {
+		if len(r.pending) >= maxPendingQueries {
+			r.mu.Unlock()
+			return nil, fmt.Errorf("DNS lookup budget exhausted")
+		}
+		work, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		c = &lookupCall{done: make(chan struct{}), cancel: cancel}
+		r.pending[host] = c
+		go r.runLookup(work, host, c)
+	} else {
+		r.shared++
+	}
+	c.waiters++
+	r.mu.Unlock()
+	select {
+	case <-ctx.Done():
+		r.mu.Lock()
+		c.waiters--
+		if c.waiters == 0 && r.pending[host] == c {
+			delete(r.pending, host)
+			c.cancel()
+		}
+		r.mu.Unlock()
+		return nil, ctx.Err()
+	case <-c.done:
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		return cloneIPs(c.ips), c.err
+	}
+}
+func (r *DualEngineResolver) runLookup(ctx context.Context, host string, c *lookupCall) {
+	defer c.cancel()
+	ips, ttl, err := r.queryDoHWithFailover(ctx, host)
+	if err != nil && r.systemFall != nil && ctx.Err() == nil {
+		ips, err = r.systemFall.LookupIP(ctx, "ip", host)
+		ttl = 60 * time.Second
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if ctx.Err() != nil {
+		ips = nil
+		err = ctx.Err()
+	}
+	c.ips, c.err = cloneIPs(ips), err
+	if r.pending[host] == c {
+		delete(r.pending, host)
+		if err == nil && len(ips) > 0 {
+			r.saveCacheLocked(host, ips, ttl)
+		}
+	}
+	close(c.done)
 }
 
 // LookupIPv4 resolves a hostname to IPv4 addresses only.
@@ -177,24 +274,45 @@ func (r *DualEngineResolver) LookupIPv6(ctx context.Context, host string) ([]net
 }
 
 func (r *DualEngineResolver) saveCache(host string, ips []net.IP, ttl time.Duration) {
-	if ttl < MinCacheTTL {
-		ttl = MinCacheTTL
-	} else if ttl > MaxCacheTTL {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.saveCacheLocked(host, ips, ttl)
+}
+func (r *DualEngineResolver) saveCacheLocked(host string, ips []net.IP, ttl time.Duration) {
+	// Never extend authoritative TTLs, and do not negative-cache failures.
+	if ttl <= 0 || len(ips) == 0 {
+		return
+	}
+	if ttl > MaxCacheTTL {
 		ttl = MaxCacheTTL
 	}
-
-	r.mu.Lock()
-	r.cache[host] = &cacheEntry{
-		ips:       ips,
-		expiresAt: time.Now().Add(ttl),
+	r.pruneLocked(time.Now())
+	capacity := r.capacity
+	if capacity <= 0 {
+		capacity = DefaultCacheCapacity
 	}
-	r.mu.Unlock()
+	if _, exists := r.cache[host]; !exists && len(r.cache) >= capacity {
+		var oldest string
+		var expiry time.Time
+		for k, e := range r.cache {
+			if oldest == "" || e.expiresAt.Before(expiry) {
+				oldest = k
+				expiry = e.expiresAt
+			}
+		}
+		delete(r.cache, oldest)
+		r.evictions++
+	}
+	r.cache[host] = &cacheEntry{ips: cloneIPs(ips), expiresAt: time.Now().Add(ttl)}
 }
 
 func (r *DualEngineResolver) queryDoHWithFailover(ctx context.Context, host string) ([]net.IP, time.Duration, error) {
 	var lastErr error
 
 	for _, endpoint := range r.endpoints {
+		if err := ctx.Err(); err != nil {
+			return nil, 0, err
+		}
 		ips, ttl, err := r.querySingleEndpoint(ctx, endpoint, host)
 		if err == nil && len(ips) > 0 {
 			return ips, ttl, nil
@@ -221,12 +339,17 @@ func (r *DualEngineResolver) querySingleEndpoint(ctx context.Context, endpoint, 
 	}
 
 	var ips []net.IP
-	minTTL := 300
+	minTTL := int(MaxCacheTTL / time.Second)
+	for _, a := range append(append([]DoHAnswer(nil), answersA...), answersAAAA...) {
+		if a.TTL >= 0 && a.TTL < minTTL {
+			minTTL = a.TTL
+		}
+	}
 
 	for _, a := range answersA {
 		if ip := net.ParseIP(strings.TrimSpace(a.Data)); ip != nil && ip.To4() != nil {
 			ips = append(ips, ip.To4())
-			if a.TTL > 0 && a.TTL < minTTL {
+			if a.TTL >= 0 && a.TTL < minTTL {
 				minTTL = a.TTL
 			}
 		}
@@ -234,7 +357,7 @@ func (r *DualEngineResolver) querySingleEndpoint(ctx context.Context, endpoint, 
 	for _, a := range answersAAAA {
 		if ip := net.ParseIP(strings.TrimSpace(a.Data)); ip != nil && ip.To4() == nil {
 			ips = append(ips, ip)
-			if a.TTL > 0 && a.TTL < minTTL {
+			if a.TTL >= 0 && a.TTL < minTTL {
 				minTTL = a.TTL
 			}
 		}
@@ -285,5 +408,8 @@ func (r *DualEngineResolver) queryType(ctx context.Context, endpoint, host, qTyp
 		return nil, fmt.Errorf("failed to decode DoH json from %s: %w", endpoint, err)
 	}
 
+	if dohResp.Status != 0 || dohResp.TC {
+		return nil, fmt.Errorf("unsuccessful or truncated DoH response: %d", dohResp.Status)
+	}
 	return dohResp.Answer, nil
 }

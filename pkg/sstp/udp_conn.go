@@ -89,13 +89,11 @@ func (u *UDPConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 		return 0, errors.New("i/o timeout")
 	}
 
+	// PacketConn destinations must already be resolved by the selected egress.
+	// net.ResolveUDPAddr here would silently use host DNS for custom net.Addr.
 	udpAddr, ok := addr.(*net.UDPAddr)
-	if !ok {
-		rAddr, err := net.ResolveUDPAddr("udp", addr.String())
-		if err != nil {
-			return 0, fmt.Errorf("invalid udp destination address: %w", err)
-		}
-		udpAddr = rAddr
+	if !ok || udpAddr == nil {
+		return 0, fmt.Errorf("UDP destination must be a resolved *net.UDPAddr")
 	}
 
 	if udpAddr.IP == nil {

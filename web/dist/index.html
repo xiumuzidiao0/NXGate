@@ -453,6 +453,11 @@
                         <input id="cfg-proxy-port" class="input-field w-full mono"  type="number" required>
                     </div>
                     <div class="form-group">
+                        <label class="form-label" for="cfg-proxy-global-max">全局代理并发上限 / Global connection limit (1–65536)</label>
+                        <input id="cfg-proxy-global-max" class="input-field w-full mono" type="number" min="1" max="65536" value="1024" required>
+                        <small>所有代理端口共享；降低上限不切断已有连接。Per-port limits still apply.</small>
+                    </div>
+                    <div class="form-group">
                         <label class="form-label" data-i18n="set.age_pubkey">age 订阅安全加密公钥 (选填，开启后加密订阅)</label>
                         <div class="input-addon">
                             <input id="cfg-age-pubkey" class="input-field mono text-xs" type="text" placeholder="留空关闭加密，或填入 age1... / age1pq..." data-i18n-placeholder="set.age_pubkey_ph">

@@ -501,6 +501,7 @@ type mockUserlandPacket struct {
 
 type mockUserlandPacketConn struct {
 	inCh        chan mockUserlandPacket
+	done        chan struct{}
 	sentPackets [][]byte
 	targetAddrs []net.Addr
 	closed      bool
@@ -510,13 +511,16 @@ type mockUserlandPacketConn struct {
 func newMockUserlandPacketConn() *mockUserlandPacketConn {
 	return &mockUserlandPacketConn{
 		inCh: make(chan mockUserlandPacket, 16),
+		done: make(chan struct{}),
 	}
 }
 
 func (m *mockUserlandPacketConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
-	pkt, ok := <-m.inCh
-	if !ok {
+	var pkt mockUserlandPacket
+	select {
+	case <-m.done:
 		return 0, nil, io.EOF
+	case pkt = <-m.inCh:
 	}
 	n = copy(p, pkt.data)
 	return n, pkt.addr, nil
@@ -524,17 +528,21 @@ func (m *mockUserlandPacketConn) ReadFrom(p []byte) (n int, addr net.Addr, err e
 
 func (m *mockUserlandPacketConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.closed {
+		return 0, net.ErrClosed
+	}
 	cp := make([]byte, len(p))
 	copy(cp, p)
 	m.sentPackets = append(m.sentPackets, cp)
 	m.targetAddrs = append(m.targetAddrs, addr)
-	m.mu.Unlock()
 
 	// Simulate echo reply back
 	resp := append([]byte("echo:"), p...)
-	m.inCh <- mockUserlandPacket{
-		data: resp,
-		addr: addr,
+	select {
+	case m.inCh <- mockUserlandPacket{data: resp, addr: addr}:
+	default:
+		return 0, fmt.Errorf("mock packet queue full")
 	}
 	return len(p), nil
 }
@@ -544,7 +552,7 @@ func (m *mockUserlandPacketConn) Close() error {
 	defer m.mu.Unlock()
 	if !m.closed {
 		m.closed = true
-		close(m.inCh)
+		close(m.done)
 	}
 	return nil
 }

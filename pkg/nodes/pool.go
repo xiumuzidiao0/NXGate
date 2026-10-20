@@ -536,7 +536,8 @@ func (np *NodePool) ProbeNodes(ctx context.Context, nodeList []*Node) {
 				start := time.Now()
 				var dialErr error
 
-				conn, err := net.DialTimeout("tcp", addr, strategy.TCPTimeout)
+				dialer := net.Dialer{Timeout: strategy.TCPTimeout}
+				conn, err := dialer.DialContext(ctx, "tcp", addr)
 				dialErr = err
 				if err == nil {
 					_ = conn.Close()
@@ -556,6 +557,10 @@ func (np *NodePool) ProbeNodes(ctx context.Context, nodeList []*Node) {
 				}
 			}
 
+			// Cancellation/budget expiry is not evidence that the node failed.
+			if ctx.Err() != nil {
+				return
+			}
 			// All attempts failed
 			np.mu.Lock()
 			target.LatencyMs = -1

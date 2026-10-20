@@ -1,6 +1,9 @@
 package tunnel
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	"net"
 	"syscall"
 	"time"
@@ -8,6 +11,23 @@ import (
 
 // CheckTunnelConnectivity tests whether a specific network interface has functional egress to the Internet.
 func CheckTunnelConnectivity(devName string, timeout time.Duration) bool {
+	return CheckTunnelConnectivityContext(context.Background(), devName, timeout)
+}
+
+func CheckTunnelConnectivityContext(ctx context.Context, devName string, timeout time.Duration) bool {
+	ok, _ := probeTunnelConnectivity(ctx, devName, timeout)
+	return ok
+}
+
+// Unknown (deadline/cancellation) is different from repeated explicit failures.
+func probeTunnelConnectivity(ctx context.Context, devName string, timeout time.Duration) (bool, error) {
+	if ctx.Err() != nil {
+		return false, ctx.Err()
+	}
+	if devName == "" {
+		return false, fmt.Errorf("no tunnel device")
+	}
+	unknown := false
 	if timeout <= 0 {
 		timeout = 3 * time.Second
 	}
@@ -31,11 +51,21 @@ func CheckTunnelConnectivity(devName string, timeout time.Duration) bool {
 				return operr
 			},
 		}
-		conn, err := d.Dial("tcp", target)
+		conn, err := d.DialContext(ctx, "tcp", target)
 		if err == nil {
 			_ = conn.Close()
-			return true
+			return true, nil
+		}
+		if ctx.Err() != nil {
+			return false, ctx.Err()
+		}
+		var ne net.Error
+		if errors.As(err, &ne) && ne.Timeout() {
+			unknown = true
 		}
 	}
-	return false
+	if unknown {
+		return false, context.DeadlineExceeded
+	}
+	return false, nil
 }

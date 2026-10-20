@@ -752,27 +752,46 @@ func (p *Pool) GetHealthyTunnels(targetIDs []string) []*Tunnel {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
-	idFilter := make(map[string]bool)
-	for _, id := range targetIDs {
-		idFilter[id] = true
+	// Bound IDs are indexed directly; avoid scanning the entire pool or
+	// allocating a second map for a small explicit selection.
+	capacity := len(p.tunnels)
+	if len(targetIDs) > 0 && len(targetIDs) < capacity {
+		capacity = len(targetIDs)
 	}
-
-	// 1. Prioritize available (not circuit-broken) tunnels
-	var available []*Tunnel
-	var healthy []*Tunnel
-	for _, t := range p.tunnels {
-		if len(idFilter) == 0 || idFilter[t.ID] {
-			if t.IsAvailable() {
-				available = append(available, t)
+	healthy := make([]*Tunnel, 0, capacity)
+	visit := func(t *Tunnel) {
+		if t != nil && t.IsHealthy() {
+			healthy = append(healthy, t)
+		}
+	}
+	if len(targetIDs) > 0 {
+		for i, id := range targetIDs {
+			duplicate := false
+			for _, prior := range targetIDs[:i] {
+				if prior == id {
+					duplicate = true
+					break
+				}
 			}
-			if t.IsHealthy() {
-				healthy = append(healthy, t)
+			if !duplicate {
+				visit(p.tunnels[id])
 			}
+		}
+	} else {
+		for _, t := range p.tunnels {
+			visit(t)
 		}
 	}
 
-	if len(available) > 0 {
-		return available
+	available := 0
+	for _, t := range healthy {
+		if t.IsAvailable() {
+			healthy[available] = t
+			available++
+		}
+	}
+	if available > 0 {
+		return healthy[:available]
 	}
 	return healthy
 }
@@ -974,4 +993,3 @@ func ensureIPRule(selector, val, table, pref string) {
 			selector, val, table, pref)
 	}
 }
-

@@ -35,11 +35,14 @@ type Config struct {
 	AgePublicKey      string
 
 	// Proxy gateway settings
-	ProxyHost           string
-	ProxyPort           int
-	ProxyUser           string
-	ProxyPass           string
-	ProxyMaxConnections int
+	ProxyHost                 string
+	ProxyPort                 int
+	ProxyUser                 string
+	ProxyPass                 string
+	ProxyMaxConnections       int
+	ProxyGlobalMaxConnections int
+	proxyActive               int
+	proxyRejected             uint64
 
 	// Intervals & Limits
 	FetchInterval      time.Duration
@@ -67,21 +70,22 @@ type Config struct {
 }
 
 type SettingsDTO struct {
-	UIPort             int      `json:"ui_port"`
-	UIPath             string   `json:"ui_path"`
-	UIUsername         string   `json:"ui_username"`
-	UIPassword         string   `json:"ui_password,omitempty"`
-	SubToken           string   `json:"sub_token,omitempty"`
-	AgeEncryptEnabled  bool     `json:"age_encrypt_enabled"`
-	AgePublicKey       string   `json:"age_public_key"`
-	ProxyPort          int      `json:"proxy_port"`
-	ProxyUser          string   `json:"proxy_user"`
-	ProxyPass          string   `json:"proxy_pass,omitempty"`
-	AutoRotateMinutes  int      `json:"auto_rotate_minutes"`
-	AutoRotateIPType   string   `json:"auto_rotate_ip_type"`
-	DiscoveryCountries []string `json:"discovery_countries"`
-	TelegramBotToken   string   `json:"telegram_bot_token"`
-	TelegramChatID     string   `json:"telegram_chat_id"`
+	ProxyGlobalMaxConnections *int     `json:"proxy_global_max_connections,omitempty"`
+	UIPort                    int      `json:"ui_port"`
+	UIPath                    string   `json:"ui_path"`
+	UIUsername                string   `json:"ui_username"`
+	UIPassword                string   `json:"ui_password,omitempty"`
+	SubToken                  string   `json:"sub_token,omitempty"`
+	AgeEncryptEnabled         bool     `json:"age_encrypt_enabled"`
+	AgePublicKey              string   `json:"age_public_key"`
+	ProxyPort                 int      `json:"proxy_port"`
+	ProxyUser                 string   `json:"proxy_user"`
+	ProxyPass                 string   `json:"proxy_pass,omitempty"`
+	AutoRotateMinutes         int      `json:"auto_rotate_minutes"`
+	AutoRotateIPType          string   `json:"auto_rotate_ip_type"`
+	DiscoveryCountries        []string `json:"discovery_countries"`
+	TelegramBotToken          string   `json:"telegram_bot_token"`
+	TelegramChatID            string   `json:"telegram_chat_id"`
 }
 
 func getEnv(key, defaultVal string, fallbackKeys ...string) string {
@@ -276,11 +280,12 @@ func LoadConfig() *Config {
 		AgeEncryptEnabled: ageEncryptEnabled,
 		AgePublicKey:      agePublicKey,
 
-		ProxyHost:           getEnv("LOCAL_PROXY_HOST", "127.0.0.1", "PROXY_HOST"),
-		ProxyPort:           getEnvInt("LOCAL_PROXY_PORT", 7928, 1, 65535, "PROXY_PORT"),
-		ProxyUser:           proxyUser,
-		ProxyPass:           proxyPass,
-		ProxyMaxConnections: getEnvInt("LOCAL_PROXY_MAX_CONNECTIONS", 512, 16, 4096, "PROXY_MAX_CONNECTIONS"),
+		ProxyHost:                 getEnv("LOCAL_PROXY_HOST", "127.0.0.1", "PROXY_HOST"),
+		ProxyPort:                 getEnvInt("LOCAL_PROXY_PORT", 7928, 1, 65535, "PROXY_PORT"),
+		ProxyUser:                 proxyUser,
+		ProxyPass:                 proxyPass,
+		ProxyGlobalMaxConnections: getEnvInt("LOCAL_PROXY_GLOBAL_MAX_CONNECTIONS", DefaultProxyGlobalMaxConnections, 1, MaxProxyGlobalMaxConnections),
+		ProxyMaxConnections:       getEnvInt("LOCAL_PROXY_MAX_CONNECTIONS", 512, 16, 4096, "PROXY_MAX_CONNECTIONS"),
 
 		FetchInterval: func() time.Duration {
 			fetchSec := getEnvInt("FETCH_INTERVAL_SECONDS", 0, 60, 86400)
@@ -325,8 +330,13 @@ func (c *Config) GetSettings() SettingsDTO {
 }
 
 func (c *Config) settingsLocked() SettingsDTO {
+	limit := c.ProxyGlobalMaxConnections
+	if limit <= 0 {
+		limit = DefaultProxyGlobalMaxConnections
+	}
 	return SettingsDTO{
-		UIPort: c.UIPort, UIPath: c.UIPath, UIUsername: c.UIUsername, UIPassword: c.UIPassword,
+		ProxyGlobalMaxConnections: &limit,
+		UIPort:                    c.UIPort, UIPath: c.UIPath, UIUsername: c.UIUsername, UIPassword: c.UIPassword,
 		SubToken: c.SubToken, AgeEncryptEnabled: c.AgeEncryptEnabled, AgePublicKey: c.AgePublicKey,
 		ProxyPort: c.ProxyPort, ProxyUser: c.ProxyUser, ProxyPass: c.ProxyPass,
 		AutoRotateMinutes: c.AutoRotateMinutes, AutoRotateIPType: c.AutoRotateIPType,
@@ -379,6 +389,9 @@ func (c *Config) IsUIAuthEnabled() bool {
 }
 
 func (c *Config) UpdateSettings(dto SettingsDTO) error {
+	if dto.ProxyGlobalMaxConnections != nil && (*dto.ProxyGlobalMaxConnections < 1 || *dto.ProxyGlobalMaxConnections > MaxProxyGlobalMaxConnections) {
+		return fmt.Errorf("proxy_global_max_connections must be 1..%d", MaxProxyGlobalMaxConnections)
+	}
 	for name, value := range map[string]string{
 		"ui_path":             dto.UIPath,
 		"ui_username":         dto.UIUsername,
@@ -419,6 +432,12 @@ func (c *Config) UpdateSettings(dto SettingsDTO) error {
 }
 
 func (c *Config) applySettingsLocked(dto SettingsDTO) {
+	if dto.ProxyGlobalMaxConnections != nil {
+		if *dto.ProxyGlobalMaxConnections < 1 || *dto.ProxyGlobalMaxConnections > MaxProxyGlobalMaxConnections {
+			panic("invalid persisted proxy global budget")
+		}
+		c.ProxyGlobalMaxConnections = *dto.ProxyGlobalMaxConnections
+	}
 	if dto.UIPort > 0 && dto.UIPort < 65536 {
 		c.UIPort = dto.UIPort
 	}

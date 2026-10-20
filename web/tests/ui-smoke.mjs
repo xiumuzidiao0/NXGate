@@ -104,6 +104,7 @@ const nodes = [{
 }];
 
 let lastOutboundPost = null;
+let lastSettingsPost=null;
 
 async function mockAPI(route) {
   const path = new URL(route.request().url()).pathname;
@@ -163,11 +164,13 @@ async function mockAPI(route) {
       }
     ];
   } else if (path.endsWith("/api/settings")) {
+    if(route.request().method()==="POST") lastSettingsPost=JSON.parse(route.request().postData()||"{}");
     body = {
       ui_port: 8787,
       ui_path: "nxgate",
       ui_username: "admin",
       proxy_port: 7928,
+      proxy_global_max_connections: 777,
       auto_rotate_minutes: 15,
       auto_rotate_ip_type: "residential",
       discovery_countries: ["JP", "US"],
@@ -274,6 +277,17 @@ try {
     await page.waitForTimeout(100);
     const baseVisible = await page.locator("#tab-content-base").isVisible();
     if (!baseVisible) failures.push(`${viewport}px: settings base tab is not visible`);
+    if(await page.locator('#cfg-proxy-global-max').inputValue()!=="777") failures.push(`${viewport}px: global budget not loaded`);
+    await page.locator('#cfg-proxy-global-max').fill('888');
+    await page.locator('#cfg-web-port').fill(new URL(baseURL).port);
+    await page.evaluate(() => history.replaceState(null, '', '/nxgate#settings'));
+    await page.locator('#cfg-web-path').fill('nxgate');
+    lastSettingsPost=null;
+    await page.evaluate(()=>document.querySelector('#cfg-proxy-global-max').closest('form').requestSubmit());
+    await page.waitForTimeout(120);
+    if(lastSettingsPost?.proxy_global_max_connections!==888) failures.push(`${viewport}px: global budget not saved`);
+    await page.evaluate(() => document.querySelector('[data-view="settings"]').click());
+
 
     await page.locator('[data-action="switchSettingsTab"][data-args*="tg"]').click();
     await page.waitForTimeout(60);

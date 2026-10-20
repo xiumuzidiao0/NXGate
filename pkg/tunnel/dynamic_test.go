@@ -2,6 +2,8 @@ package tunnel
 
 import (
 	"context"
+	"net"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -115,6 +117,7 @@ func TestSystemPrimaryGroupEvaluation(t *testing.T) {
 
 	mockPC := &mockPrimaryConnector{}
 	mgr.SetPrimaryConnector(mockPC)
+	ip, port := dynamicProbeFixture(t)
 
 	// Inject candidate nodes
 	np.SetCandidatesForTest([]*nodes.Node{
@@ -128,8 +131,8 @@ func TestSystemPrimaryGroupEvaluation(t *testing.T) {
 			},
 		},
 		{
-			ID:           "node-jp-stream",
-			IP:           "2.2.2.2",
+			ID: "node-jp-stream",
+			IP: ip, Port: port, Proto: "tcp",
 			CountryShort: "JP",
 			Score:        2000,
 			Unlock: &nodes.UnlockResult{
@@ -240,15 +243,15 @@ func TestCascadingFallbackAndConnectivityFilter(t *testing.T) {
 
 	np := nodes.NewNodePool(cfg)
 	favNode := &nodes.Node{
-		ID:           "node-fav-us",
-		IP:           "198.51.100.5",
+		ID: "node-fav-us",
+		IP: "127.0.0.1", Port: 1, Proto: "tcp",
 		CountryShort: "US",
 		Ping:         40,
 		Score:        800,
 	}
 	jpNode := &nodes.Node{
-		ID:           "node-jp",
-		IP:           "203.0.113.1",
+		ID: "node-jp",
+		IP: "127.0.0.1", Port: 1, Proto: "tcp",
 		CountryShort: "JP",
 		Ping:         60,
 		Score:        600,
@@ -284,8 +287,8 @@ func TestCascadingFallbackAndConnectivityFilter(t *testing.T) {
 
 	// Now add a healthy KR candidate -> evaluation should automatically failback to primary!
 	krNode := &nodes.Node{
-		ID:           "node-kr",
-		IP:           "210.100.1.1",
+		ID: "node-kr",
+		IP: "127.0.0.1", Port: 1, Proto: "tcp",
 		CountryShort: "KR",
 		Ping:         45,
 		Score:        900,
@@ -301,4 +304,26 @@ func TestCascadingFallbackAndConnectivityFilter(t *testing.T) {
 	if gRecovered.FallbackReason != "" {
 		t.Errorf("expected empty fallback reason after recovery, got: %s", gRecovered.FallbackReason)
 	}
+}
+
+// ProbeNodes only needs a TCP accept for this connector-selection unit test.
+func dynamicProbeFixture(t *testing.T) (string, int) {
+	t.Helper()
+	ln, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { ln.Close() })
+	go func() {
+		for {
+			c, e := ln.Accept()
+			if e != nil {
+				return
+			}
+			c.Close()
+		}
+	}()
+	host, ps, _ := net.SplitHostPort(ln.Addr().String())
+	port, _ := strconv.Atoi(ps)
+	return host, port
 }

@@ -54,6 +54,13 @@ type DynamicGroupManager struct {
 	mu               sync.RWMutex
 	groups           map[string]*DynamicGroup
 	evalMutex        sync.Mutex
+	roundMu          sync.Mutex
+	health           map[*Tunnel]*tunnelHealth
+	healthProbe      func(context.Context, string, time.Duration) (bool, error)
+	loopOnce         sync.Once
+	queueMu          sync.Mutex
+	evalQueue        chan string
+	evalPending      map[string]bool
 	primaryConnector PrimaryConnector
 }
 
@@ -183,6 +190,7 @@ func (m *DynamicGroupManager) GetGroup(id string) *DynamicGroup {
 		return nil
 	}
 	cp := *g
+	cp.ActiveTunnelIDs = append([]string(nil), g.ActiveTunnelIDs...)
 	if (cp.IsSystem || cp.ID == SystemPrimaryGroupID) && (cp.ConnectMode == "zero_tun" || cp.ConnectMode == "sstp") {
 		if m.primaryConnector != nil && m.primaryConnector.GetStatus() == "connected" {
 			activeNode := m.primaryConnector.GetActiveNode()
@@ -387,8 +395,32 @@ func (m *DynamicGroupManager) filterCandidatesForGroup(allCandidates []*nodes.No
 
 // EvaluateGroup evaluates candidates, probes metrics, and dynamically rotates tunnels for a group
 func (m *DynamicGroupManager) EvaluateGroup(ctx context.Context, g *DynamicGroup) {
-	m.evalMutex.Lock()
+	if g == nil {
+		return
+	}
+	for !m.evalMutex.TryLock() {
+		if !waitContext(ctx, 10*time.Millisecond) {
+			return
+		}
+	}
 	defer m.evalMutex.Unlock()
+	if ctx.Err() != nil {
+		return
+	}
+	// Evaluate a private snapshot, never an unlocked pointer into the manager.
+	m.mu.RLock()
+	original := m.groups[g.ID]
+	if original == nil || !original.Enabled {
+		m.mu.RUnlock()
+		return
+	}
+	copyGroup := *original
+	copyGroup.ActiveTunnelIDs = append([]string(nil), original.ActiveTunnelIDs...)
+	m.mu.RUnlock()
+	g = &copyGroup
+	if m.nodePool == nil {
+		return
+	}
 
 	allCandidates := m.nodePool.GetCandidates()
 	if len(allCandidates) == 0 {
@@ -454,7 +486,7 @@ func (m *DynamicGroupManager) EvaluateGroup(ctx context.Context, g *DynamicGroup
 	g.InFallback = inFallback
 	g.FallbackReason = fallbackReason
 	m.mu.Lock()
-	if stored, ok := m.groups[g.ID]; ok {
+	if stored, ok := m.groups[g.ID]; ok && stored == original {
 		stored.InFallback = inFallback
 		stored.FallbackReason = fallbackReason
 	}
@@ -467,7 +499,7 @@ func (m *DynamicGroupManager) EvaluateGroup(ctx context.Context, g *DynamicGroup
 		} else {
 			g.StatusText = "无匹配候选节点"
 		}
-		if stored, ok := m.groups[g.ID]; ok {
+		if stored, ok := m.groups[g.ID]; ok && stored == original {
 			stored.StatusText = g.StatusText
 		}
 		m.mu.Unlock()
@@ -544,6 +576,14 @@ func (m *DynamicGroupManager) EvaluateGroup(ctx context.Context, g *DynamicGroup
 	// 4. Special handling for System Primary Gateway Group (tun0)
 	if g.IsSystem || g.ID == SystemPrimaryGroupID {
 		m.evaluatePrimarySystemGroup(ctx, g, matched)
+		m.mu.Lock()
+		if stored := m.groups[g.ID]; stored == original {
+			stored.ActiveTunnelIDs = append([]string(nil), g.ActiveTunnelIDs...)
+			stored.LastEvaluatedAt = g.LastEvaluatedAt
+			stored.StatusText = g.StatusText
+			_ = m.saveLocked()
+		}
+		m.mu.Unlock()
 		return
 	}
 
@@ -601,11 +641,32 @@ func (m *DynamicGroupManager) EvaluateGroup(ctx context.Context, g *DynamicGroup
 		}
 	}
 
+	var startedIDs []string
+	defer func() {
+		m.mu.RLock()
+		retained := make(map[string]bool)
+		for _, stored := range m.groups {
+			if stored.Enabled {
+				for _, id := range stored.ActiveTunnelIDs {
+					retained[id] = true
+				}
+			}
+		}
+		m.mu.RUnlock()
+		for _, id := range startedIDs {
+			if !retained[id] {
+				_ = m.pool.StopTunnel(id)
+			}
+		}
+	}()
 	// 7. Replenish / backfill any missing slots from the sorted matched list
 	needed := targetN - len(chosenTunnelIDs)
 	if needed > 0 {
 		attemptCount := 0
 		for _, n := range matched {
+			if ctx.Err() != nil {
+				return
+			}
 			if needed <= 0 || attemptCount >= 3 {
 				break
 			}
@@ -639,10 +700,14 @@ func (m *DynamicGroupManager) EvaluateGroup(ctx context.Context, g *DynamicGroup
 				continue
 			}
 
+			startedIDs = append(startedIDs, newTun.ID)
 			// Wait for handshake completion or early exit (up to 14s)
 			connected := false
 			for w := 0; w < 28; w++ {
-				time.Sleep(500 * time.Millisecond)
+				if !waitContext(ctx, 500*time.Millisecond) {
+					_ = m.pool.StopTunnel(newTun.ID)
+					return
+				}
 				st := newTun.GetStatus()
 				if st == StatusConnected {
 					connected = true
@@ -657,8 +722,15 @@ func (m *DynamicGroupManager) EvaluateGroup(ctx context.Context, g *DynamicGroup
 				// Verify genuine outbound Internet connectivity through this tunnel (skip device route check for userland SSTP)
 				connOK := true
 				if !newTun.IsUserland {
-					time.Sleep(300 * time.Millisecond)
-					connOK = CheckTunnelConnectivity(newTun.DevName, 3*time.Second)
+					if !waitContext(ctx, 300*time.Millisecond) {
+						_ = m.pool.StopTunnel(newTun.ID)
+						return
+					}
+					connOK = CheckTunnelConnectivityContext(ctx, newTun.DevName, 3*time.Second)
+				}
+				if ctx.Err() != nil {
+					_ = m.pool.StopTunnel(newTun.ID)
+					return
 				}
 				if connOK {
 					// 严苛物理入网闸门：若配置了解锁过滤（如三大 AI 全通），立即通过网卡物理实测
@@ -697,6 +769,16 @@ func (m *DynamicGroupManager) EvaluateGroup(ctx context.Context, g *DynamicGroup
 		}
 	}
 
+	if ctx.Err() != nil {
+		return
+	}
+	m.mu.RLock()
+	unchanged := m.groups[g.ID] == original
+	m.mu.RUnlock()
+	if !unchanged {
+		return
+	}
+
 	// 8. Stop any leftover old tunnels that are no longer chosen
 	for tid, oldTun := range activeTunnels {
 		stats.LogInfo("DynamicGroup", "[%s] 平滑淘汰退役旧出口: %s (%s)", g.Name, tid, oldTun.DevName)
@@ -705,7 +787,7 @@ func (m *DynamicGroupManager) EvaluateGroup(ctx context.Context, g *DynamicGroup
 
 	// 9. Update group status directly in manager map
 	m.mu.Lock()
-	if stored, ok := m.groups[g.ID]; ok {
+	if stored, ok := m.groups[g.ID]; ok && stored == original {
 		stored.ActiveTunnelIDs = chosenTunnelIDs
 		stored.LastEvaluatedAt = time.Now()
 		stored.InFallback = g.InFallback
@@ -735,41 +817,102 @@ func (m *DynamicGroupManager) EvaluateGroup(ctx context.Context, g *DynamicGroup
 
 // StartEvaluationLoop starts periodic health checking & evaluation for all dynamic groups
 func (m *DynamicGroupManager) StartEvaluationLoop(ctx context.Context) {
-	go func() {
-		// Initial evaluation shortly after boot
-		time.Sleep(3 * time.Second)
-		m.evaluateAll(ctx)
-
-		ticker := time.NewTicker(15 * time.Second)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-ctx.Done():
+	m.loopOnce.Do(func() {
+		m.queueMu.Lock()
+		m.evalQueue = make(chan string, 64)
+		m.evalPending = make(map[string]bool)
+		m.queueMu.Unlock()
+		go m.evaluationWorker(ctx)
+		go func() {
+			if !waitContext(ctx, 3*time.Second) {
 				return
-			case <-ticker.C:
-				m.evaluateAll(ctx)
 			}
+			m.evaluateAll(ctx)
+			ticker := time.NewTicker(15 * time.Second)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+					m.evaluateAll(ctx)
+				}
+			}
+		}()
+	})
+}
+
+// Slow handshakes are separated from the bounded health round. One refill worker
+// preserves device-allocation ordering; a bounded deduplicated FIFO avoids spawning
+// a goroutine per group or starving later groups on every monitor tick.
+func (m *DynamicGroupManager) enqueueEvaluation(id string) {
+	m.queueMu.Lock()
+	defer m.queueMu.Unlock()
+	if m.evalQueue == nil || m.evalPending[id] {
+		return
+	}
+	select {
+	case m.evalQueue <- id:
+		m.evalPending[id] = true
+	default:
+	}
+}
+func (m *DynamicGroupManager) evaluationWorker(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case id := <-m.evalQueue:
+			if ctx.Err() != nil {
+				return
+			}
+			g := m.GetGroup(id)
+			if g != nil && g.Enabled {
+				evalCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
+				m.EvaluateGroup(evalCtx, g)
+				cancel()
+			}
+			m.queueMu.Lock()
+			delete(m.evalPending, id)
+			m.queueMu.Unlock()
 		}
-	}()
+	}
 }
 
 func (m *DynamicGroupManager) evaluateAll(ctx context.Context) {
-	m.mu.RLock()
-	var groupIDs []string
-	for id, g := range m.groups {
+	if !m.roundMu.TryLock() {
+		return
+	}
+	defer m.roundMu.Unlock()
+	roundCtx, cancel := context.WithTimeout(ctx, 12*time.Second)
+	defer cancel()
+	ctx = roundCtx
+	groups := m.ListGroups()
+	var checkTunnels []*Tunnel
+	for _, g := range groups {
 		if g.Enabled {
-			groupIDs = append(groupIDs, id)
+			for _, id := range g.ActiveTunnelIDs {
+				checkTunnels = append(checkTunnels, m.pool.GetTunnel(id))
+			}
 		}
 	}
-	m.mu.RUnlock()
+	healthCtx, healthCancel := context.WithTimeout(ctx, healthRoundBudget)
+	health := m.healthBatch(healthCtx, checkTunnels)
+	healthCancel()
+	var groupIDs []string
+	for _, g := range groups {
+		if g.Enabled {
+			groupIDs = append(groupIDs, g.ID)
+		}
+	}
 
 	now := time.Now()
 	for _, gid := range groupIDs {
-		m.mu.RLock()
-		g, ok := m.groups[gid]
-		m.mu.RUnlock()
-		if !ok || !g.Enabled {
+		if ctx.Err() != nil {
+			return
+		}
+		g := m.GetGroup(gid)
+		if g == nil || !g.Enabled {
 			continue
 		}
 
@@ -793,12 +936,21 @@ func (m *DynamicGroupManager) evaluateAll(ctx context.Context) {
 					needsEval = true
 				}
 			} else {
-				if len(g.ActiveTunnelIDs) < g.TargetCount {
+				valid := 0
+				for _, id := range g.ActiveTunnelIDs {
+					t := m.pool.GetTunnel(id)
+					if t != nil && t.IsAvailable() {
+						if allowed, known := health[t]; !known || allowed {
+							valid++
+						}
+					}
+				}
+				if valid < g.TargetCount {
 					needsEval = true
 				}
 			}
 			if needsEval {
-				m.EvaluateGroup(ctx, g)
+				m.enqueueEvaluation(g.ID)
 			}
 			continue
 		}
@@ -830,12 +982,10 @@ func (m *DynamicGroupManager) evaluateAll(ctx context.Context) {
 					if t == nil || !t.IsHealthy() || !t.IsAvailable() {
 						continue
 					}
-					// Active egress verification: ensure traffic actually flows out to internet
-					if !t.IsUserland && !CheckTunnelConnectivity(t.DevName, 2*time.Second) {
-						stats.LogWarn("DynamicGroup", "[%s] 出口隧道 %s (%s) 探测公网不通，标记失效并触发换线", g.Name, t.ID, t.DevName)
-						t.TripCircuitBreaker(60 * time.Second)
+					if allowed, known := health[t]; known && !allowed {
 						continue
 					}
+
 					validCount++
 				}
 			}
@@ -845,10 +995,15 @@ func (m *DynamicGroupManager) evaluateAll(ctx context.Context) {
 		}
 
 		if needsEval {
-			m.EvaluateGroup(ctx, g)
+			m.enqueueEvaluation(g.ID)
 		}
 	}
 
+	// Never reap a tunnel that the separate refill worker is still establishing.
+	if !m.evalMutex.TryLock() {
+		return
+	}
+	defer m.evalMutex.Unlock()
 	// Automatic garbage collection: clean up any orphan tunnels that are not claimed
 	// by any active dynamic group and not the primary connection (tun0)
 	m.mu.RLock()
@@ -985,6 +1140,9 @@ func (m *DynamicGroupManager) evaluatePrimarySystemGroup(ctx context.Context, g 
 		}
 	}
 
+	if ctx.Err() != nil {
+		return
+	}
 	// Trigger primary connection to the best node
 	if m.primaryConnector != nil {
 		targetMode := "kernel"

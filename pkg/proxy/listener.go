@@ -145,17 +145,23 @@ func (l *PortListener) Start(ctx context.Context) error {
 		}
 		_ = client.SetDeadline(time.Now().Add(30 * time.Second))
 
+		if !l.cfg.TryAcquireProxyConnection() {
+			_ = client.Close()
+			continue
+		}
 		select {
 		case l.sem <- struct{}{}:
 			stats.GetTrafficTracker().IncConn()
 			go func(c net.Conn) {
 				defer func() {
+					l.cfg.ReleaseProxyConnection()
 					<-l.sem
 					stats.GetTrafficTracker().DecConn()
 				}()
 				l.dispatch(c)
 			}(client)
 		default:
+			l.cfg.ReleaseProxyConnection()
 			stats.LogWarn("Proxy", "端口 %d 并发超限，丢弃连接: %s", l.rule.Port, client.RemoteAddr())
 			_ = client.Close()
 		}
