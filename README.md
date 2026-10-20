@@ -7,13 +7,13 @@
 [English](README_EN.md) | [简体中文](README.md)
 
 [![Release](https://img.shields.io/github/v/release/xiumuzidiao0/NXGate?style=flat-square&label=Release&color=16a34a)](https://github.com/xiumuzidiao0/NXGate/releases/latest)
-[![Go Version](https://img.shields.io/badge/Go-1.25.13+-00ADD8?style=flat-square&logo=go)](https://go.dev/)
+[![Go Version](https://img.shields.io/badge/Go-1.26.10+-00ADD8?style=flat-square&logo=go)](https://go.dev/)
 [![Platform](https://img.shields.io/badge/Platform-amd64%20%7C%20arm64%20%7C%20386%20%7C%20arm-6366f1?style=flat-square)](https://github.com/xiumuzidiao0/NXGate/releases/latest)
 [![License](https://img.shields.io/badge/License-GPL--3.0-334155?style=flat-square)](LICENSE)
 
 </div>
 
-NXGate 是一款采用 **Go 1.25.13+ 原生高并发模型与 Linux 内核策略路由** 构建的高性能自适应多出口智能路由网关系统。系统被构建为单一静态可执行二进制文件（内置 5 视图响应式 SPA Web 管理控制台，并提供 Material 3 原生 Android 配套客户端），常驻内存小于 15MB，专为 Linux VPS 与边缘节点设计，具备高并发高吞吐、零路由污染与底层硬件级策略路由强隔离能力。
+NXGate 是一款采用 **Go 1.26.10+ 原生高并发模型与 Linux 内核策略路由** 构建的高性能自适应多出口智能路由网关系统。系统被构建为单一静态可执行二进制文件（内置 5 视图响应式 SPA Web 管理控制台，并提供 Material 3 原生 Android 配套客户端），常驻内存小于 15MB，专为 Linux VPS 与边缘节点设计，具备高并发高吞吐、零路由污染与底层硬件级策略路由强隔离能力。
 
 ---
 
@@ -319,7 +319,7 @@ systemctl is-enabled nxgate
 
 ### 本地编译运行
 
-构建环境需满足 Go 1.25.13+：
+构建环境需满足 Go 1.26.10+：
 
 ```bash
 # 1. 克隆代码仓库

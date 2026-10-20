@@ -7,13 +7,13 @@
 [English](README_EN.md) | [简体中文](README.md)
 
 [![Release](https://img.shields.io/github/v/release/xiumuzidiao0/NXGate?style=flat-square&label=Release&color=16a34a)](https://github.com/xiumuzidiao0/NXGate/releases/latest)
-[![Go Version](https://img.shields.io/badge/Go-1.25.13+-00ADD8?style=flat-square&logo=go)](https://go.dev/)
+[![Go Version](https://img.shields.io/badge/Go-1.26.10+-00ADD8?style=flat-square&logo=go)](https://go.dev/)
 [![Platform](https://img.shields.io/badge/Platform-amd64%20%7C%20arm64%20%7C%20386%20%7C%20arm-6366f1?style=flat-square)](https://github.com/xiumuzidiao0/NXGate/releases/latest)
 [![License](https://img.shields.io/badge/License-GPL--3.0-334155?style=flat-square)](LICENSE)
 
 </div>
 
-NXGate is a high-performance adaptive multi-egress intelligent routing gateway built on **Go 1.25.13+ native concurrency models and the Linux kernel policy routing stack**. Packaged as a single static executable (with an embedded 5-view responsive Single Page Application Web Console and a companion Material 3 native Android management client), NXGate operates with a resident memory footprint of less than 15MB. It is engineered specifically for Linux VPS and edge instances, featuring high concurrency, zero host route contamination, and kernel-level isolated policy routing.
+NXGate is a high-performance adaptive multi-egress intelligent routing gateway built on **Go 1.26.10+ native concurrency models and the Linux kernel policy routing stack**. Packaged as a single static executable (with an embedded 5-view responsive Single Page Application Web Console and a companion Material 3 native Android management client), NXGate operates with a resident memory footprint of less than 15MB. It is engineered specifically for Linux VPS and edge instances, featuring high concurrency, zero host route contamination, and kernel-level isolated policy routing.
 
 ---
 
@@ -247,7 +247,7 @@ Configuration file is located at `/opt/nxgate/config.env` (compatible with legac
 
 ### Local Compilation & Execution
 
-Requires Go 1.25.13+:
+Requires Go 1.26.10+:
 
 ```bash
 # 1. Clone repository
