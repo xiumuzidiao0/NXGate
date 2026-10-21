@@ -31,6 +31,11 @@ type Manager struct {
 	sstpTunnel *sstp.Tunnel
 	driverMode DriverMode
 
+	// failoverDelegate, when set and returning true, takes over primary egress
+	// recovery so the unconstrained global "best node" pick never overrides a
+	// governing dynamic group's country / IP-type / purity / unlock constraints.
+	failoverDelegate func() bool
+
 	mu           sync.RWMutex
 	epoch        uint64
 	primaryID    string
@@ -93,6 +98,18 @@ func (m *Manager) SetProxyAttacher(attacher UserlandProxyAttacher) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.attacher = attacher
+}
+
+// SetPrimaryFailoverDelegate installs a handler consulted before the built-in
+// unconstrained "best node" failover pick. When it reports true, primary egress
+// recovery is left entirely to that handler: the system-primary dynamic group
+// owns the country / IP-type / purity / unlock constraints, and the global pick
+// would silently violate them. The handler must not block for long and must be
+// safe to call without holding the manager lock.
+func (m *Manager) SetPrimaryFailoverDelegate(fn func() bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.failoverDelegate = fn
 }
 
 func (m *Manager) Snapshot() StateSnapshot {
@@ -437,6 +454,17 @@ func (m *Manager) Disconnect(reason string) {
 }
 
 func (m *Manager) TriggerAutoFailover() {
+	m.mu.RLock()
+	delegate := m.failoverDelegate
+	m.mu.RUnlock()
+	if delegate != nil && delegate() {
+		m.mu.Lock()
+		m.status = StatusReconnecting
+		m.lastMessage = "检测到隧道中断，已转交主出口动态组按既定国家/纯净度约束重新选路..."
+		m.mu.Unlock()
+		return
+	}
+
 	m.mu.Lock()
 	if m.isConnecting {
 		m.mu.Unlock()

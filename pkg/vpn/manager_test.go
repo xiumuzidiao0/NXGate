@@ -2,6 +2,7 @@ package vpn
 
 import (
 	"testing"
+	"time"
 
 	"aimili-vpngate-go/pkg/config"
 	"aimili-vpngate-go/pkg/nodes"
@@ -81,5 +82,39 @@ func TestConnectWithModeAutoDowngrade(t *testing.T) {
 	snap := mgr.Snapshot()
 	if snap.DriverMode != DriverUserland {
 		t.Fatalf("expected driver mode to be downgraded to userland, got %s", snap.DriverMode)
+	}
+}
+
+// TestPrimaryFailoverDelegateTakesPrecedence verifies that a governing dynamic
+// group (country / IP-type / purity constraints) is consulted before the
+// unconstrained global best-node pick, and that no global selection happens when
+// the delegate claims ownership of primary egress recovery.
+func TestPrimaryFailoverDelegateTakesPrecedence(t *testing.T) {
+	t.Setenv("DRIVER_MODE", "userland")
+	cfg := &config.Config{DataDir: t.TempDir()}
+	mgr := NewManager(cfg, nil, nil)
+
+	called := make(chan struct{}, 1)
+	mgr.SetPrimaryFailoverDelegate(func() bool {
+		called <- struct{}{}
+		return true
+	})
+
+	mgr.TriggerAutoFailover()
+
+	select {
+	case <-called:
+	case <-time.After(2 * time.Second):
+		t.Fatal("failover delegate was never consulted")
+	}
+
+	snap := mgr.Snapshot()
+	if snap.Status != StatusReconnecting {
+		t.Fatalf("expected StatusReconnecting while the delegate owns recovery, got %s", snap.Status)
+	}
+	// pool is nil: reaching the built-in pick would panic, so a clean return also
+	// proves the global selection path was skipped.
+	if snap.ReconnectCount != 0 {
+		t.Fatalf("expected delegate-owned failover to skip the built-in reconnect counter, got %d", snap.ReconnectCount)
 	}
 }
