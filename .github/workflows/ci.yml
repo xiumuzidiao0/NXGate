@@ -38,6 +38,13 @@ jobs:
         with:
           node-version: "20"
 
+      - name: Run Offline Installer Regressions
+        run: |
+          bash -n install.sh
+          shellcheck --severity=error install.sh
+          python3 scripts/tests/test_installer.py
+          bash scripts/test-security-cli.sh
+
       - name: Check version consistency
         run: |
           chmod +x scripts/check-version.sh

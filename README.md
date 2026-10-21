@@ -240,13 +240,17 @@ NXGate 实现了一套单端口双栈协议嗅探与中继引擎：
 
 ### 一键安装与部署
 
-在目标 Linux VPS（支持 Debian / Ubuntu / CentOS / RHEL / Rocky / AlmaLinux / Alpine）以 `root` 权限执行：
+在使用 systemd 的目标 Linux VPS（Debian / Ubuntu / CentOS / RHEL / Rocky / AlmaLinux / Fedora）中，以 `root` 权限执行。先下载并检查脚本，再运行：
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/xiumuzidiao0/NXGate/main/install.sh | bash
+curl -fL https://raw.githubusercontent.com/xiumuzidiao0/NXGate/main/install.sh -o install.sh
+less install.sh
+bash install.sh
 ```
 
-安装脚本将自动执行架构匹配、拉取预编译可执行文件、配置网络守护进程服务并写入全局管理指令。所有 sing-box 边缘抗审查网关管理脚本已完全原生内嵌（`//go:embed`），部署过程**零外部 GitHub 脚本网络依赖**，在受限网络环境下亦可秒级完成自释放与初始化部署。
+安装器需要交互终端，最终确认前不安装依赖；sing-box 及其公开入站默认跳过。脚本不再自动修改 SSH、防火墙或策略路由，后台默认仅监听回环地址。普通 Alpine/OpenRC 或无 systemd 容器请使用独立进程或 Docker Compose。已有旧脚本写入的规则不会自动删除，详见 [安装器行为与安全边界](docs/INSTALLER_SAFETY.md)。
+
+安装脚本按架构下载并校验发行二进制，配置 systemd 服务和管理命令；下载失败时可能回退源码构建。可选 sing-box 管理脚本优先从本地源码或 NXGate 内嵌资源提取，必要时从仓库下载；实际时间取决于网络、工具链和主机性能。
 
 ### CLI 快捷指令参考
 

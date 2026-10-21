@@ -3,7 +3,8 @@ set -e
 
 # ==============================================================================
 # NXGate (Go 高性能多出口网关) 一键安装与终端管理脚本
-# 支持系统: Ubuntu / Debian / CentOS / RHEL / AlmaLinux / Rocky / Fedora / Alpine
+# 支持使用 systemd 的 Linux: Ubuntu / Debian / CentOS / RHEL / AlmaLinux / Rocky / Fedora
+# OpenRC Alpine / 无 systemd 容器请使用独立进程或 Docker Compose。
 # ==============================================================================
 
 RED='\033[0;31m'
@@ -26,7 +27,7 @@ is_elf_binary() {
 
 INSTALL_DIR="/opt/nxgate"
 if [ -d "/opt/aimilivpn" ] && [ ! -d "/opt/nxgate" ]; then
-    mv /opt/aimilivpn /opt/nxgate 2>/dev/null || INSTALL_DIR="/opt/aimilivpn"
+    INSTALL_DIR="/opt/aimilivpn" # 只识别旧目录；读取状态不迁移文件
 fi
 BIN_PATH="${INSTALL_DIR}/nxgate"
 CONFIG_FILE="${INSTALL_DIR}/config.env"
@@ -101,7 +102,8 @@ detect_arch() {
             GO_ARCH="arm"
             ;;
         *)
-            GO_ARCH="amd64"
+            echo "不支持的 CPU 架构: $ARCH" >&2
+            return 1
             ;;
     esac
     export GO_ARCH
@@ -145,7 +147,7 @@ download_release_binary() {
             continue
         fi
 
-        if curl -sSL -f -m 30 "$u" -o "${target_file}.tmp" 2>/dev/null && [ -s "${target_file}.tmp" ]; then
+        if curl -fL --progress-bar --connect-timeout 15 --max-time 300 --speed-limit 1024 --speed-time 60 "$u" -o "${target_file}.tmp" && [ -s "${target_file}.tmp" ]; then
             if head -c 4 "${target_file}.tmp" | grep -q 'ELF'; then
                 local actual_hash
                 actual_hash=$(sha256sum "${target_file}.tmp" | awk '{print $1}' | tr '[:upper:]' '[:lower:]')
@@ -184,7 +186,6 @@ install_dependencies() {
         $PKG_MGR install -y jq openvpn curl git ca-certificates iptables iproute psmisc || \
         $PKG_MGR install -y jq openvpn curl git ca-certificates iptables iproute2 psmisc
     fi
-    ensure_ssh_firewall_and_routing_safety
 }
 
 # 5. 安装或确保 Go 编译环境
@@ -234,73 +235,152 @@ ensure_go() {
         fi
     fi
 
-    echo -e "${YELLOW}正在安装 Go ${REQUIRED_GO_VERSION} 编译环境 (架构: ${GO_ARCH})...${PLAIN}"
-    local go_tar="go${REQUIRED_GO_VERSION}.linux-${GO_ARCH}.tar.gz"
-    local go_urls=(
-        "https://mirrors.aliyun.com/golang/${go_tar}"
-        "https://golang.google.cn/dl/${go_tar}"
-        "https://go.dev/dl/${go_tar}"
-    )
-    local dl_ok=0
-    for u in "${go_urls[@]}"; do
-        echo -e "  -> 尝试从镜像源下载 Go: $u ..."
-        if curl -sSL -f -m 60 "$u" -o "/tmp/${go_tar}" 2>/dev/null && [ -s "/tmp/${go_tar}" ]; then
-            if tar -xzf "/tmp/${go_tar}" -C /usr/local 2>/dev/null; then
-                dl_ok=1
-                rm -f "/tmp/${go_tar}"
-                break
-            fi
-            rm -f "/tmp/${go_tar}"
+    local bundled_go="${INSTALL_DIR}/toolchains/go${REQUIRED_GO_VERSION}/bin"
+    if [ -x "$bundled_go/go" ]; then
+        export PATH="$bundled_go:$PATH"
+        if go_version_supported; then
+            return 0
         fi
-    done
-
-    if [ "$dl_ok" = "1" ]; then
-        export PATH="/usr/local/go/bin:$PATH"
-        echo 'export PATH="/usr/local/go/bin:$PATH"' >> /etc/profile
-        echo -e "${GREEN}Go 编译环境安装完成！${PLAIN}"
-    else
-        echo -e "${RED}无法下载 Go 编译环境，请检查网络连接。${PLAIN}"
     fi
-    export PATH="/usr/local/go/bin:$PATH"
-    echo 'export PATH="/usr/local/go/bin:$PATH"' >> /etc/profile
+    install_verified_go
+}
+
+# 仅在官方元数据与下载包 SHA256 匹配后，安装到 NXGate 专用版本目录。
+install_verified_go() {
+    local go_arch="$GO_ARCH"
+    [ "$go_arch" = arm ] && go_arch=armv6l
+    local go_tar="go${REQUIRED_GO_VERSION}.linux-${go_arch}.tar.gz"
+    local work expected actual tool_root target stage
+    work=$(mktemp -d) || return 1
+    if ! curl --proto '=https' --proto-redir '=https' -fsSL --connect-timeout 15 --max-time 60 \
+        'https://go.dev/dl/?mode=json&include=all' -o "$work/releases.json"; then
+        rm -rf "$work"
+        echo '无法取得 Go 官方校验元数据，未安装 Go。' >&2
+        return 1
+    fi
+    expected=$(jq -er --arg version "go${REQUIRED_GO_VERSION}" --arg name "$go_tar" --arg arch "$go_arch" \
+        '[.[] | select(.version == $version) | .files[] |
+          select(.filename == $name and .os == "linux" and .arch == $arch and .kind == "archive") |
+          .sha256] | if length == 1 then .[0] else error("missing or ambiguous archive") end' "$work/releases.json") || {
+        rm -rf "$work"; return 1;
+    }
+    if [[ ! "$expected" =~ ^[0-9a-f]{64}$ ]]; then
+        rm -rf "$work"; return 1
+    fi
+    echo "正在下载 Go ${REQUIRED_GO_VERSION} (${go_arch})，低带宽请耐心等待..."
+    if ! curl --proto '=https' --proto-redir '=https' -fL --progress-bar --connect-timeout 15 \
+        --max-time 900 --speed-limit 1024 --speed-time 60 "https://go.dev/dl/${go_tar}" -o "$work/go.tar.gz"; then
+        rm -rf "$work"; return 1
+    fi
+    actual=$(sha256sum "$work/go.tar.gz")
+    if [ "${actual%% *}" != "$expected" ]; then
+        echo 'Go SHA256 校验失败，拒绝解压；原有 Go 未改动。' >&2
+        rm -rf "$work"; return 1
+    fi
+    tool_root="${INSTALL_DIR}/toolchains"
+    target="$tool_root/go${REQUIRED_GO_VERSION}"
+    if [ -e "$target" ]; then
+        # 不覆盖已有工具目录；损坏的目录需管理员核查。
+        if [ ! -x "$target/bin/go" ] || ! "$target/bin/go" version | grep -Fq "go${REQUIRED_GO_VERSION} "; then
+            echo "已有 $target 无效，请检查后再安装；未覆盖。" >&2
+            rm -rf "$work"; return 1
+        fi
+    else
+        mkdir -p "$tool_root" || { rm -rf "$work"; return 1; }
+        stage=$(mktemp -d "$tool_root/.go-stage.XXXXXX") || { rm -rf "$work"; return 1; }
+        if ! tar -xzf "$work/go.tar.gz" -C "$stage" ||
+            [ ! -x "$stage/go/bin/go" ] ||
+            ! "$stage/go/bin/go" version | grep -Fq "go${REQUIRED_GO_VERSION} "; then
+            rm -rf "$stage" "$work"; return 1
+        fi
+        if ! mv -T "$stage/go" "$target"; then
+            rm -rf "$stage" "$work"; return 1
+        fi
+        rmdir "$stage"
+    fi
+    rm -rf "$work"
+    export PATH="$target/bin:$PATH"
+    go_version_supported
 }
 
 # 辅助生成随机字符串与密码 (连续流式读取，消除熵池截断)
 rand_str() {
     local len="${1:-8}"
-    LC_ALL=C tr -dc 'A-Za-z0-9' < /dev/urandom | head -c "$len" || echo "aimili"
+    LC_ALL=C tr -dc 'A-Za-z0-9' < /dev/urandom 2>/dev/null | head -c "$len" || echo "aimili"
 }
 
 rand_pass() {
     local len="${1:-12}"
-    LC_ALL=C tr -dc 'A-Za-z0-9' < /dev/urandom | head -c "$len" || echo "nxgate123"
+    LC_ALL=C tr -dc 'A-Za-z0-9' < /dev/urandom 2>/dev/null | head -c "$len" || echo "nxgate123"
 }
 
-# 兼容管道执行与终端直接执行的用户输入函数 (使用安全 printf -v 赋值，杜绝 eval 注入)
+# 始终从控制终端读取；不消费 curl | bash 的脚本流。
+require_terminal() {
+    local tty_fd
+    if ! { exec {tty_fd}<>/dev/tty; } 2>/dev/null; then
+        echo '需要交互终端；请在 SSH 终端下载脚本后用 bash 执行。未继续安装。' >&2
+        exit 1
+    fi
+    if [ ! -t "$tty_fd" ]; then
+        exec {tty_fd}>&-
+        echo '没有可用的交互终端，未继续安装。' >&2
+        exit 1
+    fi
+    exec {tty_fd}>&-
+}
+
+require_systemd() {
+    if ! command -v systemctl >/dev/null 2>&1 || [ ! -d /run/systemd/system ] ||
+        ! systemctl show --property=Version --value >/dev/null 2>&1; then
+        echo '此安装器需要正在运行的 systemd；OpenRC Alpine/普通容器请使用独立进程或 Docker Compose。未安装依赖或修改系统。' >&2
+        exit 1
+    fi
+}
+
+# 提示出现前关闭回显，避免快速粘贴的密码在 read -s 生效前泄露。
+# 子进程的 EXIT trap 在 EOF/中断时也恢复原终端状态。
+read_terminal_secret() (
+    local fd="$1" message="$2" saved value
+    saved=$(stty -g <&"$fd") || exit 1
+    trap 'stty "$saved" <&"$fd"' EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    stty -echo <&"$fd" || exit 1
+    printf '%s' "$message" >&"$fd"
+    if ! IFS= read -r -u "$fd" value; then
+        printf '\n输入已中断，停止操作。\n' >&"$fd"
+        exit 1
+    fi
+    printf '\n' >&"$fd"
+    printf '%s' "$value"
+)
+
 prompt_input() {
-    local prompt_msg="$1"
-    local default_val="$2"
-    local result_var="$3"
-    local input_val=""
-
-    if [ -t 0 ]; then
-        read -p "$prompt_msg" input_val
-    elif [ -c /dev/tty ] && [ -r /dev/tty ]; then
-        read -p "$prompt_msg" input_val </dev/tty 2>/dev/null || true
-    fi
-
-    if [ -z "$input_val" ]; then
-        printf -v "$result_var" '%s' "$default_val"
+    local prompt_msg="$1" default_val="$2" result_var="$3"
+    local input_val="" tty_fd
+    require_terminal
+    exec {tty_fd}<>/dev/tty
+    if [ "${4:-}" = secret ]; then
+        if ! input_val=$(read_terminal_secret "$tty_fd" "$prompt_msg"); then
+            exec {tty_fd}>&-; exit 1
+        fi
     else
-        printf -v "$result_var" '%s' "$input_val"
+        printf '%s' "$prompt_msg" >&"$tty_fd"
+        if ! IFS= read -r -u "$tty_fd" input_val; then
+            printf '\n输入已中断，停止操作。\n' >&"$tty_fd"
+            exec {tty_fd}>&-; exit 1
+        fi
     fi
+    exec {tty_fd}>&-
+    printf -v "$result_var" '%s' "${input_val:-$default_val}"
 }
 
 # 6. 交互式自定义配置与保存
 configure_install_params() {
-    mkdir -p "${INSTALL_DIR}"
-    mkdir -p "${INSTALL_DIR}/data"
-
+    if [ -f "$(settings_json_path)" ] && ! command -v jq >/dev/null 2>&1; then
+        echo '已有 settings.json，需要 jq 读取保存设置；请先安装 jq，避免用初始化值覆盖。' >&2
+        return 1
+    fi
     local def_web_port="8787"
     local def_path=$(rand_str 8)
     local def_user="admin"
@@ -309,11 +389,12 @@ configure_install_params() {
 
     # 如果已有配置文件，优先以已有值作为默认
     if [ -f "${CONFIG_FILE}" ]; then
-        local exist_web=$(get_config_val "UI_PORT")
-        local exist_path=$(get_config_val "UI_PATH")
-        local exist_user=$(get_config_val "UI_USERNAME")
-        local exist_pass=$(get_config_val "UI_PASSWORD")
-        local exist_proxy=$(get_config_val "LOCAL_PROXY_PORT")
+        local exist_web exist_path exist_user exist_pass exist_proxy
+        exist_web=$(get_config_val "UI_PORT") || return 1
+        exist_path=$(get_config_val "UI_PATH") || return 1
+        exist_user=$(get_config_val "UI_USERNAME") || return 1
+        exist_pass=$(get_config_val "UI_PASSWORD") || return 1
+        exist_proxy=$(get_config_val "LOCAL_PROXY_PORT") || return 1
 
         [ -n "$exist_web" ] && def_web_port="$exist_web"
         [ -n "$exist_path" ] && def_path="$exist_path"
@@ -347,7 +428,7 @@ configure_install_params() {
     [ -z "$custom_user" ] && custom_user="${def_user}"
 
     # 4. 管理员密码
-    prompt_input "4. 请输入 Web 管理员密码 (默认随机密码: ${def_pass}): " "${def_pass}" custom_pass
+    prompt_input "4. 请输入 Web 管理员密码 (回车保留原密码或使用随机密码，输入不回显): " "${def_pass}" custom_pass secret
     [ -z "$custom_pass" ] && custom_pass="${def_pass}"
 
     # 5. 代理出站端口
@@ -368,10 +449,17 @@ configure_install_params() {
     echo -e " Web 管理端口   : ${CYAN}${custom_web_port}${PLAIN}"
     echo -e " 安全访问路径   : ${CYAN}/${custom_path}${PLAIN}"
     echo -e " 管理员账号     : ${YELLOW}${custom_user}${PLAIN}"
-    echo -e " 管理员密码     : ${YELLOW}${custom_pass}${PLAIN}"
+    echo -e " 管理员密码     : 已设置（安装完成后请妥善保存）"
     echo -e " 本地代理端口   : ${CYAN}${custom_proxy_port}${PLAIN}"
     echo -e "${GREEN}-------------------------------------------------------${PLAIN}"
 
+    local confirmed
+    prompt_input "确认保存以上配置并安装 NXGate？[y/N]: " "n" confirmed
+    case "${confirmed,,}" in y|yes) ;; *) echo '已取消，未保存配置或安装。'; exit 1 ;; esac
+    mkdir -p "${INSTALL_DIR}/data"
+    # 创建时即限制权限，不等写入明文凭据后再收紧。
+    (umask 077; : > "${CONFIG_FILE}")
+    chmod 600 "${CONFIG_FILE}"
     cat > "${CONFIG_FILE}" <<EOF
 # NXGate 运行环境变量配置
 DATA_DIR=${INSTALL_DIR}/data
@@ -486,88 +574,10 @@ EOF
     cp -f /usr/bin/nx /usr/local/bin/aimili 2>/dev/null || true
 }
 
-# 7.4.1 全方位确保 SSH 端口在所有防火墙与策略路由中永远畅通放行 (绝对杜绝断连)
-ensure_ssh_firewall_and_routing_safety() {
-    local ssh_ports=()
-    if [ -f /etc/ssh/sshd_config ]; then
-        while read -r p; do
-            [[ "$p" =~ ^[0-9]+$ ]] && ssh_ports+=("$p")
-        done < <(grep -E '^[[:space:]]*Port[[:space:]]+[0-9]+' /etc/ssh/sshd_config 2>/dev/null | awk '{print $2}')
-    fi
-    for f in /etc/ssh/sshd_config.d/*.conf; do
-        if [ -f "$f" ]; then
-            while read -r p; do
-                [[ "$p" =~ ^[0-9]+$ ]] && ssh_ports+=("$p")
-            done < <(grep -E '^[[:space:]]*Port[[:space:]]+[0-9]+' "$f" 2>/dev/null | awk '{print $2}')
-        fi
-    done
-    ssh_ports+=(22)
-
-    local unique_ports=($(echo "${ssh_ports[@]}" | tr ' ' '\n' | sort -nu))
-    for sp in "${unique_ports[@]}"; do
-        [ -z "$sp" ] && continue
-
-        # 1. 内核策略路由锁定：确保 SSH 入站及出站流量永远走主路由表(物理网卡默认网关)，不受任何隧道干扰
-        if command -v ip >/dev/null 2>&1; then
-            ip rule show 2>/dev/null | grep -qw "sport ${sp} lookup main" || ip rule add sport "${sp}" table main priority 50 2>/dev/null || true
-            ip rule show 2>/dev/null | grep -qw "dport ${sp} lookup main" || ip rule add dport "${sp}" table main priority 50 2>/dev/null || true
-        fi
-
-        # 2. UFW 防火墙放行
-        if command -v ufw >/dev/null 2>&1; then
-            ufw allow "${sp}/tcp" >/dev/null 2>&1 || true
-            ufw allow OpenSSH >/dev/null 2>&1 || true
-        fi
-
-        # 3. Firewalld 防火墙放行
-        if command -v firewall-cmd >/dev/null 2>&1 && systemctl is-active firewalld >/dev/null 2>&1; then
-            firewall-cmd --zone=public --add-service=ssh --permanent >/dev/null 2>&1 || true
-            firewall-cmd --zone=public --add-port="${sp}/tcp" --permanent >/dev/null 2>&1 || true
-        fi
-
-        # 4. iptables (IPv4) 放行
-        if command -v iptables >/dev/null 2>&1; then
-            iptables -C INPUT -p tcp --dport "${sp}" -j ACCEPT 2>/dev/null || iptables -I INPUT -p tcp --dport "${sp}" -j ACCEPT 2>/dev/null || true
-        fi
-
-        # 5. ip6tables (IPv6) 放行
-        if command -v ip6tables >/dev/null 2>&1; then
-            ip6tables -C INPUT -p tcp --dport "${sp}" -j ACCEPT 2>/dev/null || ip6tables -I INPUT -p tcp --dport "${sp}" -j ACCEPT 2>/dev/null || true
-        fi
-    done
-}
-
-# 7.5 配置并放行防火墙端口
+# 不接管主机 SSH、防火墙或策略路由。回环监听不需要公网放行。
+# 对外服务由管理员按实际监听地址在现用防火墙/云安全组中显式配置。
 configure_firewall() {
-    # 强制优先放行 SSH 端口，无论后续防火墙如何重载，SSH 绝不断连
-    ensure_ssh_firewall_and_routing_safety
-
-    local port="$1"
-    [ -z "$port" ] && return 0
-    echo -e "  -> 正在检查并放行防火墙端口 ${port}/tcp ..."
-
-    # 1. UFW (Debian / Ubuntu)
-    if command -v ufw >/dev/null 2>&1; then
-        if ufw status 2>/dev/null | grep -qw "active"; then
-            ufw allow "${port}/tcp" >/dev/null 2>&1 || true
-        fi
-    fi
-
-    # 2. Firewalld (CentOS / RHEL / Rocky / AlmaLinux / Fedora)
-    if command -v firewall-cmd >/dev/null 2>&1 && systemctl is-active firewalld >/dev/null 2>&1; then
-        firewall-cmd --zone=public --add-port="${port}/tcp" --permanent >/dev/null 2>&1 || true
-        firewall-cmd --reload >/dev/null 2>&1 || true
-    fi
-
-    # 3. iptables (通用)
-    if command -v iptables >/dev/null 2>&1; then
-        iptables -C INPUT -p tcp --dport "${port}" -j ACCEPT 2>/dev/null || iptables -I INPUT -p tcp --dport "${port}" -j ACCEPT 2>/dev/null || true
-    fi
-
-    # 4. ip6tables (IPv6)
-    if command -v ip6tables >/dev/null 2>&1; then
-        ip6tables -C INPUT -p tcp --dport "${port}" -j ACCEPT 2>/dev/null || ip6tables -I INPUT -p tcp --dport "${port}" -j ACCEPT 2>/dev/null || true
-    fi
+    echo "未修改防火墙或路由。端口 ${1}/tcp 默认用于本机；远程管理建议 SSH 隧道或 HTTPS 反向代理。"
 }
 
 # 8. 安装 systemd 服务
@@ -770,13 +780,13 @@ menu_modify_credentials() {
         echo -e "  [2] 一键随机重置 12 位安全强密码"
         echo -e "  [0] 返回主菜单"
         echo -e "${BLUE}=======================================================${PLAIN}"
-        read -p "请选择操作 [0-2]: " cred_choice
+        prompt_input "请选择操作 [0-2]: " "" cred_choice
 
         case "$cred_choice" in
             1)
                 echo ""
-                read -p "请输入新管理账号 (回车保持不变): " new_u
-                read -p "请输入新管理密码 (不能为空, 回车保持不变): " new_p
+                prompt_input "请输入新管理账号 (回车保持不变): " "" new_u
+                prompt_input "请输入新管理密码 (不能为空, 回车保持不变): " "" new_p secret
                 [ -n "$new_u" ] && set_config_val "UI_USERNAME" "$new_u"
                 [ -n "$new_p" ] && set_config_val "UI_PASSWORD" "$new_p"
                 systemctl restart nxgate 2>/dev/null || systemctl restart aimilivpn 2>/dev/null || true
@@ -788,7 +798,7 @@ menu_modify_credentials() {
                 set_config_val "UI_PASSWORD" "$rand_p"
                 systemctl restart nxgate 2>/dev/null || systemctl restart aimilivpn 2>/dev/null || true
                 echo -e "${GREEN}密码已成功重置为: ${YELLOW}${rand_p}${PLAIN}"
-                read -p "按回车键继续..."
+                prompt_input "按回车键继续..." "" ignored_input
                 ;;
             0)
                 break
@@ -822,11 +832,11 @@ menu_modify_ports_and_path() {
         echo -e "  [4] 一键随机重新生成安全路径 (防扫描防爆破)"
         echo -e "  [0] 返回主菜单"
         echo -e "${BLUE}=======================================================${PLAIN}"
-        read -p "请选择操作 [0-4]: " p_choice
+        prompt_input "请选择操作 [0-4]: " "" p_choice
 
         case "$p_choice" in
             1)
-                read -p "请输入新的 Web 管理端口 [1-65535]: " n_web
+                prompt_input "请输入新的 Web 管理端口 [1-65535]: " "" n_web
                 if [[ "$n_web" =~ ^[0-9]+$ ]] && [ "$n_web" -ge 1 ] && [ "$n_web" -le 65535 ]; then
                     if [ "$n_web" = "$curr_proxy" ]; then
                         echo -e "${RED}错误: Web 端口不能与代理端口相同！${PLAIN}"; sleep 1.5
@@ -841,7 +851,7 @@ menu_modify_ports_and_path() {
                 fi
                 ;;
             2)
-                read -p "请输入新的 本地代理端口 [1-65535]: " n_proxy
+                prompt_input "请输入新的 本地代理端口 [1-65535]: " "" n_proxy
                 if [[ "$n_proxy" =~ ^[0-9]+$ ]] && [ "$n_proxy" -ge 1 ] && [ "$n_proxy" -le 65535 ]; then
                     if [ "$n_proxy" = "$curr_web" ]; then
                         echo -e "${RED}错误: 代理端口不能与 Web 端口相同！${PLAIN}"; sleep 1.5
@@ -855,7 +865,7 @@ menu_modify_ports_and_path() {
                 fi
                 ;;
             3)
-                read -p "请输入新的安全访问路径 (无需斜杠，例如 admin 或 myvpn): " n_path
+                prompt_input "请输入新的安全访问路径 (无需斜杠，例如 admin 或 myvpn): " "" n_path
                 n_path=$(echo "${n_path}" | tr -d '/' | tr -d ' ')
                 if [ -n "$n_path" ]; then
                     set_config_val "UI_PATH" "$n_path"
@@ -868,7 +878,7 @@ menu_modify_ports_and_path() {
                 set_config_val "UI_PATH" "$rand_p"
                 systemctl restart aimilivpn
                 echo -e "${GREEN}安全访问路径已随机更新为: ${YELLOW}/${rand_p}${PLAIN}"
-                read -p "按回车键继续..."
+                prompt_input "按回车键继续..." "" ignored_input
                 ;;
             0)
                 break
@@ -902,7 +912,7 @@ menu_list_nodes() {
         echo "$line"
     done
     echo ""
-    read -p "按回车键返回主菜单..."
+    prompt_input "按回车键返回主菜单..." "" ignored_input
 }
 
 menu_update() {
@@ -913,7 +923,7 @@ menu_update() {
         if ! is_elf_binary "${BIN_PATH}.tmp"; then
             echo -e "${RED}错误: 下载的更新文件不是有效的 ELF 二进制程序，拒绝应用！${PLAIN}"
             rm -f "${BIN_PATH}.tmp"
-            read -p "按回车键返回主菜单..."
+            prompt_input "按回车键返回主菜单..." "" ignored_input
             return 1
         fi
         mv -f "${BIN_PATH}.tmp" "${BIN_PATH}"
@@ -922,12 +932,11 @@ menu_update() {
         curl -sSL -f "https://raw.githubusercontent.com/xiumuzidiao0/NXGate/main/install.sh" -o "${INSTALL_DIR}/install.sh" 2>/dev/null || true
         chmod +x "${INSTALL_DIR}/install.sh" 2>/dev/null || true
         register_shortcuts
-        ensure_ssh_firewall_and_routing_safety
         systemctl restart nxgate 2>/dev/null || systemctl restart aimilivpn 2>/dev/null || true
         local new_ver=$(get_app_version)
         echo -e "\n${GREEN}🎉 NXGate 已成功极速更新至最新构建 (v${new_ver}) 并重启！${PLAIN}"
         echo -e " ${BOLD}快捷指令已注册${PLAIN}: 在终端随时输入 ${CYAN}nx${PLAIN} 唤出管理控制中心"
-        read -p "按回车键返回主菜单..."
+        prompt_input "按回车键返回主菜单..." "" ignored_input
         return
     fi
 
@@ -946,7 +955,6 @@ menu_update() {
                 mkdir -p "${INSTALL_DIR}/mirror"
                 cp -f "${TMP_DIR}/mirror/vpngate.csv" "${INSTALL_DIR}/mirror/" 2>/dev/null || true
                 register_shortcuts
-                ensure_ssh_firewall_and_routing_safety
                 systemctl restart nxgate 2>/dev/null || systemctl restart aimilivpn 2>/dev/null || true
                 echo -e "\n${GREEN}🎉 源码就地编译更新完成并已重启服务！(v$(get_app_version))${PLAIN}"
                 echo -e " ${BOLD}快捷指令已注册${PLAIN}: 在终端随时输入 ${CYAN}nx${PLAIN} 唤出管理控制中心"
@@ -960,12 +968,12 @@ menu_update() {
     else
         echo -e "${RED}拉取源码失败，请检查网络连接。${PLAIN}"
     fi
-    read -p "按回车键返回主菜单..."
+    prompt_input "按回车键返回主菜单..." "" ignored_input
 }
 
 menu_uninstall() {
     echo -e "\n${RED}警告: 即将完全卸载 NXGate 服务及其配置文件！${PLAIN}"
-    read -p "确认卸载吗？(y/N): " confirm
+    prompt_input "确认卸载吗？(y/N): " "" confirm
     if [ "$confirm" = "y" ] || [ "$confirm" = "Y" ]; then
         systemctl stop nxgate 2>/dev/null || true
         systemctl disable nxgate 2>/dev/null || true
@@ -977,7 +985,7 @@ menu_uninstall() {
         rm -rf "${INSTALL_DIR}" /opt/aimilivpn 2>/dev/null || true
 
         if type -P sing-box &>/dev/null || [ -d "/etc/sing-box" ]; then
-            read -p "是否同时卸载边缘抗封锁网关 sing-box 及其配置？[y/N]: " un_sb
+            prompt_input "是否同时卸载边缘抗封锁网关 sing-box 及其配置？[y/N]: " "" un_sb
             if [ "${un_sb,,}" = "y" ]; then
                 systemctl stop sing-box 2>/dev/null || true
                 systemctl disable sing-box 2>/dev/null || true
@@ -1160,6 +1168,10 @@ do_install_singbox() {
                 mv -f "$found_sb" "$sb_bin"
                 chmod +x "$sb_bin"
                 echo -e "  ${GREEN}✓ sing-box 官方核心二进制部署成功${PLAIN}"
+            else
+                echo 'sing-box 压缩包缺少核心文件，未完成安装。' >&2
+                rm -rf "$tmp_extract" "$core_tar"
+                return 1
             fi
             rm -rf "$tmp_extract" "$core_tar"
         else
@@ -1215,51 +1227,49 @@ ProtectSystem=full
 WantedBy=multi-user.target
 EOF
         systemctl daemon-reload
-        systemctl enable sing-box &>/dev/null || true
-        systemctl restart sing-box &>/dev/null || true
+        systemctl enable sing-box || return 1
+        systemctl restart sing-box || return 1
         echo -e "  ${GREEN}✓ sing-box.service 守护进程已注册并启动${PLAIN}"
     fi
 
-    # 6. 如果尚未创建任何节点，自动创建一个推荐的 VLESS-REALITY 入站并接入 NXGate
-    local proxy_port=$(get_config_val "LOCAL_PROXY_PORT" 2>/dev/null || echo "7928")
-    [ -z "$proxy_port" ] && proxy_port="7928"
-    local node_count=0
-    if [ -d "/etc/sing-box/conf" ]; then
-        node_count=$(ls /etc/sing-box/conf 2>/dev/null | grep -c '\.json$' || true)
-    fi
-    if [ "$node_count" -eq 0 ]; then
-        echo -e "  -> 正在初始化默认 VLESS-REALITY 边缘节点并链式接入 NXGate (${proxy_port})..."
-        /usr/local/bin/sing-box api add reality auto auto auto "127.0.0.1:${proxy_port}" 2>/dev/null || true
-    fi
+    # 组件安装不创建入站，也不修改现有入站。
 
     echo -e "${GREEN}✓ sing-box 边缘抗封锁网关安装部署成功！${PLAIN}"
     return 0
 }
 
-setup_singbox_integration() {
-    echo -e "\n${YELLOW}[4/4] 正在配置边缘抗封锁网关 (sing-box)...${PLAIN}"
-    local proxy_port=$(get_config_val "LOCAL_PROXY_PORT")
-    [ -z "$proxy_port" ] && proxy_port="7928"
-
-    if ! type -P sing-box &>/dev/null && [ ! -x "/usr/local/bin/sing-box" ]; then
-        echo -e "NXGate 支持联动 sing-box 实现【公网高抗封锁入站 + 全球住宅家宽出站】。"
-        echo -e "安装后，客户端可使用 VLESS-REALITY / Hysteria2 安全直连，且流量自动经由 NXGate 住宅 IP 分流出海。"
-        local install_choice="y"
-        prompt_input "是否同时安装部署 sing-box 边缘抗封锁网关？[Y/n] (推荐安装): " "y" install_choice
-        if [ "${install_choice,,}" = "y" ] || [ "${install_choice,,}" = "yes" ]; then
-            if do_install_singbox; then
-                local create_node="y"
-                prompt_input "是否立即创建一个推荐的 VLESS-REALITY 节点并链式接入本地 ${proxy_port} 代理？[Y/n]: " "y" create_node
-                if [ "${create_node,,}" = "y" ] || [ "${create_node,,}" = "yes" ]; then
-                    local sb_bin=$(type -P sing-box || echo "/usr/local/bin/sing-box")
-                    $sb_bin api add reality auto auto auto "127.0.0.1:${proxy_port}" 2>/dev/null || true
-                    echo -e "${GREEN}✓ VLESS-REALITY 入站已自动创建并绑定到 NXGate 出口 (${proxy_port})！${PLAIN}"
-                fi
-            fi
-        fi
+# 一个显式确认只对应一次创建；失败不能宣称已创建。
+create_initial_singbox_node() {
+    local proxy_port="$1" create_node sb_bin
+    prompt_input "创建 VLESS-REALITY 入站？将监听所有地址 (::)，可能对公网开放；请先确认访问控制。[y/N]: " "n" create_node
+    case "${create_node,,}" in y|yes) ;; *) return 0 ;; esac
+    sb_bin=$(type -P sing-box) || return 1
+    if "$sb_bin" api add reality auto auto auto "127.0.0.1:${proxy_port}"; then
+        echo "VLESS-REALITY 入站已创建，出口配置为本地代理 ${proxy_port}；请核对代理认证和连通性。"
     else
-        echo -e "${GREEN}✓ 检测到系统中已安装 sing-box，已自动启用边缘入站与 Web 控制台联动！${PLAIN}"
+        echo '创建入站失败，请检查 sing-box 日志和已有配置；未自动重试。' >&2
+        return 1
     fi
+}
+
+singbox_available() {
+    type -P sing-box >/dev/null 2>&1 || [ -x /usr/local/bin/sing-box ]
+}
+
+setup_singbox_integration() {
+    echo -e "\n${YELLOW}[4/4] 可选 sing-box 集成${PLAIN}"
+    local proxy_port install_choice
+    proxy_port=$(get_config_val "LOCAL_PROXY_PORT")
+    proxy_port=${proxy_port:-7928}
+    if singbox_available; then
+        echo '检测到已有 sing-box；保留现有配置，不自动创建或修改入站。'
+        return 0
+    fi
+    prompt_input "是否安装可选 sing-box 组件（不会自动创建入站）？[y/N]: " "n" install_choice
+    case "${install_choice,,}" in y|yes) ;; *) return 0 ;; esac
+    # 不在 if 函数条件中执行安装，以免 Bash 关闭函数内部的 errexit。
+    do_install_singbox
+    create_initial_singbox_node "$proxy_port"
 }
 
 menu_singbox() {
@@ -1289,11 +1299,11 @@ menu_singbox() {
             echo -e "  ${GREEN}[1]${PLAIN} 立即一键安装部署 sing-box 边缘网关"
             echo -e "  ${YELLOW}[0]${PLAIN} 返回上级主菜单"
             echo -e "${BLUE}==================================================================${PLAIN}"
-            read -p "请输入选项 [0-1]: " sb_choice
+            prompt_input "请输入选项 [0-1]: " "" sb_choice
             case "$sb_choice" in
                 1)
                     do_install_singbox
-                    read -p "按回车键继续..."
+                    prompt_input "按回车键继续..." "" ignored_input
                     ;;
                 0) return ;;
                 *) echo -e "${RED}输入无效${PLAIN}"; sleep 1 ;;
@@ -1325,42 +1335,46 @@ menu_singbox() {
         echo -e "  ${RED}[9]${PLAIN} 卸载 sing-box"
         echo -e "  ${YELLOW}[0]${PLAIN} 返回上级主菜单"
         echo -e "${BLUE}==================================================================${PLAIN}"
-        read -p "请输入选项 [0-9]: " sb_choice
+        prompt_input "请输入选项 [0-9]: " "" sb_choice
 
         case "$sb_choice" in
             1)
                 echo -e "\n${YELLOW}正在将全部 sing-box 入站出口切换至 127.0.0.1:${proxy_port} ...${PLAIN}"
                 $sb_cmd api outbound all "127.0.0.1:${proxy_port}"
                 echo -e "${GREEN}✓ 全部入站节点流量已成功链式绑定至 NXGate 住宅代理出口！${PLAIN}"
-                read -p "按回车键继续..."
+                prompt_input "按回车键继续..." "" ignored_input
                 ;;
             2)
                 echo -e "\n${YELLOW}正在将全部 sing-box 入站出口恢复为 direct (直连) ...${PLAIN}"
                 $sb_cmd api outbound all "direct"
                 echo -e "${GREEN}✓ 全部入站节点已恢复 VPS 本机直连出网！${PLAIN}"
-                read -p "按回车键继续..."
+                prompt_input "按回车键继续..." "" ignored_input
                 ;;
             3)
                 echo -e "\n${YELLOW}---------------- 当前活跃入站节点清单 ----------------${PLAIN}"
                 $sb_cmd api list | jq -r '.nodes[] | "----------------------------------------\n节点标签: \(.name)\n监听端口: :\(.port)\n传输协议: \(.protocol) (\(.network))\n链式出口: \(.outbound)\n分享链接: \(.url)\n----------------------------------------"' 2>/dev/null || $sb_cmd api list
-                read -p "按回车键继续..."
+                prompt_input "按回车键继续..." "" ignored_input
                 ;;
             4)
+                echo '新建入站默认监听所有地址 (::)，可能对公网开放。请先配置访问控制。'
+                local expose_confirm
+                prompt_input "确认创建公开监听的入站？[y/N]: " "n" expose_confirm
+                case "${expose_confirm,,}" in y|yes) ;; *) continue ;; esac
                 echo -e "\n${YELLOW}请选择要新建的协议类型:${PLAIN}"
                 echo -e " 1) VLESS-REALITY (推荐：免域名免证书，借用亚马逊/苹果 TLS 指纹)"
                 echo -e " 2) Hysteria2     (推荐：UDP 极速抗丢包狂飙)"
                 echo -e " 3) TUIC          (QUIC BBR 拥塞控制，低延迟)"
                 echo -e " 4) Shadowsocks   (经典 2022 轻量协议)"
-                read -p "请选择 [1-4, 默认 1]: " p_choice
+                prompt_input "请选择 [1-4, 默认 1]: " "" p_choice
                 local p_proto="reality"
                 [ "$p_choice" = "2" ] && p_proto="hy2"
                 [ "$p_choice" = "3" ] && p_proto="tuic"
                 [ "$p_choice" = "4" ] && p_proto="ss"
 
-                read -p "请输入监听端口 [直接回车 auto 自动分配]: " p_port
+                prompt_input "请输入监听端口 [直接回车 auto 自动分配]: " "" p_port
                 [ -z "$p_port" ] && p_port="auto"
 
-                read -p "是否直接链式接入 NXGate 本地代理出口 (127.0.0.1:${proxy_port})？[Y/n]: " p_chain
+                prompt_input "是否直接链式接入 NXGate 本地代理出口 (127.0.0.1:${proxy_port})？[Y/n]: " "" p_chain
                 local p_outbound="127.0.0.1:${proxy_port}"
                 if [ "${p_chain,,}" = "n" ] || [ "${p_chain,,}" = "no" ]; then
                     p_outbound="direct"
@@ -1369,11 +1383,11 @@ menu_singbox() {
                 echo -e "\n${YELLOW}正在创建并部署入站节点...${PLAIN}"
                 $sb_cmd api add "$p_proto" "$p_port" auto auto "$p_outbound"
                 echo -e "${GREEN}✓ 节点创建完成！${PLAIN}"
-                read -p "按回车键继续..."
+                prompt_input "按回车键继续..." "" ignored_input
                 ;;
             5)
                 echo -e "\n 1) 启动  2) 停止  3) 重启"
-                read -p "请选择 [1-3]: " s_op
+                prompt_input "请选择 [1-3]: " "" s_op
                 case "$s_op" in
                     1) systemctl start sing-box && echo -e "${GREEN}服务已启动${PLAIN}" ;;
                     2) systemctl stop sing-box && echo -e "${YELLOW}服务已停止${PLAIN}" ;;
@@ -1384,17 +1398,17 @@ menu_singbox() {
             6)
                 echo -e "\n${YELLOW}正在拉取远程订阅链接...${PLAIN}"
                 $sb_cmd api sub get
-                read -p "按回车键继续..."
+                prompt_input "按回车键继续..." "" ignored_input
                 ;;
             7)
                 $sb_cmd
                 ;;
             8)
                 do_install_singbox
-                read -p "按回车键继续..."
+                prompt_input "按回车键继续..." "" ignored_input
                 ;;
             9)
-                read -p "确认彻底卸载 sing-box 及其所有配置文件吗？[y/N]: " un_confirm
+                prompt_input "确认彻底卸载 sing-box 及其所有配置文件吗？[y/N]: " "" un_confirm
                 if [ "${un_confirm,,}" = "y" ] || [ "${un_confirm,,}" = "yes" ]; then
                     systemctl stop sing-box 2>/dev/null || true
                     systemctl disable sing-box 2>/dev/null || true
@@ -1404,7 +1418,7 @@ menu_singbox() {
                     systemctl daemon-reload 2>/dev/null || true
                     echo -e "${GREEN}✓ sing-box 已彻底卸载干净！${PLAIN}"
                 fi
-                read -p "按回车键继续..."
+                prompt_input "按回车键继续..." "" ignored_input
                 ;;
             0) return ;;
             *) echo -e "${RED}输入无效${PLAIN}"; sleep 1 ;;
@@ -1441,7 +1455,7 @@ main_menu() {
         echo -e "  ${CYAN}[11]${PLAIN} 🚀 管理 / 安装 sing-box 边缘抗封锁入站网关"
         echo -e "  ${YELLOW}[0]${PLAIN} 退出终端管理"
         echo -e "${BLUE}==================================================================${PLAIN}"
-        read -p "请输入选项 [0-11]: " choice
+        prompt_input "请输入选项 [0-11]: " "" choice
 
         case "$choice" in
             1) menu_start ;;
@@ -1464,69 +1478,42 @@ main_menu() {
 # ==============================================================================
 # 脚本主执行入口
 # ==============================================================================
-check_root
-detect_os
-detect_arch
-
-# 启动第一时间无条件加固并放行 SSH 端口与策略路由，杜绝任何断连风险
-ensure_ssh_firewall_and_routing_safety >/dev/null 2>&1 || true
-
-# 二进制程序完整性自愈：如果已部署但发现 BIN_PATH 缺失或被误覆盖为脚本，自动自愈重新拉取
-if [ -f "${BIN_PATH}" ] && ! is_elf_binary "${BIN_PATH}"; then
-    echo -e "${YELLOW}检测到内核文件 ${BIN_PATH} 异常（非 ELF 可执行文件），正在自动自愈修复...${PLAIN}"
-    rm -f "${BIN_PATH}"
-    download_release_binary "${BIN_PATH}" || true
-    chmod +x "${BIN_PATH}" 2>/dev/null || true
-    systemctl restart nxgate 2>/dev/null || systemctl restart aimilivpn 2>/dev/null || true
-fi
-
-# 如果已部署过服务但缺少新版快捷命令，自动平滑补齐 nx 与 nxgate
-if [ -f "${BIN_PATH}" ]; then
-    if [ ! -f "/usr/bin/nx" ] || [ ! -f "/usr/local/bin/nx" ]; then
-        register_shortcuts >/dev/null 2>&1 || true
-    fi
-fi
-
-# 命令行快捷操作分发
-case "$1" in
-    update|upgrade|9)
-        menu_update
-        exit 0
-        ;;
-    start)
-        systemctl start nxgate 2>/dev/null || systemctl start aimilivpn 2>/dev/null || true
-        echo -e "${GREEN}NXGate 服务已启动${PLAIN}"
-        exit 0
-        ;;
-    stop)
-        systemctl stop nxgate 2>/dev/null || systemctl stop aimilivpn 2>/dev/null || true
-        echo -e "${YELLOW}NXGate 服务已停止${PLAIN}"
-        exit 0
-        ;;
-    restart)
-        systemctl restart nxgate 2>/dev/null || systemctl restart aimilivpn 2>/dev/null || true
-        echo -e "${GREEN}NXGate 服务已重启${PLAIN}"
-        exit 0
-        ;;
-    status)
+main() {
+    check_root
+    # status 保持只读；不进行自动修复、补命令、目录迁移或网络策略修改。
+    if [ "${1:-}" = status ]; then
         menu_status
-        exit 0
-        ;;
-    menu)
+        return
+    fi
+    require_systemd
+    case "${1:-}" in
+        start) systemctl start nxgate; return ;;
+        stop) systemctl stop nxgate; return ;;
+        restart) systemctl restart nxgate; return ;;
+        ""|menu|update|upgrade|9|install) ;;
+        *) echo "未知命令: $1" >&2; return 1 ;;
+    esac
+    require_terminal
+    detect_os
+    detect_arch
+    case "${1:-}" in
+        update|upgrade|9) menu_update; return ;;
+        menu) main_menu; return ;;
+    esac
+    if [ -f "${BIN_PATH}" ] && [ -f "${SERVICE_FILE}" ] && [ -z "${1:-}" ]; then
         main_menu
-        exit 0
-        ;;
-esac
+        return
+    fi
+    # 先收集并确认配置；预检/EOF/取消时不安装依赖、不改网络策略。
+    configure_install_params
+    install_dependencies
+    build_and_deploy
+    install_service
+    setup_singbox_integration
+    print_install_success
+}
 
-if [ -f "${BIN_PATH}" ] && [ -f "${SERVICE_FILE}" ] && [ -z "$1" ]; then
-    main_menu
-    exit 0
+# 可 source 函数用于隔离回归；curl | bash 时 BASH_SOURCE 为空。
+if [ -z "${BASH_SOURCE[0]:-}" ] || [ "${BASH_SOURCE[0]}" = "$0" ]; then
+    main "$@"
 fi
-
-# 首次执行或指定全新安装：进入交互式参数配置与全流程安装
-install_dependencies
-configure_install_params
-build_and_deploy
-install_service
-setup_singbox_integration
-print_install_success
