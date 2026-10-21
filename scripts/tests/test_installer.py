@@ -114,8 +114,79 @@ singbox_available() { return 1; }
                 self.assertEqual(events.read_text().splitlines(), ["deps", "build", "service", "done"])
                 config = self.dir / "install/config.env"
                 self.assertIn("UI_PASSWORD=SecretNoEcho123", config.read_text())
-                self.assertIn("UI_HOST=127.0.0.1", config.read_text())
+                self.assertIn("UI_HOST=0.0.0.0", config.read_text())
+                self.assertIn("LOCAL_PROXY_HOST=127.0.0.1", config.read_text())
                 self.assertEqual(config.stat().st_mode & 0o777, 0o600)
+
+    def test_explicit_installer_web_host_is_preserved(self):
+        for host in ("127.0.0.1", "192.0.2.10", "::1"):
+            with self.subTest(host=host):
+                target = self.dir / "install"
+                target.mkdir(exist_ok=True)
+                config = target / "config.env"
+                config.write_text("UI_HOST=" + host + "\nUI_PORT=8787\nUI_PATH=enter\nUI_USERNAME=admin\nUI_PASSWORD=original-test-password\nLOCAL_PROXY_PORT=7928\n")
+                rc, out = self.terminal(self.base + "configure_install_params", self.wizard_replies())
+                self.assertEqual(rc, 0, out)
+                self.assertIn("UI_HOST=" + host + "\n", config.read_text())
+                self.assertIn("LOCAL_PROXY_HOST=127.0.0.1", config.read_text())
+
+    def test_fresh_installer_respects_explicit_environment_host(self):
+        self.env["UI_HOST"] = "127.0.0.1"
+        rc, out = self.terminal(self.base + "configure_install_params", self.wizard_replies())
+        self.assertEqual(rc, 0, out)
+        self.assertIn("UI_HOST=127.0.0.1", (self.dir / "install/config.env").read_text())
+
+    def test_installer_rejects_host_environment_injection(self):
+        self.env["UI_HOST"] = "0.0.0.0\nLOCAL_PROXY_HOST=0.0.0.0"
+        result = self.shell('configure_install_params', check=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('UI_HOST 必须是单个 IP', result.stderr)
+        self.assertFalse((self.dir / 'install/config.env').exists())
+
+    def test_access_url_uses_configured_host_and_validated_public_ip(self):
+        for host, want in [("0.0.0.0", "203.0.113.9"), ("::", "203.0.113.9"),
+                           ("127.0.0.1", "127.0.0.1"), ("::1", "[::1]")]:
+            with self.subTest(host=host):
+                result = self.shell("""
+mkdir -p "$INSTALL_DIR"
+printf 'UI_HOST=%s\nUI_PORT=8787\nUI_PATH=/enter/\n' """ + shlex.quote(host) + """ > "$CONFIG_FILE"
+curl() { echo 203.0.113.9; }
+get_web_access_url
+""")
+                self.assertEqual(result.stdout.strip(), "http://" + want + ":8787/enter/")
+        # HTML/invalid addresses are not claimed as a successfully detected server IP.
+        result = self.shell("curl() { echo '<html>Error</html>'; }; get_public_ip")
+        self.assertEqual(result.stdout.strip(), "<SERVER-IP>")
+        result = self.shell("curl() { echo '999.1.2.3'; }; get_public_ip")
+        self.assertEqual(result.stdout.strip(), "<SERVER-IP>")
+        result = self.shell("curl() { return 7; }; get_public_ip")
+        self.assertEqual(result.stdout.strip(), "<SERVER-IP>")
+        result = self.shell("""
+mkdir -p "$INSTALL_DIR"
+printf 'UI_HOST=0.0.0.0\nUI_PORT=8787\nUI_PATH=enter\n' > "$CONFIG_FILE"
+curl() { return 7; }
+get_web_access_url
+""")
+        self.assertEqual(result.stdout.strip(), "http://<SERVER-IP>:8787/enter/")
+
+    def test_panels_use_same_configured_access_url(self):
+        result = self.shell("""
+mkdir -p "$INSTALL_DIR"
+printf 'UI_HOST=127.0.0.1\nUI_PORT=8787\nUI_PATH=enter\nLOCAL_PROXY_PORT=7928\n' > "$CONFIG_FILE"
+get_app_version() { echo test; }
+show_singbox_status() { echo stopped; }
+show_service_status() { echo stopped; }
+curl() { echo unexpected-network-call >&2; return 99; }
+print_install_success
+menu_status
+""")
+        self.assertEqual(result.stdout.count("http://127.0.0.1:8787/enter/"), 2)
+        self.assertNotIn("unexpected-network-call", result.stderr)
+        self.assertIn('EnvironmentFile=-/opt/nxgate/config.env', (ROOT / 'scripts/nxgate.service').read_text())
+        self.assertIn('EnvironmentFile=${CONFIG_FILE}', SOURCE)
+        compose = (ROOT / 'docker-compose.yml').read_text()
+        self.assertIn('${NXGATE_UI_PUBLISH_HOST:-0.0.0.0}:8787:8787', compose)
+        self.assertIn('127.0.0.1:7928:7928', compose)
 
     def test_default_confirmation_cancels_without_writes(self):
         rc, out = self.terminal(self.full_fixture(), self.wizard_replies(b"\n"), True)

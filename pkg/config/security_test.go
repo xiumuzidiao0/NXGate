@@ -36,7 +36,7 @@ func TestSecurityInitialPassword(t *testing.T) {
 	t.Setenv("UI_USERNAME", "")
 	t.Setenv("UI_HOST", "")
 	c := LoadConfig()
-	if c.UIPassword == "aimilivpn" || len(c.UIPassword) < 32 || c.UIHost != "127.0.0.1" {
+	if c.UIPassword == "aimilivpn" || len(c.UIPassword) < 32 || c.UIHost != "0.0.0.0" || !c.IsUIAuthEnabled() {
 		t.Fatal("insecure defaults")
 	}
 	if c.UIPassword != LoadConfig().UIPassword {

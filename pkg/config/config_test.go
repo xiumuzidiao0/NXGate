@@ -5,15 +5,15 @@ import (
 	"testing"
 )
 
-func TestLoadConfigUsesLoopbackAndSecureDataDir(t *testing.T) {
+func TestLoadConfigUsesPublicWebLoopbackProxyAndSecureDataDir(t *testing.T) {
 	dataDir := t.TempDir()
 	t.Setenv("DATA_DIR", dataDir)
 	t.Setenv("UI_HOST", "")
 	t.Setenv("LOCAL_PROXY_HOST", "")
 
 	cfg := LoadConfig()
-	if cfg.UIHost != "127.0.0.1" {
-		t.Fatalf("expected loopback UI host, got %q", cfg.UIHost)
+	if cfg.UIHost != "0.0.0.0" {
+		t.Fatalf("expected all-IPv4 UI host, got %q", cfg.UIHost)
 	}
 	if cfg.ProxyHost != "127.0.0.1" {
 		t.Fatalf("expected loopback proxy host, got %q", cfg.ProxyHost)
@@ -106,5 +106,30 @@ func TestLoadConfigFallbackEnvVars(t *testing.T) {
 	}
 	if cfg.OpenVPNCommand != "/usr/bin/openvpn-custom" {
 		t.Fatalf("expected OPENVPN_COMMAND fallback /usr/bin/openvpn-custom, got %q", cfg.OpenVPNCommand)
+	}
+}
+
+func TestLoadConfigPreservesExplicitUIHost(t *testing.T) {
+	for _, host := range []string{"127.0.0.1", "192.0.2.10", "::1", "::"} {
+		t.Run(host, func(t *testing.T) {
+			t.Setenv("DATA_DIR", t.TempDir())
+			t.Setenv("UI_HOST", host)
+			if got := LoadConfig().UIHost; got != host {
+				t.Fatalf("explicit UI_HOST = %q, want %q", got, host)
+			}
+		})
+	}
+}
+
+func TestWebAccessURL(t *testing.T) {
+	for _, tc := range []struct{ host, want string }{
+		{"", "<SERVER-IP>"}, {"0.0.0.0", "<SERVER-IP>"}, {"::", "<SERVER-IP>"},
+		{"127.0.0.1", "127.0.0.1"}, {"::1", "[::1]"}, {"[2001:db8::1]", "[2001:db8::1]"},
+		{"console.example.com", "console.example.com"},
+	} {
+		got := WebAccessURL(tc.host, 8787, "/enter/")
+		if want := "http://" + tc.want + ":8787/enter/"; got != want {
+			t.Errorf("host %q: got %q, want %q", tc.host, got, want)
+		}
 	}
 }

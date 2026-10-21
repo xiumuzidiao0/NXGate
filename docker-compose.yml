@@ -6,7 +6,7 @@ services:
     restart: unless-stopped
     # 纯用户态免 TUN 模式（无需任何 --privileged、无需 CAP_NET_ADMIN、无需 /dev/net/tun）
     ports:
-      - "127.0.0.1:8787:8787"  # Web 管理控制台
+      - "${NXGATE_UI_PUBLISH_HOST:-0.0.0.0}:8787:8787"  # Web 默认发布到全部 IPv4 接口；可设为 127.0.0.1
       - "127.0.0.1:7928:7928"  # SOCKS5 / HTTP 多出口矩阵代理端口
     volumes:
       - ./data:/app/data
@@ -22,4 +22,5 @@ services:
       # - UI_PASSWORD=your_password
 
       # 首次随机密码保存在 ./data/ui_password.txt；网页修改保存在 ./data/settings.json。
-      # settings.json 优先于初始化环境变量；公网请通过 TLS 反代，不要裸露后台。
+      # settings.json 优先于对应初始化环境变量；公网请通过 HTTPS 反代并限制来源。
+      # 只需本地管理时：在 .env 写入 NXGATE_UI_PUBLISH_HOST=127.0.0.1，再 docker compose up -d

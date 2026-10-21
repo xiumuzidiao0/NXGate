@@ -381,6 +381,7 @@ configure_install_params() {
         echo '已有 settings.json，需要 jq 读取保存设置；请先安装 jq，避免用初始化值覆盖。' >&2
         return 1
     fi
+    local def_web_host="${UI_HOST:-0.0.0.0}"
     local def_web_port="8787"
     local def_path=$(rand_str 8)
     local def_user="admin"
@@ -389,7 +390,9 @@ configure_install_params() {
 
     # 如果已有配置文件，优先以已有值作为默认
     if [ -f "${CONFIG_FILE}" ]; then
-        local exist_web exist_path exist_user exist_pass exist_proxy
+        local exist_web_host exist_web exist_path exist_user exist_pass exist_proxy
+        exist_web_host=$(get_config_val "UI_HOST")
+        [ -n "$exist_web_host" ] && def_web_host="$exist_web_host"
         exist_web=$(get_config_val "UI_PORT") || return 1
         exist_path=$(get_config_val "UI_PATH") || return 1
         exist_user=$(get_config_val "UI_USERNAME") || return 1
@@ -402,6 +405,12 @@ configure_install_params() {
         [ -n "$exist_pass" ] && def_pass="$exist_pass"
         [ -n "$exist_proxy" ] && def_proxy_port="$exist_proxy"
     fi
+
+    # 只允许单行地址，避免调用环境中的 UI_HOST 注入 EnvironmentFile 的其他配置。
+    [[ "$def_web_host" =~ ^[a-zA-Z0-9_.:-]+$ || "$def_web_host" =~ ^\[[a-fA-F0-9:]+\]$ ]] || {
+        echo 'UI_HOST 必须是单个 IP 或主机名，不能带协议、空格或控制字符。' >&2
+        return 1
+    }
 
     echo -e "\n${BLUE}==================================================================${PLAIN}"
     echo -e "${BLUE}              NXGate 初始部署参数自定义配置                       ${PLAIN}"
@@ -446,6 +455,7 @@ configure_install_params() {
     done
 
     echo -e "\n${GREEN}------------------- 您配置的参数确认 -------------------${PLAIN}"
+    echo -e " Web 监听地址   : ${CYAN}${def_web_host}${PLAIN}（公网访问仍受防火墙/NAT 限制；建议 HTTPS 反代）"
     echo -e " Web 管理端口   : ${CYAN}${custom_web_port}${PLAIN}"
     echo -e " 安全访问路径   : ${CYAN}/${custom_path}${PLAIN}"
     echo -e " 管理员账号     : ${YELLOW}${custom_user}${PLAIN}"
@@ -463,7 +473,7 @@ configure_install_params() {
     cat > "${CONFIG_FILE}" <<EOF
 # NXGate 运行环境变量配置
 DATA_DIR=${INSTALL_DIR}/data
-UI_HOST=127.0.0.1
+UI_HOST=${def_web_host}
 UI_PORT=${custom_web_port}
 UI_PATH=${custom_path}
 UI_USERNAME=${custom_user}
@@ -675,16 +685,52 @@ set_config_val() {
 }
 
 # 11. 获取服务器公网 IP
+is_ipv4_address() {
+    local value="$1" octet
+    [[ "$value" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]] || return 1
+    local -a octets
+    IFS=. read -r -a octets <<< "$value"
+    for octet in "${octets[@]}"; do
+        [ "$((10#$octet))" -le 255 ] || return 1
+    done
+}
 get_public_ip() {
-    local ip
-    ip=$(curl -s4m 3 https://api.ipify.org || curl -s4m 3 https://ip.sb || curl -s4m 3 https://checkip.amazonaws.com || echo "你的VPS公网IP")
-    echo "$ip"
+    local ip source
+    for source in https://api.ipify.org https://ip.sb https://checkip.amazonaws.com; do
+        ip=$(curl -fsS4 --connect-timeout 2 --max-time 3 "$source" 2>/dev/null) || continue
+        ip=${ip//$'\r'/}; ip=${ip//$'\n'/}
+        if is_ipv4_address "$ip"; then printf '%s\n' "$ip"; return; fi
+    done
+    printf '%s\n' '<SERVER-IP>'
+}
+
+# 监听地址不是访问地址；回环/指定地址不探测公网 IP，IPv6 URL 需加方括号。
+get_web_access_url() {
+    local host port path
+    host=$(get_config_val "UI_HOST"); host=${host:-0.0.0.0}
+    host=${host#[}; host=${host%]}
+    port=$(get_config_val "UI_PORT")
+    path=$(get_config_val "UI_PATH"); path=${path#/}; path=${path%/}
+    case "$host" in
+        0.0.0.0|::) host=$(get_public_ip) ;;
+        *:*) host="[$host]" ;;
+    esac
+    printf 'http://%s:%s/%s/\n' "$host" "$port" "$path"
+}
+
+get_web_bind_address() {
+    local host port
+    host=$(get_config_val "UI_HOST"); host=${host:-0.0.0.0}
+    host=${host#[}; host=${host%]}
+    case "$host" in *:*) host="[$host]" ;; esac
+    port=$(get_config_val "UI_PORT")
+    printf '%s:%s\n' "$host" "$port"
 }
 
 # 12. 打印安装成功面板
 print_install_success() {
-    local ip=$(get_public_ip)
-    local port=$(get_config_val "UI_PORT")
+    local web_url=$(get_web_access_url)
+    local web_bind=$(get_web_bind_address)
     local path=$(get_config_val "UI_PATH")
     local user=$(get_config_val "UI_USERNAME")
     local pass=$(get_config_val "UI_PASSWORD")
@@ -696,7 +742,8 @@ print_install_success() {
     echo -e "\n${GREEN}==================================================================${PLAIN}"
     echo -e "${GREEN}        🎉 NXGate (自适应多出口路由网关 v${ver}) 安装部署完成！        ${PLAIN}"
     echo -e "${GREEN}==================================================================${PLAIN}"
-    echo -e " ${BOLD}Web 管理控制台${PLAIN} : ${CYAN}http://127.0.0.1:${port}/${path}/${PLAIN}"
+    echo -e " ${BOLD}Web 配置监听${PLAIN}   : ${CYAN}${web_bind}${PLAIN}"
+    echo -e " ${BOLD}Web 管理控制台${PLAIN} : ${CYAN}${web_url}${PLAIN}"
     echo -e " ${BOLD}管理账号${PLAIN}       : ${YELLOW}${user}${PLAIN}"
     echo -e " ${BOLD}管理密码${PLAIN}       : ${YELLOW}${pass}${PLAIN}"
     echo -e " ${BOLD}本地自适应代理${PLAIN} : ${GREEN}127.0.0.1:${proxy_port}${PLAIN} (HTTP/HTTPS/SOCKS5 单端口)"
@@ -704,7 +751,8 @@ print_install_success() {
     echo -e " ${BOLD}当前程序版本${PLAIN}   : ${YELLOW}v${ver}${PLAIN}"
     echo -e " ${BOLD}终端管理命令${PLAIN}   : 在终端随时输入 ${CYAN}nx${PLAIN} 唤出管理控制中心"
     echo -e " ${YELLOW}⚠️ 访问提示${PLAIN}       : 1. 访问时请务必带上后缀路径: ${CYAN}/${path}/${PLAIN} (未带路径将隐藏返回 404)"
-    echo -e "                   2. 默认仅回环访问；请用 SSH 隧道或 TLS 反代，不要直接放行后台端口"
+    echo -e "                   2. <SERVER-IP> 请替换为可达的服务器 IP/域名；0.0.0.0 仅表示监听所有 IPv4 接口"
+    echo -e "                   3. 公网访问仍需防火墙/NAT 允许；HTTP 明文传输凭据，建议 HTTPS 反代并限制来源"
     echo -e "${GREEN}==================================================================${PLAIN}\n"
 }
 
@@ -721,9 +769,9 @@ show_service_status() {
 }
 
 menu_status() {
-    local ip=$(get_public_ip)
-    local port=$(get_config_val "UI_PORT")
-    local path=$(get_config_val "UI_PATH")
+    local web_url=$(get_web_access_url)
+    local web_bind=$(get_web_bind_address)
+
     local user=$(get_config_val "UI_USERNAME")
     local pass=$(get_config_val "UI_PASSWORD")
     local proxy_port=$(get_config_val "LOCAL_PROXY_PORT")
@@ -735,10 +783,12 @@ menu_status() {
     echo -e "${BLUE}==================================================================${PLAIN}"
     echo -e " ${BOLD}服务运行状态${PLAIN}   : $(show_service_status)"
     echo -e " ${BOLD}sing-box 入站状态${PLAIN}: ${sb_status}"
-    echo -e " ${BOLD}Web 控制台入口${PLAIN}  : ${CYAN}http://${ip}:${port}/${path}/${PLAIN}"
+    echo -e " ${BOLD}Web 配置监听${PLAIN}   : ${CYAN}${web_bind}${PLAIN}"
+    echo -e " ${BOLD}Web 控制台入口${PLAIN}  : ${CYAN}${web_url}${PLAIN}"
     echo -e " ${BOLD}管理账号/密码${PLAIN}   : ${YELLOW}${user}${PLAIN} / ${YELLOW}${pass}${PLAIN}"
     echo -e " ${BOLD}本地代理端口${PLAIN}     : ${GREEN}127.0.0.1:${proxy_port}${PLAIN} (HTTP/SOCKS5 单端口自适应)"
     echo -e " ${BOLD}当前程序版本${PLAIN}   : ${YELLOW}v${ver}${PLAIN}"
+    echo -e " 访问提示：<SERVER-IP> 请替换为可达服务器地址；公网仍受防火墙/NAT 限制，建议 HTTPS 反代。"
     echo -e "${BLUE}==================================================================${PLAIN}\n"
 }
 
@@ -1496,9 +1546,9 @@ menu_singbox() {
 main_menu() {
     while true; do
         safe_clear
-        local ip=$(get_public_ip)
-        local port=$(get_config_val "UI_PORT")
-        local path=$(get_config_val "UI_PATH")
+        local web_url=$(get_web_access_url)
+        local web_bind=$(get_web_bind_address)
+
         local user=$(get_config_val "UI_USERNAME")
         local pass=$(get_config_val "UI_PASSWORD")
         local proxy_port=$(get_config_val "LOCAL_PROXY_PORT")
@@ -1510,7 +1560,8 @@ main_menu() {
         echo -e "${BLUE}==================================================================${PLAIN}"
         echo -e "  ${BOLD}服务运行状态${PLAIN}   : $(show_service_status)"
         echo -e "  ${BOLD}sing-box 入站状态${PLAIN}: ${sb_status}"
-        echo -e "  ${BOLD}Web 控制台入口${PLAIN}  : ${CYAN}http://${ip}:${port}/${path}/${PLAIN}"
+        echo -e " ${BOLD}Web 配置监听${PLAIN}   : ${CYAN}${web_bind}${PLAIN}"
+        echo -e "  ${BOLD}Web 控制台入口${PLAIN}  : ${CYAN}${web_url}${PLAIN}"
         echo -e "  ${BOLD}管理账号/密码${PLAIN}   : ${YELLOW}${user}${PLAIN} / ${YELLOW}${pass}${PLAIN}"
         echo -e "  ${BOLD}本地代理端口${PLAIN}     : ${GREEN}127.0.0.1:${proxy_port}${PLAIN} (HTTP & SOCKS5 单端口自适应)"
         echo -e "${BLUE}------------------------------------------------------------------${PLAIN}"

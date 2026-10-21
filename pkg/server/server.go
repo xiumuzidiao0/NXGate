@@ -136,11 +136,7 @@ func (s *Server) Start(ctx context.Context) error {
 	handler = mw.SecretPathGuard(handler)
 	handler = mw.SecurityHeaders(handler)
 
-	uiHost := strings.Trim(strings.TrimSpace(s.cfg.UIHost), "[]")
-	if uiHost == "" {
-		uiHost = "127.0.0.1"
-	}
-	addr := net.JoinHostPort(uiHost, fmt.Sprintf("%d", s.cfg.UIPort))
+	uiHost, addr := webListenAddress(s.cfg.UIHost, s.cfg.UIPort)
 	lc := net.ListenConfig{}
 	ln, err := lc.Listen(ctx, "tcp", addr)
 	if err != nil {
@@ -165,8 +161,8 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 	s.mu.Unlock()
 
-	adminURL := fmt.Sprintf("http://%s/%s", ln.Addr().String(), strings.Trim(s.cfg.UIPath, "/"))
-	stats.LogInfo("Server", "Web 控制台已启动，访问入口: %s (用户名: %s)", adminURL, s.cfg.UIUsername)
+	adminURL := config.WebAccessURL(uiHost, ln.Addr().(*net.TCPAddr).Port, s.cfg.UIPath)
+	stats.LogInfo("Server", "Web 控制台已启动，监听: %s，访问入口: %s (用户名: %s；<SERVER-IP> 请替换为可达的服务器地址)", ln.Addr().String(), adminURL, s.cfg.UIUsername)
 	if !isLoopbackHost(uiHost) && s.cfg.IsUIAuthEnabled() {
 		stats.LogWarn("Server", "Web 控制台正在非回环地址上使用明文 HTTP，请务必通过 TLS 反向代理或防火墙限制访问")
 	}
@@ -197,6 +193,15 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// webListenAddress shares normalization for the actual socket and warning/display logic.
+func webListenAddress(host string, port int) (string, string) {
+	host = strings.Trim(strings.TrimSpace(host), "[]")
+	if host == "" {
+		host = "0.0.0.0"
+	}
+	return host, net.JoinHostPort(host, fmt.Sprint(port))
 }
 
 func isLoopbackHost(host string) bool {

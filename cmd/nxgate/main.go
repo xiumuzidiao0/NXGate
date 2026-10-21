@@ -190,12 +190,11 @@ func main() {
 	}()
 
 	// Print startup summary banner (terminal output includes credentials for host operator)
-	adminURL := fmt.Sprintf("http://%s:%d/%s", cfg.UIHost, cfg.UIPort, strings.Trim(cfg.UIPath, "/"))
-	if cfg.UIHost == "::" || cfg.UIHost == "0.0.0.0" {
-		adminURL = fmt.Sprintf("http://<VPS-IP>:%d/%s", cfg.UIPort, strings.Trim(cfg.UIPath, "/"))
-	}
+	adminURL := config.WebAccessURL(cfg.UIHost, cfg.UIPort, cfg.UIPath)
 	fmt.Printf("\n-------------------------------------------------------------\n")
+	fmt.Printf("NXGate Web 监听   : %s:%d\n", cfg.UIHost, cfg.UIPort)
 	fmt.Printf("NXGate Web 控制台 : %s\n", adminURL)
+	fmt.Printf("访问提示         : <SERVER-IP> 请替换为可达的服务器 IP/域名；公网访问需防火墙/NAT 放行，建议 HTTPS 反代。\n")
 	fmt.Printf("管理账号 / 密码   : %s / %s\n", cfg.UIUsername, cfg.UIPassword)
 	fmt.Printf("本地代理网关     : %s:%d (支持 SOCKS5 / HTTP / HTTPS CONNECT)\n", cfg.ProxyHost, cfg.ProxyPort)
 	fmt.Printf("Prometheus 指标  : http://<VPS-IP>:%d/metrics\n", cfg.UIPort)

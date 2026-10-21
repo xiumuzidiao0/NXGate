@@ -219,11 +219,17 @@ systemctl is-enabled nxgate
 
 ## Configuration Specification
 
+The Web console now defaults to `0.0.0.0` (all IPv4 interfaces). Connect using the server's reachable IP or domain, not `0.0.0.0`. The installer does not open firewall rules. Firewalls, cloud security groups and NAT still control public reachability. HTTP sends credentials in plaintext; use an HTTPS reverse proxy and restrict allowed sources. Proxy listeners remain loopback-only by default.
+
+Existing explicit `UI_HOST` settings are preserved. For an existing script installation, edit `UI_HOST=0.0.0.0` in `/opt/nxgate/config.env` and run `sudo systemctl restart nxgate`. Use `UI_HOST=127.0.0.1` for local-only management. A standalone binary reads its startup environment, not this file automatically.
+
+Compose publishes Web on all IPv4 interfaces by default while keeping the proxy port published only on host loopback. To persistently restrict Web publication, put `NXGATE_UI_PUBLISH_HOST=127.0.0.1` in the Compose `.env` file and run `docker compose up -d`. Rebuild local source with `docker compose up -d --build`; a source push does not update existing Release binaries or the `latest` image.
+
 Configuration file is located at `/opt/nxgate/config.env` (compatible with legacy `/opt/aimilivpn/config.env`, environment variables override file settings):
 
 | Environment Variable | Default | Valid Range / Format | Description |
 | :--- | :--- | :--- | :--- |
-| `UI_HOST` | `::` | IP string | Web console bind address |
+| `UI_HOST` | `0.0.0.0` | IP string | Web console bind address (all IPv4 interfaces by default) |
 | `UI_PORT` | `8787` | `1-65535` | Web console listening port |
 | `UI_PATH` | `enter` | Alphanumeric string | Secret URL path prefix (anti-scanning, e.g. `/enter/`) |
 | `UI_USERNAME` | `admin` | String | Web console administrative username |
