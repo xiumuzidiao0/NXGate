@@ -1016,6 +1016,78 @@ show_singbox_status() {
     fi
 }
 
+# Kept identical in install.sh and embedded download.sh: the installer also runs via stdin.
+nxgate_download_file() {
+    local target="$1" expected="$2"
+    shift 2
+    local budget="${NXGATE_DOWNLOAD_TIMEOUT:-600}"
+    local stall="${NXGATE_DOWNLOAD_STALL:-60}"
+    if [[ ! "$budget" =~ ^[0-9]{1,4}$ ]] || ((10#$budget < 60 || 10#$budget > 1800)); then
+        echo 'NXGATE_DOWNLOAD_TIMEOUT 必须为 60–1800 秒。' >&2
+        return 1
+    fi
+    if [[ ! "$stall" =~ ^[0-9]{1,3}$ ]] || ((10#$stall < 5 || 10#$stall > 300)); then
+        echo 'NXGATE_DOWNLOAD_STALL 必须为 5–300 秒。' >&2
+        return 1
+    fi
+    budget=$((10#$budget)); stall=$((10#$stall))
+    local stage url attempt rc status bytes actual
+    stage=$(mktemp -d "${TMPDIR:-/tmp}/nxgate-download.XXXXXX") || return 1
+    for url in "$@"; do
+        for attempt in 1 2; do
+            rm -f "$stage/payload"
+            echo "  -> 下载源: $url (尝试 $attempt；上限 ${budget}s，连接 15s，低于 1 KiB/s 持续 ${stall}s 切源)" >&2
+            rc=0
+            curl --location --fail --show-error --progress-bar \
+                --connect-timeout 15 --max-time "$budget" \
+                --speed-limit 1024 --speed-time "$stall" \
+                --output "$stage/payload" --write-out '%{http_code} %{size_download}\n' \
+                "$url" > "$stage/status" || rc=$?
+            read -r status bytes < "$stage/status" || true
+            status=${status:-000}; bytes=${bytes:-0}
+            if [ "$rc" = 0 ] && [ -s "$stage/payload" ]; then
+                if [ -n "$expected" ]; then
+                    actual=$(sha256sum "$stage/payload")
+                    actual=${actual%% *}
+                    if [ "$actual" != "$expected" ]; then
+                        echo '  SHA256 校验失败，丢弃该源文件并切换；不会安装。' >&2
+                        break
+                    fi
+                fi
+                if mv -f "$stage/payload" "$target"; then
+                    rm -rf "$stage"
+                    return 0
+                fi
+                rm -rf "$stage"
+                return 1
+            fi
+            echo "  下载失败: curl=$rc HTTP=$status 已接收=${bytes}字节；部分文件已丢弃。" >&2
+            # Only transient server errors get one same-source retry. Never restart
+            # a slow/stalled/timeout transfer on that source, nor retry a 404.
+            case "$status" in
+                429|500|502|503|504)
+                    if [ "$attempt" = 1 ]; then sleep 2; continue; fi ;;
+            esac
+            break
+        done
+    done
+    rm -rf "$stage"
+    echo '所有下载源失败；请按上方 HTTP/curl 错误判断，不一定是带宽问题。' >&2
+    return 1
+}
+
+# Digests from SagerNet's official GitHub release asset metadata (v1.14.0).
+# Pinning them here also authenticates archives fetched through third-party mirrors.
+singbox_core_sha256() {
+    case "$1:$2" in
+        v1.14.0:amd64) echo 2375de6999f4f56ab46b4fc5ddf26a6aba1d3e61a0f4e7ddec2f4690457d5f63 ;;
+        v1.14.0:arm64) echo 04d9b40bc98dc55b6f509ce3292145c65478f65866bea64826ebb2f382385088 ;;
+        v1.14.0:386) echo 543efac8f7aa3821a57da3fa394e7c47f383602a9592e674b5eaabb0cedc0d2c ;;
+        v1.14.0:armv7) echo 1a8a205e9429c6317f30c5ec112d13345966a91348ae942c9c1645d4b6140063 ;;
+        *) return 1 ;;
+    esac
+}
+
 do_install_singbox() {
     echo -e "\n${YELLOW}正在准备安装部署 sing-box 边缘抗封锁网关...${PLAIN}"
     detect_arch
@@ -1149,36 +1221,31 @@ do_install_singbox() {
             "https://gh-proxy.com/https://github.com/SagerNet/sing-box/releases/download/${sb_ver}/sing-box-${sb_ver#v}-linux-${sb_arch}.tar.gz"
         )
 
-        local core_tar="/tmp/singbox_core_$$.tar.gz"
-        local core_ok=0
-        for u in "${core_urls[@]}"; do
-            echo -e "  -> 正在下载官方 sing-box 核心 (${sb_ver}, ${sb_arch}): ${u} ..."
-            if curl -sSL -f -m 30 "$u" -o "$core_tar" 2>/dev/null && [ -s "$core_tar" ]; then
-                core_ok=1
-                break
-            fi
-        done
-
-        if [ "$core_ok" = "1" ]; then
-            local tmp_extract="/tmp/singbox_extract_$$"
-            mkdir -p "$tmp_extract"
-            tar -zxf "$core_tar" -C "$tmp_extract" --strip-components 1 2>/dev/null || tar -zxf "$core_tar" -C "$tmp_extract" 2>/dev/null || true
-            local found_sb=$(find "$tmp_extract" -type f -name "sing-box" 2>/dev/null | head -n1)
-            if [ -n "$found_sb" ]; then
-                mv -f "$found_sb" "$sb_bin"
-                chmod +x "$sb_bin"
-                echo -e "  ${GREEN}✓ sing-box 官方核心二进制部署成功${PLAIN}"
-            else
-                echo 'sing-box 压缩包缺少核心文件，未完成安装。' >&2
-                rm -rf "$tmp_extract" "$core_tar"
-                return 1
-            fi
-            rm -rf "$tmp_extract" "$core_tar"
-        else
-            echo -e "${RED}✗ 官方 sing-box 核心二进制下载失败，请检查网络连通性。${PLAIN}"
-            rm -f "$core_tar"
+        local core_stage core_tar expected core_member
+        expected=$(singbox_core_sha256 "$sb_ver" "$sb_arch") || {
+            echo '缺少该版本/架构的可信 SHA256，拒绝安装。' >&2
+            return 1
+        }
+        core_stage=$(mktemp -d "${TMPDIR:-/tmp}/nxgate-singbox.XXXXXX") || return 1
+        core_tar="$core_stage/core.tar.gz"
+        if ! nxgate_download_file "$core_tar" "$expected" "${core_urls[@]}"; then
+            rm -rf "$core_stage"
             return 1
         fi
+        # Extract only the expected member, not arbitrary archive paths.
+        core_member="sing-box-${sb_ver#v}-linux-${sb_arch}/sing-box"
+        if ! tar -xOzf "$core_tar" "$core_member" > "$core_stage/sing-box" || [ ! -s "$core_stage/sing-box" ]; then
+            echo 'sing-box 压缩包缺少核心文件或已损坏；未安装。' >&2
+            rm -rf "$core_stage"
+            return 1
+        fi
+        if ! chmod +x "$core_stage/sing-box" || ! mv -f "$core_stage/sing-box" "$sb_bin"; then
+            rm -rf "$core_stage"
+            return 1
+        fi
+        rm -rf "$core_stage"
+        echo -e "  ${GREEN}✓ sing-box 官方核心二进制部署成功（SHA256 已验证）${PLAIN}"
+
     fi
 
     # 4. 确保基础配置 config.json 存在

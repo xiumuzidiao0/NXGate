@@ -41,8 +41,10 @@ jobs:
       - name: Run Offline Installer Regressions
         run: |
           bash -n install.sh
-          shellcheck --severity=error install.sh
+          bash -n scripts/singbox/src/download.sh
+          shellcheck --severity=error install.sh scripts/singbox/src/download.sh
           python3 scripts/tests/test_installer.py
+          python3 scripts/tests/test_downloads.py
           bash scripts/test-security-cli.sh
 
       - name: Check version consistency
