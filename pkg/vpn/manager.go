@@ -589,7 +589,15 @@ func (m *Manager) StartHealthChecker(ctx context.Context) {
 					}
 					m.mu.Unlock()
 					if due && !probeUserlandEgress(sTun) {
-						stats.LogWarn("Health", "心跳检测未通过：用户态隧道已无法转发 IP 报文，触发自动切换")
+						// A relay that stopped forwarding must not be picked again
+						// immediately, otherwise failover just bounces straight back to it.
+						m.mu.RLock()
+						failedNode := m.activeNode
+						m.mu.RUnlock()
+						if failedNode != nil && m.pool != nil {
+							m.pool.Blacklist().Mark(failedNode, "用户态隧道已无法转发 IP 报文", 300*time.Second)
+						}
+						stats.LogWarn("Health", "心跳检测未通过：用户态隧道已无法转发 IP 报文 (%s)，已暂时降权并触发自动切换", nodeLabel(failedNode))
 						go m.TriggerAutoFailover()
 					}
 					continue
@@ -695,4 +703,12 @@ func (m *Manager) GetSSTPTunnel() *sstp.Tunnel {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.sstpTunnel
+}
+
+// nodeLabel renders a node for log output, tolerating a nil node.
+func nodeLabel(n *nodes.Node) string {
+	if n == nil {
+		return "<unknown>"
+	}
+	return fmt.Sprintf("%s (%s)", n.IP, n.CountryShort)
 }
