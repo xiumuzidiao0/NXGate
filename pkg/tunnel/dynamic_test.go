@@ -15,15 +15,18 @@ import (
 type mockPrimaryConnector struct {
 	connectedNode *nodes.Node
 	status        string
+	connectCalls  int
 }
 
 func (m *mockPrimaryConnector) Connect(target *nodes.Node) error {
+	m.connectCalls++
 	m.connectedNode = target
 	m.status = "connected"
 	return nil
 }
 
 func (m *mockPrimaryConnector) ConnectWithMode(target *nodes.Node, mode string) error {
+	m.connectCalls++
 	m.connectedNode = target
 	m.status = "connected"
 	return nil
@@ -326,4 +329,86 @@ func dynamicProbeFixture(t *testing.T) (string, int) {
 	host, ps, _ := net.SplitHostPort(ln.Addr().String())
 	port, _ := strconv.Atoi(ps)
 	return host, port
+}
+
+// TestSystemPrimaryGroupDoesNotInterruptInFlightConnect guards against the
+// redundant reconnect burst: the health checker's failover and the 15s
+// evaluation loop overlap, and without this guard the loop tears down a tunnel
+// that is still being established to the very same relay.
+func TestSystemPrimaryGroupDoesNotInterruptInFlightConnect(t *testing.T) {
+	cfg := &config.Config{DataDir: t.TempDir()}
+	pool := NewPool(cfg, nil)
+	np := nodes.NewNodePool(cfg)
+	mgr := NewDynamicGroupManager(cfg, pool, np)
+
+	target := &nodes.Node{
+		ID:           "node-jp-1",
+		IP:           "203.0.113.9",
+		Port:         1461,
+		Proto:        "tcp",
+		CountryShort: "JP",
+		Score:        1000,
+	}
+	np.SetCandidatesForTest([]*nodes.Node{target})
+
+	// The connector reports "connecting" to this very node, i.e. a connect is in
+	// flight right now.
+	pc := &mockPrimaryConnector{connectedNode: target, status: "connecting"}
+	mgr.SetPrimaryConnector(pc)
+
+	sysGroup := mgr.GetGroup(SystemPrimaryGroupID)
+	if sysGroup == nil {
+		t.Fatal("expected system-primary group")
+	}
+	sysGroup.Country = "JP"
+	sysGroup.IntervalMinutes = 30
+	sysGroup.ConnectMode = "zero_tun"
+	_ = mgr.SaveGroup(sysGroup)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	mgr.EvaluateGroup(ctx, sysGroup)
+
+	if pc.connectCalls != 0 {
+		t.Fatalf("expected the in-flight connect to be left alone, got %d new connect call(s)", pc.connectCalls)
+	}
+	if !strings.Contains(mgr.GetGroup(SystemPrimaryGroupID).StatusText, "建立中") {
+		t.Fatalf("expected an \"establishing\" status, got %q", mgr.GetGroup(SystemPrimaryGroupID).StatusText)
+	}
+}
+
+// TestSystemPrimaryGroupReconnectsWhenNotInFlight is the counterpart guard: when
+// nothing is in flight the group must still drive the connection.
+func TestSystemPrimaryGroupReconnectsWhenNotInFlight(t *testing.T) {
+	cfg := &config.Config{DataDir: t.TempDir()}
+	pool := NewPool(cfg, nil)
+	np := nodes.NewNodePool(cfg)
+	mgr := NewDynamicGroupManager(cfg, pool, np)
+
+	target := &nodes.Node{
+		ID:           "node-jp-2",
+		IP:           "203.0.113.10",
+		Port:         1462,
+		Proto:        "tcp",
+		CountryShort: "JP",
+		Score:        1000,
+	}
+	np.SetCandidatesForTest([]*nodes.Node{target})
+
+	pc := &mockPrimaryConnector{status: "disconnected"}
+	mgr.SetPrimaryConnector(pc)
+
+	sysGroup := mgr.GetGroup(SystemPrimaryGroupID)
+	sysGroup.Country = "JP"
+	sysGroup.IntervalMinutes = 30
+	sysGroup.ConnectMode = "zero_tun"
+	_ = mgr.SaveGroup(sysGroup)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	mgr.EvaluateGroup(ctx, sysGroup)
+
+	if pc.connectCalls == 0 {
+		t.Fatal("expected the group to drive a connect when nothing is in flight")
+	}
 }

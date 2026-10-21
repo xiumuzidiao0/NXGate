@@ -18,6 +18,11 @@ import (
 
 const SystemPrimaryGroupID = "system-primary"
 
+// primaryStatusConnecting mirrors vpn.StatusConnecting. It is duplicated as a
+// literal because pkg/vpn imports pkg/tunnel, so the constant cannot be shared
+// without an import cycle.
+const primaryStatusConnecting = "connecting"
+
 type DynamicGroup struct {
 	ID              string    `json:"id"`                        // e.g. "dg-1" or "system-primary"
 	Name            string    `json:"name"`                      // e.g. "日本Top3住宅隧道组"
@@ -1083,6 +1088,25 @@ func (m *DynamicGroupManager) evaluatePrimarySystemGroup(ctx context.Context, g 
 				break
 			}
 		}
+	}
+
+	// A connection attempt to this very node may already be in flight: the health
+	// checker's failover and the evaluation loop overlap, and issuing another
+	// connect would tear down the tunnel that is still being established, which
+	// shows up as a burst of redundant reconnects to the same relay. Let it finish.
+	if m.primaryConnector != nil && currentActiveNode != nil &&
+		(currentActiveNode.ID == best.ID || currentActiveNode.IP == best.IP) &&
+		m.primaryConnector.GetStatus() == primaryStatusConnecting {
+		m.mu.Lock()
+		g.LastEvaluatedAt = time.Now()
+		if g.ConnectMode == "zero_tun" || g.ConnectMode == "sstp" {
+			g.StatusText = fmt.Sprintf("主网关建立中: %s (%s, 免TUN)", best.IP, best.CountryShort)
+		} else {
+			g.StatusText = fmt.Sprintf("主网关正在建立: %s (%s, tun0)", best.IP, best.CountryShort)
+		}
+		m.saveLocked()
+		m.mu.Unlock()
+		return
 	}
 
 	// If periodic rotation is disabled (IntervalMinutes <= 0), keep the healthy primary connection without rotating ONLY IF it satisfies unlock requirement
