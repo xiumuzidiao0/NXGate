@@ -1,5 +1,7 @@
 package com.nxgate.app.ui.components
 
+import com.nxgate.app.util.localized
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
@@ -120,7 +122,7 @@ fun GlobalServerSwitcherTitle(
             Spacer(Modifier.width(8.dp))
 
             Text(
-                text = "${activeServer?.name ?: "选择服务器"} ▾",
+                text = "${activeServer?.name ?: strings.localized("选择服务器", "Select server")} ▾",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,

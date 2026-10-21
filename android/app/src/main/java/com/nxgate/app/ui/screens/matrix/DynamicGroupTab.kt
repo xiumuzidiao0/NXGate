@@ -1,5 +1,9 @@
 package com.nxgate.app.ui.screens.matrix
 
+import com.nxgate.app.util.groupDescription
+
+import com.nxgate.app.util.localized
+
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -102,12 +106,12 @@ fun DynamicGroupTab(
                                 )
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     val modeSuffix = when (group.connectMode) {
-                                        "zero_tun" -> " [免TUN]"
-                                        "kernel" -> " [内核TUN]"
+                                        "zero_tun" -> strings.localized(" [免TUN]", " [No TUN]")
+                                        "kernel" -> strings.localized(" [内核TUN]", " [Kernel TUN]")
                                         else -> ""
                                     }
                                     val badgeText = if (group.isSystem) {
-                                        val sysMode = if (group.connectMode == "zero_tun") "免TUN" else "tun0"
+                                        val sysMode = if (group.connectMode == "zero_tun") strings.localized("免TUN", "No TUN") else "tun0"
                                         if (isEn) "Primary ($sysMode)" else "系统主出口 ($sysMode)"
                                     } else if (group.country.equals("FAVORITES", true)) {
                                         "${strings.favoritesGroupBadge} (${group.targetCount}${if (isEn) " NICs" else "网卡"})$modeSuffix"
@@ -136,7 +140,7 @@ fun DynamicGroupTab(
                             }
                             Spacer(Modifier.height(8.dp))
                             Text(
-                                text = group.description,
+                                text = strings.groupDescription(group),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurface,
                                 lineHeight = MaterialTheme.typography.bodyMedium.lineHeight * 1.35f

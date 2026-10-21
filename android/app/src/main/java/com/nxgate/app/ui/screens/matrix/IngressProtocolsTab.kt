@@ -1,5 +1,10 @@
 package com.nxgate.app.ui.screens.matrix
 
+import com.nxgate.app.util.inboundSubtitle
+
+import com.nxgate.app.util.LocalAppStrings
+import com.nxgate.app.util.inboundTitle
+
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -45,6 +50,7 @@ fun IngressProtocolsTab(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val strings = LocalAppStrings.current
 
     Column(
         modifier = modifier.fillMaxWidth(),
@@ -73,8 +79,8 @@ fun IngressProtocolsTab(
                     ConnectedListItem(
                         index = index,
                         total = inbounds.size,
-                        headline = inbound.title,
-                        supportingText = inbound.subtitle,
+                        headline = strings.inboundTitle(inbound),
+                        supportingText = strings.inboundSubtitle(inbound),
                         leadingIcon = if (index % 2 == 0) Icons.Rounded.VpnKey else Icons.Rounded.Security,
                         trailingContent = {
                             Row(verticalAlignment = Alignment.CenterVertically) {

@@ -413,6 +413,26 @@ try {
     if (!sbModalTitleEn.includes("Add sing-box Node")) {
       failures.push(`${viewport}px: expected English modal title 'Add sing-box Node', got '${sbModalTitleEn}'`);
     }
+    const countryOptions = await page.locator('#country-filter').innerText();
+    if (!countryOptions.includes('All countries / regions') || !countryOptions.includes('Japan')) {
+      failures.push(`${viewport}px: country filter did not re-render in English: ${countryOptions}`);
+    }
+    if ((await page.locator('#sb-sni-label').innerText()).match(/[\u3400-\u9fff]/)) {
+      failures.push(`${viewport}px: protocol help remained Chinese after switching languages`);
+    }
+    await page.evaluate(() => document.querySelector('[data-view="matrix"]').click());
+    await page.locator('[data-action="switchMatrixTab"][data-args*="ports"]').click();
+    await page.locator('[data-action="showAddPortForm"]').click();
+    const englishPortEditor = await page.locator('#port-edit-card').innerText();
+    if (englishPortEditor.includes('+1 建议')) failures.push(`${viewport}px: port suggestion remained Chinese`);
+    if ((await page.locator('#port-matrix-modal > .card-header .card-title').innerText()).includes('端口分流')) failures.push(`${viewport}px: matrix heading remained Chinese`);
+    if (!englishPortEditor.includes('Add proxy port and egress binding') || !englishPortEditor.includes('All healthy tunnels')) {
+      failures.push(`${viewport}px: dynamic port editor has untranslated copy: ${englishPortEditor}`);
+    }
+    if (screenshotDir) await page.screenshot({ path: join(screenshotDir, `english-port-editor-${viewport}.png`), fullPage: true });
+    await page.locator('#port-edit-card [data-drawer-close]').click();
+    await page.waitForTimeout(260);
+    await page.locator('[data-view="nodes"]:visible').click();
     await page.locator("#btn-toggle-lang").click();
     await page.waitForTimeout(60);
     const langZh = await page.evaluate(() => document.documentElement.lang);

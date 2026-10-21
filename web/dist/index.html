@@ -596,7 +596,7 @@
             <div class="card-header mb-14" >
                 <div class="card-title">
                     <svg aria-hidden="true" viewBox="0 0 24 24"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>
-                    端口分流与出口组
+                    <span data-i18n="title.matrix">端口分流与出口组</span>
                 </div>
                 <button type="button" class="btn btn-outline btn-icon" data-action="closePortMatrixModal" aria-label="关闭分流面板">×</button>
             </div>
@@ -1242,7 +1242,7 @@
             <label class="form-label" data-i18n="pe.port_label">本地监听端口号 [1-65535]</label>
             <div  class="row items-center gap-2">
                 <input id="rule-port" class="input-field input-port-sm mono"  type="number" placeholder="例如: 7928" required>
-                <button type="button" class="btn btn-outline btn-xs"  data-action="suggestNextPort">+1 建议</button>
+                <button type="button" class="btn btn-outline btn-xs"  data-action="suggestNextPort" data-i18n="pe.suggest_port">+1 建议</button>
                 <button type="button" class="btn btn-outline btn-xs"  data-action="setPortVal" data-args="[1080]">1080</button>
                 <button type="button" class="btn btn-outline btn-xs"  data-action="setPortVal" data-args="[7890]">7890</button>
                 <button type="button" class="btn btn-outline btn-xs"  data-action="setPortVal" data-args="[8080]">8080</button>

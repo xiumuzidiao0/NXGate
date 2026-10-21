@@ -16,6 +16,16 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class NXGateTileService : TileService() {
+    private fun text(zh: String, en: String): String {
+        val language = NXGateApplication.instance.serverStore.appLanguage.value
+        val english = when (language) {
+            "en" -> true
+            "zh" -> false
+            else -> !java.util.Locale.getDefault().language.startsWith("zh")
+        }
+        return if (english) en else zh
+    }
+
     private var serviceScope: CoroutineScope? = null
 
     override fun onStartListening() {
@@ -38,9 +48,9 @@ class NXGateTileService : TileService() {
 
         if (activeServer == null) {
             tile.state = Tile.STATE_INACTIVE
-            tile.label = "NXGate 网关"
+            tile.label = text("NXGate 网关", "NXGate Gateway")
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                tile.subtitle = "未配置网关"
+                tile.subtitle = text("未配置网关", "No gateway configured")
             }
             tile.updateTile()
             return
@@ -50,8 +60,8 @@ class NXGateTileService : TileService() {
         tile.state = if (activeServer.isOnline) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
         tile.label = activeServer.name
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val latencyDesc = if (activeServer.latencyMs > 0) "${activeServer.latencyMs}ms" else "就绪"
-            tile.subtitle = if (activeServer.isOnline) "在线 • $latencyDesc" else "离线"
+            val latencyDesc = if (activeServer.latencyMs > 0) "${activeServer.latencyMs}ms" else text("就绪", "Ready")
+            tile.subtitle = if (activeServer.isOnline) text("在线 • $latencyDesc", "Online • $latencyDesc") else text("离线", "Offline")
         }
         tile.updateTile()
 
@@ -67,9 +77,9 @@ class NXGateTileService : TileService() {
                     qsTile.state = if (isConn) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
                     qsTile.label = activeServer.name
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                        val nodeDesc = data.masterGateway.nodeName.ifEmpty { "主出口就绪" }
+                        val nodeDesc = data.masterGateway.nodeName.ifEmpty { text("主出口就绪", "Primary egress ready") }
                         val speedDesc = data.traffic.downSpeedMbStr
-                        qsTile.subtitle = if (isConn) "$nodeDesc • $speedDesc" else "未连接"
+                        qsTile.subtitle = if (isConn) "$nodeDesc • $speedDesc" else text("未连接", "Disconnected")
                     }
                     qsTile.updateTile()
                 }
@@ -103,7 +113,7 @@ class NXGateTileService : TileService() {
         // 已配置，点击触发“快速换线”
         val tile = qsTile ?: return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            tile.subtitle = "正在切换最优出口..."
+            tile.subtitle = text("正在切换最优出口...", "Switching to the best egress...")
         }
         tile.updateTile()
 
@@ -114,8 +124,8 @@ class NXGateTileService : TileService() {
             if (res.isSuccess) {
                 NotificationHelper.sendStatusNotification(
                     this@NXGateTileService,
-                    "NXGate 快速换线",
-                    "[${activeServer.name}] 已触发远端节点刷新并重新挑选最优主出口！"
+                    text("NXGate 快速换线", "NXGate egress refresh"),
+                    text("[${activeServer.name}] 已触发远端节点刷新并重新挑选最优主出口！", "[${activeServer.name}] Node refresh and primary egress selection requested.")
                 )
             }
             updateTileState()

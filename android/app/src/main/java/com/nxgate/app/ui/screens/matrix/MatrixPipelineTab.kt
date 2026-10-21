@@ -1,5 +1,9 @@
 package com.nxgate.app.ui.screens.matrix
 
+import com.nxgate.app.util.bindingLabel
+
+import com.nxgate.app.util.policyLabel
+
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -607,7 +611,7 @@ fun MatrixPipelineTab(
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                     Text(
-                                        text = rule.policyDisplay,
+                                        text = strings.policyLabel(rule),
                                         style = MaterialTheme.typography.bodySmall,
                                         fontWeight = FontWeight.Medium,
                                         color = MaterialTheme.colorScheme.onSurface
@@ -621,7 +625,7 @@ fun MatrixPipelineTab(
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                     Text(
-                                        text = rule.bindingDisplay,
+                                        text = strings.bindingLabel(rule),
                                         style = MaterialTheme.typography.bodySmall,
                                         fontWeight = FontWeight.Medium,
                                         color = MaterialTheme.colorScheme.primary

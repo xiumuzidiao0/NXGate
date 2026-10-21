@@ -1,5 +1,7 @@
 package com.nxgate.app.ui.screens
 
+import com.nxgate.app.util.localized
+
 import android.content.res.Configuration
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
@@ -211,7 +213,7 @@ fun FullNodeCard(
                             modifier = Modifier.size(6.dp)
                         ) {}
                         Text(
-                            text = if (node.latencyMs > 0) "${node.latencyMs} ms · $latencyTierText" else "待测",
+                            text = if (node.latencyMs > 0) "${node.latencyMs} ms · $latencyTierText" else strings.localized("待测", "Not measured"),
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color = latencyTextColor
@@ -227,7 +229,7 @@ fun FullNodeCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "运营商: ${node.isp.ifEmpty { "全球骨干网络" }}",
+                    text = strings.localized("运营商: ", "ISP: ") + node.isp.ifEmpty { strings.localized("全球骨干网络", "Unknown ISP") },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.weight(1f)
@@ -243,7 +245,7 @@ fun FullNodeCard(
                             color = MaterialTheme.colorScheme.tertiaryContainer
                         ) {
                             Text(
-                                text = "免TUN ${node.sstpPort}",
+                                text = strings.localized("免TUN ${node.sstpPort}", "No TUN · ${node.sstpPort}"),
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onTertiaryContainer,
@@ -259,7 +261,7 @@ fun FullNodeCard(
                         color = if (isRes) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainer
                     ) {
                         Text(
-                            text = if (isRes) "原生家宽" else if (isDc) "机房托管" else "普通网络",
+                            text = if (isRes) strings.localized("原生家宽", "Residential") else if (isDc) strings.localized("机房托管", "Datacenter") else strings.localized("普通网络", "Other network"),
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Medium,
                             color = if (isRes) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
@@ -283,7 +285,7 @@ fun FullNodeCard(
                             color = riskBg
                         ) {
                             Text(
-                                text = "风控 %.1f".format(node.riskScore),
+                                text = strings.localized("风控 %.1f", "Risk %.1f").format(node.riskScore),
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.SemiBold,
                                 color = riskColor,
@@ -301,12 +303,12 @@ fun FullNodeCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "实测速度: ${node.speedMbStr}",
+                    text = strings.localized("实测速度: ${node.speedMbStr}", "Measured speed: ${node.speedMbStr}"),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                    text = "信誉评分: ${node.score} 分",
+                    text = strings.localized("信誉评分: ${node.score} 分", "Reliability score: ${node.score}"),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.Bold
@@ -321,7 +323,7 @@ fun FullNodeCard(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("实测解锁:", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
+                Text(strings.localized("实测解锁:", "Service access:"), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
                 UnlockPill("ChatGPT", node.openai)
                 UnlockPill("Claude", node.claude)
                 UnlockPill("Gemini", node.gemini)
@@ -468,7 +470,7 @@ fun NodeSquareScreen(
                 if (nodesRes.isSuccess) {
                     allNodes = nodesRes.getOrNull() ?: emptyList()
                 } else {
-                    nodeLoadError = nodesRes.exceptionOrNull()?.message ?: "连接超时"
+                    nodeLoadError = nodesRes.exceptionOrNull()?.message ?: strings.localized("连接超时", "Connection timed out")
                 }
 
                 val blRes = NXGateApplication.instance.apiClient.fetchBlacklist(activeServer)
@@ -580,7 +582,7 @@ fun NodeSquareScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Rounded.Search,
-                            contentDescription = "检索候选节点",
+                            contentDescription = strings.localized("检索候选节点", "Search candidate nodes"),
                             tint = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.size(24.dp)
                         )
@@ -755,7 +757,7 @@ fun NodeSquareScreen(
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Text(
-                                text = if (activeServer == null) "当前尚未纳管任何服务器，请点击右上角或前往「设置」扫码添加 VPS 网关。" else (if (nodeLoadError != null) "拉取节点失败: $nodeLoadError" else "当前服务器暂未拉取到候选节点，请检查网络或点击重试"),
+                                text = if (activeServer == null) strings.localized("当前尚未纳管任何服务器，请点击右上角或前往「设置」扫码添加 VPS 网关。", "No servers added. Use the server menu or Settings to scan a VPS gateway QR code.") else (if (nodeLoadError != null) strings.localized("拉取节点失败: $nodeLoadError", "Failed to load nodes: $nodeLoadError") else strings.localized("当前服务器暂未拉取到候选节点，请检查网络或点击重试", "No candidate nodes returned. Check the connection or try again.")),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
@@ -764,7 +766,7 @@ fun NodeSquareScreen(
                                 OutlinedButton(onClick = { refreshAllNodes() }) {
                                     Icon(Icons.Rounded.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
                                     Spacer(Modifier.width(6.dp))
-                                    Text("立即重新拉取全部节点")
+                                    Text(strings.localized("立即重新拉取全部节点", "Reload all nodes"))
                                 }
                             }
                         }
@@ -778,7 +780,7 @@ fun NodeSquareScreen(
                         color = MaterialTheme.colorScheme.surfaceContainerLow
                     ) {
                         Text(
-                            text = "未找到符合当前筛选条件的节点，请尝试切换上方国家下拉框或点击全量测速。",
+                            text = strings.localized("未找到符合当前筛选条件的节点，请尝试切换上方国家下拉框或点击全量测速。", "No nodes match these filters. Change the country filter or run a probe."),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.padding(20.dp)
@@ -802,15 +804,15 @@ fun NodeSquareScreen(
                                 onSetMaster = {
                                     if (activeServer != null) {
                                         scope.launch {
-                                            Toast.makeText(context, "正在请求将 [${node.countryLong.ifEmpty { node.countryShort }} ${node.ip}] 设为系统主出口...", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(context, strings.localized("正在请求将 [${node.countryLong.ifEmpty { node.countryShort }} ${node.ip}] 设为系统主出口...", "Switching primary egress to [${node.ip}]..."), Toast.LENGTH_SHORT).show()
                                             val res = NXGateApplication.instance.apiClient.connectMaster(activeServer, node.id)
                                             if (res.isSuccess) {
                                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                                 activeMasterIp = node.ip
-                                                Toast.makeText(context, "已将 [${node.countryLong.ifEmpty { node.countryShort }} ${node.ip}] 设为主网关出口", Toast.LENGTH_SHORT).show()
+                                                Toast.makeText(context, strings.localized("已将 [${node.countryLong.ifEmpty { node.countryShort }} ${node.ip}] 设为主网关出口", "Primary egress set to [${node.ip}]"), Toast.LENGTH_SHORT).show()
                                                 refreshAllNodes()
                                             } else {
-                                                Toast.makeText(context, "切换主出口失败: ${res.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
+                                                Toast.makeText(context, strings.localized("切换主出口失败: ${res.exceptionOrNull()?.message}", "Failed to switch primary egress: ${res.exceptionOrNull()?.message}"), Toast.LENGTH_LONG).show()
                                             }
                                         }
                                     }
@@ -822,7 +824,7 @@ fun NodeSquareScreen(
                                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                             NXGateApplication.instance.apiClient.toggleFavorite(activeServer, node.id)
                                             allNodes = allNodes.map { if (it.id == node.id) it.copy(isFavorite = !it.isFavorite) else it }
-                                            Toast.makeText(context, if (!node.isFavorite) "已收藏 [${node.ip}]" else "已取消收藏", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(context, if (!node.isFavorite) strings.localized("已收藏 [${node.ip}]", "Added [${node.ip}] to favorites") else strings.localized("已取消收藏", "Removed from favorites"), Toast.LENGTH_SHORT).show()
                                         }
                                     }
                                 },
@@ -831,7 +833,7 @@ fun NodeSquareScreen(
                                         scope.launch {
                                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                             NXGateApplication.instance.apiClient.startTunnel(activeServer, node.id)
-                                            Toast.makeText(context, "已在 [${activeServer.name}] 为该节点拉起独立并发网卡！", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(context, strings.localized("已在 [${activeServer.name}] 为该节点拉起独立并发网卡！", "Started a separate egress tunnel on [${activeServer.name}]"), Toast.LENGTH_SHORT).show()
                                         }
                                     }
                                 },
@@ -858,15 +860,15 @@ fun NodeSquareScreen(
                                 onSetMaster = {
                                     if (activeServer != null) {
                                         scope.launch {
-                                            Toast.makeText(context, "正在请求将 [${node.countryLong.ifEmpty { node.countryShort }} ${node.ip}] 设为系统主出口...", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(context, strings.localized("正在请求将 [${node.countryLong.ifEmpty { node.countryShort }} ${node.ip}] 设为系统主出口...", "Switching primary egress to [${node.ip}]..."), Toast.LENGTH_SHORT).show()
                                             val res = NXGateApplication.instance.apiClient.connectMaster(activeServer, node.id)
                                             if (res.isSuccess) {
                                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                                 activeMasterIp = node.ip
-                                                Toast.makeText(context, "已将 [${node.countryLong.ifEmpty { node.countryShort }} ${node.ip}] 设为主网关出口", Toast.LENGTH_SHORT).show()
+                                                Toast.makeText(context, strings.localized("已将 [${node.countryLong.ifEmpty { node.countryShort }} ${node.ip}] 设为主网关出口", "Primary egress set to [${node.ip}]"), Toast.LENGTH_SHORT).show()
                                                 refreshAllNodes()
                                             } else {
-                                                Toast.makeText(context, "切换主出口失败: ${res.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
+                                                Toast.makeText(context, strings.localized("切换主出口失败: ${res.exceptionOrNull()?.message}", "Failed to switch primary egress: ${res.exceptionOrNull()?.message}"), Toast.LENGTH_LONG).show()
                                             }
                                         }
                                     }
@@ -878,7 +880,7 @@ fun NodeSquareScreen(
                                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                             NXGateApplication.instance.apiClient.toggleFavorite(activeServer, node.id)
                                             allNodes = allNodes.map { if (it.id == node.id) it.copy(isFavorite = !it.isFavorite) else it }
-                                            Toast.makeText(context, if (!node.isFavorite) "已收藏 [${node.ip}]" else "已取消收藏", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(context, if (!node.isFavorite) strings.localized("已收藏 [${node.ip}]", "Added [${node.ip}] to favorites") else strings.localized("已取消收藏", "Removed from favorites"), Toast.LENGTH_SHORT).show()
                                         }
                                     }
                                 },
@@ -887,7 +889,7 @@ fun NodeSquareScreen(
                                         scope.launch {
                                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                             NXGateApplication.instance.apiClient.startTunnel(activeServer, node.id)
-                                            Toast.makeText(context, "已在 [${activeServer.name}] 为该节点拉起独立并发网卡！", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(context, strings.localized("已在 [${activeServer.name}] 为该节点拉起独立并发网卡！", "Started a separate egress tunnel on [${activeServer.name}]"), Toast.LENGTH_SHORT).show()
                                         }
                                     }
                                 },
@@ -1024,7 +1026,7 @@ fun NodeSquareScreen(
                                         blacklistItems = blRes.getOrNull() ?: emptyList()
                                     }
                                 } else {
-                                    Toast.makeText(context, "屏蔽失败: ${res.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, strings.localized("屏蔽失败: ${res.exceptionOrNull()?.message}", "Failed to block: ${res.exceptionOrNull()?.message}"), Toast.LENGTH_SHORT).show()
                                 }
                             }
                         }
@@ -1117,7 +1119,7 @@ fun NodeSquareScreen(
                                     if (blRes.isSuccess) blacklistItems = blRes.getOrNull() ?: emptyList()
                                     refreshAllNodes()
                                 } else {
-                                    Toast.makeText(context, "添加失败: ${res.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, strings.localized("添加失败: ${res.exceptionOrNull()?.message}", "Failed to add: ${res.exceptionOrNull()?.message}"), Toast.LENGTH_SHORT).show()
                                 }
                             }
                         } else {

@@ -1,5 +1,9 @@
 package com.nxgate.app.ui.screens
 
+import com.nxgate.app.util.policyLabel
+
+import com.nxgate.app.util.localized
+
 import android.content.res.Configuration
 import android.widget.Toast
 import androidx.compose.animation.AnimatedContent
@@ -396,7 +400,7 @@ fun RoutingMatrixScreen(
                                             if (data.availableOutbounds.isNotEmpty()) availableOutbounds = data.availableOutbounds
                                         }
                                     }
-                                    Toast.makeText(context, "已从 [${activeServer.name}] 刷新调度与入站数据", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, strings.localized("已从 [${activeServer.name}] 刷新调度与入站数据", "Refreshed routing and inbound data from [${activeServer.name}]"), Toast.LENGTH_SHORT).show()
                                 }
                             }
                         },
@@ -404,7 +408,7 @@ fun RoutingMatrixScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Rounded.Refresh,
-                            contentDescription = "刷新分流",
+                            contentDescription = strings.localized("刷新分流", "Refresh routing"),
                             tint = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.size(24.dp)
                         )
@@ -530,7 +534,7 @@ fun RoutingMatrixScreen(
                                         }
                                         val totalTarget = if (matchedGroups.isNotEmpty()) matchedGroups.sumOf { it.targetCount } else rule.boundTunnelIds.size
                                         val groupSub = if (matchedGroups.isNotEmpty()) {
-                                            "${rule.policyDisplay} · $totalTarget ${if (isEn) "NICs" else "并发网卡"}"
+                                            "${strings.policyLabel(rule)} · $totalTarget ${if (isEn) "NICs" else "并发网卡"}"
                                         } else {
                                             if (isEn) "Direct Exit" else "原生网络"
                                         }
@@ -631,7 +635,7 @@ fun RoutingMatrixScreen(
                                             isDefault = false,
                                             groupTitle = groupTitle,
                                             groupSub = groupSub,
-                                            policyLabel = rule.policyDisplay,
+                                            policyLabel = strings.policyLabel(rule),
                                             concurrencyText = "$totalTarget ${if (isEn) "Target NICs" else "目标并发网卡"}",
                                             isFallback = isFallback,
                                             leaves = leaves,
@@ -1353,17 +1357,17 @@ fun RoutingMatrixScreen(
             containerColor = MaterialTheme.colorScheme.surfaceContainer,
             title = {
                 Text(
-                    text = "更改 [${inbound.protocol}] 出口链路",
+                    text = strings.localized("更改 [${inbound.protocol}] 出口链路", "Change egress for [${inbound.protocol}]"),
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold
                 )
             },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("选择该入站协议转发流量的目标出口代理：", style = MaterialTheme.typography.bodyMedium)
+                    Text(strings.localized("选择该入站协议转发流量的目标出口代理：", "Choose the egress proxy for this inbound:"), style = MaterialTheme.typography.bodyMedium)
 
                     AppExposedDropdown(
-                        label = "目标出口链路",
+                        label = strings.localized("目标出口链路", "Target egress"),
                         options = availableOutbounds,
                         selectedOption = switchOutboundTargetOption,
                         onOptionSelected = { switchOutboundTargetOption = it },
@@ -1381,18 +1385,18 @@ fun RoutingMatrixScreen(
                                     if (it.id == inbound.id) it.copy(outbound = switchOutboundTargetOption.addr, outboundLabel = switchOutboundTargetOption.label) else it
                                 }
                                 inbounds = updated
-                                Toast.makeText(context, "[${inbound.name}] 出口已改挂至: ${switchOutboundTargetOption.label}", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, strings.localized("[${inbound.name}] 出口已改挂至: ${switchOutboundTargetOption.label}", "[${inbound.name}] egress changed to: ${switchOutboundTargetOption.label}"), Toast.LENGTH_SHORT).show()
                             }
                         }
                         selectedInboundForOutboundSwitch = null
                     }
                 ) {
-                    Text("应用切换", fontWeight = FontWeight.Bold)
+                    Text(strings.localized("应用切换", "Apply change"), fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { selectedInboundForOutboundSwitch = null }) {
-                    Text("取消")
+                    Text(strings.localized("取消", "Cancel"))
                 }
             }
         )
@@ -1405,8 +1409,8 @@ fun RoutingMatrixScreen(
             onDismissRequest = { deleteInboundCandidate = null },
             shape = RoundedCornerShape(28.dp),
             containerColor = MaterialTheme.colorScheme.surfaceContainer,
-            title = { Text("确认删除入站协议？", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) },
-            text = { Text("确认彻底删除协议节点 [${target.name}] (端口 ${target.port}) 吗？", style = MaterialTheme.typography.bodyMedium) },
+            title = { Text(strings.localized("确认删除入站协议？", "Delete inbound?"), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) },
+            text = { Text(strings.localized("确认彻底删除协议节点 [${target.name}] (端口 ${target.port}) 吗？", "Delete inbound [${target.name}] on port ${target.port}?"), style = MaterialTheme.typography.bodyMedium) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -1417,14 +1421,14 @@ fun RoutingMatrixScreen(
                             }
                         }
                         deleteInboundCandidate = null
-                        Toast.makeText(context, "已删除入站节点 [${target.name}]！", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, strings.localized("已删除入站节点 [${target.name}]！", "Deleted inbound [${target.name}]"), Toast.LENGTH_SHORT).show()
                     }
                 ) {
-                    Text("确认删除", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+                    Text(strings.localized("确认删除", "Delete"), color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { deleteInboundCandidate = null }) { Text("取消") }
+                TextButton(onClick = { deleteInboundCandidate = null }) { Text(strings.localized("取消", "Cancel")) }
             }
         )
     }
@@ -1437,15 +1441,15 @@ fun RoutingMatrixScreen(
             onDismissRequest = { showInboundQRDialog = null },
             shape = RoundedCornerShape(28.dp),
             containerColor = MaterialTheme.colorScheme.surfaceContainer,
-            title = { Text("客户端配置分享与导入", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) },
+            title = { Text(strings.localized("客户端配置分享与导入", "Share client configuration"), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("协议: ${inbound.protocol} (外部监听端口: ${inbound.port})", style = MaterialTheme.typography.bodyMedium)
+                    Text(strings.localized("协议: ${inbound.protocol} (外部监听端口: ${inbound.port})", "Protocol: ${inbound.protocol} (listening port: ${inbound.port})"), style = MaterialTheme.typography.bodyMedium)
                     OutlinedTextField(
                         value = shareUrl,
                         onValueChange = {},
                         readOnly = true,
-                        label = { Text("完整分享链接 (URL)") },
+                        label = { Text(strings.localized("完整分享链接 (URL)", "Full configuration URL")) },
                         maxLines = 4,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -1455,15 +1459,15 @@ fun RoutingMatrixScreen(
                 TextButton(
                     onClick = {
                         clipboardManager.setText(AnnotatedString(shareUrl))
-                        Toast.makeText(context, "已复制节点配置链接！", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, strings.localized("已复制节点配置链接！", "Configuration link copied"), Toast.LENGTH_SHORT).show()
                         showInboundQRDialog = null
                     }
                 ) {
-                    Text("复制链接", fontWeight = FontWeight.Bold)
+                    Text(strings.localized("复制链接", "Copy link"), fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showInboundQRDialog = null }) { Text("关闭") }
+                TextButton(onClick = { showInboundQRDialog = null }) { Text(strings.localized("关闭", "Close")) }
             }
         )
     }

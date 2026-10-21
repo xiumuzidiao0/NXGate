@@ -1,5 +1,7 @@
 package com.nxgate.app.ui.screens
 
+import com.nxgate.app.util.localized
+
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -174,7 +176,7 @@ fun ServerSystemScreen(
     fun copyToClipboard(label: String, text: String) {
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         clipboard.setPrimaryClip(ClipData.newPlainText(label, text))
-        Toast.makeText(context, "已复制 $label 到剪贴板", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, strings.localized("已复制 $label 到剪贴板", "Copied $label to clipboard"), Toast.LENGTH_SHORT).show()
     }
 
     fun loadAllServerData() {
@@ -222,9 +224,9 @@ fun ServerSystemScreen(
                 if (status != null && !status.inProgress) {
                     isUpdating = false
                     if (status.error.isNotEmpty()) {
-                        Toast.makeText(context, "更新失败: ${status.error}", Toast.LENGTH_LONG).show()
+                        Toast.makeText(context, strings.localized("更新失败: ${status.error}", "Update failed: ${status.error}"), Toast.LENGTH_LONG).show()
                     } else {
-                        Toast.makeText(context, "网关更新成功，已重启服务！", Toast.LENGTH_LONG).show()
+                        Toast.makeText(context, strings.localized("网关更新成功，已重启服务！", "Gateway updated and service restarted"), Toast.LENGTH_LONG).show()
                         loadAllServerData()
                     }
                 }
@@ -232,7 +234,7 @@ fun ServerSystemScreen(
                 consecutiveErrors++
                 if (consecutiveErrors >= 40) { // 60s without server response
                     isUpdating = false
-                    Toast.makeText(context, "查询更新超时，请手动刷新网关状态", Toast.LENGTH_LONG).show()
+                    Toast.makeText(context, strings.localized("查询更新超时，请手动刷新网关状态", "Update status timed out. Refresh the gateway status manually."), Toast.LENGTH_LONG).show()
                 }
             }
         }
@@ -258,7 +260,7 @@ fun ServerSystemScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Rounded.Refresh,
-                            contentDescription = "刷新系统配置",
+                            contentDescription = strings.localized("刷新系统配置", "Refresh system settings"),
                             tint = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.size(24.dp)
                         )
@@ -294,7 +296,7 @@ fun ServerSystemScreen(
                         color = MaterialTheme.colorScheme.surfaceContainerLow
                     ) {
                         Text(
-                            text = "请先在首页或设置中添加并选择一台在线的网关服务器。",
+                            text = strings.localized("请先在首页或设置中添加并选择一台在线的网关服务器。", "Add and select an online gateway in Dashboard or Settings first."),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(16.dp)
@@ -356,7 +358,7 @@ fun ServerSystemScreen(
                             }
 
                             Text(
-                                text = "目标服务器: ${activeServer.name} (${activeServer.host}:${activeServer.port})",
+                                text = strings.localized("目标服务器: ${activeServer.name} (${activeServer.host}:${activeServer.port})", "Target: ${activeServer.name} (${activeServer.host}:${activeServer.port})"),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -382,7 +384,7 @@ fun ServerSystemScreen(
                                                 color = MaterialTheme.colorScheme.primary
                                             )
                                             Text(
-                                                text = "正在执行服务端更新: ${updateStatus?.step ?: "准备中..."}",
+                                                text = strings.localized("正在执行服务端更新: ", "Updating server: ") + (updateStatus?.step ?: strings.localized("准备中...", "Preparing...")),
                                                 style = MaterialTheme.typography.bodyMedium,
                                                 fontWeight = FontWeight.SemiBold,
                                                 color = MaterialTheme.colorScheme.onPrimaryContainer
@@ -432,7 +434,7 @@ fun ServerSystemScreen(
                                             }
                                             if (updateInfo!!.publishedAt.isNotEmpty()) {
                                                 Text(
-                                                    text = "发布时间: ${updateInfo!!.publishedAt.take(10)}",
+                                                    text = strings.localized("发布时间: ${updateInfo!!.publishedAt.take(10)}", "Published: ${updateInfo!!.publishedAt.take(10)}"),
                                                     style = MaterialTheme.typography.labelSmall,
                                                     color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.8f)
                                                 )
@@ -479,9 +481,9 @@ fun ServerSystemScreen(
                                             isCheckingUpdate = false
                                             if (res.isSuccess) {
                                                 updateInfo = res.getOrNull()
-                                                Toast.makeText(context, "版本检测完成", Toast.LENGTH_SHORT).show()
+                                                Toast.makeText(context, strings.localized("版本检测完成", "Update check complete"), Toast.LENGTH_SHORT).show()
                                             } else {
-                                                Toast.makeText(context, "检查更新失败: ${res.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
+                                                Toast.makeText(context, strings.localized("检查更新失败: ${res.exceptionOrNull()?.message}", "Update check failed: ${res.exceptionOrNull()?.message}"), Toast.LENGTH_SHORT).show()
                                             }
                                         }
                                     },
@@ -669,7 +671,7 @@ fun ServerSystemScreen(
                                             serverSettings = updated
                                             Toast.makeText(context, if (strings == AppStringsEn) "age encryption settings saved!" else "age 加密策略配置已持久化保存！", Toast.LENGTH_SHORT).show()
                                         } else {
-                                            Toast.makeText(context, "保存失败: ${res.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
+                                            Toast.makeText(context, strings.localized("保存失败: ${res.exceptionOrNull()?.message}", "Save failed: ${res.exceptionOrNull()?.message}"), Toast.LENGTH_LONG).show()
                                         }
                                     }
                                 },
@@ -741,10 +743,10 @@ fun ServerSystemScreen(
                             OutlinedTextField(
                                 value = subToken,
                                 onValueChange = { subToken = it.trim() },
-                                label = { Text("SubToken 安全令牌") },
+                                label = { Text(strings.localized("SubToken 安全令牌", "Subscription access token")) },
                                 trailingIcon = {
                                     IconButton(onClick = { copyToClipboard("SubToken", subToken) }) {
-                                        Icon(Icons.Rounded.ContentCopy, contentDescription = "复制", modifier = Modifier.size(18.dp))
+                                        Icon(Icons.Rounded.ContentCopy, contentDescription = strings.localized("复制", "Copy"), modifier = Modifier.size(18.dp))
                                     }
                                 },
                                 singleLine = true,
@@ -766,7 +768,7 @@ fun ServerSystemScreen(
                                             sb.append(chars[rnd.nextInt(chars.length)])
                                         }
                                         subToken = sb.toString()
-                                        Toast.makeText(context, "已生成随机新 Token，请点击保存", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, strings.localized("已生成随机新 Token，请点击保存", "New random token generated. Save to apply it."), Toast.LENGTH_SHORT).show()
                                     },
                                     shape = RoundedCornerShape(12.dp),
                                     modifier = Modifier.weight(1f)
@@ -788,7 +790,7 @@ fun ServerSystemScreen(
                                                 serverSettings = updated
                                                 Toast.makeText(context, if (strings == AppStringsEn) "SubToken saved!" else "SubToken 已更新并生效！", Toast.LENGTH_SHORT).show()
                                             } else {
-                                                Toast.makeText(context, "保存失败: ${res.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
+                                                Toast.makeText(context, strings.localized("保存失败: ${res.exceptionOrNull()?.message}", "Save failed: ${res.exceptionOrNull()?.message}"), Toast.LENGTH_LONG).show()
                                             }
                                         }
                                     },
@@ -863,7 +865,7 @@ fun ServerSystemScreen(
                                 value = telegramChatId,
                                 onValueChange = { telegramChatId = it.trim() },
                                 label = { Text("Chat ID") },
-                                placeholder = { Text("例如 987654321") },
+                                placeholder = { Text(strings.localized("例如 987654321", "e.g. 987654321")) },
                                 singleLine = true,
                                 shape = RoundedCornerShape(12.dp),
                                 textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
@@ -881,9 +883,9 @@ fun ServerSystemScreen(
                                             val res = NXGateApplication.instance.apiClient.testTelegram(activeServer)
                                             isTestingTelegram = false
                                             if (res.isSuccess) {
-                                                Toast.makeText(context, res.getOrNull() ?: "测试消息发送成功", Toast.LENGTH_SHORT).show()
+                                                Toast.makeText(context, res.getOrNull() ?: strings.localized("测试消息发送成功", "Test notification sent"), Toast.LENGTH_SHORT).show()
                                             } else {
-                                                Toast.makeText(context, "测试失败: ${res.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
+                                                Toast.makeText(context, strings.localized("测试失败: ${res.exceptionOrNull()?.message}", "Test failed: ${res.exceptionOrNull()?.message}"), Toast.LENGTH_LONG).show()
                                             }
                                         }
                                     },
@@ -915,7 +917,7 @@ fun ServerSystemScreen(
                                                 serverSettings = updated
                                                 Toast.makeText(context, if (strings == AppStringsEn) "Telegram config saved!" else "Telegram 配置已保存", Toast.LENGTH_SHORT).show()
                                             } else {
-                                                Toast.makeText(context, "保存失败: ${res.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
+                                                Toast.makeText(context, strings.localized("保存失败: ${res.exceptionOrNull()?.message}", "Save failed: ${res.exceptionOrNull()?.message}"), Toast.LENGTH_LONG).show()
                                             }
                                         }
                                     },
@@ -977,7 +979,7 @@ fun ServerSystemScreen(
                                                 if (res.isSuccess) {
                                                     Toast.makeText(context, if (strings == AppStringsEn) "Triggered mirror refresh task" else "已触发服务端全量镜像拉取任务！", Toast.LENGTH_SHORT).show()
                                                 } else {
-                                                    Toast.makeText(context, "触发失败: ${res.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
+                                                    Toast.makeText(context, strings.localized("触发失败: ${res.exceptionOrNull()?.message}", "Request failed: ${res.exceptionOrNull()?.message}"), Toast.LENGTH_SHORT).show()
                                                 }
                                             }
                                         }
@@ -994,7 +996,7 @@ fun ServerSystemScreen(
                                                 if (res.isSuccess) {
                                                     Toast.makeText(context, if (strings == AppStringsEn) "Triggered shadow probing for blocked nodes" else "已触发对屏蔽隔离节点的深度 OpenVPN/TLS 影子探活！", Toast.LENGTH_SHORT).show()
                                                 } else {
-                                                    Toast.makeText(context, "探活失败: ${res.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
+                                                    Toast.makeText(context, strings.localized("探活失败: ${res.exceptionOrNull()?.message}", "Probe failed: ${res.exceptionOrNull()?.message}"), Toast.LENGTH_SHORT).show()
                                                 }
                                             }
                                         }
@@ -1093,7 +1095,7 @@ fun ServerSystemScreen(
                                                         context.startActivity(Intent.createChooser(sendIntent, strings.backupTitle))
                                                         Toast.makeText(context, strings.exportBackupSuccess, Toast.LENGTH_LONG).show()
                                                     } else {
-                                                        Toast.makeText(context, "导出失败: ${res.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
+                                                        Toast.makeText(context, strings.localized("导出失败: ${res.exceptionOrNull()?.message}", "Export failed: ${res.exceptionOrNull()?.message}"), Toast.LENGTH_SHORT).show()
                                                     }
                                                 }
                                             }
@@ -1262,7 +1264,7 @@ fun ServerSystemScreen(
                                     showImportBackupDialog = false
                                     loadAllServerData()
                                 } else {
-                                    Toast.makeText(context, "导入失败: ${res.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
+                                    Toast.makeText(context, strings.localized("导入失败: ${res.exceptionOrNull()?.message}", "Import failed: ${res.exceptionOrNull()?.message}"), Toast.LENGTH_LONG).show()
                                 }
                             }
                         }

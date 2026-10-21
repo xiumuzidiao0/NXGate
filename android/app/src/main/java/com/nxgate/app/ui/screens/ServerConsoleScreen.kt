@@ -1,5 +1,7 @@
 package com.nxgate.app.ui.screens
 
+import com.nxgate.app.util.localized
+
 import android.content.res.Configuration
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
@@ -234,7 +236,7 @@ fun TunnelChipCard(
                     color = if (tunnel.latencyMs > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                    text = if (tunnel.throughputBps > 0) "吞吐: %.1f Mb/s (断流检测通过)".format((tunnel.throughputBps * 8.0) / 1_000_000.0) else "在线待命",
+                    text = if (tunnel.throughputBps > 0) strings.localized("吞吐: %.1f Mb/s (断流检测通过)", "Throughput: %.1f Mb/s (connectivity check passed)").format((tunnel.throughputBps * 8.0) / 1_000_000.0) else strings.localized("在线待命", "Online · idle"),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -248,7 +250,7 @@ fun TunnelChipCard(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("实测解锁:", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
+                Text(strings.localized("实测解锁:", "Service access:"), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
                 UnlockPill("ChatGPT", tunnel.openai)
                 UnlockPill("Claude", tunnel.claude)
                 UnlockPill("Gemini", tunnel.gemini)
@@ -268,7 +270,7 @@ fun TunnelChipCard(
                 ) {
                     Icon(Icons.Rounded.Speed, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("测解锁", style = MaterialTheme.typography.labelMedium)
+                    Text(strings.localized("测解锁", "Probe access"), style = MaterialTheme.typography.labelMedium)
                 }
                 Spacer(Modifier.width(8.dp))
                 Button(
@@ -282,7 +284,7 @@ fun TunnelChipCard(
                 ) {
                     Icon(Icons.Rounded.Close, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("断开", style = MaterialTheme.typography.labelMedium)
+                    Text(strings.localized("断开", "Disconnect"), style = MaterialTheme.typography.labelMedium)
                 }
             }
         }
@@ -312,10 +314,10 @@ fun ServerConsoleScreen(
     var masterInfo by remember {
         mutableStateOf(
             MasterGatewayInfo(
-                devName = "主网卡 (tun0)",
-                nodeName = "正在获取出口...",
-                uptimeStr = "0分",
-                status = "检测中",
+                devName = strings.localized("主网卡 (tun0)", "Primary interface (tun0)"),
+                nodeName = strings.localized("正在获取出口...", "Loading egress..."),
+                uptimeStr = strings.localized("0分", "0m"),
+                status = strings.localized("检测中", "Checking"),
                 isConnected = false
             )
         )
@@ -403,7 +405,7 @@ fun ServerConsoleScreen(
                             if (event.log.message.contains("故障自动转移") || event.log.message.contains("自动切换至新主节点")) {
                                 NotificationHelper.sendAlertNotification(
                                     context,
-                                    "NXGate 故障自动转移通知",
+                                    strings.localized("NXGate 故障自动转移通知", "NXGate failover alert"),
                                     event.log.message
                                 )
                             }
@@ -452,7 +454,7 @@ fun ServerConsoleScreen(
                                     if (tunnelsRes.isSuccess) {
                                         tunnelList = tunnelsRes.getOrNull() ?: emptyList()
                                     }
-                                    Toast.makeText(context, "已从 [${activeServer.name}] 刷新实时网卡数据 (当前共 ${tunnelList.size} 张网卡)", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, strings.localized("已从 [${activeServer.name}] 刷新实时网卡数据 (当前共 ${tunnelList.size} 张网卡)", "Refreshed [${activeServer.name}]: ${tunnelList.size} tunnels"), Toast.LENGTH_SHORT).show()
                                 }
                             }
                         },
@@ -460,7 +462,7 @@ fun ServerConsoleScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Rounded.Refresh,
-                            contentDescription = "刷新状态",
+                            contentDescription = strings.localized("刷新状态", "Refresh status"),
                             tint = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.size(24.dp)
                         )
@@ -546,14 +548,14 @@ fun ServerConsoleScreen(
                                     text = if (strings == AppStringsEn) {
                                         "Current server [${activeServer.name}] (${activeServer.host}:${activeServer.port}) uses unencrypted HTTP. Manage with caution on public networks."
                                     } else {
-                                        "当前服务器 [${activeServer.name}] (${activeServer.host}:${activeServer.port}) 使用 HTTP 协议连接，未启用 HTTPS 安全加密，在公共 WiFi 或非受信任网络中管理可能存在被窃听风险。建议配置 HTTPS。"
+                                        strings.localized("当前服务器 [${activeServer.name}] (${activeServer.host}:${activeServer.port}) 使用 HTTP 协议连接，未启用 HTTPS 安全加密，在公共 WiFi 或非受信任网络中管理可能存在被窃听风险。建议配置 HTTPS。", "[${activeServer.name}] (${activeServer.host}:${activeServer.port}) uses unencrypted HTTP. Credentials and traffic may be intercepted on untrusted networks. Configure HTTPS.")
                                     },
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.9f)
                                 )
                             }
                             IconButton(onClick = { dismissCleartextBanner = true }) {
-                                Icon(Icons.Rounded.Close, contentDescription = "关闭提醒", tint = MaterialTheme.colorScheme.error)
+                                Icon(Icons.Rounded.Close, contentDescription = strings.localized("关闭提醒", "Dismiss warning"), tint = MaterialTheme.colorScheme.error)
                             }
                         }
                     }
@@ -580,9 +582,9 @@ fun ServerConsoleScreen(
                         ) {
                             Icon(Icons.Rounded.Dns, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(48.dp))
                             Spacer(Modifier.height(14.dp))
-                            Text("暂未纳管任何网关服务器", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                            Text(strings.localized("暂未纳管任何网关服务器", "No gateway servers added"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                             Spacer(Modifier.height(8.dp))
-                            Text("请前往「概览」或「设置」通过相机扫码或手动添加您的 VPS 网关。", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface, textAlign = TextAlign.Center)
+                            Text(strings.localized("请前往「概览」或「设置」通过相机扫码或手动添加您的 VPS 网关。", "Go to Dashboard or Settings to scan a QR code or add your VPS gateway manually."), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface, textAlign = TextAlign.Center)
                         }
                     }
                 } else if (isTabletLandscape) {
@@ -619,7 +621,7 @@ fun ServerConsoleScreen(
                                     val titleText = if (strings == AppStringsEn) {
                                         if (isZeroTun) "Primary Gateway (Zero-TUN SSTP)" else "Primary Gateway (Kernel TUN tun0)"
                                     } else {
-                                        if (isZeroTun) "系统主出口网关 (免TUN SSTP)" else "系统主出口网关 (内核TUN tun0)"
+                                        if (isZeroTun) strings.localized("系统主出口网关 (免TUN SSTP)", "Primary egress (user-space SSTP)") else strings.localized("系统主出口网关 (内核TUN tun0)", "Primary egress (kernel TUN tun0)")
                                     }
                                     Text(
                                         text = titleText,
@@ -633,18 +635,18 @@ fun ServerConsoleScreen(
                                         countryLong = masterTunnel?.countryLong ?: masterInfo.countryLong,
                                         isEnglish = strings == AppStringsEn
                                     )
-                                    val rawMasterIp = (masterTunnel?.nodeIp ?: masterInfo.nodeIp).ifEmpty { masterInfo.nodeName }
+                                    val rawMasterIp = (masterTunnel?.nodeIp ?: masterInfo.nodeIp).ifEmpty { if (masterInfo.nodeName == "未连接") strings.localized("未连接", "Disconnected") else masterInfo.nodeName }
                                     val masterLat = if ((masterTunnel?.latencyMs ?: 0) > 0) masterTunnel!!.latencyMs else masterInfo.latencyMs
                                     val masterLatStr = if (masterLat > 0) " (${masterLat}ms)" else ""
                                     val masterNodeText = if (masterLoc.isNotEmpty()) "$masterLoc · $rawMasterIp$masterLatStr" else "$rawMasterIp$masterLatStr"
-                                    val masterUptime = masterTunnel?.let { "${it.uptimeSeconds / 3600}小时${(it.uptimeSeconds % 3600) / 60}分" } ?: masterInfo.uptimeStr
+                                    val masterUptime = masterTunnel?.let { strings.localized("${it.uptimeSeconds / 3600}小时${(it.uptimeSeconds % 3600) / 60}分", "${it.uptimeSeconds / 3600}h ${(it.uptimeSeconds % 3600) / 60}m") } ?: (if (strings == AppStringsEn) masterInfo.uptimeStr.replace("小时", "h ").replace("分钟", "m").replace("分", "m").replace("秒", "s") else masterInfo.uptimeStr)
                                     val devDesc = if (strings == AppStringsEn) {
                                         if (isZeroTun) "Device: Userland Zero-TUN (SSTP)" else "Device: Primary Virtual NIC (tun0), Table 100"
                                     } else {
-                                        if (isZeroTun) "设备：用户态免TUN直连 (SSTP)" else "设备：主网卡零号 (tun0)，策略表一百"
+                                        if (isZeroTun) strings.localized("设备：用户态免TUN直连 (SSTP)", "Interface: user-space SSTP (no TUN)") else strings.localized("设备：主网卡零号 (tun0)，策略表一百", "Interface: tun0 · routing table 100")
                                     }
                                     val nodeLine = if (strings == AppStringsEn) "Node: $masterNodeText" else "节点：$masterNodeText"
-                                    val upLine = if (strings == AppStringsEn) "Uptime: $masterUptime, ${masterInfo.status}" else "已运行：$masterUptime，${masterInfo.status}"
+                                    val upLine = if (strings == AppStringsEn) "Uptime: $masterUptime · ${if (masterInfo.isConnected) "Connected" else "Disconnected"}" else "已运行：$masterUptime，${masterInfo.status}"
                                     Text(
                                         text = "$devDesc\n$nodeLine\n$upLine",
                                         style = MaterialTheme.typography.bodyMedium,
@@ -696,7 +698,7 @@ fun ServerConsoleScreen(
                             verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             Text(
-                                text = "并发在线独立出口 (${concurrentTunnels.size} 条)",
+                                text = strings.localized("并发在线独立出口 (${concurrentTunnels.size} 条)", "Active secondary egress tunnels (${concurrentTunnels.size})"),
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
@@ -709,7 +711,7 @@ fun ServerConsoleScreen(
                                     color = MaterialTheme.colorScheme.surfaceContainerLow
                                 ) {
                                     Text(
-                                        text = "暂无独立并发出口，在节点广场中点击「拉起网卡」即可多出口并发在线。",
+                                        text = strings.localized("暂无独立并发出口，在节点广场中点击「拉起网卡」即可多出口并发在线。", "No secondary tunnels. Use Start Tunnel on the Nodes page to add another egress."),
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         modifier = Modifier.padding(16.dp)
@@ -739,11 +741,11 @@ fun ServerConsoleScreen(
                             ConnectedListItem(
                                 index = 0,
                                 total = 1,
-                                headline = "实时事件与系统日志",
-                                supportingText = "向上拖拽可展开日志抽屉，支持按信息、警告、错误过滤。",
+                                headline = strings.localized("实时事件与系统日志", "Live events and system logs"),
+                                supportingText = strings.localized("向上拖拽可展开日志抽屉，支持按信息、警告、错误过滤。", "Swipe up to expand logs. Filter by info, warning, or error."),
                                 leadingIcon = Icons.AutoMirrored.Rounded.Article,
                                 trailingContent = {
-                                    Icon(Icons.Rounded.ExpandLess, contentDescription = "展开日志", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Icon(Icons.Rounded.ExpandLess, contentDescription = strings.localized("展开日志", "Expand logs"), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                                 },
                                 onClick = { showLogSheet = true }
                             )
@@ -776,7 +778,7 @@ fun ServerConsoleScreen(
                             val titleText = if (strings == AppStringsEn) {
                                 if (isZeroTun) "Primary Gateway (Zero-TUN SSTP)" else "Primary Gateway (Kernel TUN tun0)"
                             } else {
-                                if (isZeroTun) "系统主出口网关 (免TUN SSTP)" else "系统主出口网关 (内核TUN tun0)"
+                                if (isZeroTun) strings.localized("系统主出口网关 (免TUN SSTP)", "Primary egress (user-space SSTP)") else strings.localized("系统主出口网关 (内核TUN tun0)", "Primary egress (kernel TUN tun0)")
                             }
                             Text(
                                 text = titleText,
@@ -790,18 +792,18 @@ fun ServerConsoleScreen(
                                 countryLong = masterTunnel?.countryLong ?: masterInfo.countryLong,
                                 isEnglish = strings == AppStringsEn
                             )
-                            val rawMasterIp = (masterTunnel?.nodeIp ?: masterInfo.nodeIp).ifEmpty { masterInfo.nodeName }
+                            val rawMasterIp = (masterTunnel?.nodeIp ?: masterInfo.nodeIp).ifEmpty { if (masterInfo.nodeName == "未连接") strings.localized("未连接", "Disconnected") else masterInfo.nodeName }
                             val masterLat = if ((masterTunnel?.latencyMs ?: 0) > 0) masterTunnel!!.latencyMs else masterInfo.latencyMs
                             val masterLatStr = if (masterLat > 0) " (${masterLat}ms)" else ""
                             val masterNodeText = if (masterLoc.isNotEmpty()) "$masterLoc · $rawMasterIp$masterLatStr" else "$rawMasterIp$masterLatStr"
-                            val masterUptime = masterTunnel?.let { "${it.uptimeSeconds / 3600}小时${(it.uptimeSeconds % 3600) / 60}分" } ?: masterInfo.uptimeStr
+                            val masterUptime = masterTunnel?.let { strings.localized("${it.uptimeSeconds / 3600}小时${(it.uptimeSeconds % 3600) / 60}分", "${it.uptimeSeconds / 3600}h ${(it.uptimeSeconds % 3600) / 60}m") } ?: (if (strings == AppStringsEn) masterInfo.uptimeStr.replace("小时", "h ").replace("分钟", "m").replace("分", "m").replace("秒", "s") else masterInfo.uptimeStr)
                             val devDesc = if (strings == AppStringsEn) {
                                 if (isZeroTun) "Device: Userland Zero-TUN (SSTP)" else "Device: Primary Virtual NIC (tun0), Table 100"
                             } else {
-                                if (isZeroTun) "设备：用户态免TUN直连 (SSTP)" else "设备：主网卡零号 (tun0)，策略表一百"
+                                if (isZeroTun) strings.localized("设备：用户态免TUN直连 (SSTP)", "Interface: user-space SSTP (no TUN)") else strings.localized("设备：主网卡零号 (tun0)，策略表一百", "Interface: tun0 · routing table 100")
                             }
                             val nodeLine = if (strings == AppStringsEn) "Node: $masterNodeText" else "节点：$masterNodeText"
-                            val upLine = if (strings == AppStringsEn) "Uptime: $masterUptime, ${masterInfo.status}" else "已运行：$masterUptime，${masterInfo.status}"
+                            val upLine = if (strings == AppStringsEn) "Uptime: $masterUptime · ${if (masterInfo.isConnected) "Connected" else "Disconnected"}" else "已运行：$masterUptime，${masterInfo.status}"
                             Text(
                                 text = "$devDesc\n$nodeLine\n$upLine",
                                 style = MaterialTheme.typography.bodyMedium,
@@ -849,7 +851,7 @@ fun ServerConsoleScreen(
 
                     // 4. 并发独立网卡卡片列表 (精确显示真实并发网卡数量)
                     Text(
-                        text = "并发在线独立出口 (${concurrentTunnels.size} 条)",
+                        text = strings.localized("并发在线独立出口 (${concurrentTunnels.size} 条)", "Active secondary egress tunnels (${concurrentTunnels.size})"),
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -862,7 +864,7 @@ fun ServerConsoleScreen(
                             color = MaterialTheme.colorScheme.surfaceContainerLow
                         ) {
                             Text(
-                                text = "暂无独立并发出口，在节点广场中点击「拉起网卡」即可多出口并发在线。",
+                                text = strings.localized("暂无独立并发出口，在节点广场中点击「拉起网卡」即可多出口并发在线。", "No secondary tunnels. Use Start Tunnel on the Nodes page to add another egress."),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(16.dp)
@@ -895,11 +897,11 @@ fun ServerConsoleScreen(
                     ConnectedListItem(
                         index = 0,
                         total = 1,
-                        headline = "实时事件与系统日志",
-                        supportingText = "向上拖拽可展开日志抽屉，支持按信息、警告、错误过滤。",
+                        headline = strings.localized("实时事件与系统日志", "Live events and system logs"),
+                        supportingText = strings.localized("向上拖拽可展开日志抽屉，支持按信息、警告、错误过滤。", "Swipe up to expand logs. Filter by info, warning, or error."),
                         leadingIcon = Icons.AutoMirrored.Rounded.Article,
                         trailingContent = {
-                            Icon(Icons.Rounded.ExpandLess, contentDescription = "展开日志", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Icon(Icons.Rounded.ExpandLess, contentDescription = strings.localized("展开日志", "Expand logs"), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         },
                         onClick = { showLogSheet = true }
                     )
@@ -931,13 +933,13 @@ fun ServerConsoleScreen(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "系统运维日志流",
+                            text = strings.localized("系统运维日志流", "Live system logs"),
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = "来自服务端 /api/logs 的实时环形日志 (共 ${serverLogs.size} 条记录)",
+                            text = strings.localized("来自服务端 /api/logs 的实时环形日志 (共 ${serverLogs.size} 条记录)", "Live server log buffer from /api/logs (${serverLogs.size} entries)"),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -951,13 +953,13 @@ fun ServerConsoleScreen(
                                     isLoadingLogs = false
                                     if (logsRes.isSuccess) {
                                         serverLogs = logsRes.getOrNull() ?: emptyList()
-                                        Toast.makeText(context, "已刷新最新 ${serverLogs.size} 条日志", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, strings.localized("已刷新最新 ${serverLogs.size} 条日志", "Loaded ${serverLogs.size} recent log entries"), Toast.LENGTH_SHORT).show()
                                     }
                                 }
                             }
                         }
                     ) {
-                        Icon(Icons.Rounded.Refresh, contentDescription = "刷新日志", tint = MaterialTheme.colorScheme.primary)
+                        Icon(Icons.Rounded.Refresh, contentDescription = strings.localized("刷新日志", "Refresh logs"), tint = MaterialTheme.colorScheme.primary)
                     }
                 }
                 Spacer(Modifier.height(8.dp))
@@ -976,7 +978,7 @@ fun ServerConsoleScreen(
                         color = MaterialTheme.colorScheme.surfaceContainerHighest
                     ) {
                         Text(
-                            text = "当前服务器暂未产生事件日志，待有网络活动或节点轮换时将自动显示。",
+                            text = strings.localized("当前服务器暂未产生事件日志，待有网络活动或节点轮换时将自动显示。", "No server events yet. Logs appear when network activity or node rotation occurs."),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(16.dp)

@@ -5,7 +5,8 @@
     "build": "esbuild src/app.js --bundle --minify-whitespace --minify-syntax --format=iife --target=es2020 --outfile=dist/app.js",
     "test": "npm run test:ui",
     "test:status": "node tests/status-transport.mjs",
-    "test:ui": "node tests/ui-smoke.mjs"
+    "test:ui": "node tests/ui-smoke.mjs",
+    "test:i18n": "node tests/i18n.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.28.2",

@@ -1,5 +1,7 @@
 package com.nxgate.app.ui.components
 
+import com.nxgate.app.util.localized
+
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -249,13 +251,13 @@ fun TrafficStatsCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "双向总计: ${liveTraffic.totalCombinedStr}",
+                    text = strings.localized("双向总计: ${liveTraffic.totalCombinedStr}", "Total traffic: ${liveTraffic.totalCombinedStr}"),
                     style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = "活跃连接: ${liveTraffic.activeConnections} 个",
+                    text = strings.localized("活跃连接: ${liveTraffic.activeConnections} 个", "Active connections: ${liveTraffic.activeConnections}"),
                     style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant

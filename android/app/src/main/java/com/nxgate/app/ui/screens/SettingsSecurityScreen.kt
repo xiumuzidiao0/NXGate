@@ -1,5 +1,7 @@
 package com.nxgate.app.ui.screens
 
+import com.nxgate.app.util.localized
+
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -600,7 +602,7 @@ fun SettingsSecurityScreen(
                                     index = 0,
                                     total = landscapePrefCount,
                                     headline = strings.biometricLock,
-                                    supportingText = if (biometricEnabled) "后台等待 ${formatBiometricTimeoutShort(biometricTimeout)} 或冷启动时需要验证" else "冷启动与切回前台时无需验证",
+                                    supportingText = if (biometricEnabled) strings.localized("后台等待 ${formatBiometricTimeoutShort(biometricTimeout, isEn)} 或冷启动时需要验证", "Authenticate on cold start or after ${formatBiometricTimeoutShort(biometricTimeout, isEn)} in the background") else strings.localized("冷启动与切回前台时无需验证", "No authentication required on startup or return"),
                                     leadingIcon = Icons.Rounded.Fingerprint,
                                     trailingContent = {
                                         Switch(
@@ -620,11 +622,11 @@ fun SettingsSecurityScreen(
                                         index = 1,
                                         total = landscapePrefCount,
                                         headline = strings.backgroundTimeout,
-                                        supportingText = formatBiometricTimeout(biometricTimeout),
+                                        supportingText = formatBiometricTimeout(biometricTimeout, isEn),
                                         leadingIcon = Icons.Rounded.Timer,
                                         trailingContent = {
                                             Text(
-                                                text = formatBiometricTimeoutShort(biometricTimeout),
+                                                text = formatBiometricTimeoutShort(biometricTimeout, isEn),
                                                 style = MaterialTheme.typography.labelLarge,
                                                 color = MaterialTheme.colorScheme.primary,
                                                 fontWeight = FontWeight.Bold
@@ -975,7 +977,7 @@ fun SettingsSecurityScreen(
                             index = 0,
                             total = portraitPrefCount,
                             headline = strings.biometricLock,
-                            supportingText = if (biometricEnabled) "后台等待 ${formatBiometricTimeoutShort(biometricTimeout)} 或冷启动时需要验证" else "冷启动与切回前台时无需验证",
+                            supportingText = if (biometricEnabled) strings.localized("后台等待 ${formatBiometricTimeoutShort(biometricTimeout, isEn)} 或冷启动时需要验证", "Authenticate on cold start or after ${formatBiometricTimeoutShort(biometricTimeout, isEn)} in the background") else strings.localized("冷启动与切回前台时无需验证", "No authentication required on startup or return"),
                             leadingIcon = Icons.Rounded.Fingerprint,
                             trailingContent = {
                                 Switch(
@@ -983,7 +985,7 @@ fun SettingsSecurityScreen(
                                     onCheckedChange = {
                                         biometricEnabled = it
                                         NXGateApplication.instance.serverStore.setBiometricEnabled(it)
-                                        Toast.makeText(context, "生物识别安全锁已${if (it) "开启" else "关闭"}", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, strings.localized("生物识别安全锁已${if (it) "开启" else "关闭"}", "Biometric lock ${if (it) "enabled" else "disabled"}"), Toast.LENGTH_SHORT).show()
                                     },
                                     colors = SwitchDefaults.colors(
                                         checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
@@ -1002,11 +1004,11 @@ fun SettingsSecurityScreen(
                                 index = 1,
                                 total = portraitPrefCount,
                                 headline = strings.backgroundTimeout,
-                                supportingText = formatBiometricTimeout(biometricTimeout),
+                                supportingText = formatBiometricTimeout(biometricTimeout, isEn),
                                 leadingIcon = Icons.Rounded.Timer,
                                 trailingContent = {
                                     Text(
-                                        text = formatBiometricTimeoutShort(biometricTimeout),
+                                        text = formatBiometricTimeoutShort(biometricTimeout, isEn),
                                         style = MaterialTheme.typography.labelLarge,
                                         color = MaterialTheme.colorScheme.primary,
                                         fontWeight = FontWeight.Bold
@@ -1028,7 +1030,7 @@ fun SettingsSecurityScreen(
                                     onCheckedChange = {
                                         cleartextWarningEnabled = it
                                         NXGateApplication.instance.serverStore.setCleartextWarningEnabled(it)
-                                        Toast.makeText(context, "明文提醒已${if (it) "开启" else "关闭"}", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, strings.localized("明文提醒已${if (it) "开启" else "关闭"}", "Unencrypted connection warning ${if (it) "enabled" else "disabled"}"), Toast.LENGTH_SHORT).show()
                                     },
                                     colors = SwitchDefaults.colors(
                                         checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
@@ -1751,7 +1753,12 @@ fun ThemeAppearanceSettingsSection(modifier: Modifier = Modifier) {
     }
 }
 
-private fun formatBiometricTimeout(seconds: Int): String {
+private fun formatBiometricTimeout(seconds: Int, isEnglish: Boolean = false): String {
+    if (isEnglish) return when (seconds) {
+        0 -> "Immediately when leaving the app"
+        60 -> "1 minute (recommended)"
+        else -> if (seconds < 60) "${seconds} seconds" else "${seconds / 60} minutes"
+    }
     return when (seconds) {
         0 -> "立即锁定 (离开即锁)"
         15 -> "15 秒"
@@ -1764,7 +1771,8 @@ private fun formatBiometricTimeout(seconds: Int): String {
     }
 }
 
-private fun formatBiometricTimeoutShort(seconds: Int): String {
+private fun formatBiometricTimeoutShort(seconds: Int, isEnglish: Boolean = false): String {
+    if (isEnglish && seconds == 0) return "Immediately"
     return when (seconds) {
         0 -> "立即"
         15 -> "15s"

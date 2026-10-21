@@ -21,13 +21,13 @@ import { createStatusTransport } from './status-transport.js';
             try {
                 const response = await originalFetch(input, init);
                 if (response.status >= 500) {
-                    showAppAlert(`服务返回 ${response.status}，部分数据可能未更新。`);
+                    showAppAlert(localize(`服务返回 ${response.status}，部分数据可能未更新。`, `Service returned ${response.status}. Some data may be out of date.`));
                 } else if (response.ok) {
                     clearAppAlert();
                 }
                 return response;
             } catch (error) {
-                showAppAlert('无法连接管理服务，请检查网络或服务状态。');
+                showAppAlert(localize('无法连接管理服务，请检查网络或服务状态。', 'Cannot reach the management service. Check the connection and service status.'));
                 throw error;
             }
         };
@@ -60,6 +60,11 @@ import { I18N } from './i18n.js';
 
         function tAlert(zhMsg, enMsg) {
             alert(getLanguage() === 'en' ? enMsg : zhMsg);
+        }
+
+        // Localize app-owned dynamic copy, not user names, backend errors, or logs.
+        function localize(zh, en) {
+            return getLanguage() === 'en' ? en : zh;
         }
 
         function tConfirm(zhMsg, enMsg) {
@@ -131,6 +136,13 @@ import { I18N } from './i18n.js';
             if (singBoxOverview) renderSingBox(singBoxOverview);
             if (currentDynamicGroups) renderDynamicGroups();
             if (currentPortRules) renderPortRules();
+            updateCountryFilter();
+            if (document.getElementById('port-edit-card')?.classList.contains('open')) {
+                const selectedTunnels = [...document.querySelectorAll('.chk-single-tunnel:checked')].map(el => el.value);
+                const selectedGroups = [...document.querySelectorAll('.chk-dynamic-group:checked')].map(el => el.value);
+                renderTunnelCheckboxes(selectedTunnels, selectedGroups);
+            }
+            updateProtoHelpText(currentSelectedProto);
             if (currentState) fetchStatus();
             showToast(lang === 'en' ? 'Language switched to English' : '已切换至简体中文');
         }
@@ -309,7 +321,7 @@ import { I18N } from './i18n.js';
                 if (res.ok) tAlert(ret.message || '测试消息发送成功！', ret.message || 'Test alert sent successfully!');
                 else tAlert('测试失败: ' + (ret.error || '未知错误'), 'Test alert failed: ' + (ret.error || 'Unknown error'));
             } catch(err) {
-                alert('请求失败: ' + err);
+                alert(localize('请求失败: ', 'Request failed: ') + err);
             }
         }
 
@@ -390,7 +402,7 @@ import { I18N } from './i18n.js';
                 }
 
                 // Info card
-                let statusLabel = vpn.status === 'connected' ? (isEn ? 'Connected' : '已连接') : (vpn.status_text || vpn.status || (isEn ? 'Disconnected' : '未连接'));
+                let statusLabel = isEn ? ({ connected: 'Connected', connecting: 'Connecting', disconnected: 'Disconnected', reconnecting: 'Reconnecting', error: 'Error' }[vpn.status] || vpn.status || 'Disconnected') : (vpn.status_text || vpn.status || '未连接');
                 if (vpn.status === 'connected' && vpn.zero_tun) {
                     statusLabel += isEn ? ' · Zero-TUN (SSTP 443)' : ' · 用户态免TUN (SSTP 443)';
                 }
@@ -519,7 +531,7 @@ import { I18N } from './i18n.js';
             const curr = select.value;
             const countries = [...new Set(allNodes.map(n => n.country_short))].filter(Boolean).sort();
 
-            select.innerHTML = '<option value="">全部国家/地区</option>' +
+            select.innerHTML = `<option value="">${localize('全部国家/地区', 'All countries / regions')}</option>` +
                 countries.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(getCountryName(c))} (${escapeHtml(c)})</option>`).join('');
             select.value = curr;
         }
@@ -906,7 +918,7 @@ import { I18N } from './i18n.js';
 
                 let riskBadge = '';
                 if (n.risk_level) {
-                    const riskLabel = n.risk_label || (n.risk_level === 'pure' ? (isEn ? 'Pure' : '极度纯净') : (isEn ? 'Clean' : '纯净住宅'));
+                    const riskLabel = (!isEn && n.risk_label) || (n.risk_level === 'pure' ? (isEn ? 'Pure' : '极度纯净') : (isEn ? 'Clean' : '纯净住宅'));
                     riskBadge = `<span class="risk-badge ${escapeHtml(n.risk_level)}" title="${isEn ? 'Risk Score' : '风险评分'}: ${n.risk_score || 0}%">${escapeHtml(riskLabel)}</span>`;
                 }
 
@@ -986,8 +998,8 @@ import { I18N } from './i18n.js';
             const btn = document.getElementById('btn-probe-nodes');
             const oldHtml = btn.innerHTML;
             btn.disabled = true;
-            btn.innerHTML = `<svg aria-hidden="true" viewBox="0 0 24 24" class="spin"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> 测速与解锁检测中 (${ids.length}个)...`;
-            appendLog({ level: 'INFO', module: 'Action', message: `正在对当前筛选出的 ${ids.length} 个节点并发执行可用性测速与 AI/流媒体解锁同步检测...` });
+            btn.innerHTML = `<svg aria-hidden="true" viewBox="0 0 24 24" class="spin"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> ${localize("测速与解锁检测中", "Probing connectivity and service access")} (${ids.length})...`;
+            appendLog({ level: 'INFO', module: 'Action', message: localize(`正在对当前筛选出的 ${ids.length} 个节点并发执行可用性测速与 AI/流媒体解锁同步检测...`, `Checking connectivity and service access for ${ids.length} selected nodes...`) });
 
             await fetch('/api/nodes/probe', {
                 method: 'POST',
@@ -1004,14 +1016,14 @@ import { I18N } from './i18n.js';
                     clearInterval(timer);
                     btn.disabled = false;
                     btn.innerHTML = oldHtml;
-                    appendLog({ level: 'INFO', module: 'Action', message: '当前筛选节点可用性与 AI/流媒体解锁检测完成！' });
+                    appendLog({ level: 'INFO', module: 'Action', message: localize('当前筛选节点可用性与 AI/流媒体解锁检测完成！', 'Node connectivity and service-access checks complete.') });
                 }
             }, 700);
         }
 
         async function quickConnect(mode = 'kernel') {
             const isUserland = mode === 'sstp' || mode === 'userland';
-            appendLog({ level: 'INFO', module: 'Action', message: isUserland ? '正在请求快速免 TUN 直连最优节点 (SSTP 443)...' : '正在请求快速连接最优节点 (内核模式)...' });
+            appendLog({ level: 'INFO', module: 'Action', message: isUserland ? localize('正在请求快速免 TUN 直连最优节点 (SSTP 443)...', 'Requesting the best user-space SSTP node (port 443)...') : localize('正在请求快速连接最优节点 (内核模式)...', 'Requesting the best node (kernel mode)...') });
             await fetch('/api/connect', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1032,13 +1044,13 @@ import { I18N } from './i18n.js';
         }
 
         async function disconnectVPN() {
-            appendLog({ level: 'INFO', module: 'Action', message: '正在断开当前 VPN 连接...' });
+            appendLog({ level: 'INFO', module: 'Action', message: localize('正在断开当前 VPN 连接...', 'Disconnecting VPN...') });
             await fetch('/api/disconnect', { method: 'POST' });
             fetchStatus();
         }
 
         async function refreshNodes() {
-            appendLog({ level: 'INFO', module: 'Action', message: '正在刷新远端节点列表...' });
+            appendLog({ level: 'INFO', module: 'Action', message: localize('正在刷新远端节点列表...', 'Refreshing node list...') });
             await fetch('/api/refresh', { method: 'POST' });
             setTimeout(fetchNodes, 1500);
             fetchStatus();
@@ -1163,7 +1175,7 @@ import { I18N } from './i18n.js';
                     fetchStatus();
                 }
             } catch (err) {
-                alert('网络请求失败: ' + err);
+                alert(localize('网络请求失败: ', 'Network request failed: ') + err);
             }
         }
 
@@ -1175,7 +1187,7 @@ import { I18N } from './i18n.js';
                 url: (apiPrefix || '') + '/api/events',
                 fetchStatus,
                 renderStatus: data => { statusEventVersion++; renderStatus(data); },
-                onOpen: () => appendLog({ level: 'INFO', module: 'SSE', message: '已成功连通服务器实时推流总线' })
+                onOpen: () => appendLog({ level: 'INFO', module: 'SSE', message: localize('已成功连通服务器实时推流总线', 'Live server updates connected') })
             });
             const es = statusTransport.start();
             if (!es) return;
@@ -1215,7 +1227,7 @@ import { I18N } from './i18n.js';
         }
 
         async function startNewTunnel(nodeId) {
-            appendLog({ level: 'INFO', module: 'Tunnel', message: `正在启动并发独立出口隧道: ${nodeId}...` });
+            appendLog({ level: 'INFO', module: 'Tunnel', message: localize(`正在启动并发独立出口隧道: ${nodeId}...`, `Starting a secondary egress tunnel: ${nodeId}...`) });
             try {
                 const res = await fetch('/api/tunnels/start', {
                     method: 'POST',
@@ -1226,11 +1238,11 @@ import { I18N } from './i18n.js';
                 if (!res.ok) {
                     tAlert('启动并发隧道失败: ' + (ret.error || '未知错误'), 'Failed to launch concurrent tunnel: ' + (ret.error || 'Unknown error'));
                 } else {
-                    appendLog({ level: 'INFO', module: 'Tunnel', message: `新隧道启动成功: ${ret.tunnel.id} (${ret.tunnel.dev_name})` });
+                    appendLog({ level: 'INFO', module: 'Tunnel', message: localize(`新隧道启动成功: ${ret.tunnel.id} (${ret.tunnel.dev_name})`, `Tunnel started: ${ret.tunnel.id} (${ret.tunnel.dev_name})`) });
                     fetchStatus();
                 }
             } catch (err) {
-                alert('请求失败: ' + err);
+                alert(localize('请求失败: ', 'Request failed: ') + err);
             }
         }
 
@@ -1244,7 +1256,7 @@ import { I18N } from './i18n.js';
                 });
                 fetchStatus();
             } catch (err) {
-                alert('断开失败: ' + err);
+                alert(localize('断开失败: ', 'Disconnect failed: ') + err);
             }
         }
 
@@ -1477,7 +1489,7 @@ import { I18N } from './i18n.js';
                 updateSystemPrimaryRotateBanner();
                 fetchStatus();
             } catch(err) {
-                alert('请求异常: ' + err);
+                alert(localize('请求异常: ', 'Request error: ') + err);
             }
         }
 
@@ -2344,7 +2356,7 @@ import { I18N } from './i18n.js';
 
                 let authBadge = `<span class="auth-note">${isEn ? 'Random Credentials' : '系统随机账密'}</span>`;
                 if (r.auth_mode === 'none') {
-                    authBadge = `<span class="auth-note auth-open">${isEn ? 'No Auth (Direct)' : '免密直连'}</span>`;
+                    authBadge = `<span class="auth-note auth-open">${isEn ? 'No Authentication' : '免密直连'}</span>`;
                 } else if (r.auth_mode === 'custom') {
                     authBadge = `<span class="auth-note text-accent">${isEn ? 'Custom: ' : '独立账号: '}${escapeHtml(r.auth_user || (isEn ? 'Not Set' : '未设'))}</span>`;
                 }
@@ -2419,7 +2431,7 @@ import { I18N } from './i18n.js';
 
         function showAddPortForm() {
             editingPort = null;
-            document.getElementById('port-edit-title').innerHTML = `新增代理监听端口与分流绑定`;
+            document.getElementById('port-edit-title').textContent = localize(`新增代理监听端口与分流绑定`, 'Add proxy port and egress binding');
             document.getElementById('rule-port').value = '';
             document.getElementById('rule-port').disabled = false;
             selectPolicy('round_robin');
@@ -2436,7 +2448,7 @@ import { I18N } from './i18n.js';
             const rule = currentPortRules.find(r => r.port === port);
             if (!rule) return;
             editingPort = port;
-            document.getElementById('port-edit-title').innerHTML = `编辑端口 [${port}] 绑定与调度规则`;
+            document.getElementById('port-edit-title').textContent = localize(`编辑端口 [${port}] 绑定与调度规则`, `Edit port [${port}] bindings and routing`);
             document.getElementById('rule-port').value = rule.port;
             document.getElementById('rule-port').disabled = true;
             selectPolicy(rule.policy || 'round_robin');
@@ -2514,28 +2526,28 @@ import { I18N } from './i18n.js';
             let html = `
                 <label class="check-row check-row-all">
                     <input type="checkbox" id="chk-tunnel-all" ${isAllChecked ? 'checked' : ''} data-change-action="onAllTunnelsCheckChanged">
-                    <span><strong>全部在线隧道 (默认)</strong> - 自动根据当前所有运行的隧道动态负载均衡</span>
+                    <span><strong>${localize('全部在线隧道 (默认)', 'All healthy tunnels (default)')}</strong> - ${localize('自动根据当前所有运行的隧道动态负载均衡', 'Load balance across all eligible healthy tunnels')}</span>
                 </label>
             `;
 
             if (currentDynamicGroups && currentDynamicGroups.length > 0) {
-                html += '<div class="check-section-label text-accent">动态出口组 (按规则自动维持并定期轮换):</div>';
+                html += `<div class="check-section-label text-accent">${localize('动态出口组 (按规则自动维持并定期轮换):', 'Dynamic egress groups (maintained and rotated automatically):')}</div>`;
                 currentDynamicGroups.forEach(g => {
                     const isChecked = !isAllChecked && selGrpMap[g.id];
-                    let metricText = g.sort_by === 'speed' ? '最大带宽' : (g.sort_by === 'score' ? '最高评分' : '最低延迟');
+                    let metricText = g.sort_by === 'speed' ? localize('最大带宽', 'Highest bandwidth') : (g.sort_by === 'score' ? localize('最高评分', 'Highest score') : localize('最低延迟', 'Lowest latency'));
                     html += `
                         <label  class="check-row">
                             <input type="checkbox" class="chk-dynamic-group" value="${escapeHtml(g.id)}" ${isChecked ? 'checked' : ''} data-change-action="onSpecificTunnelCheckChanged">
-                            <span class="badge badge-system">出口组</span>
+                            <span class="badge badge-system">${localize('出口组', 'Egress group')}</span>
                             <strong class="check-name">${escapeHtml(g.name)}</strong>
-                            <span  class="text-xs text-muted">(${escapeHtml(g.country || '全部')} · ${escapeHtml(g.ip_type === 'residential' ? '家宽' : (g.ip_type === 'hosting' ? '机房' : '不限'))} · ${escapeHtml(metricText)} Top${escapeHtml(g.target_count)})</span>
+                            <span  class="text-xs text-muted">(${escapeHtml(g.country || localize('全部', 'All'))} · ${escapeHtml(g.ip_type === 'residential' ? localize('家宽', 'Residential') : (g.ip_type === 'hosting' ? localize('机房', 'Datacenter') : localize('不限', 'Any')))} · ${escapeHtml(metricText)} Top${escapeHtml(g.target_count)})</span>
                         </label>
                     `;
                 });
             }
 
             if (tunnels.length > 0) {
-                html += '<div class="check-section-label text-muted">固定独立在线隧道:</div>';
+                html += `<div class="check-section-label text-muted">${localize('固定独立在线隧道:', 'Specific active tunnels:')}</div>`;
                 tunnels.forEach(t => {
                     const ip = t.node ? t.node.ip : '';
                     const cName = t.node ? getCountryName(t.node.country_short) : '';
@@ -2638,7 +2650,7 @@ import { I18N } from './i18n.js';
                 tAlert(`端口 [${port}] 规则已保存并实时生效！`, `Port [${port}] rule saved and active!`);
                 fetchStatus();
             } catch (err) {
-                alert('请求异常: ' + err);
+                alert(localize('请求异常: ', 'Request error: ') + err);
             }
         }
 
@@ -2711,7 +2723,7 @@ import { I18N } from './i18n.js';
                 dashboard: 'Dashboard Overview',
                 singbox: 'Edge Ingress (sing-box)',
                 matrix: 'Multi-Port Proxy & Routing Matrix',
-                nodes: 'VPN Node Square',
+                nodes: 'VPN Nodes',
                 settings: 'System & Security Settings'
             };
             const titles = isEn ? titlesEn : titlesZh;
@@ -2846,7 +2858,7 @@ import { I18N } from './i18n.js';
                 singBoxOverview = data;
                 renderSingBox(data);
                 if (showToastNotice) {
-                    showToast('sing-box 入站与链式状态已同步刷新');
+                    showToast(localize('sing-box 入站与链式状态已同步刷新', 'sing-box inbounds and egress chains refreshed'));
                 }
             } catch (err) {
                 console.warn('拉取 sing-box 概览失败:', err);
@@ -3103,25 +3115,25 @@ import { I18N } from './i18n.js';
             const isSocks = proto === 'socks';
 
             if (isReality) {
-                sniLabel.innerText = '自定义 SNI 伪装域名';
-                if (sniInput) sniInput.placeholder = 'auto (知名权威站，如 www.amazon.com)';
+                sniLabel.innerText = localize('自定义 SNI 伪装域名', 'Custom SNI hostname');
+                if (sniInput) sniInput.placeholder = localize('auto (知名权威站，如 www.amazon.com)', 'auto (e.g. www.amazon.com)');
             } else if (isTLS) {
-                sniLabel.innerText = '域名 / SNI 证书配置 (需已解析域名)';
-                if (sniInput) sniInput.placeholder = 'auto (或输入域名，如 your-domain.com)';
+                sniLabel.innerText = localize('域名 / SNI 证书配置 (需已解析域名)', 'Domain / SNI certificate (DNS must be configured)');
+                if (sniInput) sniInput.placeholder = localize('auto (或输入域名，如 your-domain.com)', 'auto (or a domain, e.g. your-domain.com)');
             } else {
-                sniLabel.innerText = '自定义 SNI / 伪装域名 (当前协议免配置)';
-                if (sniInput) sniInput.placeholder = 'auto (当前协议无需配置)';
+                sniLabel.innerText = localize('自定义 SNI / 伪装域名 (当前协议免配置)', 'SNI hostname (not required for this protocol)');
+                if (sniInput) sniInput.placeholder = localize('auto (当前协议无需配置)', 'auto (not required for this protocol)');
             }
 
             if (isPassword) {
-                credLabel.innerText = '自定义连接密码 (Password)';
-                if (credInput) credInput.placeholder = 'auto (自动生成高强度随机密码)';
+                credLabel.innerText = localize('自定义连接密码 (Password)', 'Connection password');
+                if (credInput) credInput.placeholder = localize('auto (自动生成高强度随机密码)', 'auto (generate a strong random password)');
             } else if (isSocks) {
-                credLabel.innerText = 'Socks 认证密码 (留空免密)';
-                if (credInput) credInput.placeholder = '留空免密直连';
+                credLabel.innerText = localize('Socks 认证密码 (留空免密)', 'SOCKS password (blank disables authentication)');
+                if (credInput) credInput.placeholder = localize('留空免密直连', 'Leave blank for no authentication');
             } else {
-                credLabel.innerText = '自定义客户端 UUID 凭据';
-                if (credInput) credInput.placeholder = 'auto (自动生成标准 UUID 凭证)';
+                credLabel.innerText = localize('自定义客户端 UUID 凭据', 'Client UUID');
+                if (credInput) credInput.placeholder = localize('auto (自动生成标准 UUID 凭证)', 'auto (generate a UUID)');
             }
         }
 
@@ -3134,7 +3146,7 @@ import { I18N } from './i18n.js';
             if (e) e.preventDefault();
             const btn = document.getElementById('btn-submit-add-sb');
             btn.disabled = true;
-            btn.innerText = '正在生成并部署...';
+            btn.innerText = localize('正在生成并部署...', 'Creating and deploying...');
 
             const portVal = document.getElementById('sb-add-port').value.trim() || 'auto';
             let sniVal = document.getElementById('sb-add-sni').value.trim() || 'auto';
@@ -3164,13 +3176,13 @@ import { I18N } from './i18n.js';
                     return;
                 }
                 closeAddSingBoxModal();
-                showToast(`已成功创建 ${ret.node?.protocol || currentSelectedProto} 入站节点 (端口: ${ret.node?.port || 'auto'})`);
+                showToast(localize(`已成功创建 ${ret.node?.protocol || currentSelectedProto} 入站节点 (端口: ${ret.node?.port || 'auto'})`, `Created ${ret.node?.protocol || currentSelectedProto} inbound (port ${ret.node?.port || 'auto'})`));
                 await fetchSingBoxOverview();
             } catch (err) {
-                alert('网络请求失败: ' + err);
+                alert(localize('网络请求失败: ', 'Network request failed: ') + err);
             } finally {
                 btn.disabled = false;
-                btn.innerText = '立即创建并部署';
+                btn.innerText = localize('立即创建并部署', 'Create and deploy');
             }
         }
 
@@ -3183,14 +3195,14 @@ import { I18N } from './i18n.js';
                 });
                 const ret = await res.json();
                 if (!res.ok) {
-                    alert('修改出口失败: ' + (ret.error || '未知错误'));
+                    alert(localize('修改出口失败: ', 'Failed to change egress: ') + (ret.error || localize('未知错误', 'Unknown error')));
                     await fetchSingBoxOverview();
                     return;
                 }
-                showToast(`节点 [${nodeName}] 链式出口已切换为: ${outboundAddr}`);
+                showToast(localize(`节点 [${nodeName}] 链式出口已切换为: ${outboundAddr}`, `[${nodeName}] egress changed to: ${outboundAddr}`));
                 await fetchSingBoxOverview();
             } catch (err) {
-                alert('网络请求失败: ' + err);
+                alert(localize('网络请求失败: ', 'Network request failed: ') + err);
             }
         }
 
@@ -3207,11 +3219,11 @@ import { I18N } from './i18n.js';
             }
 
             let targetOutbound = 'direct';
-            let label = '直连 (VPS 原生机房网络)';
+            let label = localize('直连 (VPS 原生机房网络)', 'Direct (VPS network)');
             if (targetType === 'default') {
                 const defOb = (singBoxOverview.available_outbounds || []).find(o => o.is_default);
                 targetOutbound = defOb ? defOb.addr : '127.0.0.1:7928';
-                label = `NXGate 默认住宅出口 (${targetOutbound})`;
+                label = localize(`NXGate 默认住宅出口 (${targetOutbound})`, `NXGate default egress (${targetOutbound})`);
             }
 
             if (!tConfirm(`确定将所有 sing-box 入站节点批量切换至【${label}】吗？`, `Switch all sing-box inbound nodes to [${label}]?`)) return;
@@ -3227,10 +3239,10 @@ import { I18N } from './i18n.js';
                     tAlert('批量修改出口失败: ' + (ret.error || '未知错误'), 'Batch egress update failed: ' + (ret.error || 'Unknown error'));
                     return;
                 }
-                showToast(`已成功将 ${ret.updated_count || '全部'} 个节点切换至: ${targetOutbound}`);
+                showToast(`已成功将 ${ret.updated_count || localize('全部', 'All')} 个节点切换至: ${targetOutbound}`);
                 await fetchSingBoxOverview();
             } catch (err) {
-                alert('网络请求失败: ' + err);
+                alert(localize('网络请求失败: ', 'Network request failed: ') + err);
             }
         }
 
@@ -3242,13 +3254,13 @@ import { I18N } from './i18n.js';
                 });
                 const ret = await res.json();
                 if (!res.ok) {
-                    alert('删除失败: ' + (ret.error || '未知错误'));
+                    alert(localize('删除失败: ', 'Delete failed: ') + (ret.error || localize('未知错误', 'Unknown error')));
                     return;
                 }
-                showToast(`节点 [${nodeName}] 已成功删除并重构订阅`);
+                showToast(localize(`节点 [${nodeName}] 已成功删除并重构订阅`, `Deleted [${nodeName}] and rebuilt subscriptions`));
                 await fetchSingBoxOverview();
             } catch (err) {
-                alert('网络请求失败: ' + err);
+                alert(localize('网络请求失败: ', 'Network request failed: ') + err);
             }
         }
 
@@ -3277,7 +3289,7 @@ import { I18N } from './i18n.js';
             }
             const url = getGenericSubURL();
             const isAge = singBoxOverview.subscription && singBoxOverview.subscription.age_encrypt_enabled && singBoxOverview.subscription.age_public_key;
-            copyText(url, isAge ? 'age 端到端加密的通用订阅链接 (Base64/Raw)' : 'sing-box 全量通用订阅链接 (Base64/Raw)');
+            copyText(url, isAge ? localize('age 端到端加密的通用订阅链接 (Base64/Raw)', 'age-encrypted subscription URL (Base64/Raw)') : localize('sing-box 全量通用订阅链接 (Base64/Raw)', 'Full sing-box subscription URL (Base64/Raw)'));
         }
 
         function getClashSubURL() {
@@ -3296,7 +3308,7 @@ import { I18N } from './i18n.js';
             }
             const url = getClashSubURL();
             const isAge = singBoxOverview.subscription && singBoxOverview.subscription.age_encrypt_enabled && singBoxOverview.subscription.age_public_key;
-            copyText(url, isAge ? 'age 端到端加密的 Clash Meta 专属订阅链接' : 'Clash Meta / Mihomo 专属订阅链接');
+            copyText(url, isAge ? localize('age 端到端加密的 Clash Meta 专属订阅链接', 'age-encrypted Clash Meta subscription URL') : localize('Clash Meta / Mihomo 专属订阅链接', 'Clash Meta / Mihomo subscription URL'));
         }
 
         function downloadClashConfig() {
@@ -3307,7 +3319,7 @@ import { I18N } from './i18n.js';
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
-            showToast('已触发下载 singbox-clash.yaml');
+            showToast(localize('已触发下载 singbox-clash.yaml', 'Downloading singbox-clash.yaml'));
         }
 
         function sanitizeShareURL(url) {
@@ -3331,7 +3343,7 @@ import { I18N } from './i18n.js';
                 tAlert('暂无分享链接', 'No share link available');
                 return;
             }
-            document.getElementById('sb-qr-title').innerText = title || '客户端配置链接与二维码';
+            document.getElementById('sb-qr-title').innerText = title || localize('客户端配置链接与二维码', 'Client configuration URL and QR code');
             document.getElementById('sb-qr-url-text').value = url;
             const qrImg = document.getElementById('sb-qr-img');
             qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(url)}`;
@@ -3398,12 +3410,12 @@ import { I18N } from './i18n.js';
 
         function copyFilteredGenericSub() {
             const url = getFilteredGenericSubURL();
-            copyText(url, '定制通用订阅链接 (Base64/Raw)');
+            copyText(url, localize('定制通用订阅链接 (Base64/Raw)', 'Filtered subscription URL (Base64/Raw)'));
         }
 
         function copyFilteredClashSub() {
             const url = getFilteredClashSubURL();
-            copyText(url, '定制 Clash Meta 订阅链接');
+            copyText(url, localize('定制 Clash Meta 订阅链接', 'Filtered Clash Meta subscription URL'));
         }
 
         function downloadFilteredClash() {
@@ -3414,12 +3426,12 @@ import { I18N } from './i18n.js';
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
-            showToast('已触发下载定制 singbox-clash-filtered.yaml');
+            showToast(localize('已触发下载定制 singbox-clash-filtered.yaml', 'Downloading singbox-clash-filtered.yaml'));
         }
 
         function showFilteredQR() {
             const url = getFilteredGenericSubURL();
-            showNodeQRCode(url, '定制订阅链接与二维码');
+            showNodeQRCode(url, localize('定制订阅链接与二维码', 'Filtered subscription URL and QR code'));
         }
 
         let currentAgeType = 'x25519';
@@ -3474,9 +3486,9 @@ import { I18N } from './i18n.js';
                 }
                 document.getElementById('age-secret-key-input').value = data.secret_key;
                 document.getElementById('age-public-key-input').value = data.public_key;
-                showToast(`已成功生成全新 ${data.type} 密钥对！解密私钥请妥善保存。`);
+                showToast(localize(`已成功生成全新 ${data.type} 密钥对！解密私钥请妥善保存。`, `Generated a new ${data.type} key pair. Keep the private key safe.`));
             } catch (err) {
-                alert('网络请求失败: ' + err);
+                alert(localize('网络请求失败: ', 'Network request failed: ') + err);
             }
         }
 
@@ -3486,7 +3498,7 @@ import { I18N } from './i18n.js';
                 tAlert('请先输入或生成 age 解密私钥', 'Please enter or generate an age secret key first');
                 return;
             }
-            copyText(sec, 'age 解密私钥');
+            copyText(sec, localize('age 解密私钥', 'age private key'));
         }
 
         async function deriveAgePublicKey() {
@@ -3512,9 +3524,9 @@ import { I18N } from './i18n.js';
                 } else {
                     switchAgeType('x25519');
                 }
-                showToast(`已成功推导出 ${data.type} 加密公钥！`);
+                showToast(localize(`已成功推导出 ${data.type} 加密公钥！`, `Derived the ${data.type} public key.`));
             } catch (err) {
-                alert('网络请求失败: ' + err);
+                alert(localize('网络请求失败: ', 'Network request failed: ') + err);
             }
         }
 
@@ -3524,7 +3536,7 @@ import { I18N } from './i18n.js';
                 tAlert('请先输入或生成 age 加密公钥', 'Please enter or generate an age public key first');
                 return;
             }
-            copyText(pub, 'age 加密公钥');
+            copyText(pub, localize('age 加密公钥', 'age public key'));
         }
 
         async function applyAgePublicKey() {
@@ -3546,15 +3558,15 @@ import { I18N } from './i18n.js';
                 });
                 if (!res.ok) {
                     const err = await res.json();
-                    alert('保存失败: ' + (err.error || '未知错误'));
+                    alert(localize('保存失败: ', 'Save failed: ') + (err.error || localize('未知错误', 'Unknown error')));
                     return;
                 }
                 const cfgPub = document.getElementById('cfg-age-pubkey');
                 if (cfgPub) cfgPub.value = pub;
-                showToast('已一键填入公钥并开启 age 订阅端到端加密！');
+                showToast(localize('已一键填入公钥并开启 age 订阅端到端加密！', 'Public key applied and age subscription encryption enabled.'));
                 await fetchSingBoxOverview();
             } catch (err) {
-                alert('网络请求失败: ' + err);
+                alert(localize('网络请求失败: ', 'Network request failed: ') + err);
             }
         }
 
@@ -3580,14 +3592,14 @@ import { I18N } from './i18n.js';
                 });
                 if (!res.ok) {
                     const err = await res.json();
-                    alert('保存开关失败: ' + (err.error || '未知错误'));
+                    alert(localize('保存开关失败: ', 'Failed to save setting: ') + (err.error || localize('未知错误', 'Unknown error')));
                     toggleEl.checked = !isEnabled;
                     return;
                 }
                 showToast(`age 订阅端到端加密已${isEnabled ? '开启' : '关闭'}`);
                 await fetchSingBoxOverview();
             } catch (err) {
-                alert('网络请求失败: ' + err);
+                alert(localize('网络请求失败: ', 'Network request failed: ') + err);
                 toggleEl.checked = !isEnabled;
             }
         }
@@ -3677,26 +3689,26 @@ import { I18N } from './i18n.js';
             const testEl = document.getElementById('app-api-test-result');
             if (!testEl) return;
             testEl.classList.remove('hidden');
-            testEl.innerHTML = '<span class="text-muted">正在测试连接 /api/app/info ...</span>';
+            testEl.innerHTML = `<span class="text-muted">${localize('正在测试连接', 'Testing')} /api/app/info ...</span>`;
             const start = Date.now();
             try {
                 const res = await fetch('/api/app/info');
                 const elapsed = Date.now() - start;
                 if (res.ok) {
                     const data = await res.json();
-                    testEl.innerHTML = `<span class="text-success">API 连通正常！(耗时 ${elapsed}ms, 版本: v${escapeHtml(data.version || '2.5.4')}, 状态: ${escapeHtml(data.status || '就绪')})</span>`;
+                    testEl.innerHTML = `<span class="text-success">${localize('API 连通正常！', 'API reachable.')} (${elapsed} ms, ${localize('版本', 'version')}: v${escapeHtml(data.version || '')}, ${localize('状态', 'status')}: ${escapeHtml(data.status || localize('就绪', 'Ready'))})</span>`;
                 } else {
-                    testEl.innerHTML = `<span class="text-danger">API 测试返回异常 (HTTP ${res.status})</span>`;
+                    testEl.innerHTML = `<span class="text-danger">${localize('API 测试返回异常', 'API test failed')} (HTTP ${res.status})</span>`;
                 }
             } catch (err) {
-                testEl.innerHTML = `<span class="text-danger">无法连接到 API: ${escapeHtml(err.message)}</span>`;
+                testEl.innerHTML = `<span class="text-danger">${localize('无法连接到 API', 'Cannot reach API')}: ${escapeHtml(err.message)}</span>`;
             }
         }
 
         function copyFromElement(elId) {
             const el = document.getElementById(elId);
             if (el) {
-                copyText(el.value, '链接');
+                copyText(el.value, localize('链接', 'URL'));
             }
         }
 
@@ -3747,11 +3759,11 @@ import { I18N } from './i18n.js';
             statusTags.forEach(t => {
                 if (t) {
                     t.className = 'badge badge-proto';
-                    t.textContent = '检查中...';
+                    t.textContent = localize('检查中...', 'Checking...');
                 }
             });
             latestVerElements.forEach(el => {
-                if (el) el.textContent = '查询中...';
+                if (el) el.textContent = localize('查询中...', 'Checking...');
             });
 
             try {
@@ -3767,13 +3779,13 @@ import { I18N } from './i18n.js';
                     statusTags.forEach(t => {
                         if (t) {
                             t.className = 'badge badge-danger';
-                            t.textContent = '检查失败';
+                            t.textContent = localize('检查失败', 'Check failed');
                         }
                     });
                     latestVerElements.forEach(el => {
-                        if (el) el.textContent = '无法获取';
+                        if (el) el.textContent = localize('无法获取', 'Unavailable');
                     });
-                    if (!silent) showToast(data.error || '检查更新失败', 'error');
+                    if (!silent) showToast(data.error || localize('检查更新失败', 'Update check failed'), 'error');
                     return;
                 }
 
@@ -3783,9 +3795,9 @@ import { I18N } from './i18n.js';
                 });
 
                 if (data.release_notes || data.release_name) {
-                    const title = data.release_name || `${latestVer} 发行说明`;
-                    const dateStr = data.published_at ? new Date(data.published_at).toLocaleDateString('zh-CN') : '';
-                    const notesFormatted = escapeHtml(data.release_notes || '已检测到远端主干最新稳定版本。').replace(/\n/g, '<br>');
+                    const title = data.release_name || localize(`${latestVer} 发行说明`, `${latestVer} release notes`);
+                    const dateStr = data.published_at ? new Date(data.published_at).toLocaleDateString(getLanguage() === 'en' ? 'en-US' : 'zh-CN') : '';
+                    const notesFormatted = escapeHtml(data.release_notes || localize('已检测到远端主干最新稳定版本。', 'The latest stable release is available.')).replace(/\n/g, '<br>');
 
                     const elTitle = document.getElementById('update-release-title');
                     if (elTitle) elTitle.textContent = title;
@@ -3811,7 +3823,7 @@ import { I18N } from './i18n.js';
                     statusTags.forEach(t => {
                         if (t) {
                             t.className = 'badge badge-success';
-                            t.textContent = '可更新';
+                            t.textContent = localize('可更新', 'Update available');
                         }
                     });
                     updateBtns.forEach(b => {
@@ -3825,12 +3837,12 @@ import { I18N } from './i18n.js';
                     const dotNew = document.getElementById('header-update-dot');
                     if (dotNew) dotNew.classList.remove('hidden');
 
-                    if (!silent) showToast(`发现新版本 ${latestVer}，可点击立即升级！`, 'info');
+                    if (!silent) showToast(localize(`发现新版本 ${latestVer}，可点击立即升级！`, `Version ${latestVer} is available.`), 'info');
                 } else {
                     statusTags.forEach(t => {
                         if (t) {
                             t.className = 'badge badge-proto';
-                            t.textContent = '已是最新';
+                            t.textContent = localize('已是最新', 'Up to date');
                         }
                     });
                     updateBtns.forEach(b => {
@@ -3844,23 +3856,23 @@ import { I18N } from './i18n.js';
                     const dotNew = document.getElementById('header-update-dot');
                     if (dotNew) dotNew.classList.add('hidden');
 
-                    if (!silent) showToast('当前已是最新稳定版本 (v' + String(data.current_version || '').replace(/^v/, '') + ')', 'success');
+                    if (!silent) showToast(localize('当前已是最新稳定版本 (v', 'Already on the latest stable version (v') + String(data.current_version || '').replace(/^v/, '') + ')', 'success');
                 }
             } catch (err) {
                 console.error('检查更新失败:', err);
                 statusTags.forEach(t => {
                     if (t) {
                         t.className = 'badge badge-danger';
-                        t.textContent = '网络异常';
+                        t.textContent = localize('网络异常', 'Network error');
                     }
                 });
-                if (!silent) showToast('检查更新失败，请检查网络连接', 'error');
+                if (!silent) showToast(localize('检查更新失败，请检查网络连接', 'Update check failed. Check your connection.'), 'error');
             }
         }
 
         async function triggerSystemUpdate(force = false) {
             if (isUpdating) return;
-            const actionDesc = force ? '强制重新安装当前最新构建' : '升级至最新版本';
+            const actionDesc = force ? localize('强制重新安装当前最新构建', 'reinstall the latest build') : localize('升级至最新版本', 'upgrade to the latest version');
             if (!tConfirm(`确认立即执行系统更新（${actionDesc}）并重启服务吗？`, `Proceed with system update (${actionDesc}) and restart service?`)) return;
 
             isUpdating = true;
@@ -3880,7 +3892,7 @@ import { I18N } from './i18n.js';
             ];
 
             progressBoxes.forEach(b => b && b.classList.remove('hidden'));
-            progressSteps.forEach(s => s && (s.textContent = '正在下载官方二进制包并比对 SHA-256 校验和...'));
+            progressSteps.forEach(s => s && (s.textContent = localize('正在下载官方二进制包并比对 SHA-256 校验和...', 'Downloading the official binary and verifying its SHA-256 checksum...')));
             updateBtns.forEach(b => b && (b.disabled = true));
 
             try {
@@ -3894,15 +3906,15 @@ import { I18N } from './i18n.js';
                 if (!res.ok || !ret.ok) {
                     isUpdating = false;
                     updateBtns.forEach(b => b && (b.disabled = false));
-                    progressSteps.forEach(s => s && (s.textContent = `${ret.error || '更新失败'}`));
+                    progressSteps.forEach(s => s && (s.textContent = `${ret.error || localize('更新失败', 'Update failed')}`));
                     tAlert('系统更新失败: ' + (ret.error || '未知错误'), 'System update failed: ' + (ret.error || 'Unknown error'));
                     return;
                 }
 
                 // Success! Service is restarting
                 let countdown = 5;
-                const updateMsg = escapeHtml(ret.message || '更新完成！');
-                progressSteps.forEach(s => s && (s.innerHTML = `<strong>${updateMsg}</strong> 页面将在 <strong>${countdown}</strong> 秒后自动刷新...`));
+                const updateMsg = escapeHtml(ret.message || localize('更新完成！', 'Update complete!'));
+                progressSteps.forEach(s => s && (s.innerHTML = `<strong>${updateMsg}</strong> ${localize("页面将在", "Reloading in")} <strong>${countdown}</strong> ${localize("秒后自动刷新...", "seconds...")}`));
 
                 const timer = setInterval(() => {
                     countdown--;
@@ -3910,15 +3922,15 @@ import { I18N } from './i18n.js';
                         clearInterval(timer);
                         window.location.reload();
                     } else {
-                        progressSteps.forEach(s => s && (s.innerHTML = `<strong>${updateMsg}</strong> 页面将在 <strong>${countdown}</strong> 秒后自动刷新...`));
+                        progressSteps.forEach(s => s && (s.innerHTML = `<strong>${updateMsg}</strong> ${localize("页面将在", "Reloading in")} <strong>${countdown}</strong> ${localize("秒后自动刷新...", "seconds...")}`));
                     }
                 }, 1000);
 
             } catch (err) {
                 isUpdating = false;
                 updateBtns.forEach(b => b && (b.disabled = false));
-                progressSteps.forEach(s => s && (s.textContent = `网络异常: ${err}`));
-                alert('请求更新失败: ' + err);
+                progressSteps.forEach(s => s && (s.textContent = localize(`网络异常: ${err}`, `Network error: ${err}`)));
+                alert(localize('请求更新失败: ', 'Update request failed: ') + err);
             }
         }
 
