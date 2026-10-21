@@ -341,10 +341,12 @@ func TestSystemPrimaryGroupDoesNotInterruptInFlightConnect(t *testing.T) {
 	np := nodes.NewNodePool(cfg)
 	mgr := NewDynamicGroupManager(cfg, pool, np)
 
+	// Probe a local listener so the candidate probe cannot stall the evaluation.
+	ip, port := dynamicProbeFixture(t)
 	target := &nodes.Node{
 		ID:           "node-jp-1",
-		IP:           "203.0.113.9",
-		Port:         1461,
+		IP:           ip,
+		Port:         port,
 		Proto:        "tcp",
 		CountryShort: "JP",
 		Score:        1000,
@@ -385,10 +387,12 @@ func TestSystemPrimaryGroupReconnectsWhenNotInFlight(t *testing.T) {
 	np := nodes.NewNodePool(cfg)
 	mgr := NewDynamicGroupManager(cfg, pool, np)
 
+	// Probe a local listener so the candidate probe cannot stall the evaluation.
+	ip, port := dynamicProbeFixture(t)
 	target := &nodes.Node{
 		ID:           "node-jp-2",
-		IP:           "203.0.113.10",
-		Port:         1462,
+		IP:           ip,
+		Port:         port,
 		Proto:        "tcp",
 		CountryShort: "JP",
 		Score:        1000,
