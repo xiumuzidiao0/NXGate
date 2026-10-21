@@ -8,6 +8,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"errors"
 	"math/big"
 	"net"
 	"strings"
@@ -218,5 +219,32 @@ func TestIsHealthyHonoursIdleTimeout(t *testing.T) {
 	tun.mu.Unlock()
 	if !tun.IsHealthy() {
 		t.Fatalf("a tunnel silent for less than %s must still be healthy", DefaultIdleTimeout)
+	}
+}
+
+// TestDialRejectsStaleTunnel verifies that a black-holed peer is rejected
+// immediately rather than after the full SYN timeout for every request.
+func TestDialRejectsStaleTunnel(t *testing.T) {
+	tun := &Tunnel{
+		assignedIP: net.ParseIP("10.211.1.7"),
+		closeCh:    make(chan struct{}),
+		sessions:   make(map[uint32]*TCPConn),
+		udpConns:   make(map[uint16]*UDPConn),
+		pending:    make(map[uint16]*pendingHandshake),
+	}
+	defer tun.Close()
+
+	tun.markActivity()
+	tun.mu.Lock()
+	tun.lastRecv = time.Now().Add(-DefaultIdleTimeout - time.Second)
+	tun.mu.Unlock()
+
+	start := time.Now()
+	_, err := tun.Dial(context.Background(), "tcp", "1.1.1.1:443")
+	if !errors.Is(err, ErrTunnelStale) {
+		t.Fatalf("expected ErrTunnelStale for a black-holed peer, got %v", err)
+	}
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Fatalf("stale dial must fail fast, took %s", elapsed)
 	}
 }

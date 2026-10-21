@@ -670,6 +670,12 @@ func (t *Tunnel) Dial(ctx context.Context, network, addr string) (net.Conn, erro
 		t.mu.Unlock()
 		return nil, ErrTunnelClosed
 	}
+	// Fail fast while the peer is black-holing instead of waiting out the full
+	// SYN timeout for every proxied request in the failover window.
+	if !t.lastRecv.IsZero() && time.Since(t.lastRecv) > DefaultIdleTimeout {
+		t.mu.Unlock()
+		return nil, ErrTunnelStale
+	}
 
 	// Allocate unique ephemeral port
 	var srcPort uint16

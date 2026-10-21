@@ -11,6 +11,7 @@ var (
 	ErrAuthFailed      = errors.New("sstp pap authentication failed")
 	ErrIPCPFailed      = errors.New("sstp ipcp negotiation failed")
 	ErrTimeout         = errors.New("sstp operation timed out")
+	ErrTunnelStale     = errors.New("sstp tunnel peer stopped responding")
 )
 
 const (
