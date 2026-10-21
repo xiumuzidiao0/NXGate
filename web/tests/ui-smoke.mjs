@@ -429,6 +429,10 @@ try {
     if (!englishPortEditor.includes('Add proxy port and egress binding') || !englishPortEditor.includes('All healthy tunnels')) {
       failures.push(`${viewport}px: dynamic port editor has untranslated copy: ${englishPortEditor}`);
     }
+    // Wait for the 240ms drawer transition before checking or capturing its layout.
+    await page.waitForTimeout(260);
+    const englishEditorOverflow = await page.locator('#port-edit-card').evaluate(el => el.scrollWidth > el.clientWidth + 1);
+    if (englishEditorOverflow) failures.push(`${viewport}px: English port editor overflows horizontally`);
     if (screenshotDir) await page.screenshot({ path: join(screenshotDir, `english-port-editor-${viewport}.png`), fullPage: true });
     await page.locator('#port-edit-card [data-drawer-close]').click();
     await page.waitForTimeout(260);
