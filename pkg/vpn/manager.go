@@ -451,7 +451,11 @@ func (m *Manager) ConnectUserland(target *nodes.Node) error {
 			}
 			m.mu.Unlock()
 			if m.pool != nil {
-				m.pool.Blacklist().Mark(target, "用户态隧道握手成功但无法出网", 600*time.Second)
+				// A verified forwarding failure is a functional defect, not a
+				// transient blip, so block the node outright instead of relying on
+				// the escalation counter (which only starts blocking at 3 strikes).
+				m.pool.Blacklist().MarkManual(target.ID, target.IP, target.CountryShort,
+					"用户态隧道握手成功但无法出网", 10*time.Minute)
 			}
 			stats.LogWarn("VPN", "用户态隧道 %s (%s) 握手成功但无法出网 (被对端阻断)，已拉黑并重新选路", target.IP, target.CountryShort)
 			go m.TriggerAutoFailover()
@@ -595,7 +599,8 @@ func (m *Manager) StartHealthChecker(ctx context.Context) {
 						failedNode := m.activeNode
 						m.mu.RUnlock()
 						if failedNode != nil && m.pool != nil {
-							m.pool.Blacklist().Mark(failedNode, "用户态隧道已无法转发 IP 报文", 300*time.Second)
+							m.pool.Blacklist().MarkManual(failedNode.ID, failedNode.IP, failedNode.CountryShort,
+								"用户态隧道已无法转发 IP 报文", 5*time.Minute)
 						}
 						stats.LogWarn("Health", "心跳检测未通过：用户态隧道已无法转发 IP 报文 (%s)，已暂时降权并触发自动切换", nodeLabel(failedNode))
 						go m.TriggerAutoFailover()
