@@ -1486,7 +1486,6 @@ import { I18N } from './i18n.js';
                 hideDynamicGroupForm();
                 appendLog({ level: 'INFO', module: 'Action', message: `动态出口组 [${name}] 已成功保存！` });
                 await fetchDynamicGroups();
-                updateSystemPrimaryRotateBanner();
                 fetchStatus();
             } catch(err) {
                 alert(localize('请求异常: ', 'Request error: ') + err);
