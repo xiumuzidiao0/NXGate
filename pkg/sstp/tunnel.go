@@ -43,6 +43,7 @@ type Tunnel struct {
 	pending      map[uint16]*pendingHandshake // key: srcPort
 	writeMu      sync.Mutex
 	lastRecv     time.Time
+	closeReason  string
 	closed       bool
 	closeOnce    sync.Once
 	closeCh      chan struct{}
@@ -448,6 +449,7 @@ func (t *Tunnel) readLoop() {
 	for {
 		isCtrl, body, err := t.readPacketDirect(t.tlsConn)
 		if err != nil {
+			t.noteCloseReason(fmt.Sprintf("read from peer failed: %v", err))
 			return
 		}
 		t.markActivity()
@@ -460,6 +462,7 @@ func (t *Tunnel) readLoop() {
 					echoResp := BuildControlPacket(MsgEchoResponse, nil)
 					_ = t.sendRaw(echoResp)
 				} else if msgType == MsgCallDisconnect || msgType == MsgCallAbort {
+					t.noteCloseReason(fmt.Sprintf("peer sent control message 0x%04x", msgType))
 					return
 				}
 			}
@@ -476,6 +479,9 @@ func (t *Tunnel) readLoop() {
 
 		proto := binary.BigEndian.Uint16(body[offset : offset+2])
 		if proto != ProtoIPv4 {
+			if t.handlePPPControl(proto, body[offset+2:]) {
+				return
+			}
 			continue
 		}
 
@@ -541,6 +547,11 @@ func (t *Tunnel) keepAliveLoop() {
 		case <-ticker.C:
 			echoReq := BuildControlPacket(MsgEchoRequest, nil)
 			if err := t.sendRaw(echoReq); err != nil {
+				return
+			}
+			// SoftEther relays also police the PPP link layer. An SSTP-level echo
+			// alone keeps TLS alive but does not satisfy LCP, so drive both.
+			if err := t.sendPPP(BuildLCPPacket(PPPCodeEchoRequest, 0, pppMagic)); err != nil {
 				return
 			}
 		}
@@ -772,6 +783,73 @@ func (t *Tunnel) Port() int {
 	return t.port
 }
 
+// pppMagic is the LCP Magic-Number advertised by this client. PPP requires an
+// Echo-Reply to carry the replying peer's own magic number.
+var pppMagic = []byte{0x4e, 0x58, 0x47, 0x54} // "NXGT"
+
+// sendPPP frames and writes a PPP control payload inside an SSTP data packet.
+func (t *Tunnel) sendPPP(pppPayload []byte) error {
+	return t.sendRaw(BuildDataPacket(pppPayload))
+}
+
+// handlePPPControl answers link-layer control protocols that arrive after the
+// handshake completes and reports whether the session must be torn down.
+//
+// This is not optional: SoftEther relays use PPP LCP echo requests as their
+// session keepalive. A client that only speaks SSTP-level echoes never answers
+// them, so the relay declares the link dead and disconnects with
+// MsgCallDisconnect roughly a minute after the tunnel comes up - which shows up
+// as tunnels that connect successfully and then die in a loop.
+func (t *Tunnel) handlePPPControl(proto uint16, payload []byte) (fatal bool) {
+	if len(payload) < 4 {
+		return false
+	}
+	code := payload[0]
+	ident := payload[1]
+	plen := int(binary.BigEndian.Uint16(payload[2:4]))
+	if plen < 4 || plen > len(payload) {
+		plen = len(payload)
+	}
+	opts := payload[4:plen]
+
+	switch proto {
+	case ProtoLCP:
+		switch code {
+		case PPPCodeEchoRequest:
+			// Echo the peer's data back, as every PPP implementation does.
+			_ = t.sendPPP(BuildLCPPacket(PPPCodeEchoReply, ident, opts))
+		case PPPCodeEchoReply:
+			// Nothing to do: inbound activity already refreshed liveness.
+		case PPPCodeConfigureRequest:
+			_ = t.sendPPP(BuildLCPPacket(PPPCodeConfigureAck, ident, opts))
+		case PPPCodeTerminateRequest:
+			_ = t.sendPPP(BuildLCPPacket(PPPCodeTerminateAck, ident, opts))
+			t.noteCloseReason("peer terminated the PPP link (LCP Terminate-Request)")
+			return true
+		}
+	case ProtoIPCP:
+		switch code {
+		case PPPCodeConfigureRequest:
+			_ = t.sendPPP(BuildIPCPPacket(PPPCodeConfigureAck, ident, opts))
+		case PPPCodeTerminateRequest:
+			_ = t.sendPPP(BuildIPCPPacket(PPPCodeTerminateAck, ident, opts))
+			t.noteCloseReason("peer terminated IPCP (Terminate-Request)")
+			return true
+		}
+	}
+	return false
+}
+
+// noteCloseReason records why the session ended so operators can tell a relay
+// side disconnect apart from a local transport failure.
+func (t *Tunnel) noteCloseReason(reason string) {
+	t.mu.Lock()
+	if t.closeReason == "" {
+		t.closeReason = reason
+	}
+	t.mu.Unlock()
+}
+
 // markActivity records inbound liveness for IsHealthy.
 func (t *Tunnel) markActivity() {
 	t.mu.Lock()
@@ -844,7 +922,11 @@ func (t *Tunnel) Close() error {
 		if t.tlsConn != nil {
 			_ = t.tlsConn.Close()
 		}
-		stats.LogInfo("SSTP", "用户态免 TUN 隧道已关闭: %s:%d", t.host, t.port)
+		reason := t.closeReason
+		if reason == "" {
+			reason = "closed locally"
+		}
+		stats.LogInfo("SSTP", "用户态免 TUN 隧道已关闭: %s:%d (%s)", t.host, t.port, reason)
 	})
 	return nil
 }

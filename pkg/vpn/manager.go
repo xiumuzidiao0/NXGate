@@ -36,6 +36,10 @@ type Manager struct {
 	// governing dynamic group's country / IP-type / purity / unlock constraints.
 	failoverDelegate func() bool
 
+	// lastEgressProbe throttles the userland forwarding check so it runs at most
+	// once per userlandEgressProbeInterval instead of on every health tick.
+	lastEgressProbe time.Time
+
 	mu           sync.RWMutex
 	epoch        uint64
 	primaryID    string
@@ -45,6 +49,36 @@ type Manager struct {
 	lastMessage  string
 	reconnects   int
 	isConnecting bool
+}
+
+// userlandEgressProbes are dialled through a userland tunnel using literal IPs,
+// so the check exercises IP packet forwarding only and never depends on DNS or
+// on the tunnel's own DoH resolver.
+var userlandEgressProbes = []string{"1.1.1.1:443", "8.8.8.8:443", "9.9.9.9:443"}
+
+const (
+	userlandEgressProbeInterval = 60 * time.Second
+	userlandEgressProbeTimeout  = 5 * time.Second
+)
+
+// probeUserlandEgress verifies that a userland tunnel actually forwards IP
+// packets. A SoftEther relay can complete the SSTP/PPP handshake, stay perfectly
+// responsive to keepalives and still never forward traffic (restricted relay or
+// upstream filtering); such a tunnel must never be published as a working exit.
+func probeUserlandEgress(tun *sstp.Tunnel) bool {
+	if tun == nil {
+		return false
+	}
+	for _, target := range userlandEgressProbes {
+		ctx, cancel := context.WithTimeout(context.Background(), userlandEgressProbeTimeout)
+		conn, err := tun.Dial(ctx, "tcp", target)
+		cancel()
+		if err == nil {
+			_ = conn.Close()
+			return true
+		}
+	}
+	return false
 }
 
 // AutoDetectDriverMode inspects system environment and capabilities to select appropriate driver mode.
@@ -156,6 +190,10 @@ func (m *Manager) Snapshot() StateSnapshot {
 	if driverMode == DriverUserland {
 		if m.sstpTunnel != nil && m.sstpTunnel.IsHealthy() {
 			status = StatusConnected
+		} else if status == StatusConnected {
+			// The userland session died (peer gone or silently black-holed). Never
+			// keep advertising a working exit while the proxy cannot forward.
+			status = StatusReconnecting
 		}
 	} else if m.primaryID != "" && m.tunnelPool != nil {
 		if t := m.tunnelPool.GetTunnel(m.primaryID); t != nil {
@@ -401,6 +439,25 @@ func (m *Manager) ConnectUserland(target *nodes.Node) error {
 			go m.TriggerAutoFailover()
 			return
 		}
+
+		// The SSTP/PPP handshake alone does not prove the relay forwards traffic.
+		if !probeUserlandEgress(tun) {
+			_ = tun.Close()
+			m.mu.Lock()
+			if m.epoch == currentEpoch {
+				m.status = StatusFailed
+				m.isConnecting = false
+				m.lastMessage = fmt.Sprintf("用户态隧道 %s 握手成功但无法转发 IP 报文", target.IP)
+			}
+			m.mu.Unlock()
+			if m.pool != nil {
+				m.pool.Blacklist().Mark(target, "用户态隧道握手成功但无法出网", 600*time.Second)
+			}
+			stats.LogWarn("VPN", "用户态隧道 %s (%s) 握手成功但无法出网 (被对端阻断)，已拉黑并重新选路", target.IP, target.CountryShort)
+			go m.TriggerAutoFailover()
+			return
+		}
+
 		if target != nil {
 			target.SSTPPort = tun.Port()
 		}
@@ -519,6 +576,20 @@ func (m *Manager) StartHealthChecker(ctx context.Context) {
 				if dMode == DriverUserland {
 					if sTun == nil || !sTun.IsHealthy() {
 						stats.LogWarn("Health", "心跳检测未通过：用户态 SSTP 链路已中断，触发自动切换")
+						go m.TriggerAutoFailover()
+						continue
+					}
+					// The SSTP session can stay alive while the relay silently stops
+					// forwarding, so re-verify real egress periodically. A dead exit must
+					// never be reported as connected.
+					m.mu.Lock()
+					due := time.Since(m.lastEgressProbe) >= userlandEgressProbeInterval
+					if due {
+						m.lastEgressProbe = time.Now()
+					}
+					m.mu.Unlock()
+					if due && !probeUserlandEgress(sTun) {
+						stats.LogWarn("Health", "心跳检测未通过：用户态隧道已无法转发 IP 报文，触发自动切换")
 						go m.TriggerAutoFailover()
 					}
 					continue

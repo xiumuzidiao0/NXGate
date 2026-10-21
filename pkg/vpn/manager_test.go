@@ -1,6 +1,7 @@
 package vpn
 
 import (
+	"net"
 	"testing"
 	"time"
 
@@ -116,5 +117,30 @@ func TestPrimaryFailoverDelegateTakesPrecedence(t *testing.T) {
 	// proves the global selection path was skipped.
 	if snap.ReconnectCount != 0 {
 		t.Fatalf("expected delegate-owned failover to skip the built-in reconnect counter, got %d", snap.ReconnectCount)
+	}
+}
+
+// TestProbeUserlandEgressRejectsNilTunnel ensures a missing tunnel is never
+// reported as a working exit, so the connect path cannot publish a dead primary.
+func TestProbeUserlandEgressRejectsNilTunnel(t *testing.T) {
+	if probeUserlandEgress(nil) {
+		t.Fatal("a nil tunnel must never be reported as a working exit")
+	}
+}
+
+// TestUserlandEgressProbesUseLiteralIPs guards the probe design: the check must
+// measure packet forwarding only, never DNS resolution.
+func TestUserlandEgressProbesUseLiteralIPs(t *testing.T) {
+	if len(userlandEgressProbes) < 2 {
+		t.Fatalf("expected several independent egress probes, got %v", userlandEgressProbes)
+	}
+	for _, target := range userlandEgressProbes {
+		host, _, err := net.SplitHostPort(target)
+		if err != nil {
+			t.Fatalf("probe target %q is not host:port: %v", target, err)
+		}
+		if net.ParseIP(host) == nil {
+			t.Fatalf("probe target %q must use a literal IP so DNS cannot mask a dead exit", target)
+		}
 	}
 }

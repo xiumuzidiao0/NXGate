@@ -8,7 +8,9 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/binary"
 	"errors"
+	"io"
 	"math/big"
 	"net"
 	"strings"
@@ -247,4 +249,186 @@ func TestDialRejectsStaleTunnel(t *testing.T) {
 	if elapsed := time.Since(start); elapsed > time.Second {
 		t.Fatalf("stale dial must fail fast, took %s", elapsed)
 	}
+}
+
+// TestHandlePPPControlAnswersLCPEcho is the regression guard for the Zero-TUN
+// "connects then dies after ~40s" loop: SoftEther relays police the PPP link
+// layer with LCP echo requests, so the client must answer them.
+func TestHandlePPPControlAnswersLCPEcho(t *testing.T) {
+	server := newLoopbackPPP(t)
+	defer server.Close()
+
+	tun := server.newTunnel(t)
+	defer tun.Close()
+	go tun.readLoop()
+
+	// Server asks for an LCP echo the way a SoftEther relay does.
+	req := BuildLCPPacket(PPPCodeEchoRequest, 7, []byte{0xde, 0xad, 0xbe, 0xef})
+	if _, err := server.Write(BuildDataPacket(req)); err != nil {
+		t.Fatalf("write echo request: %v", err)
+	}
+
+	proto, code, ident, data := server.readPPPControl(t, 5*time.Second)
+	if proto != ProtoLCP || code != PPPCodeEchoReply {
+		t.Fatalf("expected LCP Echo-Reply, got proto=0x%04x code=%d", proto, code)
+	}
+	if ident != 7 {
+		t.Fatalf("echo reply must reuse the request identifier, got %d", ident)
+	}
+	if string(data) != string([]byte{0xde, 0xad, 0xbe, 0xef}) {
+		t.Fatalf("echo reply must carry the request data, got %x", data)
+	}
+}
+
+// TestHandlePPPControlTerminateIsFatal verifies a peer-initiated PPP teardown
+// ends the session instead of being silently ignored.
+func TestHandlePPPControlTerminateIsFatal(t *testing.T) {
+	tun := &Tunnel{
+		assignedIP: net.ParseIP("10.211.1.7"),
+		closeCh:    make(chan struct{}),
+		sessions:   make(map[uint32]*TCPConn),
+		udpConns:   make(map[uint16]*UDPConn),
+		pending:    make(map[uint16]*pendingHandshake),
+	}
+	defer tun.Close()
+
+	term := BuildLCPPacket(PPPCodeTerminateRequest, 1, nil)
+	if !tun.handlePPPControl(ProtoLCP, term[2:]) {
+		t.Fatal("LCP Terminate-Request must be treated as fatal")
+	}
+	if tun.closeReason == "" {
+		t.Fatal("expected a recorded close reason")
+	}
+
+	// IPCP teardown must be fatal too.
+	termIPCP := BuildIPCPPacket(PPPCodeTerminateRequest, 2, nil)
+	if !tun.handlePPPControl(ProtoIPCP, termIPCP[2:]) {
+		t.Fatal("IPCP Terminate-Request must be treated as fatal")
+	}
+}
+
+// TestHandlePPPControlIgnoresMalformed guards against panics on truncated frames.
+func TestHandlePPPControlIgnoresMalformed(t *testing.T) {
+	tun := &Tunnel{closeCh: make(chan struct{})}
+	defer tun.Close()
+	for _, payload := range [][]byte{nil, {0x09}, {0x09, 0x01}, {0x09, 0x01, 0xff, 0xff, 0xaa}} {
+		if tun.handlePPPControl(ProtoLCP, payload) {
+			t.Fatalf("malformed payload %x must not be fatal", payload)
+		}
+	}
+}
+
+// pppLoopback is a minimal SSTP peer used to exercise the post-handshake PPP
+// control plane without depending on a real relay.
+type pppLoopback struct {
+	t      *testing.T
+	lis    net.Listener
+	srv    net.Conn
+	br     *bufio.Reader
+	client *tls.Conn
+}
+
+func newLoopbackPPP(t *testing.T) *pppLoopback {
+	t.Helper()
+	lis, err := tls.Listen("tcp", "127.0.0.1:0", generateTestTLSConfig(t))
+	if err != nil {
+		t.Fatalf("listen tls failed: %v", err)
+	}
+	lb := &pppLoopback{t: t, lis: lis}
+
+	accepted := make(chan net.Conn, 1)
+	go func() {
+		c, err := lis.Accept()
+		if err != nil {
+			return
+		}
+		// tls.Listen defers the handshake until first use, so drive it here;
+		// otherwise the client side blocks forever waiting for the ServerHello.
+		if err := c.(*tls.Conn).Handshake(); err != nil {
+			return
+		}
+		accepted <- c
+	}()
+
+	raw, err := net.Dial("tcp", lis.Addr().String())
+	if err != nil {
+		t.Fatalf("dial loopback failed: %v", err)
+	}
+	_ = raw.SetDeadline(time.Now().Add(5 * time.Second))
+	client := tls.Client(raw, sstpTLSConfig("127.0.0.1"))
+	if err := client.Handshake(); err != nil {
+		t.Fatalf("loopback tls handshake failed: %v", err)
+	}
+	_ = raw.SetDeadline(time.Time{})
+	lb.client = client
+
+	select {
+	case c := <-accepted:
+		lb.srv = c
+		lb.br = bufio.NewReader(c)
+	case <-time.After(5 * time.Second):
+		t.Fatal("loopback accept timed out")
+	}
+	return lb
+}
+
+func (lb *pppLoopback) Close() {
+	if lb.client != nil {
+		_ = lb.client.Close()
+	}
+	if lb.srv != nil {
+		_ = lb.srv.Close()
+	}
+	_ = lb.lis.Close()
+}
+
+// newTunnel binds a Tunnel to the client side of the loopback peer.
+func (lb *pppLoopback) newTunnel(t *testing.T) *Tunnel {
+	t.Helper()
+	return &Tunnel{
+		host:       "127.0.0.1",
+		port:       443,
+		assignedIP: net.ParseIP("10.211.1.7"),
+		tlsConn:    lb.client,
+		sessions:   make(map[uint32]*TCPConn),
+		udpConns:   make(map[uint16]*UDPConn),
+		pending:    make(map[uint16]*pendingHandshake),
+		closeCh:    make(chan struct{}),
+	}
+}
+
+func (lb *pppLoopback) Write(b []byte) (int, error) { return lb.srv.Write(b) }
+
+// readPPPControl reads one SSTP data frame and returns its PPP control fields.
+func (lb *pppLoopback) readPPPControl(t *testing.T, timeout time.Duration) (uint16, byte, byte, []byte) {
+	t.Helper()
+	_ = lb.srv.SetReadDeadline(time.Now().Add(timeout))
+
+	hdr := make([]byte, 4)
+	if _, err := io.ReadFull(lb.br, hdr); err != nil {
+		t.Fatalf("read sstp header: %v", err)
+	}
+	pktLen := int(binary.BigEndian.Uint16(hdr[2:4]) & 0x0fff)
+	if pktLen < 4 {
+		t.Fatalf("invalid sstp frame length %d", pktLen)
+	}
+	body := make([]byte, pktLen-4)
+	if _, err := io.ReadFull(lb.br, body); err != nil {
+		t.Fatalf("read sstp body: %v", err)
+	}
+
+	off := 0
+	if len(body) >= 2 && body[0] == 0xff && body[1] == 0x03 {
+		off = 2
+	}
+	if len(body)-off < 4 {
+		t.Fatalf("ppp payload too short: %x", body)
+	}
+	proto := binary.BigEndian.Uint16(body[off : off+2])
+	payload := body[off+2:]
+	plen := int(binary.BigEndian.Uint16(payload[2:4]))
+	if plen < 4 || plen > len(payload) {
+		plen = len(payload)
+	}
+	return proto, payload[0], payload[1], payload[4:plen]
 }
