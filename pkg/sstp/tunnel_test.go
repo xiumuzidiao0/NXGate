@@ -186,3 +186,37 @@ func TestSSTPTLSAcceptsHostnameOnlyCertificate(t *testing.T) {
 		t.Fatalf("TLS layer rejected a hostname-only certificate: %v", err)
 	}
 }
+
+// TestIsHealthyHonoursIdleTimeout guards the black-hole detection bound: a relay
+// that stops forwarding leaves the TCP socket open, so liveness must be judged on
+// inbound activity. Before this bound the gateway reported "connected" for many
+// minutes while every proxied request failed.
+func TestIsHealthyHonoursIdleTimeout(t *testing.T) {
+	tun := &Tunnel{
+		assignedIP: net.ParseIP("10.211.1.7"),
+		closeCh:    make(chan struct{}),
+		sessions:   make(map[uint32]*TCPConn),
+		udpConns:   make(map[uint16]*UDPConn),
+		pending:    make(map[uint16]*pendingHandshake),
+	}
+	defer tun.Close()
+
+	tun.markActivity()
+	if !tun.IsHealthy() {
+		t.Fatal("a tunnel that just received traffic must be healthy")
+	}
+
+	tun.mu.Lock()
+	tun.lastRecv = time.Now().Add(-DefaultIdleTimeout - time.Second)
+	tun.mu.Unlock()
+	if tun.IsHealthy() {
+		t.Fatalf("a tunnel silent for longer than %s must be unhealthy", DefaultIdleTimeout)
+	}
+
+	tun.mu.Lock()
+	tun.lastRecv = time.Now().Add(-DefaultIdleTimeout / 2)
+	tun.mu.Unlock()
+	if !tun.IsHealthy() {
+		t.Fatalf("a tunnel silent for less than %s must still be healthy", DefaultIdleTimeout)
+	}
+}

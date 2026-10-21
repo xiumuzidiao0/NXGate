@@ -19,6 +19,15 @@ const (
 	DefaultWriteTimeout   = 10 * time.Second
 	DefaultEchoInterval   = 20 * time.Second
 	DefaultTCPMSS         = 1360
+
+	// DefaultIdleTimeout bounds how long a tunnel may stay completely silent
+	// before it is treated as dead. The keepalive loop sends an SSTP echo every
+	// DefaultEchoInterval and SoftEther relays also emit their own keepalives, so
+	// several consecutive silent rounds mean the session is gone even though the
+	// underlying TCP socket has not reported an error yet. Without this bound a
+	// silently black-holed relay keeps reporting "connected" for many minutes
+	// while every proxied request fails.
+	DefaultIdleTimeout = 75 * time.Second
 )
 
 // SSTP Header Constants

@@ -42,6 +42,7 @@ type Tunnel struct {
 	udpConns     map[uint16]*UDPConn          // key: localPort
 	pending      map[uint16]*pendingHandshake // key: srcPort
 	writeMu      sync.Mutex
+	lastRecv     time.Time
 	closed       bool
 	closeOnce    sync.Once
 	closeCh      chan struct{}
@@ -274,6 +275,10 @@ func Connect(ctx context.Context, host string, port int, user, pass string) (*Tu
 		_ = t.Close()
 		return nil, err
 	}
+	// The PPP negotiation that just completed proves the peer was alive, so the
+	// liveness clock starts here rather than being left zero (which would disable
+	// the staleness bound below).
+	t.markActivity()
 
 	go t.readLoop()
 	go t.keepAliveLoop()
@@ -445,6 +450,7 @@ func (t *Tunnel) readLoop() {
 		if err != nil {
 			return
 		}
+		t.markActivity()
 
 		if isCtrl {
 			if len(body) >= 2 {
@@ -760,10 +766,38 @@ func (t *Tunnel) Port() int {
 	return t.port
 }
 
+// markActivity records inbound liveness for IsHealthy.
+func (t *Tunnel) markActivity() {
+	t.mu.Lock()
+	t.lastRecv = time.Now()
+	t.mu.Unlock()
+}
+
 func (t *Tunnel) IsHealthy() bool {
 	t.mu.RLock()
+	closed := t.closed
+	assigned := t.assignedIP
+	lastRecv := t.lastRecv
+	t.mu.RUnlock()
+
+	if closed || assigned == nil {
+		return false
+	}
+	// A relay that stopped forwarding (or was silently black-holed) leaves the
+	// TCP socket open, so liveness must be judged on inbound activity instead of
+	// on the socket merely being writable.
+	if !lastRecv.IsZero() && time.Since(lastRecv) > DefaultIdleTimeout {
+		return false
+	}
+	return true
+}
+
+// LastRecv reports when the tunnel last received a byte from the peer. A zero
+// value means nothing has been received since the session was established.
+func (t *Tunnel) LastRecv() time.Time {
+	t.mu.RLock()
 	defer t.mu.RUnlock()
-	return !t.closed && t.assignedIP != nil
+	return t.lastRecv
 }
 
 func (t *Tunnel) Close() error {
