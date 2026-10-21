@@ -82,6 +82,25 @@ func ResolveCandidatePortsWithPreferred(targetPort int, preferredPort int) []int
 	return candidates
 }
 
+// sstpTLSConfig returns the TLS configuration required by the MS-SSTP client.
+//
+// SSTP servers present certificates issued for their own hostname (for VPNGate
+// relays this is "opengw.net") while clients dial literal IP addresses, so chain
+// and hostname verification can never succeed. Per [MS-SSTP] the TLS layer is a
+// transport wrapper only: session authenticity is established by the PPP layer
+// (MS-CHAPv2 / EAP) carried inside the tunnel, so the server certificate is not
+// the authentication anchor. Certificate verification is therefore intentionally
+// disabled, matching every mainstream SSTP client (sstpc, SoftEther, Windows
+// RRAS). Regression guard: enabling it silently breaks every Zero-TUN tunnel.
+func sstpTLSConfig(serverName string) *tls.Config {
+	return &tls.Config{
+		MinVersion: tls.VersionTLS12,
+		ServerName: serverName,
+		//nolint:gosec // G402: see sstpTLSConfig doc comment above.
+		InsecureSkipVerify: true,
+	}
+}
+
 // FastProbeSSTPPort tests whether a given host:port accepts SSTP_DUPLEX_POST over TLS.
 func FastProbeSSTPPort(ctx context.Context, host string, port int, timeout time.Duration) bool {
 	if port <= 0 || port > 65535 {
@@ -100,10 +119,7 @@ func FastProbeSSTPPort(ctx context.Context, host string, port int, timeout time.
 
 	_ = rawConn.SetDeadline(time.Now().Add(timeout))
 
-	tlsConfig := &tls.Config{
-		MinVersion: tls.VersionTLS12,
-		ServerName: host,
-	}
+	tlsConfig := sstpTLSConfig(host)
 	tlsConn := tls.Client(rawConn, tlsConfig)
 	if err := tlsConn.HandshakeContext(ctx); err != nil {
 		return false
@@ -179,24 +195,41 @@ func ConnectNode(ctx context.Context, host string, targetPort int, proto string,
 
 func ConnectNodeWithPreferred(ctx context.Context, host string, preferredPort int, targetPort int, proto string, user, pass string) (*Tunnel, error) {
 	ports := ResolveCandidatePortsWithPreferred(targetPort, preferredPort)
-	var lastErr error
+	attempts := make([]string, 0, len(ports))
+	var firstErr error
 
-	for _, p := range ports {
+	for i, p := range ports {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
 
-		connCtx, cancel := context.WithTimeout(ctx, 7*time.Second)
+		// The node's own listener (preferred / target port) is the authoritative
+		// SSTP endpoint. The generic SoftEther fallback ports (443/995/5555) are
+		// almost never open on VPNGate relays, so give them a tighter budget to
+		// keep failover fast instead of stalling the scheduler for ~30s.
+		budget := 7 * time.Second
+		if i > 0 {
+			budget = 4 * time.Second
+		}
+
+		connCtx, cancel := context.WithTimeout(ctx, budget)
 		tun, err := Connect(connCtx, host, p, user, pass)
 		cancel()
 		if err == nil {
 			return tun, nil
 		}
-		lastErr = err
+		if firstErr == nil {
+			firstErr = err
+		}
+		attempts = append(attempts, fmt.Sprintf("%d: %v", p, err))
 	}
 
-	if lastErr != nil {
-		return nil, fmt.Errorf("connect to %s across ports %v failed: %w", host, ports, lastErr)
+	if firstErr != nil {
+		// Surface every port's failure, not just the last one: the authoritative
+		// port's error is the meaningful one and must not be masked by a timeout
+		// on an unrelated fallback port.
+		return nil, fmt.Errorf("connect to %s failed across ports %v (%s): %w",
+			host, ports, strings.Join(attempts, "; "), firstErr)
 	}
 	return nil, ErrHandshakeFailed
 }
@@ -218,10 +251,7 @@ func Connect(ctx context.Context, host string, port int, user, pass string) (*Tu
 		return nil, fmt.Errorf("tcp dial failed: %w", err)
 	}
 
-	tlsConfig := &tls.Config{
-		MinVersion: tls.VersionTLS12,
-		ServerName: host,
-	}
+	tlsConfig := sstpTLSConfig(host)
 	tlsConn := tls.Client(rawConn, tlsConfig)
 	if err := tlsConn.HandshakeContext(ctx); err != nil {
 		_ = rawConn.Close()

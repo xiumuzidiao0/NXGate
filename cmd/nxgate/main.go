@@ -21,6 +21,23 @@ import (
 	singboxscripts "aimili-vpngate-go/scripts/singbox"
 )
 
+// enabledSystemPrimaryGroup returns the enabled system-primary dynamic group, or
+// nil when the primary egress is not managed by a dynamic group.
+func enabledSystemPrimaryGroup(mgr *tunnel.DynamicGroupManager) *tunnel.DynamicGroup {
+	if mgr == nil {
+		return nil
+	}
+	for _, g := range mgr.ListGroups() {
+		if g == nil || !g.Enabled {
+			continue
+		}
+		if g.IsSystem || g.ID == tunnel.SystemPrimaryGroupID {
+			return g
+		}
+	}
+	return nil
+}
+
 func main() {
 	showVersion := flag.Bool("version", false, "显示程序版本号")
 	extractSingbox := flag.String("extract-singbox", "", "释放内置的 sing-box 管理脚本到指定目录 (例如 /etc/sing-box/sh)")
@@ -165,8 +182,14 @@ func main() {
 		stats.LogInfo("Main", "正在初始化节点池并拉取候选节点...")
 		if err := nodePool.Refresh(ctx); err != nil {
 			stats.LogWarn("Main", "初次拉取节点失败: %v，等待定时任务重试", err)
+		} else if g := enabledSystemPrimaryGroup(dynamicGroupMgr); g != nil {
+			// The system-primary dynamic group owns the primary egress: it applies
+			// country / IP-type / purity / unlock constraints that a global
+			// "best node" pick cannot honour. Running both would race and let the
+			// unconstrained pick tear down the group's tunnel seconds after it
+			// was established.
+			stats.LogInfo("Main", "检测到已启用的主出口动态组 [%s]，主网关交由动态组托管，跳过全局最优节点自动连接", g.Name)
 		} else {
-			// Auto connect to best node if available
 			best := nodePool.SelectBest()
 			if best != nil {
 				stats.LogInfo("Main", "检测到最优候选节点 [%s] (%s)，准备自动建立 VPN 连接...", best.ID, best.CountryShort)

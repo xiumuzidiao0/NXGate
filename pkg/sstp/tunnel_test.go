@@ -8,17 +8,22 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"encoding/pem"
 	"math/big"
 	"net"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 )
 
 func generateTestTLSConfig(t *testing.T) *tls.Config {
+	return generateTestTLSConfigWithSANs(t, nil, []string{"opengw.net"})
+}
+
+// generateTestTLSConfigWithSANs builds a throwaway server certificate. Real
+// SoftEther / VPNGate relays present a certificate issued for their own
+// hostname while clients dial literal IP addresses, which is why the default
+// fixture below carries a hostname SAN only.
+func generateTestTLSConfigWithSANs(t *testing.T, ips []net.IP, dnsNames []string) *tls.Config {
 	priv, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatalf("generate rsa key failed: %v", err)
@@ -34,7 +39,8 @@ func generateTestTLSConfig(t *testing.T) *tls.Config {
 		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		BasicConstraintsValid: true,
-		IPAddresses:           []net.IP{net.ParseIP("127.0.0.1")},
+		IPAddresses:           ips,
+		DNSNames:              dnsNames,
 	}
 
 	certDER, err := x509.CreateCertificate(rand.Reader, &template, &template, &priv.PublicKey, priv)
@@ -79,14 +85,7 @@ func TestResolveCandidatePortsWithPreferred(t *testing.T) {
 }
 
 func TestFastProbeAndDetectSSTPPort(t *testing.T) {
-	tlsCfg := generateTestTLSConfig(t)
-	caFile := filepath.Join(t.TempDir(), "root.pem")
-	if err := os.WriteFile(caFile, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: tlsCfg.Certificates[0].Certificate[0]}), 0600); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("SSL_CERT_FILE", caFile)
-	t.Setenv("SSL_CERT_DIR", t.TempDir())
-	listener, err := tls.Listen("tcp", "127.0.0.1:0", tlsCfg)
+	listener, err := tls.Listen("tcp", "127.0.0.1:0", generateTestTLSConfig(t))
 	if err != nil {
 		t.Fatalf("listen tls failed: %v", err)
 	}
@@ -138,34 +137,52 @@ func TestFastProbeAndDetectSSTPPort(t *testing.T) {
 	}
 }
 
-func TestSecuritySSTPRejectsUntrustedCertificate(t *testing.T) {
-	// A separate self-signed certificate is not the explicitly trusted fixture above.
+// TestSSTPTLSAcceptsHostnameOnlyCertificate locks in the real-world SoftEther
+// contract: relays such as VPNGate present a certificate issued for their own
+// hostname ("opengw.net") while clients dial literal IP addresses, so chain and
+// hostname verification can never succeed. MS-SSTP treats TLS as a transport
+// wrapper and authenticates the session in the PPP layer (MS-CHAPv2), therefore
+// the client must complete the TLS handshake instead of aborting with a
+// certificate error. Regression guard for the Zero-TUN "connecting forever" bug.
+func TestSSTPTLSAcceptsHostnameOnlyCertificate(t *testing.T) {
 	listener, err := tls.Listen("tcp", "127.0.0.1:0", generateTestTLSConfig(t))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer listener.Close()
+
 	go func() {
 		for {
-			c, err := listener.Accept()
+			conn, err := listener.Accept()
 			if err != nil {
 				return
 			}
-			go func(c net.Conn) { defer c.Close(); _ = c.(*tls.Conn).Handshake() }(c)
+			go func(c net.Conn) {
+				defer c.Close()
+				reader := bufio.NewReader(c)
+				if _, err := reader.ReadString('\n'); err != nil {
+					return
+				}
+				_, _ = c.Write([]byte("HTTP/1.1 200 OK\r\nContent-Length: 18446744073709551615\r\nServer: Microsoft-HTTPAPI/2.0\r\n\r\n"))
+			}(conn)
 		}
 	}()
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	port := listener.Addr().(*net.TCPAddr).Port
-	if FastProbeSSTPPort(ctx, "127.0.0.1", port, time.Second) {
-		t.Fatal("probe accepted untrusted certificate")
+
+	if !FastProbeSSTPPort(ctx, "127.0.0.1", port, time.Second) {
+		t.Fatal("probe rejected a hostname-only certificate presented by an SSTP listener")
 	}
+
+	// Connect must get past the TLS layer; it may still fail later because this
+	// stub does not implement the PPP negotiation, but never with a cert error.
 	tun, err := Connect(ctx, "127.0.0.1", port, "test", "test")
 	if tun != nil {
-		tun.Close()
-		t.Fatal("connection accepted untrusted certificate")
+		_ = tun.Close()
 	}
-	if err == nil || !strings.Contains(err.Error(), "certificate") {
-		t.Fatal("expected TLS certificate rejection", err)
+	if err != nil && strings.Contains(strings.ToLower(err.Error()), "certificate") {
+		t.Fatalf("TLS layer rejected a hostname-only certificate: %v", err)
 	}
 }
