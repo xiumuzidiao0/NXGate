@@ -462,6 +462,18 @@ func TestSubscriptionGroupPrefixAndFiltering(t *testing.T) {
 		t.Errorf("expected only trojan for protocol filter, got %d nodes", len(filteredProto))
 	}
 
+	// 3b. Test filter=proxy (only relayed egress, exclude direct)
+	qProxy := url.Values{"filter": []string{"proxy"}}
+	filteredProxy := s.FilterSubscriptionNodes(testNodes, qProxy)
+	if len(filteredProxy) != 2 {
+		t.Errorf("expected 2 relayed nodes (excluding direct), got %d", len(filteredProxy))
+	}
+	for _, n := range filteredProxy {
+		if strings.EqualFold(n.Outbound, "direct") {
+			t.Errorf("node %s has direct outbound, should have been filtered out", n.Tag)
+		}
+	}
+
 	// 4. Test URL filter query propagation in buildGenericSubURL and buildClashSubURL
 	reqWithFav := httptest.NewRequest("GET", "/api/singbox/subscription?format=json&filter=favorites", nil)
 	genURL := s.buildGenericSubURL(reqWithFav)

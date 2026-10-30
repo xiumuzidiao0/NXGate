@@ -60,6 +60,7 @@ func (s *Server) prepareSubscriptionNodes(ctx context.Context, r *http.Request) 
 
 // FilterSubscriptionNodes applies multi-dimensional filtering to sing-box nodes based on URL query parameters:
 // - filter=favorites (or favorites=1/true): only nodes bound to favorites dynamic group
+// - filter=proxy / filter=relayed (or proxy_only=1/true): only nodes with non-direct proxy egress (转接出口)
 // - countries=JP,US (or country=JP): only nodes bound to dynamic groups matching target countries
 // - group=dg-1 (or group_id=xxx): only nodes bound to a specific dynamic group ID or name
 // - protocols=vless,hy2 (or protocol=reality): only nodes matching specified protocols
@@ -73,6 +74,11 @@ func (s *Server) FilterSubscriptionNodes(nodes []singbox.Node, q url.Values) []s
 	filterFav := strings.EqualFold(q.Get("filter"), "favorites") ||
 		strings.EqualFold(q.Get("favorites"), "1") ||
 		strings.EqualFold(q.Get("favorites"), "true")
+
+	filterProxyOnly := strings.EqualFold(q.Get("filter"), "proxy") ||
+		strings.EqualFold(q.Get("filter"), "relayed") ||
+		strings.EqualFold(q.Get("proxy_only"), "1") ||
+		strings.EqualFold(q.Get("proxy_only"), "true")
 
 	countriesRaw := q.Get("countries")
 	if countriesRaw == "" {
@@ -120,7 +126,7 @@ func (s *Server) FilterSubscriptionNodes(nodes []singbox.Node, q url.Values) []s
 	}
 
 	// If no effective filters active, return nodes as is
-	if !filterFav && len(targetCountries) == 0 && targetGroup == "" && len(targetProtocols) == 0 && maxPing <= 0 && minSpeed <= 0 {
+	if !filterFav && !filterProxyOnly && len(targetCountries) == 0 && targetGroup == "" && len(targetProtocols) == 0 && maxPing <= 0 && minSpeed <= 0 {
 		return nodes
 	}
 
@@ -187,6 +193,13 @@ func (s *Server) FilterSubscriptionNodes(nodes []singbox.Node, q url.Values) []s
 				}
 			}
 			if !matched {
+				continue
+			}
+		}
+
+		// 2b. Proxy / Relayed only filter (排除直连出口，仅保留有转接出口的节点)
+		if filterProxyOnly {
+			if isDirect {
 				continue
 			}
 		}
