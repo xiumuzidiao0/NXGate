@@ -71,6 +71,7 @@ fun SubscriptionDialog(
     var selectedFilterIndex by remember { mutableIntStateOf(0) }
     val filterOptions = listOf(
         "" to strings.filterAll,
+        "filter=proxy" to strings.subFilterProxyOnly,
         "filter=favorites" to strings.subFilterFavoritesOnly,
         "countries=JP" to strings.subFilterJapanOnly,
         "countries=US" to strings.subFilterUSOnly,
@@ -80,7 +81,12 @@ fun SubscriptionDialog(
 
     fun appendQuery(base: String, queryParam: String): String {
         if (queryParam.isBlank()) return base
-        return if (base.contains("?")) "$base&$queryParam" else "$base?$queryParam"
+        val u = Uri.parse(base).buildUpon()
+        val parts = queryParam.split("=")
+        if (parts.size == 2) {
+            u.appendQueryParameter(parts[0], parts[1])
+        }
+        return u.build().toString()
     }
 
     val activeQuery = filterOptions[selectedFilterIndex].first
