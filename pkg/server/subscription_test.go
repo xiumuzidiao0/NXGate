@@ -474,6 +474,13 @@ func TestSubscriptionGroupPrefixAndFiltering(t *testing.T) {
 		}
 	}
 
+	// 3c. Test filter=direct (only native direct egress, exclude proxy)
+	qDirect := url.Values{"filter": []string{"direct"}}
+	filteredDirect := s.FilterSubscriptionNodes(testNodes, qDirect)
+	if len(filteredDirect) != 1 || !strings.EqualFold(filteredDirect[0].Outbound, "direct") {
+		t.Errorf("expected 1 direct node, got %d", len(filteredDirect))
+	}
+
 	// 3c. Test corrupted/injected countries param does not zero out all nodes
 	qInjected := url.Values{
 		"filter":    []string{"proxy"},

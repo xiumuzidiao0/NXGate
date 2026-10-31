@@ -72,6 +72,7 @@ fun SubscriptionDialog(
     val filterOptions = listOf(
         "" to strings.filterAll,
         "filter=proxy" to strings.subFilterProxyOnly,
+        "filter=direct" to strings.subFilterDirectOnly,
         "filter=favorites" to strings.subFilterFavoritesOnly,
         "countries=JP" to strings.subFilterJapanOnly,
         "countries=US" to strings.subFilterUSOnly,

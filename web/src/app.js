@@ -3360,6 +3360,8 @@ import { I18N } from './i18n.js';
                 params.set('filter', 'favorites');
             } else if (scope === 'proxy' || scope === 'relayed') {
                 params.set('filter', 'proxy');
+            } else if (scope === 'direct') {
+                params.set('filter', 'direct');
             } else if (scope) {
                 params.set('countries', scope);
             }
