@@ -474,6 +474,16 @@ func TestSubscriptionGroupPrefixAndFiltering(t *testing.T) {
 		}
 	}
 
+	// 3c. Test corrupted/injected countries param does not zero out all nodes
+	qInjected := url.Values{
+		"filter":    []string{"proxy"},
+		"countries": []string{"http://156.238.235.88:8787/45cc8052c973/api/singbox/subscription?filter=proxy"},
+	}
+	filteredInjected := s.FilterSubscriptionNodes(testNodes, qInjected)
+	if len(filteredInjected) != 2 {
+		t.Errorf("expected malformed countries param to be ignored and return 2 relayed nodes, got %d", len(filteredInjected))
+	}
+
 	// 4. Test URL filter query propagation in buildGenericSubURL and buildClashSubURL
 	reqWithFav := httptest.NewRequest("GET", "/api/singbox/subscription?format=json&filter=favorites", nil)
 	genURL := s.buildGenericSubURL(reqWithFav)

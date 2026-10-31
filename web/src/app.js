@@ -3364,7 +3364,14 @@ import { I18N } from './i18n.js';
                 params.set('countries', scope);
             }
             if (customCountry) {
-                params.set('countries', customCountry);
+                // 如果用户输入的是有效国家代码（例如 JP,US,KR），则设置，防止输入整条 URL 导致污染
+                const sanitizedCountry = customCountry.split(',')
+                    .map(c => c.trim().toUpperCase())
+                    .filter(c => c && /^[A-Z]{2,10}$/.test(c))
+                    .join(',');
+                if (sanitizedCountry) {
+                    params.set('countries', sanitizedCountry);
+                }
             }
             if (proto) {
                 params.set('protocol', proto);
@@ -3372,21 +3379,27 @@ import { I18N } from './i18n.js';
             if (ping) {
                 params.set('max_ping', ping);
             }
-            return params.toString();
+            return params;
         }
 
         function getFilteredGenericSubURL() {
             const base = getGenericSubURL();
-            const qs = buildFilteredSubParams();
-            if (!qs) return base;
-            return base.includes('?') ? `${base}&${qs}` : `${base}?${qs}`;
+            const u = new URL(base, window.location.origin);
+            const params = buildFilteredSubParams();
+            // 先清除原有可能会重复的参数
+            ['filter', 'countries', 'country', 'protocol', 'protocols', 'max_ping', 'max_latency'].forEach(k => u.searchParams.delete(k));
+            params.forEach((v, k) => u.searchParams.set(k, v));
+            return u.toString();
         }
 
         function getFilteredClashSubURL() {
             const base = getClashSubURL();
-            const qs = buildFilteredSubParams();
-            if (!qs) return base;
-            return base.includes('?') ? `${base}&${qs}` : `${base}?${qs}`;
+            const u = new URL(base, window.location.origin);
+            const params = buildFilteredSubParams();
+            // 先清除原有可能会重复的参数
+            ['filter', 'countries', 'country', 'protocol', 'protocols', 'max_ping', 'max_latency'].forEach(k => u.searchParams.delete(k));
+            params.forEach((v, k) => u.searchParams.set(k, v));
+            return u.toString();
         }
 
         function updateSubFilterPreview() {
@@ -3425,8 +3438,9 @@ import { I18N } from './i18n.js';
                 return;
             }
             const base = getGenericSubURL();
-            const url = base.includes('?') ? `${base}&filter=proxy` : `${base}?filter=proxy`;
-            copyText(url, localize('所有转接出口定制订阅链接', 'Relayed egress subscription URL'));
+            const u = new URL(base, window.location.origin);
+            u.searchParams.set('filter', 'proxy');
+            copyText(u.toString(), localize('所有转接出口定制订阅链接', 'Relayed egress subscription URL'));
         }
 
         function downloadFilteredClash() {

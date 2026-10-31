@@ -88,7 +88,8 @@ func (s *Server) FilterSubscriptionNodes(nodes []singbox.Node, q url.Values) []s
 	if countriesRaw != "" {
 		for _, c := range strings.Split(countriesRaw, ",") {
 			c = strings.TrimSpace(strings.ToUpper(c))
-			if c != "" {
+			// 严格限制国家代码为常规简写，忽略异常长字符串或 URL 污染参数
+			if c != "" && len(c) <= 10 && !strings.Contains(c, "://") && !strings.Contains(c, "/") {
 				targetCountries = append(targetCountries, c)
 			}
 		}
