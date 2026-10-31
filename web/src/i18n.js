@@ -269,6 +269,7 @@ export const I18N = {
                 'matrix.topo_title': '分流链路实时拓扑思维导图',
 
                 'sb.filter_sub': '定制订阅',
+                'sb.copy_relayed_sub': '复制定制订阅链接',
                 'sub_filter.title': '定制订阅导出中心',
                 'sub_filter.subtitle': '支持按收藏出口组、国家、协议及延迟门槛过滤，生成个性化客户端订阅',
                 'sub_filter.scope_label': '出口范围过滤',
@@ -290,8 +291,8 @@ export const I18N = {
                 'sub_filter.preview_label': '动态生成的定制订阅地址 (点击输入框直接全选复制):',
                 'sub_filter.universal_sub': '通用全量订阅 (Base64/Raw):',
                 'sub_filter.clash_sub': 'Clash Meta / Mihomo 专属订阅:',
-                'sub_filter.copy_generic': '复制通用订阅',
-                'sub_filter.copy_clash': '复制 Clash 订阅',
+                'sub_filter.copy_generic': '复制通用定制订阅链接',
+                'sub_filter.copy_clash': '复制 Clash 定制订阅链接',
                 'sub_filter.download_yaml': '下载定制 YAML',
                 'sub_filter.show_qr': '二维码',
 
@@ -593,6 +594,7 @@ export const I18N = {
                 'matrix.topo_title': 'Live Egress Routing Map',
 
                 'sb.filter_sub': 'Filter Sub',
+                'sb.copy_relayed_sub': 'Copy Custom Sub Link',
                 'sub_filter.title': 'Customized Subscription Export',
                 'sub_filter.subtitle': 'Filter by favorites, countries, protocols, and latency threshold to generate personalized client subscriptions',
                 'sub_filter.scope_label': 'Egress Scope Filter',
@@ -614,8 +616,8 @@ export const I18N = {
                 'sub_filter.preview_label': 'Dynamically Generated Subscription URLs (Click to select & copy):',
                 'sub_filter.universal_sub': 'Universal Subscription (Base64/Raw):',
                 'sub_filter.clash_sub': 'Clash Meta / Mihomo Subscription:',
-                'sub_filter.copy_generic': 'Copy Universal Sub',
-                'sub_filter.copy_clash': 'Copy Clash Sub',
+                'sub_filter.copy_generic': 'Copy Custom Universal Sub Link',
+                'sub_filter.copy_clash': 'Copy Custom Clash Sub Link',
                 'sub_filter.download_yaml': 'Download Filtered YAML',
                 'sub_filter.show_qr': 'QR Code',
 

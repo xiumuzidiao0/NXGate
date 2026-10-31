@@ -3419,6 +3419,16 @@ import { I18N } from './i18n.js';
             copyText(url, localize('定制 Clash Meta 订阅链接', 'Filtered Clash Meta subscription URL'));
         }
 
+        function copyQuickRelayedSub() {
+            if (!singBoxOverview || !singBoxOverview.installed) {
+                tAlert('sing-box 未安装，无法生成定制订阅', 'sing-box not installed; cannot generate customized subscription');
+                return;
+            }
+            const base = getGenericSubURL();
+            const url = base.includes('?') ? `${base}&filter=proxy` : `${base}?filter=proxy`;
+            copyText(url, localize('所有转接出口定制订阅链接', 'Relayed egress subscription URL'));
+        }
+
         function downloadFilteredClash() {
             const url = getFilteredClashSubURL();
             const a = document.createElement('a');
@@ -4028,6 +4038,7 @@ import { I18N } from './i18n.js';
             updateSubFilterPreview,
             copyFilteredGenericSub,
             copyFilteredClashSub,
+            copyQuickRelayedSub,
             downloadFilteredClash,
             showFilteredQR,
             downloadBackupPackage,
