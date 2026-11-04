@@ -3261,9 +3261,11 @@ import { I18N } from './i18n.js';
 
         function sanitizeSubURL(url) {
             if (!url) return '';
-            const curHost = window.location.host;
+            const curOrigin = window.location.origin;
+            // 只要当前浏览器访问的不是 127.0.0.1 或 localhost，就统一将其替换为当前浏览器的真实 Origin
+            // （支持域名、公网 IP，且自动匹配当前实际使用的 http/https 协议和端口）
             if (window.location.hostname !== '127.0.0.1' && window.location.hostname !== 'localhost') {
-                url = url.replace(/:\/\/(127\.0\.0\.1|localhost)(:\d+)?\//, `://${curHost}/`);
+                url = url.replace(/^[a-zA-Z]+:\/\/(127\.0\.0\.1|localhost)(:\d+)?/, curOrigin);
             }
             return url;
         }

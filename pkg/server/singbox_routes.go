@@ -617,6 +617,22 @@ func (s *Server) buildClashSubURL(r *http.Request) string {
 	return appendFilterParams(base, r)
 }
 
+// resolveServerHost gets the clean host/domain/IP for node connection URLs.
+// It prioritizes the client's Host header, then X-Forwarded-Host, and falls back to server config.
+func (s *Server) resolveServerHost(r *http.Request) string {
+	candidate := r.Header.Get("X-Forwarded-Host")
+	if candidate == "" {
+		candidate = r.Host
+	}
+	serverHost := extractHostFromRequest(candidate)
+	if serverHost == "" || serverHost == "127.0.0.1" || serverHost == "localhost" || serverHost == "0.0.0.0" || serverHost == "::" {
+		if s.cfg != nil && s.cfg.UIHost != "" && s.cfg.UIHost != "0.0.0.0" && s.cfg.UIHost != "::" && s.cfg.UIHost != "127.0.0.1" {
+			serverHost = s.cfg.UIHost
+		}
+	}
+	return serverHost
+}
+
 func (s *Server) handleSingBoxRawSub(w http.ResponseWriter, r *http.Request) {
 	nodes, err := s.prepareSubscriptionNodes(r.Context(), r)
 	if err != nil {
@@ -626,10 +642,7 @@ func (s *Server) handleSingBoxRawSub(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	serverHost := extractHostFromRequest(r.Host)
-	if serverHost == "" || serverHost == "127.0.0.1" || serverHost == "localhost" {
-		serverHost = s.cfg.UIHost
-	}
+	serverHost := s.resolveServerHost(r)
 
 	urls := GenerateRawSubscription(nodes, serverHost)
 	rawText := strings.Join(urls, "\n")
@@ -653,10 +666,7 @@ func (s *Server) handleSingBoxClashSub(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	serverHost := extractHostFromRequest(r.Host)
-	if serverHost == "" || serverHost == "127.0.0.1" || serverHost == "localhost" {
-		serverHost = s.cfg.UIHost
-	}
+	serverHost := s.resolveServerHost(r)
 
 	yamlContent := GenerateClashYAML(nodes, serverHost)
 
@@ -685,10 +695,7 @@ func (s *Server) handleSingBoxGetSub(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	serverHost := extractHostFromRequest(r.Host)
-	if serverHost == "" || serverHost == "127.0.0.1" || serverHost == "localhost" {
-		serverHost = s.cfg.UIHost
-	}
+	serverHost := s.resolveServerHost(r)
 
 	format := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("format")))
 	accept := strings.ToLower(r.Header.Get("Accept"))
