@@ -204,10 +204,11 @@ fun TunnelChipCard(
                                    else if (tunnel.riskScore <= 35) MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f)
                                    else MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f)
                         ) {
-                            val riskText = if (isEn) "Risk: %.1f".format(tunnel.riskScore) else "纯净评分: %.1f".format(tunnel.riskScore)
+                            val riskText = if (isEn) "Risk %.1f".format(tunnel.riskScore) else "风控 %.1f".format(tunnel.riskScore)
                             Text(
                                 text = riskText,
                                 style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold,
                                 color = if (tunnel.riskScore <= 15) MaterialTheme.colorScheme.primary
                                        else if (tunnel.riskScore <= 35) MaterialTheme.colorScheme.secondary
                                        else MaterialTheme.colorScheme.error,
@@ -225,24 +226,25 @@ fun TunnelChipCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 val latencyText = if (tunnel.latencyMs > 0) {
-                    if (isEn) "Latency: ${tunnel.latencyMs}ms" else "延迟: ${tunnel.latencyMs}ms"
+                    "${tunnel.latencyMs} ms"
                 } else {
-                    if (isEn) "Ready" else "延迟: 测活就绪"
+                    if (isEn) "Ready" else "测活就绪"
                 }
                 Text(
                     text = latencyText,
                     style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.Medium,
-                    color = if (tunnel.latencyMs > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (tunnel.latencyMs > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = if (tunnel.throughputBps > 0) strings.localized("吞吐: %.1f Mb/s (断流检测通过)", "Throughput: %.1f Mb/s (connectivity check passed)").format((tunnel.throughputBps * 8.0) / 1_000_000.0) else strings.localized("在线待命", "Online · idle"),
+                    text = if (tunnel.throughputBps > 0) "%.1f Mb/s".format((tunnel.throughputBps * 8.0) / 1_000_000.0) else strings.localized("在线待命", "Online · idle"),
                     style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.primary
                 )
             }
 
-            // Row 3: AI & Streaming unlock badges (可横滑防小屏溢出)
+            // Row 3: AI & Streaming unlock badges (去噪自解释，可横滑防小屏溢出)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -250,7 +252,6 @@ fun TunnelChipCard(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(strings.localized("实测解锁:", "Service access:"), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
                 UnlockPill("ChatGPT", tunnel.openai)
                 UnlockPill("Claude", tunnel.claude)
                 UnlockPill("Gemini", tunnel.gemini)
@@ -618,18 +619,7 @@ fun ServerConsoleScreen(
                                     verticalArrangement = Arrangement.Center
                                 ) {
                                     val isZeroTun = masterInfo.isZeroTun || masterTunnel?.isUserland == true || masterInfo.driverMode == "userland" || (masterTunnel?.devName?.startsWith("sstp") == true)
-                                    val titleText = if (strings == AppStringsEn) {
-                                        if (isZeroTun) "Primary Gateway (Zero-TUN SSTP)" else "Primary Gateway (Kernel TUN tun0)"
-                                    } else {
-                                        if (isZeroTun) strings.localized("系统主出口网关 (免TUN SSTP)", "Primary egress (user-space SSTP)") else strings.localized("系统主出口网关 (内核TUN tun0)", "Primary egress (kernel TUN tun0)")
-                                    }
-                                    Text(
-                                        text = titleText,
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                    Spacer(Modifier.height(8.dp))
+                                    val devTitle = if (isZeroTun) (if (strings == AppStringsEn) "Zero-TUN" else "免TUN") else "tun0"
                                     val masterLoc = formatNodeLocation(
                                         countryCode = masterTunnel?.country ?: masterInfo.country,
                                         countryLong = masterTunnel?.countryLong ?: masterInfo.countryLong,
@@ -637,21 +627,63 @@ fun ServerConsoleScreen(
                                     )
                                     val rawMasterIp = (masterTunnel?.nodeIp ?: masterInfo.nodeIp).ifEmpty { if (masterInfo.nodeName == "未连接") strings.localized("未连接", "Disconnected") else masterInfo.nodeName }
                                     val masterLat = if ((masterTunnel?.latencyMs ?: 0) > 0) masterTunnel!!.latencyMs else masterInfo.latencyMs
-                                    val masterLatStr = if (masterLat > 0) " (${masterLat}ms)" else ""
+                                    val masterLatStr = if (masterLat > 0) " · ${masterLat}ms" else ""
                                     val masterNodeText = if (masterLoc.isNotEmpty()) "$masterLoc · $rawMasterIp$masterLatStr" else "$rawMasterIp$masterLatStr"
-                                    val masterUptime = masterTunnel?.let { strings.localized("${it.uptimeSeconds / 3600}小时${(it.uptimeSeconds % 3600) / 60}分", "${it.uptimeSeconds / 3600}h ${(it.uptimeSeconds % 3600) / 60}m") } ?: (if (strings == AppStringsEn) masterInfo.uptimeStr.replace("小时", "h ").replace("分钟", "m").replace("分", "m").replace("秒", "s") else masterInfo.uptimeStr)
-                                    val devDesc = if (strings == AppStringsEn) {
-                                        if (isZeroTun) "Device: Userland Zero-TUN (SSTP)" else "Device: Primary Virtual NIC (tun0), Table 100"
-                                    } else {
-                                        if (isZeroTun) strings.localized("设备：用户态免TUN直连 (SSTP)", "Interface: user-space SSTP (no TUN)") else strings.localized("设备：主网卡零号 (tun0)，策略表一百", "Interface: tun0 · routing table 100")
+                                    val masterUptime = masterTunnel?.let { strings.localized("${it.uptimeSeconds / 3600}h ${(it.uptimeSeconds % 3600) / 60}m", "${it.uptimeSeconds / 3600}h ${(it.uptimeSeconds % 3600) / 60}m") } ?: (if (strings == AppStringsEn) masterInfo.uptimeStr.replace("小时", "h ").replace("分钟", "m").replace("分", "m").replace("秒", "s") else masterInfo.uptimeStr)
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Text(
+                                                text = strings.primaryGateway,
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                            Surface(
+                                                shape = RoundedCornerShape(4.dp),
+                                                color = if (isZeroTun) MaterialTheme.colorScheme.tertiaryContainer else MaterialTheme.colorScheme.secondaryContainer
+                                            ) {
+                                                Text(
+                                                    text = devTitle,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = if (isZeroTun) MaterialTheme.colorScheme.onTertiaryContainer else MaterialTheme.colorScheme.onSecondaryContainer,
+                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                )
+                                            }
+                                        }
+                                        Surface(
+                                            shape = RoundedCornerShape(4.dp),
+                                            color = if (masterInfo.isConnected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
+                                        ) {
+                                            Text(
+                                                text = if (masterInfo.isConnected) (if (strings == AppStringsEn) "Online" else "在线") else (if (strings == AppStringsEn) "Disconnected" else "未连接"),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = if (masterInfo.isConnected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                            )
+                                        }
                                     }
-                                    val nodeLine = if (strings == AppStringsEn) "Node: $masterNodeText" else "节点：$masterNodeText"
-                                    val upLine = if (strings == AppStringsEn) "Uptime: $masterUptime · ${if (masterInfo.isConnected) "Connected" else "Disconnected"}" else "已运行：$masterUptime，${masterInfo.status}"
+                                    Spacer(Modifier.height(8.dp))
                                     Text(
-                                        text = "$devDesc\n$nodeLine\n$upLine",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        lineHeight = MaterialTheme.typography.bodyMedium.lineHeight * 1.35f
+                                        text = masterNodeText,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Spacer(Modifier.height(4.dp))
+                                    Text(
+                                        text = "${if (strings == AppStringsEn) "Uptime" else "在线"}: $masterUptime",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                             }
@@ -775,18 +807,7 @@ fun ServerConsoleScreen(
                             verticalArrangement = Arrangement.Center
                         ) {
                             val isZeroTun = masterInfo.isZeroTun || masterTunnel?.isUserland == true || masterInfo.driverMode == "userland" || (masterTunnel?.devName?.startsWith("sstp") == true)
-                            val titleText = if (strings == AppStringsEn) {
-                                if (isZeroTun) "Primary Gateway (Zero-TUN SSTP)" else "Primary Gateway (Kernel TUN tun0)"
-                            } else {
-                                if (isZeroTun) strings.localized("系统主出口网关 (免TUN SSTP)", "Primary egress (user-space SSTP)") else strings.localized("系统主出口网关 (内核TUN tun0)", "Primary egress (kernel TUN tun0)")
-                            }
-                            Text(
-                                text = titleText,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Spacer(Modifier.height(8.dp))
+                            val devTitle = if (isZeroTun) (if (strings == AppStringsEn) "Zero-TUN" else "免TUN") else "tun0"
                             val masterLoc = formatNodeLocation(
                                 countryCode = masterTunnel?.country ?: masterInfo.country,
                                 countryLong = masterTunnel?.countryLong ?: masterInfo.countryLong,
@@ -794,21 +815,63 @@ fun ServerConsoleScreen(
                             )
                             val rawMasterIp = (masterTunnel?.nodeIp ?: masterInfo.nodeIp).ifEmpty { if (masterInfo.nodeName == "未连接") strings.localized("未连接", "Disconnected") else masterInfo.nodeName }
                             val masterLat = if ((masterTunnel?.latencyMs ?: 0) > 0) masterTunnel!!.latencyMs else masterInfo.latencyMs
-                            val masterLatStr = if (masterLat > 0) " (${masterLat}ms)" else ""
+                            val masterLatStr = if (masterLat > 0) " · ${masterLat}ms" else ""
                             val masterNodeText = if (masterLoc.isNotEmpty()) "$masterLoc · $rawMasterIp$masterLatStr" else "$rawMasterIp$masterLatStr"
-                            val masterUptime = masterTunnel?.let { strings.localized("${it.uptimeSeconds / 3600}小时${(it.uptimeSeconds % 3600) / 60}分", "${it.uptimeSeconds / 3600}h ${(it.uptimeSeconds % 3600) / 60}m") } ?: (if (strings == AppStringsEn) masterInfo.uptimeStr.replace("小时", "h ").replace("分钟", "m").replace("分", "m").replace("秒", "s") else masterInfo.uptimeStr)
-                            val devDesc = if (strings == AppStringsEn) {
-                                if (isZeroTun) "Device: Userland Zero-TUN (SSTP)" else "Device: Primary Virtual NIC (tun0), Table 100"
-                            } else {
-                                if (isZeroTun) strings.localized("设备：用户态免TUN直连 (SSTP)", "Interface: user-space SSTP (no TUN)") else strings.localized("设备：主网卡零号 (tun0)，策略表一百", "Interface: tun0 · routing table 100")
+                            val masterUptime = masterTunnel?.let { strings.localized("${it.uptimeSeconds / 3600}h ${(it.uptimeSeconds % 3600) / 60}m", "${it.uptimeSeconds / 3600}h ${(it.uptimeSeconds % 3600) / 60}m") } ?: (if (strings == AppStringsEn) masterInfo.uptimeStr.replace("小时", "h ").replace("分钟", "m").replace("分", "m").replace("秒", "s") else masterInfo.uptimeStr)
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Text(
+                                        text = strings.primaryGateway,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Surface(
+                                        shape = RoundedCornerShape(4.dp),
+                                        color = if (isZeroTun) MaterialTheme.colorScheme.tertiaryContainer else MaterialTheme.colorScheme.secondaryContainer
+                                    ) {
+                                        Text(
+                                            text = devTitle,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = if (isZeroTun) MaterialTheme.colorScheme.onTertiaryContainer else MaterialTheme.colorScheme.onSecondaryContainer,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
+                                Surface(
+                                    shape = RoundedCornerShape(4.dp),
+                                    color = if (masterInfo.isConnected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
+                                ) {
+                                    Text(
+                                        text = if (masterInfo.isConnected) (if (strings == AppStringsEn) "Online" else "在线") else (if (strings == AppStringsEn) "Disconnected" else "未连接"),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = if (masterInfo.isConnected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
                             }
-                            val nodeLine = if (strings == AppStringsEn) "Node: $masterNodeText" else "节点：$masterNodeText"
-                            val upLine = if (strings == AppStringsEn) "Uptime: $masterUptime · ${if (masterInfo.isConnected) "Connected" else "Disconnected"}" else "已运行：$masterUptime，${masterInfo.status}"
+                            Spacer(Modifier.height(8.dp))
                             Text(
-                                text = "$devDesc\n$nodeLine\n$upLine",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                lineHeight = MaterialTheme.typography.bodyMedium.lineHeight * 1.35f
+                                text = masterNodeText,
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                text = "${if (strings == AppStringsEn) "Uptime" else "在线"}: $masterUptime",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }

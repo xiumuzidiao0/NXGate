@@ -24,7 +24,7 @@
                 </div>
                 <div class="brand-text">
                     <div class="brand-title">NXGate</div>
-                    <div class="brand-sub"><span data-i18n="brand.sub">多出口智能网关</span> <span class="version-trigger" data-action="openUpdateModal" title="点击检查系统更新"><span id="sidebar-version-badge" class="badge-ver">v2.6.5.29</span></span></div>
+                    <div class="brand-sub"><span data-i18n="brand.sub">多出口智能网关</span> <span class="version-trigger" data-action="openUpdateModal" title="点击检查系统更新"><span id="sidebar-version-badge" class="badge-ver">v2.6.5.30</span></span></div>
                 </div>
             </div>
 
@@ -80,7 +80,7 @@
                     </button>
                     <h1 id="page-title">运行概览</h1>
                     <span id="conn-badge" class="badge disconnected"><span class="status-dot"></span> 检查中</span>
-                    <span class="version-trigger" data-action="openUpdateModal" title="点击检查系统更新"><span id="app-version-badge" class="badge badge-accent">v2.6.5.29</span><span id="header-update-dot" class="badge-dot-pulse hidden" title="发现新版本"></span></span>
+                    <span class="version-trigger" data-action="openUpdateModal" title="点击检查系统更新"><span id="app-version-badge" class="badge badge-accent">v2.6.5.30</span><span id="header-update-dot" class="badge-dot-pulse hidden" title="发现新版本"></span></span>
                 </div>
 
                 <div class="header-actions">
@@ -237,9 +237,6 @@
                         <span id="sb-status-badge" class="badge disconnected ml-1" ><span class="status-dot"></span> 检查中</span>
                         <span id="sb-sub-badge" class="badge badge-accent hidden" hidden>订阅: 未开启</span>
                     </div>
-                    <div  class="status-subtitle">
-                        客户端通过 VLESS、Hysteria2 等协议入站，支持直连或经由网关出口分流
-                    </div>
                 </div>
                 <div  class="row items-center gap-2 wrap">
                     <button id="btn-add-sb-node" class="btn" data-action="openAddSingBoxModal">
@@ -248,27 +245,27 @@
                     </button>
                     <button class="btn btn-outline btn-sm"  data-action="batchSetSingBoxOutbound" data-args="[&quot;default&quot;]">
                         <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-                        全部接入默认出口 (7928)
+                        全部分流:7928
                     </button>
                     <button class="btn btn-outline btn-sm"  data-action="batchSetSingBoxOutbound" data-args="[&quot;direct&quot;]">
                         <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
-                        全部恢复直连
+                        全部直连
                     </button>
                     <button id="btn-copy-sub" class="btn btn-outline btn-sm"  data-action="copySingBoxSubURL">
                         <svg aria-hidden="true" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                        复制通用订阅
+                        通用订阅
                     </button>
                     <button id="btn-copy-clash" class="btn btn-outline btn-sm btn-accent-outline"  data-action="copyClashSubURL" title="复制适配 Clash Meta / Mihomo 的 YAML 订阅地址">
                         <svg aria-hidden="true" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 7h10"/><path d="M7 12h10"/><path d="M7 17h6"/></svg>
-                        复制 Clash 订阅
+                        Clash 订阅
                     </button>
                     <button id="btn-copy-relayed-sub" class="btn btn-outline btn-sm btn-accent-outline" data-action="copyQuickRelayedSub" title="一键复制所有有转接出口的定制订阅链接">
                         <svg aria-hidden="true" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                        <span data-i18n="sb.copy_relayed_sub">复制定制订阅链接</span>
+                        <span data-i18n="sb.copy_relayed_sub">定制链接</span>
                     </button>
                     <button id="btn-sub-filter" class="btn btn-outline btn-sm" data-action="openSubFilterModal" title="定制订阅导出中心 (按协议/国家/延迟生成定制订阅)">
                         <svg aria-hidden="true" viewBox="0 0 24 24"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
-                        <span data-i18n="sb.filter_sub">定制订阅中心</span>
+                        <span data-i18n="sb.filter_sub">定制中心</span>
                     </button>
                     <button id="btn-age-helper" class="btn btn-outline btn-sm" data-action="openAgeKeyHelper" title="配置 age 订阅端到端加密与密钥助手">
                         <svg aria-hidden="true" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
@@ -1037,21 +1034,17 @@
                 <button type="button" class="btn btn-outline btn-icon" data-action="closeSubFilterModal" aria-label="关闭定制订阅">×</button>
             </div>
 
-            <div class="text-xs text-muted mb-4" data-i18n="sub_filter.subtitle">
-                支持按收藏出口组、国家、协议及延迟门槛过滤，生成个性化客户端订阅
-            </div>
-
             <div class="form-grid-auto mb-4">
                 <div>
                     <label class="form-label qr-label" data-i18n="sub_filter.scope_label">出口范围过滤</label>
                     <select id="sub-filter-scope" class="input-field w-full text-xs" data-change-action="updateSubFilterPreview">
-                        <option value="" data-i18n="sub_filter.scope_all">全部节点 (默认全量导出)</option>
-                        <option value="proxy" data-i18n="sub_filter.scope_relayed">🔀 仅有转接出口的节点 (filter=proxy)</option>
-                        <option value="direct" data-i18n="sub_filter.scope_direct_only">🌐 仅原生直连出口 (filter=direct)</option>
-                        <option value="favorites" data-i18n="sub_filter.scope_fav">⭐ 仅我的收藏出口组 (filter=favorites)</option>
-                        <option value="JP" data-i18n="sub_filter.scope_jp">🇯🇵 日本出口组 (countries=JP)</option>
-                        <option value="US" data-i18n="sub_filter.scope_us">🇺🇸 美国出口组 (countries=US)</option>
-                        <option value="DIRECT" data-i18n="sub_filter.scope_direct">🌐 原生直连出口 (countries=DIRECT)</option>
+                        <option value="" data-i18n="sub_filter.scope_all">全部</option>
+                        <option value="proxy" data-i18n="sub_filter.scope_relayed">🔀 转接出口</option>
+                        <option value="direct" data-i18n="sub_filter.scope_direct_only">🌐 原生直连</option>
+                        <option value="favorites" data-i18n="sub_filter.scope_fav">⭐ 我的收藏</option>
+                        <option value="JP" data-i18n="sub_filter.scope_jp">🇯🇵 日本</option>
+                        <option value="US" data-i18n="sub_filter.scope_us">🇺🇸 美国</option>
+                        <option value="DIRECT" data-i18n="sub_filter.scope_direct">🌐 原生直连</option>
                     </select>
                 </div>
                 <div>
@@ -1084,7 +1077,6 @@
             </div>
 
             <div class="card p-3 mb-4" style="background: var(--bg-card-sub); border: 1px solid var(--border);">
-                <div class="text-xs text-muted mb-2" data-i18n="sub_filter.preview_label">动态生成的定制订阅地址 (点击输入框直接全选复制):</div>
                 <div class="mb-3">
                     <div class="text-xs font-semibold mb-1" data-i18n="sub_filter.universal_sub">通用全量订阅 (Base64/Raw):</div>
                     <input id="sub-filter-preview-generic" type="text" class="input-field w-full mono text-xs" readonly data-action="copyFromElement" data-args="[&quot;sub-filter-preview-generic&quot;]">

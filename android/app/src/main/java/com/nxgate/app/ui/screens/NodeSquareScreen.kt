@@ -296,26 +296,27 @@ fun FullNodeCard(
                 }
             }
 
-            // Row 3: Speed & Score
+            // Row 3: Speed & Score (大字/清晰排版去噪)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = strings.localized("实测速度: ${node.speedMbStr}", "Measured speed: ${node.speedMbStr}"),
-                    style = MaterialTheme.typography.bodySmall,
+                    text = node.speedMbStr,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                    text = strings.localized("信誉评分: ${node.score} 分", "Reliability score: ${node.score}"),
-                    style = MaterialTheme.typography.bodySmall,
+                    text = "${node.score} 分",
+                    style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.Bold
                 )
             }
 
-            // Row 4: AI & Streaming Unlock Badges Row (可横滑防小屏溢出)
+            // Row 4: AI & Streaming Unlock Badges Row (可横滑防小屏溢出，去噪自解释)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -323,7 +324,6 @@ fun FullNodeCard(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(strings.localized("实测解锁:", "Service access:"), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
                 UnlockPill("ChatGPT", node.openai)
                 UnlockPill("Claude", node.claude)
                 UnlockPill("Gemini", node.gemini)

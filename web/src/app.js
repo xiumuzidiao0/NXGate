@@ -3005,11 +3005,7 @@ import { I18N } from './i18n.js';
 
                         <!-- 链式出口动态选择器 -->
                         <div class="sb-chain-box">
-                            <div class="sb-chain-label">
-                                <svg aria-hidden="true" viewBox="0 0 24 24" class="icon-xs icon-stroke"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-                                ${isEn ? 'Forwarding Egress Exit' : '出口路由 (Forwarding Exit)'}
-                            </div>
-                            <select class="${chainSelectClass}" data-change-action="updateNodeOutboundFromSelect" data-node-name="${escapeHtml(n.name)}">
+                            <select class="${chainSelectClass}" data-change-action="updateNodeOutboundFromSelect" data-node-name="${escapeHtml(n.name)}" aria-label="${isEn ? 'Egress Exit' : '出口路由'}">
                                 ${outboundOptions}
                             </select>
                         </div>
@@ -3017,11 +3013,11 @@ import { I18N } from './i18n.js';
                         <!-- 节点核心参数摘要 -->
                         <div class="sb-node-info">
                             <div class="sb-info-item">
-                                <span class="sb-info-lbl">${isEn ? 'SNI / Camouflage' : 'SNI / 伪装域名'}</span>
+                                <span class="sb-info-lbl">SNI</span>
                                 <span class="sb-info-val" title="${escapeHtml(sniText)}">${escapeHtml(sniText)}</span>
                             </div>
                             <div class="sb-info-item">
-                                <span class="sb-info-lbl">${isEn ? 'Transport / Flow' : '传输层 / 流控'}</span>
+                                <span class="sb-info-lbl">${isEn ? 'Transport' : '传输流控'}</span>
                                 <span class="sb-info-val" title="${escapeHtml(networkText)}">${escapeHtml(networkText)}</span>
                             </div>
                         </div>
