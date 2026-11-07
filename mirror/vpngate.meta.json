@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "source": "多源聚合 (Fastly 全球加速 CDN 等 6 个在线数据源)",
+  "generated_at": 1794055405,
+  "generated_at_iso": "2026-11-07T12:43:25Z",
+  "row_count": 1600,
+  "byte_count": 21548788,
+  "sha256": "7afce3e9b3b89a35717f84458b2e89171b53e9d95dd9f1ae1fccaf2794eafe08"
+}
