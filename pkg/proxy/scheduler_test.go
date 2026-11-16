@@ -43,17 +43,17 @@ func TestScheduler(t *testing.T) {
 }
 
 func TestSchedulerSystemPrimaryFallback(t *testing.T) {
-	if !isOnlySystemPrimary(nil, []string{"system-primary"}) {
-		t.Fatal("expected isOnlySystemPrimary to be true for [system-primary]")
+	if !ContainsSystemPrimaryGroup(nil, []string{"system-primary"}) {
+		t.Fatal("expected ContainsSystemPrimaryGroup to be true for [system-primary]")
 	}
-	if isOnlySystemPrimary([]string{"tun-1"}, []string{"system-primary"}) {
-		t.Fatal("expected isOnlySystemPrimary to be false when boundIDs is non-empty")
+	if ContainsSystemPrimaryGroup([]string{"tun-1"}, []string{"system-primary"}) {
+		t.Fatal("expected ContainsSystemPrimaryGroup to be false when boundIDs is non-empty")
 	}
-	if isOnlySystemPrimary(nil, []string{"system-primary", "dg-123"}) {
-		t.Fatal("expected isOnlySystemPrimary to be false when multiple groups bound")
+	if !ContainsSystemPrimaryGroup(nil, []string{"system-primary", "dg-123"}) {
+		t.Fatal("expected ContainsSystemPrimaryGroup to be true when system-primary is among bound groups")
 	}
-	if isOnlySystemPrimary(nil, []string{"dg-123"}) {
-		t.Fatal("expected isOnlySystemPrimary to be false for non-primary group")
+	if ContainsSystemPrimaryGroup(nil, []string{"dg-123"}) {
+		t.Fatal("expected ContainsSystemPrimaryGroup to be false for non-primary group")
 	}
 }
 

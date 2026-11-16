@@ -266,21 +266,3 @@ fun TrafficStatsCard(
         }
     }
 }
-
-/**
- * 兼容旧名称的别名调用，默认渲染 TrafficStatsCard
- */
-@Composable
-fun SpeedWaveformCard(
-    liveTraffic: LiveTrafficInfo = LiveTrafficInfo(),
-    downSpeedStr: String = "",
-    upSpeedStr: String = "",
-    modifier: Modifier = Modifier
-) {
-    TrafficStatsCard(
-        liveTraffic = liveTraffic,
-        downSpeedStr = downSpeedStr,
-        upSpeedStr = upSpeedStr,
-        modifier = modifier
-    )
-}

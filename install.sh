@@ -33,7 +33,7 @@ BIN_PATH="${INSTALL_DIR}/nxgate"
 CONFIG_FILE="${INSTALL_DIR}/config.env"
 SERVICE_FILE="/etc/systemd/system/nxgate.service"
 GITHUB_REPO="https://github.com/xiumuzidiao0/NXGate.git"
-DEFAULT_VERSION="2.6.5.31"
+DEFAULT_VERSION="2.6.5.32"
 REQUIRED_GO_VERSION="1.26.10"
 
 get_app_version() {
@@ -893,7 +893,7 @@ menu_modify_ports_and_path() {
                     else
                         set_config_val "UI_PORT" "$n_web"
                         configure_firewall "$n_web"
-                        systemctl restart aimilivpn
+                        systemctl restart nxgate 2>/dev/null || systemctl restart aimilivpn 2>/dev/null || true
                         echo -e "${GREEN}Web 管理端口已更新为 $n_web 并重启生效！${PLAIN}"; sleep 1.5
                     fi
                 else
@@ -907,7 +907,7 @@ menu_modify_ports_and_path() {
                         echo -e "${RED}错误: 代理端口不能与 Web 端口相同！${PLAIN}"; sleep 1.5
                     else
                         set_config_val "LOCAL_PROXY_PORT" "$n_proxy"
-                        systemctl restart aimilivpn
+                        systemctl restart nxgate 2>/dev/null || systemctl restart aimilivpn 2>/dev/null || true
                         echo -e "${GREEN}本地代理端口已更新为 $n_proxy 并重启生效！${PLAIN}"; sleep 1.5
                     fi
                 else
@@ -919,14 +919,14 @@ menu_modify_ports_and_path() {
                 n_path=$(echo "${n_path}" | tr -d '/' | tr -d ' ')
                 if [ -n "$n_path" ]; then
                     set_config_val "UI_PATH" "$n_path"
-                    systemctl restart aimilivpn
+                    systemctl restart nxgate 2>/dev/null || systemctl restart aimilivpn 2>/dev/null || true
                     echo -e "${GREEN}安全路径已更新为 /${n_path} 并重启生效！${PLAIN}"; sleep 1.5
                 fi
                 ;;
             4)
                 local rand_p=$(rand_str 8)
                 set_config_val "UI_PATH" "$rand_p"
-                systemctl restart aimilivpn
+                systemctl restart nxgate 2>/dev/null || systemctl restart aimilivpn 2>/dev/null || true
                 echo -e "${GREEN}安全访问路径已随机更新为: ${YELLOW}/${rand_p}${PLAIN}"
                 prompt_input "按回车键继续..." "" ignored_input
                 ;;
@@ -1513,8 +1513,26 @@ menu_singbox() {
                 sleep 1
                 ;;
             6)
-                echo -e "\n${YELLOW}正在拉取远程订阅链接...${PLAIN}"
-                $sb_cmd api sub get
+                echo -e "\n${YELLOW}正在获取 NXGate 原生订阅链接...${PLAIN}"
+                local ui_port sub_tok pub_ip
+                ui_port=$(get_config_val "UI_PORT")
+                [ -z "$ui_port" ] && ui_port="8787"
+                if [ -s "${INSTALL_DIR}/data/sub_token.txt" ]; then
+                    sub_tok=$(tr -d '\r\n ' < "${INSTALL_DIR}/data/sub_token.txt")
+                else
+                    sub_tok=$(get_config_val "UI_PATH")
+                    sub_tok="${sub_tok#/}"
+                    sub_tok="${sub_tok%/}"
+                fi
+                pub_ip=$(curl -sS -m 4 https://api.ipify.org 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}')
+                [ -z "$pub_ip" ] && pub_ip="127.0.0.1"
+                if [ -n "$sub_tok" ]; then
+                    echo -e "  ${BOLD}通用订阅 (Base64)${PLAIN}: ${GREEN}http://${pub_ip}:${ui_port}/${sub_tok}/api/singbox/subscription${PLAIN}"
+                    echo -e "  ${BOLD}Clash / Mihomo${PLAIN}   : ${GREEN}http://${pub_ip}:${ui_port}/${sub_tok}/api/singbox/subscription/clash${PLAIN}"
+                else
+                    echo -e "  ${BOLD}通用订阅 (Base64)${PLAIN}: ${GREEN}http://${pub_ip}:${ui_port}/api/singbox/subscription${PLAIN}"
+                    echo -e "  ${BOLD}Clash / Mihomo${PLAIN}   : ${GREEN}http://${pub_ip}:${ui_port}/api/singbox/subscription/clash${PLAIN}"
+                fi
                 prompt_input "按回车键继续..." "" ignored_input
                 ;;
             7)

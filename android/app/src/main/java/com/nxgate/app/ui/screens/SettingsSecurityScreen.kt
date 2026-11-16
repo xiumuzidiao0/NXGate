@@ -93,10 +93,8 @@ import com.nxgate.app.MainActivity
 import com.nxgate.app.data.ApiClient
 import com.nxgate.app.model.ServerProfile
 import com.nxgate.app.theme.ACCENT_OPTIONS
-import com.nxgate.app.theme.AVAILABLE_PALETTES
 import com.nxgate.app.theme.BASE_TONE_OPTIONS
 import com.nxgate.app.ui.components.AppExposedDropdown
-import com.nxgate.app.ui.components.AppPermissionRationaleDialog
 import com.nxgate.app.ui.components.CameraQrScannerDialog
 import com.nxgate.app.ui.components.ConnectedButtonItem
 import com.nxgate.app.ui.components.ConnectedButtonGroup

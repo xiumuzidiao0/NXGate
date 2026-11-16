@@ -43,8 +43,8 @@ func TestManagerSnapshotAndDriverMode(t *testing.T) {
 	cfg := &config.Config{DataDir: t.TempDir()}
 	mgr := NewManager(cfg, nil, nil)
 
-	if mgr.GetDefaultDriverMode() != DriverUserland {
-		t.Fatalf("expected manager driver mode to be DriverUserland, got %s", mgr.GetDefaultDriverMode())
+	if mgr.DriverMode() != DriverUserland {
+		t.Fatalf("expected manager driver mode to be DriverUserland, got %s", mgr.DriverMode())
 	}
 
 	snap := mgr.Snapshot()
@@ -142,5 +142,30 @@ func TestUserlandEgressProbesUseLiteralIPs(t *testing.T) {
 		if net.ParseIP(host) == nil {
 			t.Fatalf("probe target %q must use a literal IP so DNS cannot mask a dead exit", target)
 		}
+	}
+}
+
+func TestManagerAutoRotateGuardAndUserlandDialer(t *testing.T) {
+	t.Setenv("DRIVER_MODE", "userland")
+	cfg := &config.Config{DataDir: t.TempDir()}
+	mgr := NewManager(cfg, nil, nil)
+
+	if !mgr.IsZeroTun() {
+		t.Fatal("expected IsZeroTun() to be true in userland mode")
+	}
+	if mgr.GetUserlandDialer() != nil {
+		t.Fatal("expected nil userland dialer before connecting")
+	}
+
+	called := false
+	mgr.SetAutoRotateGuard(func() bool {
+		called = true
+		return true
+	})
+	mgr.mu.RLock()
+	guard := mgr.autoRotateGuard
+	mgr.mu.RUnlock()
+	if guard == nil || !guard() || !called {
+		t.Fatal("expected autoRotateGuard to be registered and callable")
 	}
 }

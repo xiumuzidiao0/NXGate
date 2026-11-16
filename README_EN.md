@@ -180,13 +180,15 @@ Out of thousands of global candidate endpoints, NXGate filters for high-reliabil
 
 ### One-Line Installation & Deployment
 
-Execute with `root` privileges on any modern Linux distribution (Debian, Ubuntu, CentOS, RHEL, Rocky, AlmaLinux, Alpine):
+Execute with `root` privileges on a `systemd`-based Linux distribution (Debian, Ubuntu, CentOS, RHEL, Rocky, AlmaLinux; Alpine/OpenRC and containers should use standalone binary or Docker Compose):
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/xiumuzidiao0/NXGate/main/install.sh | bash
+curl -fL https://raw.githubusercontent.com/xiumuzidiao0/NXGate/main/install.sh -o install.sh
+less install.sh
+bash install.sh
 ```
 
-The script automatically matches CPU architecture, downloads precompiled binaries, configures systemd daemon units, and links the global `nx` CLI helper. All sing-box edge gateway management scripts are natively embedded (`//go:embed`) with **zero external GitHub script dependencies**, guaranteeing fast, self-contained deployment even in restricted environments.
+The script requires an interactive terminal (`/dev/tty`), prompts before installing dependencies, matches CPU architecture, downloads and verifies precompiled binaries, configures systemd daemon units, and links the global `nx` CLI helper. All sing-box edge gateway management scripts are natively embedded (`//go:embed`) with **zero external GitHub script dependencies**, guaranteeing fast, self-contained deployment even in restricted environments.
 
 ### CLI Quick Reference
 
@@ -231,7 +233,7 @@ Configuration file is located at `/opt/nxgate/config.env` (compatible with legac
 | :--- | :--- | :--- | :--- |
 | `UI_HOST` | `0.0.0.0` | IP string | Web console bind address (all IPv4 interfaces by default) |
 | `UI_PORT` | `8787` | `1-65535` | Web console listening port |
-| `UI_PATH` | `enter` | Alphanumeric string | Secret URL path prefix (anti-scanning, e.g. `/enter/`) |
+| `UI_PATH` | *(random & persisted)* | Alphanumeric string | Secret URL path prefix (anti-scanning, e.g. `/enter/`) |
 | `UI_USERNAME` | `admin` | String | Web console administrative username |
 | `UI_PASSWORD` | *(random)* | String | Web console administrative password |
 | `SUB_TOKEN` | *(random)* | 16-char string | Random security token for secret subscription delivery |
@@ -245,7 +247,7 @@ Configuration file is located at `/opt/nxgate/config.env` (compatible with legac
 | `TARGET_VALID_NODES` | `5` | `1-50` | Minimum prechecked candidates maintained in memory pool |
 | `MAX_SCAN_ROWS` | `1000` | `10-5000` | Maximum rows parsed per feed refresh |
 | `DISCOVERY_COUNTRIES` | *(empty)* | Comma-separated ISO (e.g. `JP,US`) | Country filter whitelist (empty = global) |
-| `DATA_DIR` | `/opt/nxgate/data` | Absolute path | Runtime certificates, routes, and data directory |
+| `DATA_DIR` | `data` (installer sets `/opt/nxgate/data`) | Path | Runtime certificates, routes, and data directory |
 
 ---
 

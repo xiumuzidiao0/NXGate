@@ -31,88 +31,21 @@ sub_port_gen() {
 }
 
 sub_server_apply() {
-    local port=$1
     mkdir -p "$is_sub_dir"
 
-    # Stop and clean legacy caddy sub conf if exists
+    # Stop and clean legacy caddy sub conf / python http.server daemon if exists
     if [[ -f "$is_sub_caddy_conf" ]]; then
         rm -f "$is_sub_caddy_conf"
         if [[ -n "$is_caddy_bin" && $(pgrep -f "$is_caddy_bin") ]]; then
             manage restart caddy &>/dev/null || true
         fi
     fi
-
-    # Detect lightweight HTTP server (python3 / python / busybox)
-    local py_bin
-    py_bin=$(type -P python3 || type -P python || echo "")
-
-    if [[ -d /run/systemd/system || -d /lib/systemd/system || -d /etc/systemd/system ]]; then
-        if [[ -n "$py_bin" ]]; then
-            cat >/lib/systemd/system/sing-box-sub.service <<-EOF
-[Unit]
-Description=sing-box Remote Subscription Service
-After=network.target
-
-[Service]
-Type=simple
-WorkingDirectory=${is_sub_dir}
-ExecStart=${py_bin} -m http.server ${port} --directory ${is_sub_dir}
-Restart=always
-RestartSec=3
-
-[Install]
-WantedBy=multi-user.target
-EOF
-            systemctl daemon-reload &>/dev/null || true
-            systemctl enable sing-box-sub &>/dev/null || true
-            systemctl restart sing-box-sub &>/dev/null || true
-        elif [[ $(type -P busybox) ]]; then
-            cat >/lib/systemd/system/sing-box-sub.service <<-EOF
-[Unit]
-Description=sing-box Remote Subscription Service
-After=network.target
-
-[Service]
-Type=simple
-ExecStart=$(type -P busybox) httpd -f -p ${port} -h ${is_sub_dir}
-Restart=always
-RestartSec=3
-
-[Install]
-WantedBy=multi-user.target
-EOF
-            systemctl daemon-reload &>/dev/null || true
-            systemctl enable sing-box-sub &>/dev/null || true
-            systemctl restart sing-box-sub &>/dev/null || true
-        fi
-    else
-        # Fallback for non-systemd environments (background daemon)
-        pkill -f "http.server $port" 2>/dev/null || true
-        if [[ -n "$py_bin" ]]; then
-            nohup "$py_bin" -m http.server "$port" --directory "$is_sub_dir" >/dev/null 2>&1 &
-        elif [[ $(type -P busybox) ]]; then
-            busybox httpd -p "$port" -h "$is_sub_dir" 2>/dev/null || true
-        fi
+    if systemctl is-active sing-box-sub &>/dev/null || [[ -f /lib/systemd/system/sing-box-sub.service ]]; then
+        systemctl stop sing-box-sub &>/dev/null || true
+        systemctl disable sing-box-sub &>/dev/null || true
+        rm -f /lib/systemd/system/sing-box-sub.service
+        systemctl daemon-reload &>/dev/null || true
     fi
-}
-
-sub_caddy_apply() {
-    sub_server_apply "$@"
-}
-
-is_sub_server_running() {
-    if systemctl is-active sing-box-sub &>/dev/null; then
-        return 0
-    fi
-    if pgrep -f "http.server.*$is_sub_dir" &>/dev/null || pgrep -f "httpd -f -p" &>/dev/null; then
-        return 0
-    fi
-    local port
-    port=$(jq -r '.port // empty' "$is_sub_json" 2>/dev/null)
-    if [[ -n "$port" ]] && pgrep -f "http.server $port" &>/dev/null; then
-        return 0
-    fi
-    return 1
 }
 
 sub_sync() {
@@ -171,7 +104,7 @@ sub_init() {
           --arg filename "$filename" \
           '{port: $port, token: $token, filename: $filename, enabled: true}' >"$is_sub_json"
 
-    sub_caddy_apply "$port"
+    sub_server_apply "$port"
     sub_sync
     sleep 1
     _green "\n已成功初始化并开启远程订阅服务!"
@@ -219,13 +152,7 @@ sub_info() {
     msg "监听端口 (port) \t=  \e[${is_color}m${port}\e[0m"
     msg "文件路径 (path) \t=  \e[${is_color}m/${token}/${filename}\e[0m"
     msg "包含节点 (nodes) \t=  \e[${is_color}m${node_count} 个\e[0m"
-    if is_sub_server_running; then
-        msg "服务状态 (status) \t=  $(_green 运行中) (HTTP Server)"
-    else
-        msg "服务状态 (status) \t=  $(_red_bg 已停止) (HTTP Server)"
-    fi
-
-    warn "提示: 如无法访问订阅链接，请检查防火墙或云服务器安全组是否已放行端口 ($port)."
+    msg "服务状态 (status) \t=  $(_green 已托管) (由 NXGate WebUI 原生提供)"
 
     msg "\n------------- 二维码 (QR Code) -------------"
     msg
@@ -263,7 +190,7 @@ sub_reset() {
           --arg filename "$filename" \
           '{port: $port, token: $token, filename: $filename, enabled: true}' >"$is_sub_json"
 
-    sub_caddy_apply "$port"
+    sub_server_apply "$port"
     sub_sync
     sleep 1
     _green "\n已重置订阅服务（新端口与新路径）:"
@@ -286,7 +213,7 @@ sub_port_change() {
     fi
 
     cat <<<"$(jq --argjson port "$new_port" '.port = $port' "$is_sub_json")" >"$is_sub_json"
-    sub_caddy_apply "$new_port"
+    sub_server_apply "$new_port"
     _green "\n已更新订阅端口为: $new_port\n"
     sub_info
 }

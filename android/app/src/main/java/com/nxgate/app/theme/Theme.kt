@@ -28,14 +28,6 @@ fun NXGateTheme(
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         }
         paletteId == "miuix" -> if (darkTheme) MiuixDarkColorScheme else MiuixLightColorScheme
-        paletteId == "pixel" || paletteId == "custom" -> {
-            buildPixelColorScheme(accentId, baseId, darkTheme)
-        }
-        paletteId == "ocean" -> if (darkTheme) OceanDarkColorScheme else OceanLightColorScheme
-        paletteId == "emerald" -> if (darkTheme) EmeraldDarkColorScheme else EmeraldLightColorScheme
-        paletteId == "purple" -> if (darkTheme) PurpleDarkColorScheme else PurpleLightColorScheme
-        paletteId == "amber" -> if (darkTheme) AmberDarkColorScheme else AmberLightColorScheme
-        paletteId == "rose" -> if (darkTheme) RoseDarkColorScheme else RoseLightColorScheme
         else -> buildPixelColorScheme(accentId, baseId, darkTheme)
     }
 

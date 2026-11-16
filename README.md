@@ -248,7 +248,7 @@ less install.sh
 bash install.sh
 ```
 
-安装器需要交互终端，最终确认前不安装依赖；sing-box 及其公开入站默认跳过。脚本不再自动修改 SSH、防火墙或策略路由，后台默认仅监听回环地址。普通 Alpine/OpenRC 或无 systemd 容器请使用独立进程或 Docker Compose。已有旧脚本写入的规则不会自动删除，详见 [安装器行为与安全边界](docs/INSTALLER_SAFETY.md)。
+安装器需要交互终端，最终确认前不安装依赖；sing-box 及其公开入站默认跳过。脚本不再自动修改 SSH、防火墙或策略路由，后台默认监听 `0.0.0.0`（全部 IPv4 接口），代理端口默认仅监听回环地址。普通 Alpine/OpenRC 或无 systemd 容器请使用独立进程或 Docker Compose。已有旧脚本写入的规则不会自动删除，详见 [安装器行为与安全边界](docs/INSTALLER_SAFETY.md)。
 
 安装脚本按架构下载并校验发行二进制，配置 systemd 服务和管理命令；下载失败时可能回退源码构建。可选 sing-box 管理脚本优先从本地源码或 NXGate 内嵌资源提取，必要时从仓库下载；实际时间取决于网络、工具链和主机性能。
 
@@ -314,7 +314,7 @@ systemctl is-enabled nxgate
 - 已有 `/opt/nxgate/config.env` 中显式设置的 `UI_HOST` 会保留；升级不会自动把旧回环配置公开。要改为公网监听，编辑该文件中的 `UI_HOST=0.0.0.0`，然后 `sudo systemctl restart nxgate`；只需本地管理时设置 `UI_HOST=127.0.0.1`，可用 SSH 隧道访问。裸二进制需由启动环境设置 `UI_HOST`，不会自动读取环境文件。
 - Compose 默认发布 Web 到全部 IPv4 接口，代理端口仍只发布到宿主机回环地址；在 Compose 的 `.env` 文件写入 `NXGATE_UI_PUBLISH_HOST=127.0.0.1` 后运行 `docker compose up -d`，可持续限制 Web 为本地。源码修改后需执行 `docker compose up -d --build` 使用本地构建；现有 Release/`latest` 不会随源码推送而更新，安装脚本优先下载的发行二进制也不会自动包含尚未发布的功能修复。
 - 出口绑定是硬约束：没有匹配健康出口或全部熔断时拒绝新连接，不跨组回退、不从 VPS 原始出口直连。显式配置的自定义代理及用户态出口仍可用；非 Linux 平台不支持设备绑定出口，须使用显式用户态出口。
-- SSTP 的探测和实际连接均验证证书链与主机名/IP。自签名、不受信或名称不匹配节点会被拒绝；不再以跳过验证保证连通性。私有 CA 可通过可信的系统证书配置部署，不应从不可信节点自动导入。
+- SSTP（Zero-TUN）探测与连接由于 VPNGate/SoftEther 公共中继通常签发 `opengw.net` 通用证书且以裸 IP 建连，默认跳过 TLS 证书链与主机名校验以保证公共中继连通性，但仍强制保留出口绑定与防黑洞/非转发自动拉黑。
 - 开启 age 加密后 raw、clash、base64、JSON 订阅全部加密，调用者不能替换管理员配置公钥，密钥错误返回失败。客户端必须支持解密；旧客户端不再收到明文 JSON。管理元数据迁移到需管理员认证的 `/api/singbox/subscription-info`（不含节点凭据），配套 Android 请求已同步调整。
 - 旧的空凭据 `custom` 规则会被拒绝认证，必须补齐用户名/密码；只有显式 `none` 才免密。SOCKS5 UDP 仅接受 TCP 认证对端 IP，并固定客户端 UDP 源端口；NAT 换端口后需重新关联。
 - 备份恢复可能部分成功；错误会返回 `ok:false`、`partial` 和 `errors`，不是事务回滚。请修正错误后核对恢复结果。
@@ -363,7 +363,7 @@ chmod +x scripts/build.sh
 # 1. 静态代码分析与 CVE 漏洞扫描
 bash scripts/audit.sh
 
-# 2. 全量单元与集成测试 (覆盖全部 11 个子包)
+# 2. 全量单元与集成测试 (覆盖全部 Go 测试包)
 go test -count=1 -v ./...
 
 # 3. 代码库全链路版本一致性核验
@@ -383,7 +383,7 @@ cd web && npm test
 
 ### 本地安全与性能修订的资源预算
 
-本修订保留严格出口绑定、断线拒绝连接及 SSTP 证书验证。全局代理 TCP 并发预算默认 1024，所有多端口与 legacy gateway 共用，并保留每端口原有 512 上限。可通过 `LOCAL_PROXY_GLOBAL_MAX_CONNECTIONS=1024` 初始化，或网页设置/API `proxy_global_max_connections`（1–65536）修改；保存后的 `DATA_DIR/settings.json` 优先于环境变量。降低上限不踢掉现有连接，只拒绝新连接直至回落。默认预算按两个满载默认端口保守设定，不代表 RAM、FD 或整个 sing-box 的硬上限（独立 sing-box 入站不在该计数内）。`/metrics` 提供 `nxgate_proxy_budget_active`、`nxgate_proxy_budget_limit` 和拒绝累计数 `nxgate_proxy_budget_rejected_total`。
+本修订保留严格出口绑定、断线拒绝连接等安全基线（SSTP Zero-TUN 针对 VPNGate `opengw.net` 中继跳过证书校验以保障建连）。全局代理 TCP 并发预算默认 1024，所有多端口共用，并保留每端口原有 512 上限。可通过 `LOCAL_PROXY_GLOBAL_MAX_CONNECTIONS=1024` 初始化，或网页设置/API `proxy_global_max_connections`（1–65536）修改；保存后的 `DATA_DIR/settings.json` 优先于环境变量。降低上限不踢掉现有连接，只拒绝新连接直至回落。默认预算按两个满载默认端口保守设定，不代表 RAM、FD 或整个 sing-box 的硬上限（独立 sing-box 入站不在该计数内）。`/metrics` 提供 `nxgate_proxy_budget_active`、`nxgate_proxy_budget_limit` 和拒绝累计数 `nxgate_proxy_budget_rejected_total`。
 
 DoH 每个 resolver 最多缓存 1024 个域名、128 个进行中域名查询，过期淘汰并合并相同冷查询；尊重返回 TTL（不超过一小时），不缓存失败/零 TTL。SSTP 每条隧道独占缓存和 DoH transport，关闭时取消与清空，且 DoH 连接走该隧道，不回退系统 DNS。TUN 使用绑定网卡及当前地址的 resolver，每次拨号重新捕获接口身份，不跨重连持久缓存，以免复用 `tunN` 导致串出口。
 

@@ -543,9 +543,6 @@ api_sub_manage() {
         fi
 
         local is_caddy_run=false
-        if is_sub_server_running 2>/dev/null || systemctl is-active sing-box-sub &>/dev/null || pgrep -f "http.server" &>/dev/null || [[ -n "$is_caddy_bin" && $(pgrep -f "$is_caddy_bin") ]]; then
-            is_caddy_run=true
-        fi
 
         local joined_urls="[]"
         if [[ ${#node_urls[@]} -gt 0 ]]; then
@@ -597,7 +594,7 @@ api_sub_manage() {
                   --arg filename "$fname" \
                   '{port: $port, token: $token, filename: $filename, enabled: true}' >"$is_sub_json"
 
-            sub_caddy_apply "$p" &>/dev/null
+            sub_server_apply "$p" &>/dev/null
             sub_sync &>/dev/null
         fi
         api_sub_manage get

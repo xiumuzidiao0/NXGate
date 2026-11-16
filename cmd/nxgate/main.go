@@ -95,6 +95,9 @@ func main() {
 		go dynamicGroupMgr.EvaluateGroup(context.Background(), g)
 		return true
 	})
+	vpnMgr.SetAutoRotateGuard(func() bool {
+		return enabledSystemPrimaryGroup(dynamicGroupMgr) != nil
+	})
 	notifier := notify.NewTelegramNotifier(cfg)
 	webServer := server.NewServer(cfg, nodePool, vpnMgr, tunnelPool, dynamicGroupMgr, portMgr, notifier)
 

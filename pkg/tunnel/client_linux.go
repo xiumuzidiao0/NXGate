@@ -43,7 +43,7 @@ func newTunnelHTTPClient(devName string, timeout time.Duration) *http.Client {
 					var operr error
 					fn := func(fd uintptr) {
 						if devName != "" {
-							_ = syscall.SetsockoptString(int(fd), syscall.SOL_SOCKET, syscall.SO_BINDTODEVICE, devName)
+							operr = syscall.SetsockoptString(int(fd), syscall.SOL_SOCKET, syscall.SO_BINDTODEVICE, devName)
 						}
 					}
 					if err := c.Control(fn); err != nil {
@@ -63,14 +63,14 @@ func newTunnelHTTPClient(devName string, timeout time.Duration) *http.Client {
 						dnsDialer := net.Dialer{
 							Timeout: 3 * time.Second,
 							Control: func(n, a string, c syscall.RawConn) error {
-								var err error
+								var operr error
 								fn := func(fd uintptr) {
-									_ = syscall.SetsockoptString(int(fd), syscall.SOL_SOCKET, syscall.SO_BINDTODEVICE, devName)
+									operr = syscall.SetsockoptString(int(fd), syscall.SOL_SOCKET, syscall.SO_BINDTODEVICE, devName)
 								}
-								if err = c.Control(fn); err != nil {
+								if err := c.Control(fn); err != nil {
 									return err
 								}
-								return err
+								return operr
 							},
 						}
 						if ip4 := getTunnelInterfaceIPv4(devName); ip4 != nil {

@@ -32,10 +32,9 @@ type TCPConn struct {
 	ackTimer     *time.Timer
 	ackScheduled bool
 
-	closed      bool
-	peerClosed  bool
-	closeErr    error
-	readTimeout time.Duration
+	closed     bool
+	peerClosed bool
+	closeErr   error
 
 	readDeadline  time.Time
 	writeDeadline time.Time
@@ -100,11 +99,17 @@ func (c *TCPConn) Write(b []byte) (n int, err error) {
 	if c.closed {
 		return 0, io.ErrClosedPipe
 	}
+	if !c.writeDeadline.IsZero() && time.Now().After(c.writeDeadline) {
+		return 0, ErrTimeout
+	}
 
 	total := len(b)
 	offset := 0
 
 	for offset < total {
+		if !c.writeDeadline.IsZero() && time.Now().After(c.writeDeadline) {
+			return offset, ErrTimeout
+		}
 		chunkSize := total - offset
 		if chunkSize > DefaultTCPMSS {
 			chunkSize = DefaultTCPMSS

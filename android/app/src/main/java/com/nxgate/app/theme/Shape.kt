@@ -13,8 +13,6 @@ val NXGateShapes = Shapes(
     extraLarge = RoundedCornerShape(28.dp) // M3 Expressive Dialogs & Sheets: 28dp
 )
 
-val AimiliShapes = NXGateShapes
-
 // Capsule shape for Buttons
 val CapsuleShape = CircleShape
 

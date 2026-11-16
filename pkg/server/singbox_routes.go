@@ -218,24 +218,17 @@ func (s *Server) handleSingBoxOverview(w http.ResponseWriter, r *http.Request) {
 		resp.NodeCount = len(nds)
 	}
 
-	// Get subscription
-	if sub, err := s.singboxClient.GetSubscription(ctx); err == nil {
-		resp.Subscription = sub
+	// Native subscription is served directly on WebUI port without shelling out to legacy sub scripts
+	resp.Subscription = &singbox.SubResponse{
+		OK:                true,
+		Enabled:           true,
+		SubURL:            s.buildGenericSubURL(r),
+		ClashSubURL:       s.buildClashSubURL(r),
+		Token:             s.getSubscriptionToken(),
+		Port:              s.cfg.UIPort,
+		AgeEncryptEnabled: s.cfg.AgeEncryptEnabled,
+		AgePublicKey:      s.cfg.AgePublicKey,
 	}
-	if resp.Subscription == nil {
-		resp.Subscription = &singbox.SubResponse{
-			OK:      true,
-			Enabled: true,
-		}
-	}
-	// Always ensure subscription URLs point to our native WebUI server endpoints with safe path
-	resp.Subscription.SubURL = s.buildGenericSubURL(r)
-	resp.Subscription.ClashSubURL = s.buildClashSubURL(r)
-	resp.Subscription.Token = s.getSubscriptionToken()
-	resp.Subscription.Port = s.cfg.UIPort
-	resp.Subscription.AgeEncryptEnabled = s.cfg.AgeEncryptEnabled
-	resp.Subscription.AgePublicKey = s.cfg.AgePublicKey
-	resp.Subscription.Enabled = true
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(resp)
@@ -571,12 +564,15 @@ func appendFilterParams(baseURL string, r *http.Request) string {
 	return baseURL + "?" + encoded
 }
 
-func (s *Server) buildGenericSubURL(r *http.Request) string {
+func (s *Server) buildSubURL(r *http.Request, suffix string) string {
 	scheme := "http"
-	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
+	if r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
 		scheme = "https"
 	}
-	host := r.Host
+	host := strings.TrimSpace(strings.Split(r.Header.Get("X-Forwarded-Host"), ",")[0])
+	if host == "" {
+		host = r.Host
+	}
 	if host == "" || strings.HasPrefix(host, "0.0.0.0") || strings.HasPrefix(host, "[::]") {
 		uiHost := s.cfg.UIHost
 		if uiHost == "" || uiHost == "::" || uiHost == "0.0.0.0" {
@@ -587,34 +583,19 @@ func (s *Server) buildGenericSubURL(r *http.Request) string {
 	token := s.getSubscriptionToken()
 	var base string
 	if token != "" {
-		base = fmt.Sprintf("%s://%s/%s/api/singbox/subscription", scheme, host, token)
+		base = fmt.Sprintf("%s://%s/%s/api/singbox/subscription%s", scheme, host, token, suffix)
 	} else {
-		base = fmt.Sprintf("%s://%s/api/singbox/subscription", scheme, host)
+		base = fmt.Sprintf("%s://%s/api/singbox/subscription%s", scheme, host, suffix)
 	}
 	return appendFilterParams(base, r)
 }
 
+func (s *Server) buildGenericSubURL(r *http.Request) string {
+	return s.buildSubURL(r, "")
+}
+
 func (s *Server) buildClashSubURL(r *http.Request) string {
-	scheme := "http"
-	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
-		scheme = "https"
-	}
-	host := r.Host
-	if host == "" || strings.HasPrefix(host, "0.0.0.0") || strings.HasPrefix(host, "[::]") {
-		uiHost := s.cfg.UIHost
-		if uiHost == "" || uiHost == "::" || uiHost == "0.0.0.0" {
-			uiHost = "127.0.0.1"
-		}
-		host = net.JoinHostPort(uiHost, fmt.Sprintf("%d", s.cfg.UIPort))
-	}
-	token := s.getSubscriptionToken()
-	var base string
-	if token != "" {
-		base = fmt.Sprintf("%s://%s/%s/api/singbox/subscription/clash", scheme, host, token)
-	} else {
-		base = fmt.Sprintf("%s://%s/api/singbox/subscription/clash", scheme, host)
-	}
-	return appendFilterParams(base, r)
+	return s.buildSubURL(r, "/clash")
 }
 
 // resolveServerHost gets the clean host/domain/IP for node connection URLs.

@@ -41,5 +41,3 @@ object NXGateMotion {
         stiffness = 320f
     )
 }
-
-typealias AimiliMotion = NXGateMotion

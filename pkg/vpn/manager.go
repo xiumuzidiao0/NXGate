@@ -36,6 +36,10 @@ type Manager struct {
 	// governing dynamic group's country / IP-type / purity / unlock constraints.
 	failoverDelegate func() bool
 
+	// autoRotateGuard, when set and returning true, prevents the legacy global
+	// AutoRotator from overriding a governing system-primary dynamic group.
+	autoRotateGuard func() bool
+
 	// lastEgressProbe throttles the userland forwarding check so it runs at most
 	// once per userlandEgressProbeInterval instead of on every health tick.
 	lastEgressProbe time.Time
@@ -146,6 +150,14 @@ func (m *Manager) SetPrimaryFailoverDelegate(fn func() bool) {
 	m.failoverDelegate = fn
 }
 
+// SetAutoRotateGuard installs a predicate checked by the legacy StartAutoRotator
+// loop so it yields whenever the system-primary dynamic group is active.
+func (m *Manager) SetAutoRotateGuard(fn func() bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.autoRotateGuard = fn
+}
+
 func (m *Manager) Snapshot() StateSnapshot {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -155,13 +167,27 @@ func (m *Manager) Snapshot() StateSnapshot {
 	activeNode := m.activeNode
 	connectedAt := m.connectedAt
 
-	if m.primaryID != "" && m.tunnelPool != nil {
+	driverMode := m.driverMode
+	if driverMode == "" {
+		driverMode = DriverKernel
+	}
+
+	if driverMode == DriverUserland {
+		if status != StatusConnecting && m.sstpTunnel != nil && m.sstpTunnel.IsHealthy() {
+			status = StatusConnected
+		} else if status == StatusConnected {
+			// The userland session died (peer gone or silently black-holed). Never
+			// keep advertising a working exit while the proxy cannot forward.
+			status = StatusReconnecting
+		}
+	} else if m.primaryID != "" && m.tunnelPool != nil {
 		if t := m.tunnelPool.GetTunnel(m.primaryID); t != nil {
-			if t.Status == tunnel.StatusConnected {
+			switch t.Status {
+			case tunnel.StatusConnected:
 				status = StatusConnected
-			} else if t.Status == tunnel.StatusConnecting {
+			case tunnel.StatusConnecting:
 				status = StatusConnecting
-			} else if t.Status == tunnel.StatusFailed {
+			case tunnel.StatusFailed:
 				status = StatusFailed
 			}
 			activeNode = t.Node
@@ -180,40 +206,6 @@ func (m *Manager) Snapshot() StateSnapshot {
 	var activeID string
 	if activeNode != nil {
 		activeID = activeNode.ID
-	}
-
-	driverMode := m.driverMode
-	if driverMode == "" {
-		driverMode = DriverKernel
-	}
-
-	if driverMode == DriverUserland {
-		if m.sstpTunnel != nil && m.sstpTunnel.IsHealthy() {
-			status = StatusConnected
-		} else if status == StatusConnected {
-			// The userland session died (peer gone or silently black-holed). Never
-			// keep advertising a working exit while the proxy cannot forward.
-			status = StatusReconnecting
-		}
-	} else if m.primaryID != "" && m.tunnelPool != nil {
-		if t := m.tunnelPool.GetTunnel(m.primaryID); t != nil {
-			if t.Status == tunnel.StatusConnected {
-				status = StatusConnected
-			} else if t.Status == tunnel.StatusConnecting {
-				status = StatusConnecting
-			} else if t.Status == tunnel.StatusFailed {
-				status = StatusFailed
-			}
-			activeNode = t.Node
-			connectedAt = t.ConnectedAt
-			if t.Message != "" {
-				lastMsg = t.Message
-			}
-		}
-	}
-
-	if status == StatusConnected && !connectedAt.IsZero() {
-		uptime = int64(time.Since(connectedAt).Seconds())
 	}
 
 	return StateSnapshot{
@@ -644,6 +636,7 @@ func (m *Manager) StartAutoRotator(ctx context.Context) {
 				}
 
 				m.mu.RLock()
+				guard := m.autoRotateGuard
 				status := m.status
 				currID := ""
 				if m.activeNode != nil {
@@ -652,6 +645,9 @@ func (m *Manager) StartAutoRotator(ctx context.Context) {
 				currentMode := m.driverMode
 				m.mu.RUnlock()
 
+				if guard != nil && guard() {
+					continue
+				}
 				if status != StatusConnected {
 					continue
 				}
@@ -686,12 +682,6 @@ func (m *Manager) DriverMode() DriverMode {
 	return m.driverMode
 }
 
-func (m *Manager) GetDefaultDriverMode() DriverMode {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return m.driverMode
-}
-
 func (m *Manager) IsZeroTun() bool {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -708,6 +698,16 @@ func (m *Manager) GetSSTPTunnel() *sstp.Tunnel {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.sstpTunnel
+}
+
+func (m *Manager) GetUserlandDialer() func(ctx context.Context, network, addr string) (net.Conn, error) {
+	m.mu.RLock()
+	st := m.sstpTunnel
+	m.mu.RUnlock()
+	if st == nil {
+		return nil
+	}
+	return st.Dial
 }
 
 // nodeLabel renders a node for log output, tolerating a nil node.

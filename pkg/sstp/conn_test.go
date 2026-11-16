@@ -207,3 +207,20 @@ func BenchmarkTCPConnThroughput(b *testing.B) {
 		_, _ = io.ReadFull(conn, readBuf)
 	}
 }
+
+func TestTCPConnWriteDeadline(t *testing.T) {
+	localIP := net.ParseIP("10.211.1.2")
+	remoteIP := net.ParseIP("1.1.1.1")
+	tun := &Tunnel{
+		assignedIP: localIP,
+		sessions:   make(map[uint32]*TCPConn),
+	}
+
+	conn := newTCPConn(tun, localIP, remoteIP, 45000, 80, 1000, 2000)
+	if err := conn.SetWriteDeadline(time.Now().Add(-time.Second)); err != nil {
+		t.Fatalf("SetWriteDeadline failed: %v", err)
+	}
+	if _, err := conn.Write([]byte("hello")); err != ErrTimeout {
+		t.Fatalf("expected ErrTimeout on expired write deadline, got %v", err)
+	}
+}

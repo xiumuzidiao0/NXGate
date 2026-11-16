@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"sort"
@@ -108,6 +109,34 @@ func (m *DynamicGroupManager) SetPrimaryConnector(pc PrimaryConnector) {
 	m.primaryConnector = pc
 }
 
+func (m *DynamicGroupManager) isPrimaryUserlandMode(g *DynamicGroup) bool {
+	if g != nil && (g.ConnectMode == "zero_tun" || g.ConnectMode == "sstp") {
+		return true
+	}
+	if g == nil || g.ConnectMode == "" {
+		if reporter, ok := m.primaryConnector.(interface{ IsZeroTun() bool }); ok {
+			return reporter.IsZeroTun()
+		}
+	}
+	return false
+}
+
+func (m *DynamicGroupManager) primaryConnectedAt() time.Time {
+	if reporter, ok := m.primaryConnector.(interface{ ConnectedAt() time.Time }); ok {
+		return reporter.ConnectedAt()
+	}
+	return time.Time{}
+}
+
+func (m *DynamicGroupManager) primaryUserlandDialer() func(ctx context.Context, network, addr string) (net.Conn, error) {
+	if provider, ok := m.primaryConnector.(interface {
+		GetUserlandDialer() func(ctx context.Context, network, addr string) (net.Conn, error)
+	}); ok {
+		return provider.GetUserlandDialer()
+	}
+	return nil
+}
+
 func (m *DynamicGroupManager) load() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -167,7 +196,7 @@ func (m *DynamicGroupManager) ListGroups() []*DynamicGroup {
 		// Clone active IDs slice
 		cp.ActiveTunnelIDs = make([]string, len(g.ActiveTunnelIDs))
 		copy(cp.ActiveTunnelIDs, g.ActiveTunnelIDs)
-		if (cp.IsSystem || cp.ID == SystemPrimaryGroupID) && (cp.ConnectMode == "zero_tun" || cp.ConnectMode == "sstp") {
+		if (cp.IsSystem || cp.ID == SystemPrimaryGroupID) && m.isPrimaryUserlandMode(&cp) {
 			if m.primaryConnector != nil && m.primaryConnector.GetStatus() == "connected" {
 				activeNode := m.primaryConnector.GetActiveNode()
 				if activeNode != nil {
@@ -196,7 +225,7 @@ func (m *DynamicGroupManager) GetGroup(id string) *DynamicGroup {
 	}
 	cp := *g
 	cp.ActiveTunnelIDs = append([]string(nil), g.ActiveTunnelIDs...)
-	if (cp.IsSystem || cp.ID == SystemPrimaryGroupID) && (cp.ConnectMode == "zero_tun" || cp.ConnectMode == "sstp") {
+	if (cp.IsSystem || cp.ID == SystemPrimaryGroupID) && m.isPrimaryUserlandMode(&cp) {
 		if m.primaryConnector != nil && m.primaryConnector.GetStatus() == "connected" {
 			activeNode := m.primaryConnector.GetActiveNode()
 			if activeNode != nil {
@@ -692,7 +721,12 @@ func (m *DynamicGroupManager) EvaluateGroup(ctx context.Context, g *DynamicGroup
 
 			var newTun *Tunnel
 			var err error
-			if g.ConnectMode == "zero_tun" || g.ConnectMode == "sstp" {
+			useZeroTun := g.ConnectMode == "zero_tun" || g.ConnectMode == "sstp"
+			if !useZeroTun && !m.pool.CanUseKernelTUN() {
+				useZeroTun = true
+				stats.LogWarn("DynamicGroup", "[%s] 系统不支持内核 TUN/OpenVPN，出口自适应降级为用户态免 TUN 模式", g.Name)
+			}
+			if useZeroTun {
 				newTun, err = m.pool.StartUserlandTunnel(n)
 			} else {
 				newTun, err = m.pool.StartTunnel(n)
@@ -1061,16 +1095,35 @@ func (m *DynamicGroupManager) evaluatePrimarySystemGroup(ctx context.Context, g 
 		currentActiveNode = primaryTun.Node
 	}
 
+	isUserland := m.isPrimaryUserlandMode(g)
 	// 严苛物理实测校验：如果配置了解锁要求（如三大 AI 全通），实测当前主网关
 	primaryUnlockValid := true
-	if g.UnlockFilter != "" && g.UnlockFilter != "none" && primaryTun != nil && currentActiveNode != nil {
-		currUnlock := primaryTun.GetUnlock()
+	var unlockTarget *Tunnel
+	if primaryTun != nil {
+		unlockTarget = primaryTun
+	} else if isUserland && currentActiveNode != nil && primaryHealthy {
+		if dialer := m.primaryUserlandDialer(); dialer != nil {
+			unlockTarget = &Tunnel{
+				ID:         "primary-userland",
+				DevName:    fmt.Sprintf("sstp-%d", currentActiveNode.Port),
+				Node:       currentActiveNode,
+				Status:     StatusConnected,
+				IsUserland: true,
+				Dialer:     dialer,
+			}
+		}
+	}
+	if g.UnlockFilter != "" && g.UnlockFilter != "none" && unlockTarget != nil && currentActiveNode != nil {
+		currUnlock := unlockTarget.GetUnlock()
 		if currUnlock == nil || !currUnlock.IsProbed {
 			if m.pool.UnlockDetector() != nil {
 				probeCtx, probeCancel := context.WithTimeout(ctx, 8*time.Second)
-				currUnlock = m.pool.UnlockDetector().ProbeTunnelInstance(probeCtx, primaryTun)
+				currUnlock = m.pool.UnlockDetector().ProbeTunnelInstance(probeCtx, unlockTarget)
 				probeCancel()
-				primaryTun.SetUnlock(currUnlock)
+				unlockTarget.SetUnlock(currUnlock)
+				if primaryTun == nil && currentActiveNode != nil {
+					currentActiveNode.Unlock = currUnlock
+				}
 			}
 		}
 		if currUnlock != nil && !currUnlock.MatchFilter(g.UnlockFilter) {
@@ -1090,6 +1143,11 @@ func (m *DynamicGroupManager) evaluatePrimarySystemGroup(ctx context.Context, g 
 		}
 	}
 
+	modeTag := "tun0"
+	if isUserland {
+		modeTag = "免TUN"
+	}
+
 	// A connection attempt to this very node may already be in flight: the health
 	// checker's failover and the evaluation loop overlap, and issuing another
 	// connect would tear down the tunnel that is still being established, which
@@ -1099,11 +1157,7 @@ func (m *DynamicGroupManager) evaluatePrimarySystemGroup(ctx context.Context, g 
 		m.primaryConnector.GetStatus() == primaryStatusConnecting {
 		m.mu.Lock()
 		g.LastEvaluatedAt = time.Now()
-		if g.ConnectMode == "zero_tun" || g.ConnectMode == "sstp" {
-			g.StatusText = fmt.Sprintf("主网关建立中: %s (%s, 免TUN)", best.IP, best.CountryShort)
-		} else {
-			g.StatusText = fmt.Sprintf("主网关正在建立: %s (%s, tun0)", best.IP, best.CountryShort)
-		}
+		g.StatusText = fmt.Sprintf("主网关建立中: %s (%s, %s)", best.IP, best.CountryShort, modeTag)
 		m.saveLocked()
 		m.mu.Unlock()
 		return
@@ -1114,13 +1168,11 @@ func (m *DynamicGroupManager) evaluatePrimarySystemGroup(ctx context.Context, g 
 		m.mu.Lock()
 		if primaryTun != nil {
 			g.ActiveTunnelIDs = []string{primaryTun.ID}
+		} else if isUserland {
+			g.ActiveTunnelIDs = []string{"primary-userland"}
 		}
 		g.LastEvaluatedAt = time.Now()
-		if g.ConnectMode == "zero_tun" || g.ConnectMode == "sstp" {
-			g.StatusText = fmt.Sprintf("主网关固定连接: %s (%s, 免TUN)", currentActiveNode.IP, currentActiveNode.CountryShort)
-		} else {
-			g.StatusText = fmt.Sprintf("主网关固定连接: %s (%s, tun0)", currentActiveNode.IP, currentActiveNode.CountryShort)
-		}
+		g.StatusText = fmt.Sprintf("主网关固定连接: %s (%s, %s)", currentActiveNode.IP, currentActiveNode.CountryShort, modeTag)
 		m.saveLocked()
 		m.mu.Unlock()
 		return
@@ -1131,13 +1183,11 @@ func (m *DynamicGroupManager) evaluatePrimarySystemGroup(ctx context.Context, g 
 		m.mu.Lock()
 		if primaryTun != nil {
 			g.ActiveTunnelIDs = []string{primaryTun.ID}
+		} else if isUserland {
+			g.ActiveTunnelIDs = []string{"primary-userland"}
 		}
 		g.LastEvaluatedAt = time.Now()
-		if g.ConnectMode == "zero_tun" || g.ConnectMode == "sstp" {
-			g.StatusText = fmt.Sprintf("主网关正常运行: %s (%s, 免TUN)", currentActiveNode.IP, currentActiveNode.CountryShort)
-		} else {
-			g.StatusText = fmt.Sprintf("主网关正常运行: %s (%s, tun0)", currentActiveNode.IP, currentActiveNode.CountryShort)
-		}
+		g.StatusText = fmt.Sprintf("主网关正常运行: %s (%s, %s)", currentActiveNode.IP, currentActiveNode.CountryShort, modeTag)
 		m.saveLocked()
 		m.mu.Unlock()
 		return
@@ -1153,14 +1203,17 @@ func (m *DynamicGroupManager) evaluatePrimarySystemGroup(ctx context.Context, g 
 			m.saveLocked()
 			m.mu.Unlock()
 			return
-		} else if (g.ConnectMode == "zero_tun" || g.ConnectMode == "sstp") && currentActiveNode != nil {
-			m.mu.Lock()
-			g.ActiveTunnelIDs = []string{"primary-userland"}
-			g.LastEvaluatedAt = time.Now()
-			g.StatusText = fmt.Sprintf("主网关正常运行: %s (%s, 免TUN)", currentActiveNode.IP, currentActiveNode.CountryShort)
-			m.saveLocked()
-			m.mu.Unlock()
-			return
+		} else if isUserland && currentActiveNode != nil {
+			cAt := m.primaryConnectedAt()
+			if !cAt.IsZero() && time.Since(cAt) < 60*time.Second {
+				m.mu.Lock()
+				g.ActiveTunnelIDs = []string{"primary-userland"}
+				g.LastEvaluatedAt = time.Now()
+				g.StatusText = fmt.Sprintf("主网关正常运行: %s (%s, 免TUN)", currentActiveNode.IP, currentActiveNode.CountryShort)
+				m.saveLocked()
+				m.mu.Unlock()
+				return
+			}
 		}
 	}
 
@@ -1170,7 +1223,7 @@ func (m *DynamicGroupManager) evaluatePrimarySystemGroup(ctx context.Context, g 
 	// Trigger primary connection to the best node
 	if m.primaryConnector != nil {
 		targetMode := "kernel"
-		if g.ConnectMode == "zero_tun" || g.ConnectMode == "sstp" {
+		if isUserland {
 			targetMode = "userland"
 		}
 		stats.LogInfo("DynamicGroup", "[%s] 主出口自适应组触发自适应连接 -> 节点: %s (%s, 模式: %s)...",

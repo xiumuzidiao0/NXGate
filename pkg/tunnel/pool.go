@@ -54,6 +54,23 @@ func (p *Pool) UnlockDetector() *UnlockDetector {
 	return p.unlockDetector
 }
 
+// CanUseKernelTUN reports whether this host can establish kernel OpenVPN TUN tunnels.
+func (p *Pool) CanUseKernelTUN() bool {
+	if runtime.GOOS != "linux" {
+		return false
+	}
+	info, err := os.Stat("/dev/net/tun")
+	if err != nil || info.Mode()&os.ModeDevice == 0 {
+		return false
+	}
+	openvpnCmd := "openvpn"
+	if p != nil && p.cfg != nil && p.cfg.OpenVPNCommand != "" {
+		openvpnCmd = p.cfg.OpenVPNCommand
+	}
+	_, err = exec.LookPath(openvpnCmd)
+	return err == nil
+}
+
 func (p *Pool) allocConcurrentDevIndexLocked() int {
 	// Concurrent and dynamic tunnels strictly allocate from 1 to 63,
 	// keeping 0 exclusively reserved for the primary connection.

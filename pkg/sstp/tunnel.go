@@ -35,7 +35,6 @@ type Tunnel struct {
 	password   string
 	tlsConn    *tls.Conn
 	assignedIP net.IP
-	gatewayIP  net.IP
 
 	mu           sync.RWMutex
 	sessions     map[uint32]*TCPConn          // key: (localPort << 16) | remotePort
@@ -189,10 +188,6 @@ func DetectSSTPPort(ctx context.Context, host string, candidatePorts []int, time
 		}
 		return 0
 	}
-}
-
-func ConnectNode(ctx context.Context, host string, targetPort int, proto string, user, pass string) (*Tunnel, error) {
-	return ConnectNodeWithPreferred(ctx, host, 0, targetPort, proto, user, pass)
 }
 
 func ConnectNodeWithPreferred(ctx context.Context, host string, preferredPort int, targetPort int, proto string, user, pass string) (*Tunnel, error) {
@@ -874,14 +869,6 @@ func (t *Tunnel) IsHealthy() bool {
 		return false
 	}
 	return true
-}
-
-// LastRecv reports when the tunnel last received a byte from the peer. A zero
-// value means nothing has been received since the session was established.
-func (t *Tunnel) LastRecv() time.Time {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
-	return t.lastRecv
 }
 
 func (t *Tunnel) Close() error {

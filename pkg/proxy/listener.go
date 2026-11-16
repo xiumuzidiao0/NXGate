@@ -223,7 +223,7 @@ func (l *PortListener) dispatch(client net.Conn) {
 
 	// 3. Fall back to primary userland dialer if neither tunnel nor custom proxy was selected
 	if dialer == nil && selectedTun == nil && len(l.rule.BoundCustomProxyIDs) == 0 &&
-		(len(l.rule.BoundTunnelIDs) == 0 && len(l.rule.BoundGroupIDs) == 0 || isOnlySystemPrimary(l.rule.BoundTunnelIDs, l.rule.BoundGroupIDs)) {
+		(len(l.rule.BoundTunnelIDs) == 0 && len(l.rule.BoundGroupIDs) == 0 || ContainsSystemPrimaryGroup(l.rule.BoundTunnelIDs, l.rule.BoundGroupIDs)) {
 		l.mu.Lock()
 		uDialer := l.userlandDialer
 		uPacketConn := l.userlandPacketConn

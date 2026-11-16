@@ -1,6 +1,7 @@
 package server
 
 import (
+	"net/http/httptest"
 	"testing"
 
 	"aimili-vpngate-go/pkg/config"
@@ -148,5 +149,27 @@ func TestResolveOutboundURLWithAuth(t *testing.T) {
 	gotNone := s.resolveOutboundURL("7931")
 	if gotNone != "socks5://127.0.0.1:7931" {
 		t.Errorf("expected unauthenticated url, got %s", gotNone)
+	}
+}
+
+func TestBuildSubURLRespectsForwardedHeaders(t *testing.T) {
+	cfg := &config.Config{
+		DataDir:  t.TempDir(),
+		UIHost:   "0.0.0.0",
+		UIPort:   8787,
+		SubToken: "tok123",
+	}
+	s := &Server{cfg: cfg}
+
+	req := httptest.NewRequest("GET", "http://127.0.0.1:8787/enter/api/singbox/overview", nil)
+	req.Host = "127.0.0.1:8787"
+	req.Header.Set("X-Forwarded-Host", "gw.example.com:8443, internal.proxy")
+	req.Header.Set("X-Forwarded-Proto", "HTTPS")
+
+	if got := s.buildGenericSubURL(req); got != "https://gw.example.com:8443/tok123/api/singbox/subscription" {
+		t.Fatalf("unexpected generic sub URL: %s", got)
+	}
+	if got := s.buildClashSubURL(req); got != "https://gw.example.com:8443/tok123/api/singbox/subscription/clash" {
+		t.Fatalf("unexpected clash sub URL: %s", got)
 	}
 }

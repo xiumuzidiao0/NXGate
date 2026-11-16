@@ -222,54 +222,7 @@ class ApiClient {
                 val tunnelsList = mutableListOf<TunnelItem>()
                 if (tunnelsArr != null) {
                     for (i in 0 until tunnelsArr.length()) {
-                        val obj = tunnelsArr.getJSONObject(i)
-                        val id = obj.optString("id", "")
-                        val devName = obj.optString("dev_name", "tun$i")
-                        val devIndex = obj.optInt("dev_index", i)
-                        val tStatus = obj.optString("status", "connected")
-                        val uptime = obj.optLong("uptime", 0)
-                        val latency = obj.optInt("latency_ms", 38)
-                        val nodeObj = obj.optJSONObject("node")
-                        val ip = nodeObj?.optString("ip", "") ?: ""
-                        val port = nodeObj?.optInt("port", 443) ?: 443
-                        val country = nodeObj?.optString("country_long", nodeObj.optString("country_short", "JP")) ?: "JP"
-
-                        val unlockObj = obj.optJSONObject("unlock")
-                        val throughputBps = unlockObj?.optLong("throughput_bps", 0) ?: 0
-                        val throughputPassed = unlockObj?.optBoolean("throughput_passed", true) ?: true
-
-                        val isUserland = obj.optBoolean("is_userland", false) || devName.startsWith("sstp")
-                        val isResidential = nodeObj?.optBoolean("is_residential", false) ?: false
-                        val isHosting = nodeObj?.optBoolean("is_hosting", false) ?: (nodeObj?.optString("ip_type") == "hosting" || nodeObj?.optString("ip_type") == "datacenter")
-                        val riskScore = nodeObj?.optDouble("risk_score", -1.0)?.toFloat() ?: -1.0f
-                        val riskLevel = nodeObj?.optString("risk_level", "unknown") ?: "unknown"
-                        val riskLabel = nodeObj?.optString("risk_label", "") ?: ""
-
-                        tunnelsList.add(
-                            TunnelItem(
-                                id = id,
-                                devName = devName,
-                                devIndex = devIndex,
-                                status = tStatus,
-                                uptimeSeconds = uptime,
-                                latencyMs = latency,
-                                nodeIp = ip,
-                                nodePort = port,
-                                country = country,
-                                throughputBps = throughputBps,
-                                throughputPassed = throughputPassed,
-                                isUserland = isUserland,
-                                isResidential = isResidential,
-                                isHosting = isHosting,
-                                riskScore = riskScore,
-                                riskLevel = riskLevel,
-                                riskLabel = riskLabel,
-                                openai = unlockObj?.optString("openai", "unknown") ?: "unknown",
-                                claude = unlockObj?.optString("claude", "unknown") ?: "unknown",
-                                gemini = unlockObj?.optString("gemini", "unknown") ?: "unknown",
-                                netflix = unlockObj?.optString("netflix", "unknown") ?: "unknown"
-                            )
-                        )
+                        tunnelsList.add(parseTunnelItem(tunnelsArr.getJSONObject(i), i))
                     }
                 }
 
@@ -305,6 +258,66 @@ class ApiClient {
         }
     }
 
+    private fun parseTunnelItem(obj: JSONObject, index: Int): TunnelItem {
+        val id = obj.optString("id", "tun-$index")
+        val devName = obj.optString("dev_name", "tun$index")
+        val devIndex = obj.optInt("dev_index", index)
+        val tStatus = obj.optString("status", "connected")
+        val uptime = obj.optLong("uptime", 0)
+        val nodeObj = obj.optJSONObject("node")
+        val ip = nodeObj?.optString("ip", "") ?: ""
+        val port = nodeObj?.optInt("port", 443) ?: 443
+        val cShort = nodeObj?.optString("country_short", "") ?: ""
+        val cLong = nodeObj?.optString("country_long", "") ?: ""
+        val country = if (cShort.isNotEmpty()) cShort else (if (cLong.isNotEmpty()) cLong else "JP")
+
+        val latFromObj = if (obj.has("latency_ms")) obj.optInt("latency_ms", 0) else 0
+        val latFromNode = if (nodeObj != null && nodeObj.has("latency_ms")) nodeObj.optInt("latency_ms", 0) else 0
+        val pingFromNode = nodeObj?.optInt("ping", 0) ?: 0
+        val latency = when {
+            latFromObj > 0 -> latFromObj
+            latFromNode > 0 -> latFromNode
+            pingFromNode > 0 -> pingFromNode
+            else -> 0
+        }
+
+        val unlockObj = obj.optJSONObject("unlock")
+        val throughputBps = unlockObj?.optLong("throughput_bps", 0) ?: 0
+        val throughputPassed = unlockObj?.optBoolean("throughput_passed", true) ?: true
+
+        val isUserland = obj.optBoolean("is_userland", false) || devName.startsWith("sstp")
+        val isResidential = nodeObj?.optBoolean("is_residential", false) ?: false
+        val isHosting = nodeObj?.optBoolean("is_hosting", false) ?: (nodeObj?.optString("ip_type") == "hosting" || nodeObj?.optString("ip_type") == "datacenter")
+        val riskScore = nodeObj?.optDouble("risk_score", -1.0)?.toFloat() ?: -1.0f
+        val riskLevel = nodeObj?.optString("risk_level", "unknown") ?: "unknown"
+        val riskLabel = nodeObj?.optString("risk_label", "") ?: ""
+
+        return TunnelItem(
+            id = id,
+            devName = devName,
+            devIndex = devIndex,
+            status = tStatus,
+            uptimeSeconds = uptime,
+            latencyMs = latency,
+            nodeIp = ip,
+            nodePort = port,
+            country = country,
+            countryLong = cLong,
+            throughputBps = throughputBps,
+            throughputPassed = throughputPassed,
+            isUserland = isUserland,
+            isResidential = isResidential,
+            isHosting = isHosting,
+            riskScore = riskScore,
+            riskLevel = riskLevel,
+            riskLabel = riskLabel,
+            openai = unlockObj?.optString("openai", "unknown") ?: "unknown",
+            claude = unlockObj?.optString("claude", "unknown") ?: "unknown",
+            gemini = unlockObj?.optString("gemini", "unknown") ?: "unknown",
+            netflix = unlockObj?.optString("netflix", "unknown") ?: "unknown"
+        )
+    }
+
     suspend fun fetchTunnels(profile: ServerProfile): Result<List<TunnelItem>> = withContext(Dispatchers.IO) {
         try {
             executeCall(profile, "/api/tunnels").use { resp ->
@@ -313,45 +326,7 @@ class ApiClient {
                 val arr = JSONArray(rawStr)
                 val list = mutableListOf<TunnelItem>()
                 for (i in 0 until arr.length()) {
-                    val obj = arr.getJSONObject(i)
-                    val id = obj.optString("id", "tun-$i")
-                    val devName = obj.optString("dev_name", "tun$i")
-                    val devIndex = obj.optInt("dev_index", i)
-                    val status = obj.optString("status", "connected")
-                    val uptime = obj.optLong("uptime", 0)
-                    val nodeObj = obj.optJSONObject("node")
-                    val ip = nodeObj?.optString("ip", "") ?: ""
-                    val port = nodeObj?.optInt("port", 443) ?: 443
-                    val country = nodeObj?.optString("country_short", "JP") ?: "JP"
-                    val latency = nodeObj?.optInt("latency_ms", 35) ?: 35
-
-                    val unlockObj = obj.optJSONObject("unlock")
-                    val openai = unlockObj?.optString("openai", "unknown") ?: "unknown"
-                    val claude = unlockObj?.optString("claude", "unknown") ?: "unknown"
-                    val gemini = unlockObj?.optString("gemini", "unknown") ?: "unknown"
-                    val netflix = unlockObj?.optString("netflix", "unknown") ?: "unknown"
-                    val throughputBps = unlockObj?.optLong("throughput_bytes_per_sec", 0) ?: 0
-                    val throughputPassed = unlockObj?.optBoolean("throughput_passed", true) ?: true
-
-                    list.add(
-                        TunnelItem(
-                            id = id,
-                            devName = devName,
-                            devIndex = devIndex,
-                            status = status,
-                            latencyMs = latency,
-                            nodeIp = ip,
-                            nodePort = port,
-                            country = country,
-                            uptimeSeconds = uptime,
-                            throughputBps = throughputBps,
-                            throughputPassed = throughputPassed,
-                            openai = openai,
-                            claude = claude,
-                            gemini = gemini,
-                            netflix = netflix
-                        )
-                    )
+                    list.add(parseTunnelItem(arr.getJSONObject(i), i))
                 }
                 Result.success(list)
             }
@@ -621,10 +596,6 @@ class ApiClient {
         val hostPortA = if (cleanA.contains("@")) cleanA.substringAfter("@") else cleanA
         val hostPortB = if (cleanB.contains("@")) cleanB.substringAfter("@") else cleanB
         return hostPortA.equals(hostPortB, ignoreCase = true)
-    }
-
-    suspend fun fetchSingBoxNodes(profile: ServerProfile): Result<List<InboundProtocolItem>> = withContext(Dispatchers.IO) {
-        fetchSingBoxOverview(profile).map { it.nodes }
     }
 
     suspend fun addSingBoxNode(profile: ServerProfile, protocol: String, port: String, outbound: String): Result<Boolean> = withContext(Dispatchers.IO) {
@@ -1190,61 +1161,7 @@ class ApiClient {
                             val tunnelsList = mutableListOf<TunnelItem>()
                             if (tunnelsArr != null) {
                                 for (i in 0 until tunnelsArr.length()) {
-                                    val obj = tunnelsArr.getJSONObject(i)
-                                    val id = obj.optString("id", "")
-                                    val devName = obj.optString("dev_name", "tun$i")
-                                    val devIndex = obj.optInt("dev_index", i)
-                                    val tStatus = obj.optString("status", "connected")
-                                    val uptime = obj.optLong("uptime", 0)
-                                    val nodeObj = obj.optJSONObject("node")
-                                    val ip = nodeObj?.optString("ip", "") ?: ""
-                                    val port = nodeObj?.optInt("port", 443) ?: 443
-                                    val cShort = nodeObj?.optString("country_short", "") ?: ""
-                                    val cLong = nodeObj?.optString("country_long", "") ?: ""
-                                    val country = if (cShort.isNotEmpty()) cShort else cLong
-
-                                    val latFromObj = if (obj.has("latency_ms")) obj.optInt("latency_ms", 0) else 0
-                                    val latFromNode = if (nodeObj != null && nodeObj.has("latency_ms")) nodeObj.optInt("latency_ms", 0) else 0
-                                    val pingFromNode = nodeObj?.optInt("ping", 0) ?: 0
-                                    val latency = if (latFromObj > 0) latFromObj else (if (latFromNode > 0) latFromNode else (if (pingFromNode > 0) pingFromNode else 38))
-
-                                    val unlockObj = obj.optJSONObject("unlock")
-                                    val throughputBps = unlockObj?.optLong("throughput_bps", 0) ?: 0
-                                    val throughputPassed = unlockObj?.optBoolean("throughput_passed", true) ?: true
-
-                                    val isUserland = obj.optBoolean("is_userland", false) || devName.startsWith("sstp")
-                                    val isResidential = nodeObj?.optBoolean("is_residential", false) ?: false
-                                    val isHosting = nodeObj?.optBoolean("is_hosting", false) ?: (nodeObj?.optString("ip_type") == "hosting" || nodeObj?.optString("ip_type") == "datacenter")
-                                    val riskScore = nodeObj?.optDouble("risk_score", -1.0)?.toFloat() ?: -1.0f
-                                    val riskLevel = nodeObj?.optString("risk_level", "unknown") ?: "unknown"
-                                    val riskLabel = nodeObj?.optString("risk_label", "") ?: ""
-
-                                    tunnelsList.add(
-                                        TunnelItem(
-                                            id = id,
-                                            devName = devName,
-                                            devIndex = devIndex,
-                                            status = tStatus,
-                                            uptimeSeconds = uptime,
-                                            latencyMs = latency,
-                                            nodeIp = ip,
-                                            nodePort = port,
-                                            country = country,
-                                            countryLong = cLong,
-                                            throughputBps = throughputBps,
-                                            throughputPassed = throughputPassed,
-                                            isUserland = isUserland,
-                                            isResidential = isResidential,
-                                            isHosting = isHosting,
-                                            riskScore = riskScore,
-                                            riskLevel = riskLevel,
-                                            riskLabel = riskLabel,
-                                            openai = unlockObj?.optString("openai", "unknown") ?: "unknown",
-                                            claude = unlockObj?.optString("claude", "unknown") ?: "unknown",
-                                            gemini = unlockObj?.optString("gemini", "unknown") ?: "unknown",
-                                            netflix = unlockObj?.optString("netflix", "unknown") ?: "unknown"
-                                        )
-                                    )
+                                    tunnelsList.add(parseTunnelItem(tunnelsArr.getJSONObject(i), i))
                                 }
                             }
                             trySend(ServerSseEvent.StatusUpdate(ServerStatusData(masterInfo, traffic, tunnelsList)))

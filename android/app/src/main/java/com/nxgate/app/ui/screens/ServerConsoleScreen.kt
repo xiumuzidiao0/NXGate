@@ -697,10 +697,8 @@ fun ServerConsoleScreen(
                                             scope.launch {
                                                 val res = NXGateApplication.instance.apiClient.triggerRotate(activeServer)
                                                 masterInfo = masterInfo.copy(
-                                                    nodeName = if (strings == AppStringsEn) "Optimal Residential (Switched)" else "日本住宅最优节点(已切换)",
-                                                    uptimeStr = if (strings == AppStringsEn) "Just now" else "刚刚",
-                                                    status = if (strings == AppStringsEn) "Healthy" else "断流检测通过",
-                                                    isConnected = true
+                                                    status = if (strings == AppStringsEn) "Switching..." else "正在切换最优出口...",
+                                                    uptimeStr = ""
                                                 )
                                                 Toast.makeText(context, res.getOrDefault(if (strings == AppStringsEn) "Triggered switch to optimal egress" else "已触发主网关切换最优出口！"), Toast.LENGTH_SHORT).show()
                                             }
@@ -886,10 +884,8 @@ fun ServerConsoleScreen(
                                     scope.launch {
                                         val res = NXGateApplication.instance.apiClient.triggerRotate(activeServer)
                                         masterInfo = masterInfo.copy(
-                                            nodeName = if (strings == AppStringsEn) "Optimal Residential (Switched)" else "日本住宅最优节点(已切换)",
-                                            uptimeStr = if (strings == AppStringsEn) "Just now" else "刚刚",
-                                            status = if (strings == AppStringsEn) "Healthy" else "断流检测通过",
-                                            isConnected = true
+                                            status = if (strings == AppStringsEn) "Switching..." else "正在切换最优出口...",
+                                            uptimeStr = ""
                                         )
                                         Toast.makeText(context, res.getOrDefault(if (strings == AppStringsEn) "Triggered switch to optimal egress" else "已触发主网关切换最优出口！"), Toast.LENGTH_SHORT).show()
                                     }

@@ -1095,10 +1095,6 @@ import { I18N } from './i18n.js';
             }
         }
 
-        async function openSettingsModal() {
-            switchView('settings');
-        }
-
         function closeSettingsModal() { switchView('dashboard'); }
 
         function openSystemPrimaryConfig() {
@@ -2184,10 +2180,6 @@ import { I18N } from './i18n.js';
             }
         }
 
-        async function clearAllBlacklist() {
-            await clearTempBlacklist();
-        }
-
         async function resurrectBlacklist() {
             const btn = document.getElementById('btn-resurrect-bl');
             if (btn) {
@@ -2800,10 +2792,6 @@ import { I18N } from './i18n.js';
                 element.setAttribute('role', 'button');
                 element.setAttribute('tabindex', '0');
             });
-        }
-
-        function openSingBoxModal() {
-            switchView('singbox');
         }
 
         // ==========================================
@@ -3443,17 +3431,6 @@ import { I18N } from './i18n.js';
             copyText(u.toString(), localize('所有转接出口定制订阅链接', 'Relayed egress subscription URL'));
         }
 
-        function downloadFilteredClash() {
-            const url = getFilteredClashSubURL();
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'singbox-clash-filtered.yaml';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            showToast(localize('已触发下载定制 singbox-clash-filtered.yaml', 'Downloading singbox-clash-filtered.yaml'));
-        }
-
         function showFilteredQR() {
             const url = getFilteredGenericSubURL();
             showNodeQRCode(url, localize('定制订阅链接与二维码', 'Filtered subscription URL and QR code'));
@@ -4014,7 +3991,6 @@ import { I18N } from './i18n.js';
             clearPermBlacklist,
             promptAddCidrBlock,
             resurrectBlacklist,
-            clearAllBlacklist,
             fetchBlacklist,
             renderNodes,
             saveSettings,
@@ -4053,7 +4029,6 @@ import { I18N } from './i18n.js';
             copyFilteredGenericSub,
             copyFilteredClashSub,
             copyQuickRelayedSub,
-            downloadFilteredClash,
             showFilteredQR,
             downloadBackupPackage,
             triggerBackupFileSelect,

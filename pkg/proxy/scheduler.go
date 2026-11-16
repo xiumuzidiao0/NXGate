@@ -204,12 +204,14 @@ func (s *DefaultScheduler) selectForPort(port int, signature string, healthy []*
 	}
 }
 
-func isOnlySystemPrimary(boundIDs, boundGroupIDs []string) bool {
+func ContainsSystemPrimaryGroup(boundIDs, boundGroupIDs []string) bool {
 	if len(boundIDs) > 0 {
 		return false
 	}
-	if len(boundGroupIDs) == 1 && (boundGroupIDs[0] == "system-primary" || boundGroupIDs[0] == tunnel.SystemPrimaryGroupID) {
-		return true
+	for _, gid := range boundGroupIDs {
+		if gid == "system-primary" || gid == tunnel.SystemPrimaryGroupID {
+			return true
+		}
 	}
 	return false
 }

@@ -271,23 +271,6 @@ func (c *Client) ListNodes(ctx context.Context) ([]Node, error) {
 	return resp.Nodes, nil
 }
 
-func (c *Client) GetNode(ctx context.Context, name string) (*Node, error) {
-	ctxTimeout, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-
-	data, err := c.execAPI(ctxTimeout, "info", name)
-	if err != nil {
-		return nil, err
-	}
-
-	var resp SingleNodeResponse
-	if err := json.Unmarshal(data, &resp); err != nil {
-		return nil, fmt.Errorf("failed to parse node info json: %w", err)
-	}
-
-	return resp.Node, nil
-}
-
 func (c *Client) AddNode(ctx context.Context, protocol, port, uuidOrPass, sniOrHost, outbound string) (*Node, error) {
 	if port == "" {
 		port = "auto"
@@ -398,45 +381,6 @@ func (c *Client) GetSubscription(ctx context.Context) (*SubResponse, error) {
 	var resp SubResponse
 	if err := json.Unmarshal(data, &resp); err != nil {
 		return nil, fmt.Errorf("failed to parse subscription json: %w", err)
-	}
-
-	return &resp, nil
-}
-
-func (c *Client) SyncSubscription(ctx context.Context) (*SubResponse, error) {
-	ctxTimeout, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-
-	data, err := c.execAPI(ctxTimeout, "sub", "sync")
-	if err != nil {
-		return nil, err
-	}
-
-	var resp SubResponse
-	if err := json.Unmarshal(data, &resp); err != nil {
-		return nil, fmt.Errorf("failed to parse subscription sync response: %w", err)
-	}
-
-	return &resp, nil
-}
-
-func (c *Client) InitSubscription(ctx context.Context, port int) (*SubResponse, error) {
-	ctxTimeout, cancel := context.WithTimeout(ctx, 15*time.Second)
-	defer cancel()
-
-	args := []string{"sub", "init"}
-	if port > 0 {
-		args = append(args, fmt.Sprintf("%d", port))
-	}
-
-	data, err := c.execAPI(ctxTimeout, args...)
-	if err != nil {
-		return nil, err
-	}
-
-	var resp SubResponse
-	if err := json.Unmarshal(data, &resp); err != nil {
-		return nil, fmt.Errorf("failed to parse subscription init response: %w", err)
 	}
 
 	return &resp, nil

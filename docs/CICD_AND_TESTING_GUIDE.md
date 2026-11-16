@@ -13,10 +13,10 @@
   - [3. 前端安全与防腐审计测试](#3-前端安全与防腐审计测试)
   - [4. 全架构交叉编译检验](#4-全架构交叉编译检验)
 - [三、 版本一致性规范 (Single Source of Truth)](#三-版本一致性规范-single-source-of-truth)
-  - [1. 四大版本定义文件](#1-四大版本定义文件)
-  - [2. 自动化核验与一键同步工具](#2-自动化核验与一键同步工具)
+  - [1. 五大版本定义文件](#1-五大版本定义文件)
+  - [2. 自动化核验与一键同步工具](#3-自动化核验与一键同步工具)
 - [四、 发行包构建产物标准 (Release Artifacts)](#四-发行包构建产物标准-release-artifacts)
-  - [1. 9 大必备发行附件清单](#1-9-大必备发行附件清单)
+  - [1. 10 大必备发行附件清单](#1-10-大必备发行附件清单)
   - [2. 必须包含未压缩 ELF 的关键设计原因](#2-必须包含未压缩-elf-的关键设计原因)
   - [3. SHA256 校验和标准清单](#3-sha256-校验和标准清单)
 - [五、 GitHub Actions CI/CD 流水线](#五-github-actions-cicd-流水线)
@@ -75,7 +75,7 @@ go test -v -count=1 ./...
 
 ### 2. WebUI 跨端视口回归测试
 
-AimiliVPN WebUI 采用纯原生技术（Vanilla HTML/CSS/JS），集成了 Playwright 进行多端跨视口无头浏览器测试：
+NXGate WebUI 采用原生前端资源与 `esbuild` 模块化构建流水线，并集成了 Playwright 进行多端跨视口无头浏览器测试：
 
 ```bash
 # 安装测试依赖与 Chromium 引擎（首次运行需执行）
@@ -161,9 +161,9 @@ go test -v ./web/...
 
 ## 四、 发行包构建产物标准 (Release Artifacts)
 
-每次在 GitHub 发布 Release 时，必须严格提供以下 **9 个标准附件**。
+每次在 GitHub 发布 Release 时，必须严格提供以下 **10 个标准附件**。
 
-### 1. 9 大必备发行附件清单
+### 1. 10 大必备发行附件清单
 
 ```text
 dist/
@@ -207,22 +207,22 @@ dist/
 
 ### 1. CI 持续集成工作流 (`.github/workflows/ci.yml`)
 
-- **触发条件**：对 `main` 分支的 `push` 以及所有发往 `main` 的 `pull_request`。
+- **触发条件**：对所有分支（`**`）的 `push` 以及所有 `pull_request`。
 - **执行阶段**：
   1. 运行 `./scripts/check-version.sh` 检查全项目版本是否一致；
   2. 运行 Go 后端全量单元测试与数据竞争检测；
-  3. 安装 Chromium 并运行 Playwright 跨端视口 UI 回归测试；
+  3. 构建前端产物并安装 Chromium 运行 Playwright 跨端视口 UI 回归测试；
   4. 运行 `./scripts/build.sh` 验证多架构编译输出。
 
 ### 2. Release 自动化发布工作流 (`.github/workflows/release.yml`)
 
-- **触发条件**：推送匹配 `v*` 格式的 Git 标签（如 `v2.5.2`）。
+- **触发条件**：推送匹配 `v*` 格式的 Git 标签（如 `v2.6.5.31`）。
 - **自动化操作**：
   1. 校验 Git Tag 与代码内定义的版本是否 100% 吻合（不一致立即中断阻止误发）；
   2. 执行完整的自动化测试套件；
-  3. 执行 `./scripts/build.sh` 一键构建 4 大架构全套包；
-  4. 校验 `dist/` 目录下全部 9 个文件完整性；
-  5. 自动创建 GitHub Release，将 9 个附件完整发布，并自动生成变更日志。
+  3. 编译 Android Release APK 并执行 `./scripts/build.sh` 一键构建 4 大架构全套包；
+  4. 校验 `dist/` 与根目录下全部 10 个发布产物完整性；
+  5. 自动创建 GitHub Release，将 10 个附件完整发布，并自动生成变更日志。
 
 ---
 
@@ -230,7 +230,7 @@ dist/
 
 ### 1. 终端自动化升级流程
 
-在任何运行 AimiliVPN 的 Linux 节点上，以 root 权限执行：
+在任何运行 NXGate 的 Linux 节点上，以 root 权限执行：
 
 ```bash
 # 快捷升级命令
@@ -264,8 +264,8 @@ systemctl status nxgate
 # 3. 查看实时运行日志与节点探测
 journalctl -u nxgate -n 30 --no-pager
 
-# 4. 检查当前活跃出网隧道
-curl -s http://localhost:8964/api/tunnels | jq '.data[] | {id, node: .node.ip, unlock}'
+# 4. 检查当前活跃出网隧道（需替换为实际 UI_PATH 与凭据）
+curl -s -u admin:<password> http://127.0.0.1:8787/<UI_PATH>/api/tunnels | jq '.[] | {id, node: .node.ip, unlock}'
 ```
 
 ---

@@ -23,7 +23,6 @@ const (
 	TypeAAAA = "AAAA" // 28
 	TypeTXT  = "TXT"  // 16
 
-	MinCacheTTL          = 15 * time.Second
 	MaxCacheTTL          = 3600 * time.Second
 	DefaultCacheCapacity = 1024
 	maxPendingQueries    = 128
@@ -65,22 +64,6 @@ type DualEngineResolver struct {
 	pending                         map[string]*lookupCall
 	capacity                        int
 	hits, misses, shared, evictions uint64
-}
-
-var (
-	defaultResolver     *DualEngineResolver
-	defaultResolverOnce sync.Once
-)
-
-// Default returns the global singleton DualEngineResolver.
-func Default() *DualEngineResolver {
-	defaultResolverOnce.Do(func() {
-		defaultResolver = NewDualEngineResolver(
-			[]string{CloudflareDoHEndpoint, GoogleDoHEndpoint, CloudflareDoHIP, GoogleDoHIP},
-			nil,
-		)
-	})
-	return defaultResolver
 }
 
 // NewDualEngineResolver creates a custom DualEngineResolver with custom endpoints or HTTP client.
@@ -340,11 +323,6 @@ func (r *DualEngineResolver) querySingleEndpoint(ctx context.Context, endpoint, 
 
 	var ips []net.IP
 	minTTL := int(MaxCacheTTL / time.Second)
-	for _, a := range append(append([]DoHAnswer(nil), answersA...), answersAAAA...) {
-		if a.TTL >= 0 && a.TTL < minTTL {
-			minTTL = a.TTL
-		}
-	}
 
 	for _, a := range answersA {
 		if ip := net.ParseIP(strings.TrimSpace(a.Data)); ip != nil && ip.To4() != nil {

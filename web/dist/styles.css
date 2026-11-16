@@ -516,7 +516,6 @@ button {
             flex-wrap: wrap;
             justify-content: flex-end;
         }
-        .logo-group { display: flex; align-items: center; gap: 14px; }
         .logo-icon {
             width: 40px; height: 40px; border-radius: var(--radius-md);
             background: linear-gradient(135deg, var(--primary), var(--primary-hover));
@@ -988,10 +987,6 @@ button {
             font-weight: 600;
             font-variant-numeric: tabular-nums;
         }
-        .node-score {
-            color: var(--text-muted);
-            font-size: 11px;
-        }
         .action-group {
             display: inline-flex;
             align-items: center;
@@ -1035,11 +1030,6 @@ button {
             background: var(--bg-card);
             border-radius: var(--radius-md);
             font-size: 12px;
-        }
-        .list-error {
-            padding: 30px;
-            color: var(--danger);
-            text-align: center;
         }
         .blacklist-list {
             display: flex;
@@ -1103,7 +1093,6 @@ button {
         .input-port-sm { width: 130px; }
         .input-interval { width: 120px; }
         .search-wide { min-width: 240px; }
-        .modal-wide { max-width: 860px; }
         .qr-image {
             display: block;
             width: 200px;
@@ -1154,9 +1143,6 @@ button {
         }
         .scroll-y {
             overflow-y: auto;
-        }
-        .full-width {
-            width: 100%;
         }
         .card-stack {
             display: flex;
@@ -1302,11 +1288,6 @@ button {
             word-break: break-all;
             font-size: 11px;
         }
-        .blacklist-actions {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-        }
         .blacklist-list-container {
             max-height: 420px;
             padding-right: 4px;
@@ -1315,11 +1296,6 @@ button {
         .btn-accent-outline {
             border-color: color-mix(in srgb, var(--primary) 40%, var(--border));
             color: var(--primary);
-        }
-        .status-subtitle {
-            margin-top: 3px;
-            color: var(--text-muted);
-            font-size: 12px;
         }
         .empty-guide {
             margin-top: 12px;
@@ -1783,14 +1759,6 @@ button {
             display: flex;
             flex-direction: column;
             gap: 6px;
-        }
-        .sb-chain-label {
-            font-size: 11px;
-            color: var(--text-muted);
-            display: flex;
-            align-items: center;
-            gap: 5px;
-            font-weight: 500;
         }
         .sb-chain-select {
             width: 100%;
@@ -2342,18 +2310,6 @@ button {
         /* ===================================================
            Egress Routing Pipeline Flow Topology (Cloud-Native)
            =================================================== */
-        .pipeline-topo-canvas {
-            position: relative;
-            overflow-x: auto;
-            padding: 20px 22px;
-            border-radius: 14px;
-            background-color: var(--surface-1);
-            background-image: radial-gradient(circle, rgba(77, 202, 220, 0.12) 1px, transparent 1px);
-            background-size: 18px 18px;
-            border: 1px solid var(--border-subtle);
-            -webkit-overflow-scrolling: touch;
-        }
-
         /* 3-Stage Guide Header Bar */
         .topo-stage-bar {
             display: flex;

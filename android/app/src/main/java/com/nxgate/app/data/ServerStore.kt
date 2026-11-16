@@ -131,7 +131,7 @@ class ServerStore(private val context: Context) {
         _biometricTimeoutSeconds.value = prefs.getInt(KEY_BIOMETRIC_TIMEOUT, 60)
         _cleartextWarningEnabled.value = prefs.getBoolean(KEY_CLEARTEXT_WARN, true)
         _themeMode.value = prefs.getString(KEY_THEME_MODE, "system") ?: "system"
-        val defaultPalette = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) "monet" else "teal"
+        val defaultPalette = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) "monet" else "pixel"
         _themePalette.value = prefs.getString(KEY_THEME_PALETTE, defaultPalette) ?: defaultPalette
         _themeAccent.value = prefs.getString(KEY_THEME_ACCENT, "teal") ?: "teal"
         _themeBase.value = prefs.getString(KEY_THEME_BASE, "neutral") ?: "neutral"
@@ -197,16 +197,6 @@ class ServerStore(private val context: Context) {
             prefs.edit().putString(KEY_ACTIVE_SERVER_ID, _activeServer.value?.id).apply()
         }
         NXGateWidgetProvider.updateAllWidgets(context)
-    }
-
-    fun reorderServers(fromIndex: Int, toIndex: Int) {
-        val current = _servers.value.toMutableList()
-        if (fromIndex in current.indices && toIndex in current.indices) {
-            val item = current.removeAt(fromIndex)
-            current.add(toIndex, item)
-            _servers.value = current
-            saveList(current)
-        }
     }
 
     fun setBiometricEnabled(enabled: Boolean) {
