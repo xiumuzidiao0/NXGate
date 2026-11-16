@@ -171,4 +171,14 @@ func TestLoadConfigExplicitEmptyDisablesPathAndAuth(t *testing.T) {
 	if cfg2.UIPath != "" || cfg2.IsUIAuthEnabled() || cfg2.TelegramChatID != "123456" {
 		t.Fatalf("unexpected reloaded config: path=%q auth=%v chat=%q", cfg2.UIPath, cfg2.IsUIAuthEnabled(), cfg2.TelegramChatID)
 	}
+
+	// Persisted disabled path & auth must also take precedence if env vars are later removed.
+	unsetEnvForTest(t, "UI_PATH")
+	unsetEnvForTest(t, "ADMIN_SECRET_PATH")
+	unsetEnvForTest(t, "UI_USERNAME")
+	unsetEnvForTest(t, "UI_PASSWORD")
+	cfg3 := LoadConfig()
+	if cfg3.UIPath != "" || cfg3.UIUsername != "" || cfg3.UIPassword != "" || cfg3.IsUIAuthEnabled() {
+		t.Fatalf("expected persisted disabled path & auth without env vars, got path=%q user=%q auth=%v", cfg3.UIPath, cfg3.UIUsername, cfg3.IsUIAuthEnabled())
+	}
 }

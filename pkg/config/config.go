@@ -172,9 +172,11 @@ func LoadConfig() *Config {
 	} else if !os.IsNotExist(err) {
 		panic(fmt.Errorf("read persisted settings: %w", err))
 	}
-	uiUsername, uiUserSet := os.LookupEnv("UI_USERNAME")
-	if uiUserSet {
-		uiUsername = strings.TrimSpace(uiUsername)
+	uiUsername := ""
+	if persisted != nil {
+		uiUsername = strings.TrimSpace(persisted.UIUsername)
+	} else if envUser, uiUserSet := os.LookupEnv("UI_USERNAME"); uiUserSet {
+		uiUsername = strings.TrimSpace(envUser)
 	} else {
 		uiUsername = "admin"
 	}
@@ -188,24 +190,29 @@ func LoadConfig() *Config {
 		uiPassword = initialUIPassword(dataDir)
 	}
 
-	uiPath, uiPathSet := os.LookupEnv("UI_PATH")
-	if !uiPathSet {
-		uiPath, uiPathSet = os.LookupEnv("ADMIN_SECRET_PATH")
-	}
-	if uiPathSet {
-		uiPath = strings.Trim(strings.TrimSpace(uiPath), "/")
+	uiPath := ""
+	if persisted != nil {
+		uiPath = strings.Trim(strings.TrimSpace(persisted.UIPath), "/")
 	} else {
-		// Check if saved before
-		secretFile := filepath.Join(dataDir, "admin_path.txt")
-		// #nosec G304 -- path is rooted in the operator-controlled data directory.
-		if data, err := os.ReadFile(secretFile); err == nil && len(strings.TrimSpace(string(data))) > 0 {
-			uiPath = strings.TrimSpace(string(data))
-		} else {
-			uiPath = randomSecretPath()
-			_ = os.WriteFile(secretFile, []byte(uiPath), 0600)
-			_ = os.Chmod(secretFile, 0600)
+		envPath, uiPathSet := os.LookupEnv("UI_PATH")
+		if !uiPathSet {
+			envPath, uiPathSet = os.LookupEnv("ADMIN_SECRET_PATH")
 		}
-		uiPath = strings.Trim(uiPath, "/")
+		if uiPathSet {
+			uiPath = strings.Trim(strings.TrimSpace(envPath), "/")
+		} else {
+			// Check if saved before
+			secretFile := filepath.Join(dataDir, "admin_path.txt")
+			// #nosec G304 -- path is rooted in the operator-controlled data directory.
+			if data, err := os.ReadFile(secretFile); err == nil && len(strings.TrimSpace(string(data))) > 0 {
+				uiPath = strings.TrimSpace(string(data))
+			} else {
+				uiPath = randomSecretPath()
+				_ = os.WriteFile(secretFile, []byte(uiPath), 0600)
+				_ = os.Chmod(secretFile, 0600)
+			}
+			uiPath = strings.Trim(uiPath, "/")
+		}
 	}
 
 	subToken := getEnv("SUB_TOKEN", "")

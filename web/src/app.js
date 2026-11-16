@@ -1248,7 +1248,8 @@ import { I18N } from './i18n.js';
                 closeSettingsModal();
 
                 const curPort = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
-                if (webPort.toString() !== curPort || !window.location.pathname.includes(webPath)) {
+                const curPath = window.location.pathname.replace(/^\/+|\/+$/g, '');
+                if (webPort.toString() !== curPort || curPath !== webPath) {
                     const newUrl = `${window.location.protocol}//${window.location.hostname}:${webPort}/${webPath}`;
                     tAlert(`Web 访问入口已变更，即将跳转至新地址:\n${newUrl}`, `Web console URL changed. Redirecting to new address:\n${newUrl}`);
                     window.location.href = newUrl;
