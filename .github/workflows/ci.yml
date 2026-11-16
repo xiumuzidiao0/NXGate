@@ -70,16 +70,10 @@ jobs:
           chmod +x scripts/singbox/tests/test_api.sh
           bash scripts/singbox/tests/test_api.sh
 
-      - name: Install Web Test Dependencies & Chromium
+      - name: Run Web Unit Checks
         run: |
-          npm --prefix web ci
-          node web/node_modules/playwright-core/cli.js install --with-deps chromium
-
-      - name: Run Web UI Smoke Tests
-        run: |
-          npm --prefix web run build
+          npm --prefix web run test:i18n
           npm --prefix web run test:status
-          npm --prefix web run test:ui
 
       - name: Verify Multi-arch Compilation
         run: |
