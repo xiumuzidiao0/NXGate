@@ -46,6 +46,9 @@ type Manager struct {
 
 	mu           sync.RWMutex
 	epoch        uint64
+	bgCtx        context.Context
+	bgCancel     context.CancelFunc
+	bgWG         sync.WaitGroup
 	primaryID    string
 	status       ConnectionStatus
 	activeNode   *nodes.Node
@@ -53,6 +56,49 @@ type Manager struct {
 	lastMessage  string
 	reconnects   int
 	isConnecting bool
+}
+
+// resetEpochLocked cancels any in-flight connect/failover background work for
+// the previous connection epoch and establishes a fresh cancellable context.
+// Caller must hold m.mu.
+func (m *Manager) resetEpochLocked() (uint64, context.Context) {
+	if m.bgCancel != nil {
+		m.bgCancel()
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	m.bgCtx = ctx
+	m.bgCancel = cancel
+	m.epoch++
+	return m.epoch, ctx
+}
+
+// cancelEpochLocked cancels in-flight connection/failover background work and
+// advances the epoch so stale callbacks cannot write state or disk caches.
+// Caller must hold m.mu.
+func (m *Manager) cancelEpochLocked() {
+	if m.bgCancel != nil {
+		m.bgCancel()
+		m.bgCancel = nil
+	} else {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		m.bgCtx = ctx
+	}
+	m.epoch++
+}
+
+// launchBG runs fn in a tracked background goroutine awaited by Wait().
+func (m *Manager) launchBG(fn func()) {
+	m.bgWG.Add(1)
+	go func() {
+		defer m.bgWG.Done()
+		fn()
+	}()
+}
+
+// Wait blocks until background connection and failover goroutines exit.
+func (m *Manager) Wait() {
+	m.bgWG.Wait()
 }
 
 // userlandEgressProbes are dialled through a userland tunnel using literal IPs,
@@ -257,8 +303,7 @@ func (m *Manager) ConnectWithMode(target *nodes.Node, mode string) error {
 	}
 
 	m.mu.Lock()
-	m.epoch++
-	currentEpoch := m.epoch
+	currentEpoch, _ := m.resetEpochLocked()
 
 	// Clean up previous userland sstp tunnel if active
 	if m.sstpTunnel != nil {
@@ -313,7 +358,7 @@ func (m *Manager) ConnectWithMode(target *nodes.Node, mode string) error {
 	m.mu.Unlock()
 
 	// Monitor until ready or failed
-	go func() {
+	m.launchBG(func() {
 		ticker := time.NewTicker(300 * time.Millisecond)
 		defer ticker.Stop()
 
@@ -349,7 +394,7 @@ func (m *Manager) ConnectWithMode(target *nodes.Node, mode string) error {
 						m.lastMessage = "连接异常中断 (进程已退出)"
 					}
 					m.mu.Unlock()
-					go m.TriggerAutoFailover()
+					m.launchBG(m.TriggerAutoFailover)
 					return
 				}
 
@@ -372,20 +417,19 @@ func (m *Manager) ConnectWithMode(target *nodes.Node, mode string) error {
 						m.lastMessage = t.Message
 					}
 					m.mu.Unlock()
-					go m.TriggerAutoFailover()
+					m.launchBG(m.TriggerAutoFailover)
 					return
 				}
 			}
 		}
-	}()
+	})
 
 	return nil
 }
 
 func (m *Manager) ConnectUserland(target *nodes.Node) error {
 	m.mu.Lock()
-	m.epoch++
-	currentEpoch := m.epoch
+	currentEpoch, bgCtx := m.resetEpochLocked()
 
 	// Stop previous primary openvpn tunnel if running
 	if m.primaryID != "" && m.tunnelPool != nil {
@@ -411,24 +455,28 @@ func (m *Manager) ConnectUserland(target *nodes.Node) error {
 
 	stats.LogInfo("VPN", "开始用户态免 TUN 直连: %s (%s %s:%d, 协议: %s)", target.ID, target.CountryShort, target.IP, target.Port, target.Proto)
 
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+	m.launchBG(func() {
+		ctx, cancel := context.WithTimeout(bgCtx, 25*time.Second)
 		defer cancel()
 
 		tun, err := sstp.ConnectNodeWithPreferred(ctx, target.IP, target.SSTPPort, target.Port, target.Proto, "vpn", "vpn")
 		if err != nil {
 			m.mu.Lock()
-			if m.epoch == currentEpoch {
+			active := m.epoch == currentEpoch && bgCtx.Err() == nil
+			if active {
 				m.status = StatusFailed
 				m.isConnecting = false
 				m.lastMessage = fmt.Sprintf("用户态 SSTP 直连失败: %v", err)
 			}
 			m.mu.Unlock()
+			if !active {
+				return
+			}
 			if m.pool != nil {
 				m.pool.Blacklist().Mark(target, fmt.Sprintf("用户态免TUN直连失败: %v", err), 600*time.Second)
 			}
 			stats.LogWarn("VPN", "用户态直连 %s 失败: %v", target.IP, err)
-			go m.TriggerAutoFailover()
+			m.launchBG(m.TriggerAutoFailover)
 			return
 		}
 
@@ -436,12 +484,16 @@ func (m *Manager) ConnectUserland(target *nodes.Node) error {
 		if !probeUserlandEgress(tun) {
 			_ = tun.Close()
 			m.mu.Lock()
-			if m.epoch == currentEpoch {
+			active := m.epoch == currentEpoch && bgCtx.Err() == nil
+			if active {
 				m.status = StatusFailed
 				m.isConnecting = false
 				m.lastMessage = fmt.Sprintf("用户态隧道 %s 握手成功但无法转发 IP 报文", target.IP)
 			}
 			m.mu.Unlock()
+			if !active {
+				return
+			}
 			if m.pool != nil {
 				// A verified forwarding failure is a functional defect, not a
 				// transient blip, so block the node outright instead of relying on
@@ -450,7 +502,7 @@ func (m *Manager) ConnectUserland(target *nodes.Node) error {
 					"用户态隧道握手成功但无法出网", 10*time.Minute)
 			}
 			stats.LogWarn("VPN", "用户态隧道 %s (%s) 握手成功但无法出网 (被对端阻断)，已拉黑并重新选路", target.IP, target.CountryShort)
-			go m.TriggerAutoFailover()
+			m.launchBG(m.TriggerAutoFailover)
 			return
 		}
 
@@ -477,14 +529,14 @@ func (m *Manager) ConnectUserland(target *nodes.Node) error {
 		}
 
 		stats.LogInfo("VPN", "用户态免 TUN 直连就绪: %s (%s), 虚拟 IP: %s, 端口: %d", target.ID, target.CountryShort, tun.AssignedIP(), tun.Port())
-	}()
+	})
 
 	return nil
 }
 
 func (m *Manager) Disconnect(reason string) {
 	m.mu.Lock()
-	m.epoch++
+	m.cancelEpochLocked()
 	if m.sstpTunnel != nil {
 		_ = m.sstpTunnel.Close()
 		m.sstpTunnel = nil
@@ -508,18 +560,25 @@ func (m *Manager) Disconnect(reason string) {
 
 func (m *Manager) TriggerAutoFailover() {
 	m.mu.RLock()
+	startEpoch := m.epoch
+	ctx := m.bgCtx
 	delegate := m.failoverDelegate
 	m.mu.RUnlock()
+	if ctx != nil && ctx.Err() != nil {
+		return
+	}
 	if delegate != nil && delegate() {
 		m.mu.Lock()
-		m.status = StatusReconnecting
-		m.lastMessage = "检测到隧道中断，已转交主出口动态组按既定国家/纯净度约束重新选路..."
+		if m.epoch == startEpoch && (ctx == nil || ctx.Err() == nil) {
+			m.status = StatusReconnecting
+			m.lastMessage = "检测到隧道中断，已转交主出口动态组按既定国家/纯净度约束重新选路..."
+		}
 		m.mu.Unlock()
 		return
 	}
 
 	m.mu.Lock()
-	if m.isConnecting {
+	if m.isConnecting || m.epoch != startEpoch || (ctx != nil && ctx.Err() != nil) {
 		m.mu.Unlock()
 		return
 	}
@@ -528,18 +587,44 @@ func (m *Manager) TriggerAutoFailover() {
 	m.lastMessage = "检测到隧道中断，正在挑选最优新节点自动切换..."
 	m.mu.Unlock()
 
-	time.Sleep(2 * time.Second)
+	if ctx != nil {
+		timer := time.NewTimer(2 * time.Second)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return
+		case <-timer.C:
+		}
+	} else {
+		time.Sleep(2 * time.Second)
+	}
+
+	m.mu.RLock()
+	aborted := m.epoch != startEpoch || (ctx != nil && ctx.Err() != nil)
+	currentMode := m.driverMode
+	m.mu.RUnlock()
+	if aborted || m.pool == nil {
+		return
+	}
 
 	best := m.pool.SelectBest()
 	if best == nil {
+		refreshCtx := ctx
+		if refreshCtx == nil {
+			refreshCtx = context.Background()
+		}
 		stats.LogWarn("VPN", "未找到可用节点，尝试刷新节点池...")
-		_ = m.pool.Refresh(context.Background())
+		_ = m.pool.Refresh(refreshCtx)
 		best = m.pool.SelectBest()
 	}
 
 	m.mu.RLock()
-	currentMode := m.driverMode
+	aborted = m.epoch != startEpoch || (ctx != nil && ctx.Err() != nil)
+	currentMode = m.driverMode
 	m.mu.RUnlock()
+	if aborted {
+		return
+	}
 
 	if best != nil {
 		stats.LogInfo("VPN", "自动切换至新主节点: %s (%s, 模式: %s)", best.ID, best.CountryShort, currentMode)

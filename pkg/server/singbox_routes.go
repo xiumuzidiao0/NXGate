@@ -15,11 +15,14 @@ import (
 )
 
 type AvailableOutbound struct {
-	Port      int    `json:"port"`
-	Addr      string `json:"addr"`
-	Type      string `json:"type"`
-	Label     string `json:"label"`
-	IsDefault bool   `json:"is_default"`
+	Port        int    `json:"port"`
+	Addr        string `json:"addr"`
+	Type        string `json:"type"`
+	Label       string `json:"label"`
+	IsDefault   bool   `json:"is_default"`
+	AuthEnabled bool   `json:"auth_enabled,omitempty"`
+	TunnelCount int    `json:"tunnel_count,omitempty"`
+	GroupCount  int    `json:"group_count,omitempty"`
 }
 
 type SingBoxOverviewResponse struct {
@@ -121,17 +124,19 @@ func (s *Server) getAvailableOutbounds() []AvailableOutbound {
 		defPort = 7928
 	}
 	defAddr := s.resolveOutboundURL(fmt.Sprintf("%d", defPort))
+	defAuth := strings.Contains(defAddr, "@")
 	authNote := "免密"
-	if strings.Contains(defAddr, "@") {
+	if defAuth {
 		authNote = "密码保护"
 	}
 
 	list = append(list, AvailableOutbound{
-		Port:      defPort,
-		Addr:      defAddr,
-		Type:      "socks5",
-		Label:     fmt.Sprintf("NXGate 默认出口 (PORT %d - SOCKS5 TCP+UDP %s)", defPort, authNote),
-		IsDefault: true,
+		Port:        defPort,
+		Addr:        defAddr,
+		Type:        "socks5",
+		Label:       fmt.Sprintf("NXGate 默认出口 (PORT %d - SOCKS5 TCP+UDP %s)", defPort, authNote),
+		IsDefault:   true,
+		AuthEnabled: defAuth,
 	})
 	seenPorts[defPort] = true
 
@@ -140,8 +145,9 @@ func (s *Server) getAvailableOutbounds() []AvailableOutbound {
 		for _, rule := range s.portMgr.GetRules() {
 			if !seenPorts[rule.Port] && rule.Port > 0 {
 				ruleAddr := s.resolveOutboundURL(fmt.Sprintf("%d", rule.Port))
+				ruleAuth := strings.Contains(ruleAddr, "@")
 				ruleAuthNote := "免密"
-				if strings.Contains(ruleAddr, "@") {
+				if ruleAuth {
 					ruleAuthNote = "密码保护"
 				}
 
@@ -156,11 +162,14 @@ func (s *Server) getAvailableOutbounds() []AvailableOutbound {
 					boundDesc = fmt.Sprintf(" - %d 动态组", gCount)
 				}
 				list = append(list, AvailableOutbound{
-					Port:      rule.Port,
-					Addr:      ruleAddr,
-					Type:      "socks5",
-					Label:     fmt.Sprintf("多端口出口 (PORT %d - SOCKS5 TCP+UDP %s%s)", rule.Port, ruleAuthNote, boundDesc),
-					IsDefault: false,
+					Port:        rule.Port,
+					Addr:        ruleAddr,
+					Type:        "socks5",
+					Label:       fmt.Sprintf("多端口出口 (PORT %d - SOCKS5 TCP+UDP %s%s)", rule.Port, ruleAuthNote, boundDesc),
+					IsDefault:   false,
+					AuthEnabled: ruleAuth,
+					TunnelCount: tCount,
+					GroupCount:  gCount,
 				})
 				seenPorts[rule.Port] = true
 			}

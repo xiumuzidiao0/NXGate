@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"aimili-vpngate-go/pkg/config"
 	"aimili-vpngate-go/pkg/nodes"
@@ -192,6 +193,16 @@ func TestServerAPI(t *testing.T) {
 	if wBLClear.Code != http.StatusOK {
 		t.Fatalf("expected blacklist clear 200, got %d", wBLClear.Code)
 	}
+
+	// Wait for the async handleConnect goroutine to register the connecting
+	// epoch, then cancel and await background teardown before TempDir cleanup.
+	deadline := time.Now().Add(2 * time.Second)
+	for srv.vpn.GetStatus() == string(vpn.StatusDisconnected) && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	portMgr.StopAll()
+	vpnMgr.Disconnect("test cleanup")
+	vpnMgr.Wait()
 }
 
 func TestBasicAuthMiddleware(t *testing.T) {
@@ -354,5 +365,39 @@ func TestSubscriptionBypassUnderSecretPath(t *testing.T) {
 	handler.ServeHTTP(wScanner, reqScanner)
 	if wScanner.Code != http.StatusNotFound {
 		t.Fatalf("expected 404 for scanner probing /api/status, got %d", wScanner.Code)
+	}
+}
+
+func TestHandleUpdateSettingsClearsPathAndAuthExplicitly(t *testing.T) {
+	cfg := &config.Config{
+		DataDir:    t.TempDir(),
+		UIHost:     "0.0.0.0",
+		UIPath:     "secret",
+		UIUsername: "admin",
+		UIPassword: "oldpassword",
+		UIPort:     8787,
+		ProxyPort:  7928,
+	}
+	srv := &Server{cfg: cfg}
+
+	// Half-empty credentials must fail closed with HTTP 400.
+	wBad := httptest.NewRecorder()
+	srv.handleUpdateSettings(wBad, httptest.NewRequest("POST", "/api/settings", strings.NewReader(`{"ui_username":""}`)))
+	if wBad.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for half-empty auth update, got %d (%s)", wBad.Code, wBad.Body.String())
+	}
+
+	// Clearing ui_path while keeping existing credentials works without sending ui_password.
+	wPath := httptest.NewRecorder()
+	srv.handleUpdateSettings(wPath, httptest.NewRequest("POST", "/api/settings", strings.NewReader(`{"ui_path":""}`)))
+	if wPath.Code != http.StatusOK || cfg.UIPath != "" || !cfg.IsUIAuthEnabled() {
+		t.Fatalf("expected path cleared & auth preserved, code=%d path=%q auth=%v body=%s", wPath.Code, cfg.UIPath, cfg.IsUIAuthEnabled(), wPath.Body.String())
+	}
+
+	// Disabling auth explicitly succeeds and removes login gate.
+	wDisable := httptest.NewRecorder()
+	srv.handleUpdateSettings(wDisable, httptest.NewRequest("POST", "/api/settings", strings.NewReader(`{"disable_ui_auth":true}`)))
+	if wDisable.Code != http.StatusOK || cfg.IsUIAuthEnabled() || !cfg.IsPublicUnauthenticated() {
+		t.Fatalf("expected auth disabled & public exposure true, code=%d auth=%v public=%v body=%s", wDisable.Code, cfg.IsUIAuthEnabled(), cfg.IsPublicUnauthenticated(), wDisable.Body.String())
 	}
 }

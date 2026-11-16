@@ -536,7 +536,10 @@ class ApiClient {
                             port = ob.optInt("port", 0),
                             addr = ob.optString("addr", "direct"),
                             label = ob.optString("label", if (isAppEnglish()) "Direct Exit" else "直连出口"),
-                            isDefault = ob.optBoolean("is_default", false)
+                            isDefault = ob.optBoolean("is_default", false),
+                            authEnabled = if (ob.has("auth_enabled")) ob.optBoolean("auth_enabled") else null,
+                            tunnelCount = if (ob.has("tunnel_count")) ob.optInt("tunnel_count") else null,
+                            groupCount = if (ob.has("group_count")) ob.optInt("group_count") else null
                         )
                     )
                 }
@@ -545,7 +548,7 @@ class ApiClient {
                 for (i in 0 until nodeArr.length()) {
                     val obj = nodeArr.getJSONObject(i)
                     val rawOutbound = obj.optString("outbound", "direct")
-                    val matchedLabel = outboundsList.find { isOutboundMatch(it.addr, rawOutbound) }?.label ?: ""
+                    val matchedOutbound = outboundsList.find { isOutboundMatch(it.addr, rawOutbound) }
 
                     nodesList.add(
                         InboundProtocolItem(
@@ -555,7 +558,10 @@ class ApiClient {
                             port = obj.optInt("port", 443),
                             outbound = rawOutbound,
                             outboundPort = obj.optInt("outbound_port", 0),
-                            outboundLabel = matchedLabel,
+                            outboundLabel = matchedOutbound?.label ?: "",
+                            outboundAuthEnabled = matchedOutbound?.authEnabled,
+                            outboundTunnelCount = matchedOutbound?.tunnelCount,
+                            outboundGroupCount = matchedOutbound?.groupCount,
                             uuid = obj.optString("uuid", ""),
                             password = obj.optString("password", ""),
                             sni = obj.optString("sni", ""),
@@ -958,8 +964,8 @@ class ApiClient {
                 }
                 val settings = ServerSettingsDTO(
                     uiPort = obj.optInt("ui_port", 8787),
-                    uiPath = obj.optString("ui_path", "enter"),
-                    uiUsername = obj.optString("ui_username", "admin"),
+                    uiPath = obj.optString("ui_path", ""),
+                    uiUsername = obj.optString("ui_username", ""),
                     uiPassword = obj.optString("ui_password", ""),
                     subToken = obj.optString("sub_token", ""),
                     ageEncryptEnabled = obj.optBoolean("age_encrypt_enabled", false),
@@ -986,6 +992,9 @@ class ApiClient {
                 put("ui_port", settings.uiPort)
                 put("ui_path", settings.uiPath)
                 put("ui_username", settings.uiUsername)
+                if (settings.uiUsername.isBlank() && settings.uiPassword.isBlank()) {
+                    put("disable_ui_auth", true)
+                }
                 if (settings.uiPassword.isNotBlank()) put("ui_password", settings.uiPassword)
                 if (settings.subToken.isNotBlank()) put("sub_token", settings.subToken)
                 put("age_encrypt_enabled", settings.ageEncryptEnabled)

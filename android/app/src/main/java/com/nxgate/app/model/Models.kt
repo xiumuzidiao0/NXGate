@@ -171,7 +171,10 @@ data class AvailableOutbound(
     val port: Int,
     val addr: String,
     val label: String,
-    val isDefault: Boolean = false
+    val isDefault: Boolean = false,
+    val authEnabled: Boolean? = null,
+    val tunnelCount: Int? = null,
+    val groupCount: Int? = null
 )
 
 data class SingBoxOverviewData(
@@ -334,6 +337,9 @@ data class InboundProtocolItem(
     val outbound: String,
     val outboundPort: Int = 0,
     val outboundLabel: String = "",
+    val outboundAuthEnabled: Boolean? = null,
+    val outboundTunnelCount: Int? = null,
+    val outboundGroupCount: Int? = null,
     val uuid: String = "",
     val password: String = "",
     val sni: String = "",

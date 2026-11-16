@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -180,5 +181,46 @@ func TestLoadConfigExplicitEmptyDisablesPathAndAuth(t *testing.T) {
 	cfg3 := LoadConfig()
 	if cfg3.UIPath != "" || cfg3.UIUsername != "" || cfg3.UIPassword != "" || cfg3.IsUIAuthEnabled() {
 		t.Fatalf("expected persisted disabled path & auth without env vars, got path=%q user=%q auth=%v", cfg3.UIPath, cfg3.UIUsername, cfg3.IsUIAuthEnabled())
+	}
+}
+
+func TestUpdateSettingsWithPresenceAndPublicExposure(t *testing.T) {
+	dataDir := t.TempDir()
+	t.Setenv("DATA_DIR", dataDir)
+	unsetEnvForTest(t, "UI_PATH")
+	unsetEnvForTest(t, "ADMIN_SECRET_PATH")
+	unsetEnvForTest(t, "UI_USERNAME")
+	unsetEnvForTest(t, "UI_PASSWORD")
+	t.Setenv("UI_HOST", "0.0.0.0")
+
+	cfg := LoadConfig()
+	if cfg.UIPath == "" || !cfg.IsUIAuthEnabled() || cfg.IsPublicUnauthenticated() {
+		t.Fatalf("unexpected initial state: path=%q auth=%v publicUnauth=%v", cfg.UIPath, cfg.IsUIAuthEnabled(), cfg.IsPublicUnauthenticated())
+	}
+
+	// Half-empty credentials via explicit username clearing must fail closed.
+	err := cfg.UpdateSettingsWithPresence(SettingsDTO{UIUsername: ""}, map[string]bool{"ui_username": true}, nil)
+	if !errors.Is(err, ErrInvalidSettings) {
+		t.Fatalf("expected ErrInvalidSettings for half-empty auth, got %v", err)
+	}
+	if !cfg.IsUIAuthEnabled() || cfg.UIUsername == "" {
+		t.Fatalf("failed validation mutated config")
+	}
+
+	// Explicitly clearing ui_path while disabling auth must succeed and persist cleanly.
+	disable := true
+	err = cfg.UpdateSettingsWithPresence(SettingsDTO{UIPath: ""}, map[string]bool{"ui_path": true}, &disable)
+	if err != nil {
+		t.Fatalf("expected clean disable update, got %v", err)
+	}
+	if cfg.UIPath != "" || cfg.IsUIAuthEnabled() || !cfg.IsPublicUnauthenticated() {
+		t.Fatalf("expected empty path and public unauthenticated state, got path=%q auth=%v publicUnauth=%v",
+			cfg.UIPath, cfg.IsUIAuthEnabled(), cfg.IsPublicUnauthenticated())
+	}
+	if _, err := os.Stat(filepath.Join(dataDir, "admin_path.txt")); !os.IsNotExist(err) {
+		t.Fatalf("expected stale admin_path.txt removed, err=%v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dataDir, "ui_password.txt")); !os.IsNotExist(err) {
+		t.Fatalf("expected stale ui_password.txt removed, err=%v", err)
 	}
 }

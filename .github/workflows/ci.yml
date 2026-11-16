@@ -37,6 +37,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "20"
+          cache: "npm"
+          cache-dependency-path: web/package-lock.json
 
       - name: Run Offline Installer Regressions
         run: |
@@ -70,16 +72,41 @@ jobs:
           chmod +x scripts/singbox/tests/test_api.sh
           bash scripts/singbox/tests/test_api.sh
 
-      - name: Run Web Unit Checks
+      - name: Build and Check Web Assets & Unit Tests
         run: |
+          npm --prefix web install --no-audit --no-fund
+          npm --prefix web run build
+          git diff --exit-code web/dist/app.js
           npm --prefix web run test:i18n
           npm --prefix web run test:status
+
+      - name: Run WebUI Playwright Smoke Tests
+        run: |
+          npx --prefix web playwright install --with-deps chromium
+          npm --prefix web run test:ui
 
       - name: Verify Multi-arch Compilation
         run: |
           chmod +x scripts/build.sh
           ./scripts/build.sh
           ls -lh dist/
+
+  android-test:
+    name: Android Unit Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: "temurin"
+          java-version: "17"
+          cache: "gradle"
+      - name: Run Android debug unit tests
+        working-directory: android
+        run: ./gradlew testDebugUnitTest --no-daemon
 
   network-integration:
     if: github.event_name == 'workflow_dispatch' && inputs.network_integration

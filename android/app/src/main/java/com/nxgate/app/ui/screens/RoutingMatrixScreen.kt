@@ -1314,7 +1314,7 @@ fun RoutingMatrixScreen(
                         options = availableOutbounds,
                         selectedOption = selectedInboundOutboundOption,
                         onOptionSelected = { selectedInboundOutboundOption = it },
-                        optionLabel = { localizeOutboundLabel(it.label, it.addr, it.port, isEn) }
+                        optionLabel = { localizeOutboundLabel(it, isEn) }
                     )
                 }
             },
@@ -1371,7 +1371,7 @@ fun RoutingMatrixScreen(
                         options = availableOutbounds,
                         selectedOption = switchOutboundTargetOption,
                         onOptionSelected = { switchOutboundTargetOption = it },
-                        optionLabel = { localizeOutboundLabel(it.label, it.addr, it.port, isEn) }
+                        optionLabel = { localizeOutboundLabel(it, isEn) }
                     )
                 }
             },
@@ -1382,10 +1382,17 @@ fun RoutingMatrixScreen(
                             scope.launch {
                                 NXGateApplication.instance.apiClient.setSingBoxOutbound(activeServer, inbound.name, switchOutboundTargetOption.addr)
                                 val updated = inbounds.map {
-                                    if (it.id == inbound.id) it.copy(outbound = switchOutboundTargetOption.addr, outboundLabel = switchOutboundTargetOption.label) else it
+                                    if (it.id == inbound.id) it.copy(
+                                        outbound = switchOutboundTargetOption.addr,
+                                        outboundPort = switchOutboundTargetOption.port,
+                                        outboundLabel = switchOutboundTargetOption.label,
+                                        outboundAuthEnabled = switchOutboundTargetOption.authEnabled,
+                                        outboundTunnelCount = switchOutboundTargetOption.tunnelCount,
+                                        outboundGroupCount = switchOutboundTargetOption.groupCount
+                                    ) else it
                                 }
                                 inbounds = updated
-                                val dispLabel = localizeOutboundLabel(switchOutboundTargetOption.label, switchOutboundTargetOption.addr, switchOutboundTargetOption.port, isEn)
+                                val dispLabel = localizeOutboundLabel(switchOutboundTargetOption, isEn)
                                 Toast.makeText(context, strings.localized("[${inbound.name}] 出口已改挂至: $dispLabel", "[${inbound.name}] egress changed to: $dispLabel"), Toast.LENGTH_SHORT).show()
                             }
                         }

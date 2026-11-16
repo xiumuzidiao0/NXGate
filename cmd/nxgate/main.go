@@ -238,6 +238,9 @@ func main() {
 	} else {
 		fmt.Printf("管理账号 / 密码   : 已禁用 (无鉴权)\n")
 	}
+	if cfg.IsPublicUnauthenticated() {
+		fmt.Printf("安全警告         : Web 控制台当前在公网地址 (%s) 上无鉴权暴露，建议配合反代鉴权或绑定 127.0.0.1！\n", cfg.UIHost)
+	}
 	fmt.Printf("本地代理网关     : %s:%d (支持 SOCKS5 / HTTP / HTTPS CONNECT)\n", cfg.ProxyHost, cfg.ProxyPort)
 	fmt.Printf("Prometheus 指标  : http://<VPS-IP>:%d/metrics\n", cfg.UIPort)
 	fmt.Printf("-------------------------------------------------------------\n\n")

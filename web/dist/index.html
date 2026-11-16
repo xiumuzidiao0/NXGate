@@ -24,7 +24,7 @@
                 </div>
                 <div class="brand-text">
                     <div class="brand-title">NXGate</div>
-                    <div class="brand-sub"><span data-i18n="brand.sub">多出口智能网关</span> <span class="version-trigger" data-action="openUpdateModal" title="点击检查系统更新" data-i18n-title="header.update_title"><span id="sidebar-version-badge" class="badge-ver">v2.6.5.37</span></span></div>
+                    <div class="brand-sub"><span data-i18n="brand.sub">多出口智能网关</span> <span class="version-trigger" data-action="openUpdateModal" title="点击检查系统更新" data-i18n-title="header.update_title"><span id="sidebar-version-badge" class="badge-ver">v2.6.5.38</span></span></div>
                 </div>
             </div>
 
@@ -80,7 +80,7 @@
                     </button>
                     <h1 id="page-title">运行概览</h1>
                     <span id="conn-badge" class="badge disconnected"><span class="status-dot"></span> <span data-i18n="header.checking">检查中</span></span>
-                    <span class="version-trigger" data-action="openUpdateModal" title="点击检查系统更新" data-i18n-title="header.update_title"><span id="app-version-badge" class="badge badge-accent">v2.6.5.37</span><span id="header-update-dot" class="badge-dot-pulse hidden" title="发现新版本"></span></span>
+                    <span class="version-trigger" data-action="openUpdateModal" title="点击检查系统更新" data-i18n-title="header.update_title"><span id="app-version-badge" class="badge badge-accent">v2.6.5.38</span><span id="header-update-dot" class="badge-dot-pulse hidden" title="发现新版本"></span></span>
                 </div>
 
                 <div class="header-actions">
@@ -107,6 +107,9 @@
                 </div>
             </header>
             <div id="app-alert" class="app-alert" role="alert" hidden></div>
+            <div id="public-unauth-banner" class="security-warning-banner" role="alert" hidden data-i18n="sec.public_unauth_banner">
+                安全警告：当前控制台监听在公网/全网卡地址且已关闭账号密码认证，任何可访问此端口的来源均可直接控制网关。请开启管理员认证、限制 LISTEN_ADDR=127.0.0.1 或配合反代鉴权。
+            </div>
 
             <!-- View 1: 运行概览 Dashboard -->
             <div id="view-dashboard" class="view-page active">
@@ -448,6 +451,13 @@
                             <input id="cfg-password" class="input-field" type="text" placeholder="留空保持原密码" data-i18n-placeholder="set.password_ph">
                             <button type="button" class="btn btn-outline" data-action="randomPassword" data-i18n="set.random_pwd">随机密码</button>
                         </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                            <input id="cfg-disable-auth" type="checkbox" data-change-action="onDisableAuthChanged">
+                            <span data-i18n="set.disable_auth">关闭 Web 管理控制台账号密码认证 (仅限本机或可信内网)</span>
+                        </label>
+                        <small data-i18n="set.disable_auth_help">勾选后将清空已保存的管理员账号与密码；公网地址无认证暴露存在高安全风险。</small>
                     </div>
                     <div class="form-group">
                         <label class="form-label" data-i18n="set.proxy_port">默认本地代理端口 [1-65535]</label>

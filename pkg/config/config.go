@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,6 +14,8 @@ import (
 	"sync"
 	"time"
 )
+
+var ErrInvalidSettings = errors.New("invalid settings")
 
 type Config struct {
 	mu sync.RWMutex
@@ -408,9 +411,20 @@ func (c *Config) IsUIAuthEnabled() bool {
 	return c.UIUsername != "" || c.UIPassword != ""
 }
 
-func (c *Config) UpdateSettings(dto SettingsDTO) error {
+func (c *Config) IsWildcardUIHost() bool {
+	c.mu.RLock()
+	host := strings.TrimSpace(c.UIHost)
+	c.mu.RUnlock()
+	return host == "" || host == "0.0.0.0" || host == "::" || host == "[::]"
+}
+
+func (c *Config) IsPublicUnauthenticated() bool {
+	return !c.IsUIAuthEnabled() && c.IsWildcardUIHost()
+}
+
+func validateSettingsDTO(dto SettingsDTO) error {
 	if dto.ProxyGlobalMaxConnections != nil && (*dto.ProxyGlobalMaxConnections < 1 || *dto.ProxyGlobalMaxConnections > MaxProxyGlobalMaxConnections) {
-		return fmt.Errorf("proxy_global_max_connections must be 1..%d", MaxProxyGlobalMaxConnections)
+		return fmt.Errorf("%w: proxy_global_max_connections must be 1..%d", ErrInvalidSettings, MaxProxyGlobalMaxConnections)
 	}
 	for name, value := range map[string]string{
 		"ui_path":             dto.UIPath,
@@ -425,13 +439,24 @@ func (c *Config) UpdateSettings(dto SettingsDTO) error {
 		"auto_rotate_ip_type": dto.AutoRotateIPType,
 	} {
 		if strings.ContainsAny(value, "\r\n") {
-			return fmt.Errorf("%s 不能包含换行符", name)
+			return fmt.Errorf("%w: %s 不能包含换行符", ErrInvalidSettings, name)
 		}
 	}
 	for _, country := range dto.DiscoveryCountries {
 		if strings.ContainsAny(country, "\r\n") {
-			return fmt.Errorf("discovery_countries 不能包含换行符")
+			return fmt.Errorf("%w: discovery_countries 不能包含换行符", ErrInvalidSettings)
 		}
+	}
+	return nil
+}
+
+func (c *Config) UpdateSettings(dto SettingsDTO) error {
+	return c.UpdateSettingsWithPresence(dto, nil, nil)
+}
+
+func (c *Config) UpdateSettingsWithPresence(dto SettingsDTO, present map[string]bool, disableUIAuth *bool) error {
+	if err := validateSettingsDTO(dto); err != nil {
+		return err
 	}
 
 	c.mu.Lock()
@@ -440,6 +465,29 @@ func (c *Config) UpdateSettings(dto SettingsDTO) error {
 	pending := &Config{}
 	pending.applySettingsLocked(c.settingsLocked())
 	pending.applySettingsLocked(dto)
+
+	if present != nil && present["ui_path"] {
+		pending.UIPath = strings.Trim(strings.TrimSpace(dto.UIPath), "/")
+	}
+	if disableUIAuth != nil && *disableUIAuth {
+		pending.UIUsername = ""
+		pending.UIPassword = ""
+	} else {
+		nextUser := pending.UIUsername
+		nextPass := pending.UIPassword
+		if present != nil && present["ui_username"] {
+			nextUser = strings.TrimSpace(dto.UIUsername)
+		}
+		if present != nil && present["ui_password"] {
+			nextPass = strings.TrimSpace(dto.UIPassword)
+		}
+		if (nextUser == "") != (nextPass == "") {
+			return fmt.Errorf("%w: 管理员账号和密码必须同时填写，或启用免鉴权模式", ErrInvalidSettings)
+		}
+		pending.UIUsername = nextUser
+		pending.UIPassword = nextPass
+	}
+
 	data, err := json.MarshalIndent(pending.settingsLocked(), "", "  ")
 	if err == nil {
 		err = atomicSettingsWrite(filepath.Join(c.DataDir, "settings.json"), data)
@@ -447,7 +495,16 @@ func (c *Config) UpdateSettings(dto SettingsDTO) error {
 	if err != nil {
 		return fmt.Errorf("persist settings: %w", err)
 	}
-	c.applySettingsLocked(dto)
+	c.applySettingsLocked(pending.settingsLocked())
+	c.UIPath = pending.UIPath
+	c.UIUsername = pending.UIUsername
+	c.UIPassword = pending.UIPassword
+	if c.UIPath == "" {
+		_ = os.Remove(filepath.Join(c.DataDir, "admin_path.txt"))
+	}
+	if c.UIUsername == "" && c.UIPassword == "" {
+		_ = os.Remove(filepath.Join(c.DataDir, "ui_password.txt"))
+	}
 	return nil
 }
 

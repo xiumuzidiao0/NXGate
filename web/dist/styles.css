@@ -1899,6 +1899,22 @@ button {
         .app-alert[hidden] {
             display: none;
         }
+        .security-warning-banner {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: -6px 0 18px;
+            padding: 11px 14px;
+            border: 1px solid rgba(245, 158, 11, 0.48);
+            border-radius: var(--radius-md);
+            background: rgba(245, 158, 11, 0.10);
+            color: #fcd34d;
+            font-size: 13px;
+            line-height: 1.45;
+        }
+        .security-warning-banner[hidden] {
+            display: none;
+        }
         .sr-only {
             position: absolute;
             width: 1px;

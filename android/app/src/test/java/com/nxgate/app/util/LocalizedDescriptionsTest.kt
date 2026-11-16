@@ -1,5 +1,6 @@
 package com.nxgate.app.util
 
+import com.nxgate.app.model.AvailableOutbound
 import com.nxgate.app.model.DynamicGroupCard
 import com.nxgate.app.model.InboundProtocolItem
 import com.nxgate.app.model.PortRuleItem
@@ -49,8 +50,23 @@ class LocalizedDescriptionsTest {
             localizeOutboundLabel("NXGate 默认出口 (PORT 7928 - SOCKS5 TCP+UDP 密码保护)", "socks5://127.0.0.1:7928", 7928, isEn = true)
         )
         assertEquals(
-            "Multi-Port Exit (PORT 7929 - SOCKS5 TCP+UDP No Auth - 2 tunnels, 1 groups)",
+            "Multi-Port Exit (PORT 7929 - SOCKS5 TCP+UDP No Auth - 2 tunnels, 1 group)",
             localizeOutboundLabel("多端口出口 (PORT 7929 - SOCKS5 TCP+UDP 免密 - 2 隧道, 1 动态组)", "socks5://127.0.0.1:7929", 7929, isEn = true)
+        )
+        assertEquals(
+            "Multi-Port Exit (PORT 7935 - SOCKS5 TCP+UDP Auth - 1 tunnel, 2 groups)",
+            localizeOutboundLabel(
+                AvailableOutbound(
+                    port = 7935,
+                    addr = "socks5://u:p@127.0.0.1:7935",
+                    label = "custom label",
+                    isDefault = false,
+                    authEnabled = true,
+                    tunnelCount = 1,
+                    groupCount = 2
+                ),
+                isEn = true
+            )
         )
     }
 }

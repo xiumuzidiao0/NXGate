@@ -123,7 +123,8 @@ async function mockAPI(route) {
       nodes: [{ name: "Hysteria2-62799.json", protocol: "Hysteria2", port: 62799, outbound: "direct" }],
       available_outbounds: [
         { addr: "direct", label: "直连", is_default: false },
-        { addr: "socks5://127.0.0.1:7928", label: "默认出口 7928", is_default: true }
+        { addr: "socks5://127.0.0.1:7928", label: "默认出口 7928", is_default: true },
+        { port: 7929, addr: "socks5://127.0.0.1:7929", label: "多端口出口 (PORT 7929 - SOCKS5 TCP+UDP 免密 - 1 隧道, 2 动态组)", is_default: false, auth_enabled: false, tunnel_count: 1, group_count: 2 }
       ]
     };
   } else if (path.endsWith("/api/singbox/nodes/outbound")) {
@@ -244,6 +245,12 @@ try {
     await page.waitForTimeout(500);
     if (viewport === 390) {
       const connectedCount = statusRequests;
+      await page.evaluate(data => window.__statusSources[0].handlers.status({data:JSON.stringify(data)}), status);
+      const hiddenByDefault = await page.locator('#public-unauth-banner').isHidden();
+      if (!hiddenByDefault) failures.push('public-unauth-banner should stay hidden when ui_public_exposure is false');
+      await page.evaluate(data => window.__statusSources[0].handlers.status({data:JSON.stringify(data)}), { ...status, ui_public_exposure: true });
+      const visibleWhenExposed = await page.locator('#public-unauth-banner').isVisible();
+      if (!visibleWhenExposed) failures.push('public-unauth-banner did not show when ui_public_exposure is true');
       await page.evaluate(data => window.__statusSources[0].handlers.status({data:JSON.stringify(data)}), status);
       await page.waitForTimeout(2200);
       if (statusRequests !== connectedCount) throw new Error('SSE triggered redundant status HTTP requests');
@@ -420,6 +427,41 @@ try {
     if ((await page.locator('#sb-sni-label').innerText()).match(/[\u3400-\u9fff]/)) {
       failures.push(`${viewport}px: protocol help remained Chinese after switching languages`);
     }
+    await page.evaluate(() => document.querySelector('[data-view="singbox"]').click());
+    await page.locator('#btn-add-sb-node').click();
+    await page.waitForTimeout(80);
+    const sbOutboundOpts = await page.locator('#sb-add-outbound').innerText();
+    if (!sbOutboundOpts.includes('1 tunnel, 2 groups')) {
+      failures.push(`${viewport}px: outbound singular/plural metadata failed: ${sbOutboundOpts}`);
+    }
+    await page.locator('[data-action="closeAddSingBoxModal"]').first().click();
+    await page.waitForTimeout(80);
+    await page.evaluate(() => document.querySelector('[data-view="settings"]').click());
+    await page.waitForTimeout(80);
+    await page.locator('#cfg-disable-auth').check();
+    const userDisabled = await page.locator('#cfg-username').isDisabled();
+    const passDisabled = await page.locator('#cfg-password').isDisabled();
+    if (!userDisabled || !passDisabled) {
+      failures.push(`${viewport}px: disable-auth checkbox did not disable credential inputs`);
+    }
+    await page.locator('#cfg-disable-auth').uncheck();
+    await page.evaluate(data => window.__statusSources[0].handlers.status({data:JSON.stringify(data)}), {
+      ...status,
+      node_source: "多源聚合 (Fastly 全球加速 CDN 等 3 个在线数据源)",
+    });
+    const multiSourceText = await page.locator('#stat-node-source').innerText();
+    if (multiSourceText !== 'Source: Multi-Source (Fastly Global CDN + 3 online sources)') {
+      failures.push(`${viewport}px: unexpected English multi-source label: ${multiSourceText}`);
+    }
+    await page.evaluate(data => window.__statusSources[0].handlers.status({data:JSON.stringify(data)}), {
+      ...status,
+      node_source: "本地快照 (VPNGate 官方 HTTPS API)",
+    });
+    const snapshotSourceText = await page.locator('#stat-node-source').innerText();
+    if (snapshotSourceText !== 'Source: Local Snapshot (VPNGate Official HTTPS API)') {
+      failures.push(`${viewport}px: unexpected English snapshot source label: ${snapshotSourceText}`);
+    }
+    await page.evaluate(data => window.__statusSources[0].handlers.status({data:JSON.stringify(data)}), status);
     await page.evaluate(() => document.querySelector('[data-view="matrix"]').click());
     await page.locator('[data-action="switchMatrixTab"][data-args*="ports"]').click();
     await page.locator('[data-action="showAddPortForm"]').click();

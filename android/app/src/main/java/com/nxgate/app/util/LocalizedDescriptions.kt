@@ -1,6 +1,7 @@
 package com.nxgate.app.util
 
 import com.nxgate.app.model.DynamicGroupCard
+import com.nxgate.app.model.AvailableOutbound
 import com.nxgate.app.model.InboundProtocolItem
 import com.nxgate.app.model.PortRuleItem
 
@@ -21,39 +22,71 @@ fun AppStrings.bindingLabel(rule: PortRuleItem): String = if (this != AppStrings
 fun AppStrings.inboundTitle(inbound: InboundProtocolItem): String =
     if (this == AppStringsEn) "Inbound: ${inbound.protocol} (port ${inbound.port})" else inbound.title
 
-fun localizeOutboundLabel(label: String, outbound: String = "direct", port: Int = 0, isEn: Boolean): String {
+private fun pluralUnit(count: Int, singular: String, plural: String): String =
+    "$count ${if (count == 1) singular else plural}"
+
+fun localizeOutboundLabel(ob: AvailableOutbound, isEn: Boolean): String = localizeOutboundLabel(
+    label = ob.label,
+    outbound = ob.addr,
+    port = ob.port,
+    isEn = isEn,
+    isDefault = ob.isDefault,
+    authEnabled = ob.authEnabled,
+    tunnelCount = ob.tunnelCount,
+    groupCount = ob.groupCount
+)
+
+fun localizeOutboundLabel(
+    label: String,
+    outbound: String = "direct",
+    port: Int = 0,
+    isEn: Boolean,
+    isDefault: Boolean = false,
+    authEnabled: Boolean? = null,
+    tunnelCount: Int? = null,
+    groupCount: Int? = null
+): String {
     if (!isEn) {
         return label.ifEmpty { if (outbound == "direct") "直连出口 (VPS 本机原生网络)" else "出口指向: $outbound" }
     }
-    if (label.isEmpty()) {
-        return if (outbound == "direct") "Direct (VPS network)" else outbound
+    if (outbound == "direct" && label.isEmpty()) {
+        return "Direct (VPS network)"
     }
-    if (label.startsWith("直连出口")) {
-        return "Direct Exit (VPS native network, no chain)"
+    if (label.startsWith("直连出口") || outbound == "direct") {
+        return if (label.startsWith("直连出口")) "Direct Exit (VPS native network, no chain)" else label
     }
-    if (label.startsWith("NXGate 默认出口")) {
-        val p = Regex("""PORT\s+(\d+)""").find(label)?.groupValues?.get(1) ?: (if (port > 0) "$port" else "7928")
-        val auth = if (label.contains("密码保护")) "Auth" else "No Auth"
+    val hasAuth = authEnabled ?: (label.contains("密码保护") || outbound.contains("@"))
+    val auth = if (hasAuth) "Auth" else "No Auth"
+    val parsedPort = Regex("""PORT\s+(\d+)""").find(label)?.groupValues?.get(1) ?: (if (port > 0) "$port" else "")
+
+    if (isDefault || label.startsWith("NXGate 默认出口")) {
+        val p = parsedPort.ifEmpty { "7928" }
         return "NXGate Default Exit (PORT $p - SOCKS5 TCP+UDP $auth)"
     }
-    if (label.startsWith("多端口出口")) {
-        val p = Regex("""PORT\s+(\d+)""").find(label)?.groupValues?.get(1) ?: (if (port > 0) "$port" else "")
-        val auth = if (label.contains("密码保护")) "Auth" else "No Auth"
-        val tCount = Regex("""(\d+)\s*隧道""").find(label)?.groupValues?.get(1)
-        val gCount = Regex("""(\d+)\s*动态组""").find(label)?.groupValues?.get(1)
+    val tCount = tunnelCount ?: Regex("""(\d+)\s*隧道""").find(label)?.groupValues?.get(1)?.toIntOrNull()
+    val gCount = groupCount ?: Regex("""(\d+)\s*动态组""").find(label)?.groupValues?.get(1)?.toIntOrNull()
+    if (label.startsWith("多端口出口") || tCount != null || gCount != null) {
         val extras = listOfNotNull(
-            tCount?.let { "$it tunnels" },
-            gCount?.let { "$it groups" }
+            tCount?.takeIf { it > 0 }?.let { pluralUnit(it, "tunnel", "tunnels") },
+            gCount?.takeIf { it > 0 }?.let { pluralUnit(it, "group", "groups") }
         ).joinToString(", ")
         val suffix = if (extras.isNotEmpty()) " - $extras" else ""
-        return "Multi-Port Exit (PORT $p - SOCKS5 TCP+UDP $auth$suffix)"
+        return "Multi-Port Exit (PORT $parsedPort - SOCKS5 TCP+UDP $auth$suffix)"
     }
-    return label
+    return label.ifEmpty { outbound }
 }
 
 fun AppStrings.inboundSubtitle(inbound: InboundProtocolItem): String {
     if (this != AppStringsEn) return inbound.subtitle
-    val egress = localizeOutboundLabel(inbound.outboundLabel, inbound.outbound, inbound.outboundPort, isEn = true)
+    val egress = localizeOutboundLabel(
+        label = inbound.outboundLabel,
+        outbound = inbound.outbound,
+        port = inbound.outboundPort,
+        isEn = true,
+        authEnabled = inbound.outboundAuthEnabled,
+        tunnelCount = inbound.outboundTunnelCount,
+        groupCount = inbound.outboundGroupCount
+    )
     return "Port ${inbound.port} • $egress"
 }
 

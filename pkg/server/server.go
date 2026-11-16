@@ -167,7 +167,9 @@ func (s *Server) Start(ctx context.Context) error {
 		authLabel = "已禁用(无鉴权)"
 	}
 	stats.LogInfo("Server", "Web 控制台已启动，监听: %s，访问入口: %s (用户名: %s；<SERVER-IP> 请替换为可达的服务器地址)", ln.Addr().String(), adminURL, authLabel)
-	if !isLoopbackHost(uiHost) && s.cfg.IsUIAuthEnabled() {
+	if s.cfg.IsPublicUnauthenticated() {
+		stats.LogWarn("Server", "安全警告: Web 控制台基础鉴权已禁用且监听在公网通配地址 (%s)，建议配合 TLS 反向代理鉴权或将 UI_HOST 设为 127.0.0.1", uiHost)
+	} else if !isLoopbackHost(uiHost) && s.cfg.IsUIAuthEnabled() {
 		stats.LogWarn("Server", "Web 控制台正在非回环地址上使用明文 HTTP，请务必通过 TLS 反向代理或防火墙限制访问")
 	}
 

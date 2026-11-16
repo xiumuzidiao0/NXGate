@@ -13,6 +13,7 @@ BOLD='\033[1m'
 
 sync_version() {
     local target_ver="$1"
+    local bump_code="${2:-0}"
     # Strip any leading 'v'
     target_ver="${target_ver#v}"
 
@@ -45,6 +46,15 @@ sync_version() {
     if [ -f "android/app/build.gradle.kts" ]; then
         sed -i -E "s/versionName = \".*\"/versionName = \"${target_ver}\"/" android/app/build.gradle.kts
         echo -e "  [✓] 已更新 android/app/build.gradle.kts -> versionName = \"${target_ver}\""
+        if [ "$bump_code" -eq 1 ]; then
+            local cur_code
+            cur_code=$(grep -oE 'versionCode\s*=\s*[0-9]+' android/app/build.gradle.kts | grep -oE '[0-9]+' | head -n1 || echo "")
+            if [[ "$cur_code" =~ ^[0-9]+$ ]]; then
+                local next_code=$((cur_code + 1))
+                sed -i -E "s/versionCode = ${cur_code}/versionCode = ${next_code}/" android/app/build.gradle.kts
+                echo -e "  [✓] 已递增 android/app/build.gradle.kts versionCode: ${cur_code} -> ${next_code}"
+            fi
+        fi
     fi
 
     echo -e "\n${GREEN}🎉 全部 5 处核心版本定义已统一同步至 v${target_ver}！${PLAIN}\n"
@@ -100,10 +110,14 @@ check_versions() {
 
 if [ "$1" = "--set" ] || [ "$1" = "-s" ]; then
     if [ -z "$2" ]; then
-        echo -e "${RED}用法: $0 --set <版本号，例如 2.5.2>${PLAIN}"
+        echo -e "${RED}用法: $0 --set <版本号，例如 2.5.2> [--bump-code]${PLAIN}"
         exit 1
     fi
-    sync_version "$2"
+    bump_code=0
+    if [ "$3" = "--bump-code" ]; then
+        bump_code=1
+    fi
+    sync_version "$2" "$bump_code"
     check_versions
 else
     check_versions

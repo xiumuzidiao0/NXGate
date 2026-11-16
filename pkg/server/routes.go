@@ -3,7 +3,9 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -20,18 +22,20 @@ import (
 )
 
 type StatusResponse struct {
-	VPN            any                    `json:"vpn"`
-	Traffic        stats.TrafficSnapshot  `json:"traffic"`
-	ProxyAddr      string                 `json:"proxy_addr"`
-	NodeCount      int                    `json:"node_count"`
-	TotalNodeCount int                    `json:"total_node_count"`
-	NodeSource     string                 `json:"node_source"`
-	BlacklistCount int                    `json:"blacklist_count"`
-	AdminPath      string                 `json:"admin_path"`
-	Version        string                 `json:"version"`
-	Tunnels        []*tunnel.Tunnel       `json:"tunnels"`
-	PortRules      []proxy.PortRule       `json:"port_rules"`
-	DynamicGroups  []*tunnel.DynamicGroup `json:"dynamic_groups"`
+	VPN              any                    `json:"vpn"`
+	Traffic          stats.TrafficSnapshot  `json:"traffic"`
+	ProxyAddr        string                 `json:"proxy_addr"`
+	NodeCount        int                    `json:"node_count"`
+	TotalNodeCount   int                    `json:"total_node_count"`
+	NodeSource       string                 `json:"node_source"`
+	BlacklistCount   int                    `json:"blacklist_count"`
+	AdminPath        string                 `json:"admin_path"`
+	UIAuthEnabled    bool                   `json:"ui_auth_enabled"`
+	UIPublicExposure bool                   `json:"ui_public_exposure"`
+	Version          string                 `json:"version"`
+	Tunnels          []*tunnel.Tunnel       `json:"tunnels"`
+	PortRules        []proxy.PortRule       `json:"port_rules"`
+	DynamicGroups    []*tunnel.DynamicGroup `json:"dynamic_groups"`
 }
 
 func (s *Server) buildStatusResponse() StatusResponse {
@@ -56,18 +60,20 @@ func (s *Server) buildStatusResponse() StatusResponse {
 	}
 
 	return StatusResponse{
-		VPN:            vpnState,
-		Traffic:        traffic,
-		ProxyAddr:      fmt.Sprintf("%s:%d", proxyHost, s.cfg.ProxyPort),
-		NodeCount:      count,
-		TotalNodeCount: totalCount,
-		NodeSource:     source,
-		BlacklistCount: blCount,
-		AdminPath:      s.cfg.UIPath,
-		Version:        config.Version,
-		Tunnels:        tunnels,
-		PortRules:      portRules,
-		DynamicGroups:  dynamicGroups,
+		VPN:              vpnState,
+		Traffic:          traffic,
+		ProxyAddr:        fmt.Sprintf("%s:%d", proxyHost, s.cfg.ProxyPort),
+		NodeCount:        count,
+		TotalNodeCount:   totalCount,
+		NodeSource:       source,
+		BlacklistCount:   blCount,
+		AdminPath:        s.cfg.UIPath,
+		UIAuthEnabled:    s.cfg.IsUIAuthEnabled(),
+		UIPublicExposure: s.cfg.IsPublicUnauthenticated(),
+		Version:          config.Version,
+		Tunnels:          tunnels,
+		PortRules:        portRules,
+		DynamicGroups:    dynamicGroups,
 	}
 }
 
@@ -340,11 +346,27 @@ func (s *Server) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleUpdateSettings(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	if err != nil {
+		s.writeError(w, http.StatusBadRequest, "请求参数读取失败")
+		return
+	}
 	var req config.SettingsDTO
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.Unmarshal(body, &req); err != nil {
 		s.writeError(w, http.StatusBadRequest, "请求参数解析失败")
 		return
 	}
+
+	var rawFields map[string]json.RawMessage
+	_ = json.Unmarshal(body, &rawFields)
+	present := make(map[string]bool, len(rawFields))
+	for k := range rawFields {
+		present[k] = true
+	}
+	var meta struct {
+		DisableUIAuth *bool `json:"disable_ui_auth"`
+	}
+	_ = json.Unmarshal(body, &meta)
 
 	if req.UIPort > 0 && (req.UIPort < 1 || req.UIPort > 65535) {
 		s.writeError(w, http.StatusBadRequest, "Web 端口必须在 1 至 65535 之间")
@@ -359,8 +381,12 @@ func (s *Server) handleUpdateSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.cfg.UpdateSettings(req); err != nil {
-		s.writeError(w, http.StatusInternalServerError, fmt.Sprintf("更新配置失败: %v", err))
+	if err := s.cfg.UpdateSettingsWithPresence(req, present, meta.DisableUIAuth); err != nil {
+		status := http.StatusInternalServerError
+		if errors.Is(err, config.ErrInvalidSettings) {
+			status = http.StatusBadRequest
+		}
+		s.writeError(w, status, fmt.Sprintf("更新配置失败: %v", err))
 		return
 	}
 

@@ -173,3 +173,36 @@ func TestBuildSubURLRespectsForwardedHeaders(t *testing.T) {
 		t.Fatalf("unexpected clash sub URL: %s", got)
 	}
 }
+
+func TestGetAvailableOutboundsIncludesStructuredMetadata(t *testing.T) {
+	cfg := &config.Config{
+		DataDir:   t.TempDir(),
+		ProxyPort: 7928,
+		ProxyUser: "puser",
+		ProxyPass: "ppass",
+	}
+	s := &Server{cfg: cfg}
+	portMgr := proxy.NewMultiPortManager(cfg, nil, nil)
+	_ = portMgr.ApplyRules([]proxy.PortRule{{
+		Port:           7935,
+		Enabled:        true,
+		AuthMode:       "none",
+		BoundTunnelIDs: []string{"t1", "t2"},
+		BoundGroupIDs:  []string{"g1"},
+	}})
+	s.portMgr = portMgr
+
+	outbounds := s.getAvailableOutbounds()
+	if len(outbounds) != 3 {
+		t.Fatalf("expected 3 outbounds, got %d", len(outbounds))
+	}
+	if !outbounds[0].IsDefault || !outbounds[0].AuthEnabled || outbounds[0].Port != 7928 {
+		t.Fatalf("unexpected default outbound metadata: %+v", outbounds[0])
+	}
+	if outbounds[1].Port != 7935 || outbounds[1].AuthEnabled || outbounds[1].TunnelCount != 2 || outbounds[1].GroupCount != 1 {
+		t.Fatalf("unexpected custom outbound metadata: %+v", outbounds[1])
+	}
+	if outbounds[2].Type != "direct" || outbounds[2].Addr != "direct" {
+		t.Fatalf("unexpected direct outbound metadata: %+v", outbounds[2])
+	}
+}
