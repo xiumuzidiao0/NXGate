@@ -21,7 +21,7 @@
             android:layout_weight="1"
             android:ellipsize="end"
             android:maxLines="1"
-            android:text="NXGate 网关"
+            android:text="@string/widget_default_title"
             android:textColor="#FFFFFF"
             android:textSize="14sp"
             android:textStyle="bold" />
@@ -30,7 +30,7 @@
             android:id="@+id/widget_status_dot"
             android:layout_width="8dp"
             android:layout_height="8dp"
-            android:contentDescription="在线状态指示"
+            android:contentDescription="@string/widget_status_desc"
             android:src="@drawable/widget_dot_online" />
 
         <TextView
@@ -38,7 +38,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="6dp"
-            android:text="在线"
+            android:text="@string/widget_status_online"
             android:textColor="#94A3B8"
             android:textSize="12sp" />
     </LinearLayout>
@@ -59,7 +59,7 @@
             android:layout_height="wrap_content"
             android:ellipsize="end"
             android:maxLines="1"
-            android:text="出口: 正在读取..."
+            android:text="@string/widget_exit_loading"
             android:textColor="#E2E8F0"
             android:textSize="13sp" />
 
@@ -70,7 +70,7 @@
             android:layout_marginTop="4dp"
             android:ellipsize="end"
             android:maxLines="1"
-            android:text="下行: 0.0 Mb/s · 总计: 0.0 Mb"
+            android:text="@string/widget_speed_init"
             android:textColor="#94A3B8"
             android:textSize="12sp" />
     </LinearLayout>
@@ -93,7 +93,7 @@
             android:paddingTop="6dp"
             android:paddingEnd="12dp"
             android:paddingBottom="6dp"
-            android:text="换线"
+            android:text="@string/widget_btn_rotate"
             android:textColor="#FFFFFF"
             android:textSize="12sp"
             android:textStyle="bold" />
@@ -110,7 +110,7 @@
             android:paddingTop="6dp"
             android:paddingEnd="12dp"
             android:paddingBottom="6dp"
-            android:text="刷新"
+            android:text="@string/widget_btn_refresh"
             android:textColor="#FFFFFF"
             android:textSize="12sp"
             android:textStyle="bold" />
@@ -130,7 +130,7 @@
             android:paddingTop="6dp"
             android:paddingEnd="8dp"
             android:paddingBottom="6dp"
-            android:text="控制台"
+            android:text="@string/widget_btn_console"
             android:textColor="#60A5FA"
             android:textSize="12sp" />
     </LinearLayout>

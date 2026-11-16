@@ -1,10 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">NXGate</string>
+    <string name="tile_label">NXGate 网关</string>
     <string name="widget_name">NXGate 网关状态</string>
     <string name="widget_description">实时查看当前出海网关出口、网速与一键换线</string>
     <string name="channel_alerts_name">NXGate 故障告警与换线</string>
     <string name="channel_alerts_desc">当远端网关发生断流、自动故障转移或节点异常时发出紧急通报</string>
     <string name="channel_status_name">NXGate 网关状态</string>
     <string name="channel_status_desc">常规状态通报与快捷换线操作反馈</string>
+    <string name="widget_default_title">NXGate 网关</string>
+    <string name="widget_status_desc">在线状态指示</string>
+    <string name="widget_status_online">在线</string>
+    <string name="widget_exit_loading">出口: 正在读取...</string>
+    <string name="widget_speed_init">下行: 0.0 Mb/s · 总计: 0.0 Mb</string>
+    <string name="widget_btn_rotate">换线</string>
+    <string name="widget_btn_refresh">刷新</string>
+    <string name="widget_btn_console">控制台</string>
 </resources>

@@ -182,14 +182,14 @@ class MainActivity : FragmentActivity() {
 
             override fun onAuthenticationFailed() {
                 super.onAuthenticationFailed()
-                onError("指纹/面容不匹配，请重试")
+                onError(if (isEn) "Fingerprint/face mismatch, please try again" else "指纹/面容不匹配，请重试")
             }
         })
 
         try {
             biometricPrompt.authenticate(promptInfo)
         } catch (e: Exception) {
-            onError(e.message ?: "生物识别模块调用失败")
+            onError(e.message ?: if (isEn) "Biometric prompt failed" else "生物识别模块调用失败")
         }
     }
 

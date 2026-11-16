@@ -20,6 +20,8 @@ import com.nxgate.app.model.ServerUpdateStatus
 import com.nxgate.app.model.SingBoxOverviewData
 import com.nxgate.app.model.SystemLogEntry
 import com.nxgate.app.model.TunnelItem
+import com.nxgate.app.ui.components.countryDisplayName
+import com.nxgate.app.util.isAppEnglish
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -181,27 +183,7 @@ class ApiClient {
 
                 // 1. VPN Master info
                 val vpnObj = json.optJSONObject("vpn")
-                val activeNode = vpnObj?.optString("active_node_id", "") ?: ""
-                val status = vpnObj?.optString("status", "disconnected") ?: "disconnected"
-                val uptimeSec = vpnObj?.optLong("uptime_seconds", 0) ?: 0
-                val isZeroTun = vpnObj?.optBoolean("zero_tun", false) ?: false
-                val driverMode = vpnObj?.optString("driver_mode", if (isZeroTun) "userland" else "kernel") ?: if (isZeroTun) "userland" else "kernel"
-
-                val hours = uptimeSec / 3600
-                val mins = (uptimeSec % 3600) / 60
-                val uptimeStr = if (hours > 0) "${hours}小时${mins}分" else "${mins}分钟"
-
-                val isConnected = status == "connected"
-                val devLabel = if (isZeroTun) "主网关 (免TUN)" else "主网卡零号 (tun0)"
-                val masterInfo = MasterGatewayInfo(
-                    devName = devLabel,
-                    nodeName = if (activeNode.isNotEmpty()) activeNode else "未连接",
-                    uptimeStr = uptimeStr,
-                    status = if (isConnected) "断流检测通过" else "未连接",
-                    isConnected = isConnected,
-                    isZeroTun = isZeroTun,
-                    driverMode = driverMode
-                )
+                val masterInfo = parseMasterGateway(vpnObj, includeNodeDetails = false, isEn = isAppEnglish())
 
                 // 2. Real-time Traffic snapshot
                 val trafficObj = json.optJSONObject("traffic")
@@ -447,7 +429,8 @@ class ApiClient {
             val body = if (groupId != null) JSONObject().put("group_id", groupId).toString() else "{}"
             executeCall(profile, "/api/tunnel-groups/evaluate", "POST", body).use { response ->
                 if (response.isSuccessful) {
-                    Result.success("已在后台触发 [${profile.name}] 动态重评与换线！")
+                    val isEn = isAppEnglish()
+                    Result.success(if (isEn) "Triggered [${profile.name}] re-evaluation & rotation!" else "已在后台触发 [${profile.name}] 动态重评与换线！")
                 } else {
                     Result.failure(Exception("HTTP ${response.code}: ${response.message}"))
                 }
@@ -476,7 +459,7 @@ class ApiClient {
                     list.add(
                         DynamicGroupCard(
                             id = obj.optString("id", "dg-$i"),
-                            name = obj.optString("name", "自适应组"),
+                            name = obj.optString("name", if (isAppEnglish()) "Adaptive Group" else "自适应组"),
                             enabled = obj.optBoolean("enabled", true),
                             isSystem = obj.optBoolean("is_system", false),
                             country = obj.optString("country", "JP"),
@@ -552,7 +535,7 @@ class ApiClient {
                         AvailableOutbound(
                             port = ob.optInt("port", 0),
                             addr = ob.optString("addr", "direct"),
-                            label = ob.optString("label", "直连出口"),
+                            label = ob.optString("label", if (isAppEnglish()) "Direct Exit" else "直连出口"),
                             isDefault = ob.optBoolean("is_default", false)
                         )
                     )
@@ -692,7 +675,7 @@ class ApiClient {
                     val ip = obj.optString("ip", "")
                     val port = obj.optInt("port", 1194)
                     val cShort = obj.optString("country_short", "JP")
-                    val cLong = obj.optString("country_long", "日本")
+                    val cLong = obj.optString("country_long", countryDisplayName(cShort, isEnglish = isAppEnglish()))
                     val latency = obj.optInt("latency_ms", 0)
                     val isp = obj.optString("isp", "")
                     val score = obj.optLong("score", 80).toInt()
@@ -804,7 +787,7 @@ class ApiClient {
                             nodeId = obj.optString("id", obj.optString("node_id", "")),
                             ip = obj.optString("ip", ""),
                             country = obj.optString("country", "JP"),
-                            reason = obj.optString("reason", "不可达"),
+                            reason = obj.optString("reason", if (isAppEnglish()) "Unreachable" else "不可达"),
                             blacklistedAt = obj.optString("marked_at", obj.optString("blacklisted_at", "")),
                             expiresAt = obj.optString("until", obj.optString("expires_at", "")),
                             isPermanent = obj.optBoolean("is_permanent", false),
@@ -908,10 +891,11 @@ class ApiClient {
             executeCall(profile, "/api/update/trigger", "POST", body).use { resp ->
                 val bodyStr = resp.body?.string() ?: "{}"
                 val obj = JSONObject(bodyStr)
+                val isEn = isAppEnglish()
                 if (resp.isSuccessful && obj.optBoolean("ok", true)) {
-                    Result.success(obj.optString("message", "更新任务已启动"))
+                    Result.success(obj.optString("message", if (isEn) "Update task started" else "更新任务已启动"))
                 } else {
-                    Result.failure(Exception(obj.optString("error", "更新触发失败 (HTTP ${resp.code})")))
+                    Result.failure(Exception(obj.optString("error", if (isEn) "Failed to trigger update (HTTP ${resp.code})" else "更新触发失败 (HTTP ${resp.code})")))
                 }
             }
         } catch (e: Exception) {
@@ -926,7 +910,7 @@ class ApiClient {
                 val obj = JSONObject(resp.body?.string() ?: "{}")
                 val status = ServerUpdateStatus(
                     inProgress = obj.optBoolean("in_progress", false),
-                    step = obj.optString("step", "就绪"),
+                    step = obj.optString("step", if (isAppEnglish()) "Ready" else "就绪"),
                     version = obj.optString("version", ""),
                     error = obj.optString("error", "")
                 )
@@ -1018,10 +1002,11 @@ class ApiClient {
             executeCall(profile, "/api/settings", "POST", json.toString()).use { resp ->
                 val bodyStr = resp.body?.string() ?: "{}"
                 val obj = JSONObject(bodyStr)
+                val isEn = isAppEnglish()
                 if (resp.isSuccessful) {
-                    Result.success(obj.optString("message", "设置保存成功"))
+                    Result.success(obj.optString("message", if (isEn) "Settings saved" else "设置保存成功"))
                 } else {
-                    Result.failure(Exception(obj.optString("error", "设置保存失败 (HTTP ${resp.code})")))
+                    Result.failure(Exception(obj.optString("error", if (isEn) "Failed to save settings (HTTP ${resp.code})" else "设置保存失败 (HTTP ${resp.code})")))
                 }
             }
         } catch (e: Exception) {
@@ -1044,7 +1029,8 @@ class ApiClient {
                 if (resp.isSuccessful && res.ok) {
                     Result.success(res)
                 } else {
-                    Result.failure(Exception(res.error.ifEmpty { "生成密钥对失败 (HTTP ${resp.code})" }))
+                    val fallback = if (isAppEnglish()) "Failed to generate key pair (HTTP ${resp.code})" else "生成密钥对失败 (HTTP ${resp.code})"
+                    Result.failure(Exception(res.error.ifEmpty { fallback }))
                 }
             }
         } catch (e: Exception) {
@@ -1068,7 +1054,8 @@ class ApiClient {
                 if (resp.isSuccessful && res.ok) {
                     Result.success(res)
                 } else {
-                    Result.failure(Exception(res.error.ifEmpty { "公钥推导失败" }))
+                    val fallback = if (isAppEnglish()) "Failed to derive public key" else "公钥推导失败"
+                    Result.failure(Exception(res.error.ifEmpty { fallback }))
                 }
             }
         } catch (e: Exception) {
@@ -1081,15 +1068,61 @@ class ApiClient {
             executeCall(profile, "/api/telegram/test", "POST", "{}").use { resp ->
                 val bodyStr = resp.body?.string() ?: "{}"
                 val obj = JSONObject(bodyStr)
+                val isEn = isAppEnglish()
                 if (resp.isSuccessful) {
-                    Result.success(obj.optString("message", "测试消息发送成功"))
+                    Result.success(obj.optString("message", if (isEn) "Test alert sent" else "测试消息发送成功"))
                 } else {
-                    Result.failure(Exception(obj.optString("error", "发送测试失败 (HTTP ${resp.code})")))
+                    Result.failure(Exception(obj.optString("error", if (isEn) "Failed to send test alert (HTTP ${resp.code})" else "发送测试失败 (HTTP ${resp.code})")))
                 }
             }
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    private fun parseMasterGateway(vpnObj: JSONObject?, includeNodeDetails: Boolean, isEn: Boolean): MasterGatewayInfo {
+        val activeNode = vpnObj?.optString("active_node_id", "") ?: ""
+        val activeNodeObj = if (includeNodeDetails) vpnObj?.optJSONObject("active_node") else null
+        val masterIp = if (includeNodeDetails) (activeNodeObj?.optString("ip", activeNode) ?: activeNode) else ""
+        val masterCShort = activeNodeObj?.optString("country_short", "") ?: ""
+        val masterCLong = activeNodeObj?.optString("country_long", "") ?: ""
+        val masterLat = if (activeNodeObj != null && activeNodeObj.has("latency_ms") && activeNodeObj.optInt("latency_ms") > 0) {
+            activeNodeObj.optInt("latency_ms")
+        } else {
+            activeNodeObj?.optInt("ping", 0) ?: 0
+        }
+        val status = vpnObj?.optString("status", "disconnected") ?: "disconnected"
+        val uptimeSec = vpnObj?.optLong("uptime_seconds", 0) ?: 0
+        val hours = uptimeSec / 3600
+        val mins = (uptimeSec % 3600) / 60
+        val uptimeStr = if (isEn) {
+            if (hours > 0) "${hours}h ${mins}m" else "${mins}m"
+        } else {
+            if (hours > 0) "${hours}小时${mins}分" else "${mins}分钟"
+        }
+        val isConnected = status == "connected"
+        val isZeroTun = vpnObj?.optBoolean("zero_tun", false) ?: false
+        val driverMode = vpnObj?.optString("driver_mode", if (isZeroTun) "userland" else "kernel") ?: if (isZeroTun) "userland" else "kernel"
+        val devLabel = when {
+            isZeroTun && isEn -> "Zero-TUN Gateway"
+            isZeroTun -> "主网关 (免TUN)"
+            isEn -> "Primary NIC (tun0)"
+            else -> "主网卡零号 (tun0)"
+        }
+        val disconnectedLabel = if (isEn) "Disconnected" else "未连接"
+        return MasterGatewayInfo(
+            devName = devLabel,
+            nodeName = activeNode.ifEmpty { disconnectedLabel },
+            nodeIp = masterIp,
+            country = masterCShort,
+            countryLong = masterCLong,
+            latencyMs = masterLat,
+            uptimeStr = uptimeStr,
+            status = if (isConnected) (if (isEn) "Healthy" else "断流检测通过") else disconnectedLabel,
+            isConnected = isConnected,
+            isZeroTun = isZeroTun,
+            driverMode = driverMode
+        )
     }
 
     /**
@@ -1111,38 +1144,7 @@ class ApiClient {
                         "status" -> {
                             val json = JSONObject(data)
                             val vpnObj = json.optJSONObject("vpn")
-                            val activeNode = vpnObj?.optString("active_node_id", "") ?: ""
-                            val activeNodeObj = vpnObj?.optJSONObject("active_node")
-                            val masterIp = activeNodeObj?.optString("ip", activeNode) ?: activeNode
-                            val masterCShort = activeNodeObj?.optString("country_short", "") ?: ""
-                            val masterCLong = activeNodeObj?.optString("country_long", "") ?: ""
-                            val masterLat = if (activeNodeObj != null && activeNodeObj.has("latency_ms") && activeNodeObj.optInt("latency_ms") > 0) {
-                                activeNodeObj.optInt("latency_ms")
-                            } else {
-                                activeNodeObj?.optInt("ping", 0) ?: 0
-                            }
-                            val status = vpnObj?.optString("status", "disconnected") ?: "disconnected"
-                            val uptimeSec = vpnObj?.optLong("uptime_seconds", 0) ?: 0
-                            val hours = uptimeSec / 3600
-                            val mins = (uptimeSec % 3600) / 60
-                            val uptimeStr = if (hours > 0) "${hours}小时${mins}分" else "${mins}分钟"
-                            val isConnected = status == "connected"
-                            val isZeroTun = vpnObj?.optBoolean("zero_tun", false) ?: false
-                            val driverMode = vpnObj?.optString("driver_mode", if (isZeroTun) "userland" else "kernel") ?: if (isZeroTun) "userland" else "kernel"
-                            val devLabel = if (isZeroTun) "主网关 (免TUN)" else "主网卡零号 (tun0)"
-                            val masterInfo = MasterGatewayInfo(
-                                devName = devLabel,
-                                nodeName = if (activeNode.isNotEmpty()) activeNode else "未连接",
-                                nodeIp = masterIp,
-                                country = masterCShort,
-                                countryLong = masterCLong,
-                                latencyMs = masterLat,
-                                uptimeStr = uptimeStr,
-                                status = if (isConnected) "断流检测通过" else "未连接",
-                                isConnected = isConnected,
-                                isZeroTun = isZeroTun,
-                                driverMode = driverMode
-                            )
+                            val masterInfo = parseMasterGateway(vpnObj, includeNodeDetails = true, isEn = isAppEnglish())
 
                             val trafficObj = json.optJSONObject("traffic")
                             val traffic = if (trafficObj != null) {

@@ -646,7 +646,7 @@ fun SettingsSecurityScreen(
                                             onCheckedChange = {
                                                 cleartextWarningEnabled = it
                                                 NXGateApplication.instance.serverStore.setCleartextWarningEnabled(it)
-                                                Toast.makeText(context, "HTTP 传输提醒已${if (it) "开启" else "关闭"}", Toast.LENGTH_SHORT).show()
+                                                Toast.makeText(context, strings.localized("HTTP 传输提醒已${if (it) "开启" else "关闭"}", "Cleartext HTTP warning ${if (it) "enabled" else "disabled"}"), Toast.LENGTH_SHORT).show()
                                             },
                                             colors = SwitchDefaults.colors(
                                                 checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
@@ -1610,7 +1610,7 @@ fun ThemeAppearanceSettingsSection(modifier: Modifier = Modifier) {
                                     .clickable {
                                         serverStore.setThemeAccent(acc.id)
                                         serverStore.setThemePalette("pixel")
-                                        Toast.makeText(context, "${if (isEn) "Accent color set to " else "强调色已设为「"}${acc.name}${if (isEn) "" else "」"}", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, "${if (isEn) "Accent color set to " else "强调色已设为「"}${acc.localizedName(isEn)}${if (isEn) "" else "」"}", Toast.LENGTH_SHORT).show()
                                     },
                                 shape = CircleShape,
                                 color = acc.lightPrimary,
@@ -1653,7 +1653,7 @@ fun ThemeAppearanceSettingsSection(modifier: Modifier = Modifier) {
                                     .clickable {
                                         serverStore.setThemeBase(baseOpt.id)
                                         serverStore.setThemePalette("pixel")
-                                        Toast.makeText(context, "${if (isEn) "Base tone set to " else "基准色已设为「"}${baseOpt.name}${if (isEn) "" else "」"}", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, "${if (isEn) "Base tone set to " else "基准色已设为「"}${baseOpt.localizedName(isEn)}${if (isEn) "" else "」"}", Toast.LENGTH_SHORT).show()
                                     },
                                 shape = RoundedCornerShape(12.dp),
                                 color = if (isSelected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainer,
@@ -1664,7 +1664,7 @@ fun ThemeAppearanceSettingsSection(modifier: Modifier = Modifier) {
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
-                                        text = baseOpt.name,
+                                        text = baseOpt.localizedName(isEn),
                                         style = MaterialTheme.typography.labelMedium,
                                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                                         color = if (isSelected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurface
@@ -1697,7 +1697,7 @@ fun ThemeAppearanceSettingsSection(modifier: Modifier = Modifier) {
                             ) {}
                             Spacer(Modifier.width(6.dp))
                             Text(
-                                text = "${if (isEn) "Accent: " else "强调色: "}${currentAccent.name}",
+                                text = "${if (isEn) "Accent: " else "强调色: "}${currentAccent.localizedName(isEn)}",
                                 style = MaterialTheme.typography.bodySmall,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurface
@@ -1712,7 +1712,7 @@ fun ThemeAppearanceSettingsSection(modifier: Modifier = Modifier) {
                             ) {}
                             Spacer(Modifier.width(6.dp))
                             Text(
-                                text = "${if (isEn) "Base: " else "基准底色: "}${currentBase.name}",
+                                text = "${if (isEn) "Base: " else "基准底色: "}${currentBase.localizedName(isEn)}",
                                 style = MaterialTheme.typography.bodySmall,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurface

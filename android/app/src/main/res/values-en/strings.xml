@@ -1,10 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">NXGate</string>
+    <string name="tile_label">NXGate Gateway</string>
     <string name="widget_name">NXGate Gateway Status</string>
-    <string name="widget_description">View gateway egress, traffic speeds, and quick egress switching</string>
+    <string name="widget_description">Monitor gateway egress, speed, and trigger quick rotation</string>
     <string name="channel_alerts_name">NXGate Alerts &amp; Failover</string>
-    <string name="channel_alerts_desc">Alerts for remote gateway connection failures, automatic failover, and node errors</string>
+    <string name="channel_alerts_desc">Urgent alerts when the remote gateway disconnects, fails over, or encounters errors</string>
     <string name="channel_status_name">NXGate Gateway Status</string>
-    <string name="channel_status_desc">Gateway status and quick egress switching results</string>
+    <string name="channel_status_desc">Routine status updates and quick rotation feedback</string>
+    <string name="widget_default_title">NXGate Gateway</string>
+    <string name="widget_status_desc">Online status indicator</string>
+    <string name="widget_status_online">Online</string>
+    <string name="widget_exit_loading">Exit: Loading...</string>
+    <string name="widget_speed_init">Down: 0.0 Mb/s · Total: 0.0 Mb</string>
+    <string name="widget_btn_rotate">Rotate</string>
+    <string name="widget_btn_refresh">Refresh</string>
+    <string name="widget_btn_console">Console</string>
 </resources>

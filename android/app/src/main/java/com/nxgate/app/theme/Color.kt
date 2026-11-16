@@ -135,18 +135,23 @@ val MiuixDarkColorScheme: ColorScheme = darkColorScheme(
 data class AccentColorOption(
     val id: String,
     val name: String,
+    val nameEn: String,
     val lightPrimary: Color,
     val darkPrimary: Color,
     val lightContainer: Color,
     val darkContainer: Color,
     val lightOnContainer: Color,
     val darkOnContainer: Color
-)
+) {
+    fun localizedName(isEn: Boolean): String = if (isEn) nameEn else name
+}
 
 data class BaseToneOption(
     val id: String,
     val name: String,
+    val nameEn: String,
     val description: String,
+    val descriptionEn: String,
     val lightSurface: Color,
     val darkSurface: Color,
     val lightContainer: Color,
@@ -159,24 +164,29 @@ data class BaseToneOption(
     val darkOnSurfaceVariant: Color,
     val lightOutline: Color,
     val darkOutline: Color
-)
+) {
+    fun localizedName(isEn: Boolean): String = if (isEn) nameEn else name
+    fun localizedDescription(isEn: Boolean): String = if (isEn) descriptionEn else description
+}
 
 val ACCENT_OPTIONS = listOf(
-    AccentColorOption("teal", "青翠绿野", Color(0xFF00696E), Color(0xFF80D5DA), Color(0xFF9CF1F6), Color(0xFF0B4F52), Color(0xFF002022), Color(0xFF9CF1F6)),
-    AccentColorOption("bay_blue", "晴空海蓝", Color(0xFF1A73E8), Color(0xFF8AB4F8), Color(0xFFD3E3FD), Color(0xFF0842A0), Color(0xFF041E49), Color(0xFFD3E3FD)),
-    AccentColorOption("miuix_blue", "澎湃超凡", Color(0xFF3482FF), Color(0xFF277AF7), Color(0xFFEAF2FF), Color(0xFF2B3B54), Color(0xFF001D4D), Color(0xFFDCE8FF)),
-    AccentColorOption("mint", "薄荷青竹", Color(0xFF00875A), Color(0xFF48D08D), Color(0xFFCEF5E1), Color(0xFF005236), Color(0xFF00210B), Color(0xFFCEF5E1)),
-    AccentColorOption("coral", "珊瑚暖橙", Color(0xFFE64A19), Color(0xFFFF8A65), Color(0xFFFFDBCF), Color(0xFF782508), Color(0xFF380D00), Color(0xFFFFDBCF)),
-    AccentColorOption("iris", "紫鸢霓裳", Color(0xFF7C4DFF), Color(0xFFB388FF), Color(0xFFEDE7F6), Color(0xFF4A148C), Color(0xFF21005D), Color(0xFFEDE7F6)),
-    AccentColorOption("amber", "琥珀暖阳", Color(0xFFD84315), Color(0xFFFFB74D), Color(0xFFFFF3E0), Color(0xFF6E2805), Color(0xFF330E00), Color(0xFFFFF3E0)),
-    AccentColorOption("rose", "暗夜樱粉", Color(0xFFC2185B), Color(0xFFF48FB1), Color(0xFFFCE4EC), Color(0xFF68002D), Color(0xFF3B0018), Color(0xFFFCE4EC))
+    AccentColorOption("teal", "青翠绿野", "Emerald Teal", Color(0xFF00696E), Color(0xFF80D5DA), Color(0xFF9CF1F6), Color(0xFF0B4F52), Color(0xFF002022), Color(0xFF9CF1F6)),
+    AccentColorOption("bay_blue", "晴空海蓝", "Ocean Blue", Color(0xFF1A73E8), Color(0xFF8AB4F8), Color(0xFFD3E3FD), Color(0xFF0842A0), Color(0xFF041E49), Color(0xFFD3E3FD)),
+    AccentColorOption("miuix_blue", "澎湃超凡", "Hyper Blue", Color(0xFF3482FF), Color(0xFF277AF7), Color(0xFFEAF2FF), Color(0xFF2B3B54), Color(0xFF001D4D), Color(0xFFDCE8FF)),
+    AccentColorOption("mint", "薄荷青竹", "Fresh Mint", Color(0xFF00875A), Color(0xFF48D08D), Color(0xFFCEF5E1), Color(0xFF005236), Color(0xFF00210B), Color(0xFFCEF5E1)),
+    AccentColorOption("coral", "珊瑚暖橙", "Warm Coral", Color(0xFFE64A19), Color(0xFFFF8A65), Color(0xFFFFDBCF), Color(0xFF782508), Color(0xFF380D00), Color(0xFFFFDBCF)),
+    AccentColorOption("iris", "紫鸢霓裳", "Royal Iris", Color(0xFF7C4DFF), Color(0xFFB388FF), Color(0xFFEDE7F6), Color(0xFF4A148C), Color(0xFF21005D), Color(0xFFEDE7F6)),
+    AccentColorOption("amber", "琥珀暖阳", "Golden Amber", Color(0xFFD84315), Color(0xFFFFB74D), Color(0xFFFFF3E0), Color(0xFF6E2805), Color(0xFF330E00), Color(0xFFFFF3E0)),
+    AccentColorOption("rose", "暗夜樱粉", "Sakura Rose", Color(0xFFC2185B), Color(0xFFF48FB1), Color(0xFFFCE4EC), Color(0xFF68002D), Color(0xFF3B0018), Color(0xFFFCE4EC))
 )
 
 val BASE_TONE_OPTIONS = listOf(
     BaseToneOption(
         id = "neutral",
         name = "中性协调",
+        nameEn = "Neutral",
         description = "Google Pixel 标准中性底色",
+        descriptionEn = "Standard Pixel neutral background",
         lightSurface = Color(0xFFF8F9FA),
         darkSurface = Color(0xFF121417),
         lightContainer = Color(0xFFFFFFFF),
@@ -193,7 +203,9 @@ val BASE_TONE_OPTIONS = listOf(
     BaseToneOption(
         id = "slate",
         name = "极简冷灰",
+        nameEn = "Cool Slate",
         description = "科技纯净冷调白灰与玄岩",
+        descriptionEn = "Clean cool slate and basalt tones",
         lightSurface = Color(0xFFF0F4F8),
         darkSurface = Color(0xFF0B1015),
         lightContainer = Color(0xFFFFFFFF),
@@ -210,7 +222,9 @@ val BASE_TONE_OPTIONS = listOf(
     BaseToneOption(
         id = "sand",
         name = "暖阳米沙",
+        nameEn = "Warm Sand",
         description = "温润柔和暖沙与米白质感",
+        descriptionEn = "Soft warm sand and ivory tones",
         lightSurface = Color(0xFFFAF7F2),
         darkSurface = Color(0xFF151210),
         lightContainer = Color(0xFFFFFFFF),
@@ -227,7 +241,9 @@ val BASE_TONE_OPTIONS = listOf(
     BaseToneOption(
         id = "oled",
         name = "深邃玄黑",
+        nameEn = "Pure OLED",
         description = "高反差通透纯黑 (OLED 专属)",
+        descriptionEn = "High-contrast true black for OLED screens",
         lightSurface = Color(0xFFF5F5F5),
         darkSurface = Color(0xFF000000),
         lightContainer = Color(0xFFFFFFFF),

@@ -38,4 +38,19 @@ class LocalizedDescriptionsTest {
         assertTrue(english.contains("Target: 3 tunnels"))
         assertFalse(Regex("[\u3400-\u9fff]").containsMatchIn(english))
     }
+
+    @Test fun outboundLabelsTranslateBackendChineseWhenEnglish() {
+        assertEquals(
+            "Direct Exit (VPS native network, no chain)",
+            localizeOutboundLabel("直连出口 (VPS 本机原生网络，无链式分流)", "direct", 0, isEn = true)
+        )
+        assertEquals(
+            "NXGate Default Exit (PORT 7928 - SOCKS5 TCP+UDP Auth)",
+            localizeOutboundLabel("NXGate 默认出口 (PORT 7928 - SOCKS5 TCP+UDP 密码保护)", "socks5://127.0.0.1:7928", 7928, isEn = true)
+        )
+        assertEquals(
+            "Multi-Port Exit (PORT 7929 - SOCKS5 TCP+UDP No Auth - 2 tunnels, 1 groups)",
+            localizeOutboundLabel("多端口出口 (PORT 7929 - SOCKS5 TCP+UDP 免密 - 2 隧道, 1 动态组)", "socks5://127.0.0.1:7929", 7929, isEn = true)
+        )
+    }
 }

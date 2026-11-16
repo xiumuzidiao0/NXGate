@@ -6,6 +6,7 @@ import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import com.nxgate.app.model.ServerProfile
 import com.nxgate.app.service.NXGateWidgetProvider
+import com.nxgate.app.util.isAppEnglish
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -280,11 +281,11 @@ class ServerStore(private val context: Context) {
             val trimmed = jsonStr.trim()
             val serversArr = if (trimmed.startsWith("{")) {
                 val root = JSONObject(trimmed)
-                if (root.has("servers")) root.getJSONArray("servers") else return Result.failure(Exception("缺少 servers 节点"))
+                if (root.has("servers")) root.getJSONArray("servers") else return Result.failure(Exception(if (isAppEnglish()) "Missing servers field" else "缺少 servers 节点"))
             } else if (trimmed.startsWith("[")) {
                 JSONArray(trimmed)
             } else {
-                return Result.failure(Exception("无法识别的备份 JSON 格式"))
+                return Result.failure(Exception(if (isAppEnglish()) "Unrecognized backup JSON format" else "无法识别的备份 JSON 格式"))
             }
 
             var imported = 0
@@ -353,7 +354,7 @@ class ServerStore(private val context: Context) {
 
         return ServerProfile(
             id = obj.optString("id", UUID.randomUUID().toString()),
-            name = obj.optString("name", "NXGate 网关"),
+            name = obj.optString("name", if (isAppEnglish()) "NXGate Gateway" else "NXGate 网关"),
             host = obj.optString("host", "127.0.0.1"),
             port = obj.optInt("port", 8787),
             path = obj.optString("path", "enter"),

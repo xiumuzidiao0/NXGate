@@ -49,7 +49,7 @@
             android:name=".service.NXGateTileService"
             android:exported="true"
             android:icon="@drawable/ic_launcher_foreground"
-            android:label="NXGate 网关"
+            android:label="@string/tile_label"
             android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
             <intent-filter>
                 <action android:name="android.service.quicksettings.action.QS_TILE" />

@@ -67,6 +67,99 @@ import { I18N } from './i18n.js';
             return getLanguage() === 'en' ? en : zh;
         }
 
+        const NODE_SOURCE_MAP_EN = {
+            'GitHub Pages 实时镜像': 'GitHub Pages Live Mirror',
+            'VPNGate 官方 HTTPS API': 'VPNGate Official HTTPS API',
+            'VPNGate 官方 HTTP API': 'VPNGate Official HTTP API',
+            'NXGate 实时镜像 (Data 分支)': 'NXGate Live Mirror (Data)',
+            'NXGate 高速压缩镜像 (Gzip)': 'NXGate Gzip Mirror',
+            'GitHub Raw 直链镜像': 'GitHub Raw Mirror',
+            'Fastly 全球加速 CDN': 'Fastly Global CDN',
+            'GitHub 镜像加速源': 'GitHub Accelerated Mirror',
+            '用户 GitHub 镜像源 (Main 种子)': 'GitHub Main Seed Mirror',
+            'jsDelivr 全球加速 CDN': 'jsDelivr Global CDN',
+        };
+
+        function localizeNodeSource(src) {
+            if (!src) return localize('未知', 'Unknown');
+            if (getLanguage() !== 'en') return src;
+            return String(src).split(/\s*\+\s*/).map(part => NODE_SOURCE_MAP_EN[part.trim()] || part.trim()).join(' + ');
+        }
+
+        function localizeLastMessage(msg) {
+            if (!msg) return localize('服务正常运行中', 'Service running normally');
+            if (getLanguage() !== 'en') return msg;
+            const s = String(msg);
+            const exact = {
+                'VPN 服务已就绪，未连接': 'VPN service ready (disconnected)',
+                '服务就绪': 'Service ready',
+                '隧道池未初始化': 'Tunnel pool not initialized',
+                '连接超时': 'Connection timed out',
+                '连接异常中断 (进程已退出)': 'Connection interrupted (process exited)',
+                'VPN 隧道已成功连通并就绪': 'VPN tunnel connected and ready',
+                '检测到隧道中断，已转交主出口动态组按既定国家/纯净度约束重新选路...': 'Tunnel interrupted; handed off to primary egress group for re-routing...',
+                '检测到隧道中断，正在挑选最优新节点自动切换...': 'Tunnel interrupted; selecting optimal replacement node...',
+            };
+            if (exact[s]) return exact[s];
+            let m;
+            if ((m = s.match(/^用户态免 TUN 直连已就绪 \(虚拟 IP: ([^,]+), 端口: (\d+)\)$/))) {
+                return `Zero-TUN userland connected (Virtual IP: ${m[1]}, Port: ${m[2]})`;
+            }
+            if ((m = s.match(/^正在发起对节点 (\S+) \(([^)]+)\) 的内核 OpenVPN 连接\.\.\.$/))) {
+                return `Connecting to ${m[1]} (${m[2]}) via kernel OpenVPN...`;
+            }
+            if ((m = s.match(/^正在通过用户态 SSTP \(免 TUN\) 连接 (\S+) \(([^)]+)\)\.\.\.$/))) {
+                return `Connecting to ${m[1]} (${m[2]}) via userland Zero-TUN (SSTP)...`;
+            }
+            if ((m = s.match(/^用户态隧道 (\S+) 握手成功但无法转发 IP 报文$/))) {
+                return `Userland tunnel ${m[1]} completed handshake but failed to forward packets`;
+            }
+            if ((m = s.match(/^启动主隧道失败:\s*(.+)$/))) {
+                return `Failed to start primary tunnel: ${m[1]}`;
+            }
+            if ((m = s.match(/^用户态 SSTP 直连失败:\s*(.+)$/))) {
+                return `Zero-TUN SSTP connection failed: ${m[1]}`;
+            }
+            if ((m = s.match(/^已断开连接:\s*(.+)$/))) {
+                return `Disconnected: ${m[1]}`;
+            }
+            return s;
+        }
+
+        function localizeGroupStatus(text) {
+            if (!text) return localize('正常', 'Normal');
+            if (getLanguage() !== 'en') return text;
+            const exact = {
+                '正常': 'Normal',
+                '运行中': 'Running',
+                '主网关正常运行': 'Primary Gateway Running',
+                '未开启': 'Disabled',
+                '降级运行中': 'Fallback Active',
+                '正在选路...': 'Selecting...',
+            };
+            return exact[text] || text;
+        }
+
+        function formatOutboundLabel(ob) {
+            if (getLanguage() !== 'en') return ob.label;
+            if (ob.type === 'direct' || ob.addr === 'direct') {
+                return 'Direct Exit (VPS native network, no chain)';
+            }
+            const portMatch = ob.port || (ob.addr && ob.addr.match(/:(\d+)/)?.[1]) || '';
+            const hasAuth = (ob.addr && ob.addr.includes('@')) || (ob.label && ob.label.includes('密码保护'));
+            const authNote = hasAuth ? 'Auth' : 'No Auth';
+            if (ob.is_default) {
+                return `NXGate Default Exit (PORT ${portMatch || '7928'} - SOCKS5 TCP+UDP ${authNote})`;
+            }
+            const tMatch = ob.label && ob.label.match(/(\d+)\s*隧道/);
+            const gMatch = ob.label && ob.label.match(/(\d+)\s*动态组/);
+            const parts = [];
+            if (tMatch) parts.push(`${tMatch[1]} tunnels`);
+            if (gMatch) parts.push(`${gMatch[1]} groups`);
+            const boundDesc = parts.length ? ` - ${parts.join(', ')}` : '';
+            return `Multi-Port Exit (PORT ${portMatch} - SOCKS5 TCP+UDP ${authNote}${boundDesc})`;
+        }
+
         function tConfirm(zhMsg, enMsg) {
             return confirm(getLanguage() === 'en' ? enMsg : zhMsg);
         }
@@ -117,20 +210,10 @@ import { I18N } from './i18n.js';
             const hash = (window.location.hash || '#dashboard').replace(/^#/, '');
             switchView(hash);
             if (currentState) {
-                const traffic = currentState.traffic || {};
-                const downEl = document.getElementById('stat-total-down');
-                if (downEl) downEl.innerText = t('stat.total_down') + formatBytes(traffic.total_download_bytes || 0);
-                const upEl = document.getElementById('stat-total-up');
-                if (upEl) upEl.innerText = t('stat.total_up') + formatBytes(traffic.total_upload_bytes || 0);
-                const portEl = document.getElementById('stat-proxy-port');
-                if (portEl) portEl.innerText = `${t('stat.proxy_port')}${currentState.proxy_addr ? currentState.proxy_addr.split(':').pop() : '7928'}`;
-                const vpn = currentState.vpn || {};
+                renderStatus(currentState);
+            } else {
                 const badge = document.getElementById('conn-badge');
-                if (badge) {
-                    if (vpn.status === 'connected') badge.innerHTML = `<span class="status-dot"></span> ${t('header.connected')}`;
-                    else if (vpn.status === 'connecting' || vpn.status === 'reconnecting') badge.innerHTML = `<span class="status-dot"></span> ${t('header.connecting')}`;
-                    else badge.innerHTML = `<span class="status-dot"></span> ${t('header.disconnected')}`;
-                }
+                if (badge) badge.innerHTML = `<span class="status-dot"></span> ${t('header.checking')}`;
             }
             if (allNodes.length > 0) renderNodes(allNodes);
             if (singBoxOverview) renderSingBox(singBoxOverview);
@@ -143,7 +226,6 @@ import { I18N } from './i18n.js';
                 renderTunnelCheckboxes(selectedTunnels, selectedGroups);
             }
             updateProtoHelpText(currentSelectedProto);
-            if (currentState) fetchStatus();
             showToast(lang === 'en' ? 'Language switched to English' : '已切换至简体中文');
         }
 
@@ -270,7 +352,7 @@ import { I18N } from './i18n.js';
 
         async function probeTunnelUnlock(tunnelId) {
             const isEn = getLanguage() === 'en';
-            appendLog({ level: 'INFO', module: 'Unlock', message: `正在对出口 [${tunnelId}] 启动流媒体与 AI 解锁探测...` });
+            appendLog({ level: 'INFO', module: 'Unlock', message: localize(`正在对出口 [${tunnelId}] 启动流媒体与 AI 解锁探测...`, `Probing AI & streaming unlocks for exit [${tunnelId}]...`) });
             const btn = document.querySelector(`[data-action="probeTunnelUnlock"][data-args*="${tunnelId}"]`);
             if (btn) {
                 btn.disabled = true;
@@ -373,7 +455,10 @@ import { I18N } from './i18n.js';
                 document.getElementById('stat-total-down').innerText = t('stat.total_down') + formatBytes(traffic.total_download_bytes || 0);
                 document.getElementById('stat-total-up').innerText = t('stat.total_up') + formatBytes(traffic.total_upload_bytes || 0);
                 document.getElementById('stat-active-conns').innerText = traffic.active_connections || 0;
-                document.getElementById('stat-proxy-port').innerText = `${t('stat.proxy_port')}${data.proxy_addr ? data.proxy_addr.split(':').pop() : '7928'}`;
+                const defPort = data.proxy_addr ? data.proxy_addr.split(':').pop() : '7928';
+                document.getElementById('stat-proxy-port').innerText = `${t('stat.proxy_port')}${defPort}`;
+                const sbBatchPort = document.getElementById('sb-batch-port');
+                if (sbBatchPort) sbBatchPort.innerText = defPort;
 
                 // Status Badge & Buttons
                 const badge = document.getElementById('conn-badge');
@@ -427,7 +512,7 @@ import { I18N } from './i18n.js';
                 }
 
                 document.getElementById('vpn-proxy-addr').innerText = data.proxy_addr ? `${data.proxy_addr} (HTTP/SOCKS5)` : '-';
-                document.getElementById('vpn-last-msg').innerText = vpn.last_message || (isEn ? 'Service running normally' : '服务正常运行中');
+                document.getElementById('vpn-last-msg').innerText = localizeLastMessage(vpn.last_message);
 
                 if (vpn.uptime_seconds > 0) {
                     const m = Math.floor(vpn.uptime_seconds / 60);
@@ -439,7 +524,7 @@ import { I18N } from './i18n.js';
 
                 const totalStr = data.total_node_count && data.total_node_count > data.node_count ? (isEn ? ` (All: ${data.total_node_count})` : ` (历史全库: ${data.total_node_count})`) : '';
                 document.getElementById('stat-nodes-count').innerText = `${data.node_count || 0}${totalStr} / ${isEn ? 'Blocked ' : '屏蔽 '}${data.blacklist_count || 0}`;
-                document.getElementById('stat-node-source').innerText = `${isEn ? 'Source: ' : '数据源: '}${data.node_source || (isEn ? 'Unknown' : '未知')}`;
+                document.getElementById('stat-node-source').innerText = `${isEn ? 'Source: ' : '数据源: '}${localizeNodeSource(data.node_source)}`;
 
                 // Render active tunnels strip sorted stably by virtual interface index (tun0, tun1, tun2...)
                 const tunnels = (data.tunnels || []).sort((a, b) => {
@@ -1034,7 +1119,7 @@ import { I18N } from './i18n.js';
 
         async function connectToNode(nodeId, mode = 'kernel') {
             const isUserland = mode === 'sstp' || mode === 'userland';
-            appendLog({ level: 'INFO', module: 'Action', message: `正在请求切换至节点: ${nodeId} [${isUserland ? '免 TUN 用户态 SSTP' : '内核 OpenVPN'}]...` });
+            appendLog({ level: 'INFO', module: 'Action', message: localize(`正在请求切换至节点: ${nodeId} [${isUserland ? '免 TUN 用户态 SSTP' : '内核 OpenVPN'}]...`, `Switching exit node to ${nodeId} [${isUserland ? 'Zero-TUN SSTP' : 'Kernel OpenVPN'}]...`) });
             await fetch('/api/connect', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1336,7 +1421,7 @@ import { I18N } from './i18n.js';
                     activeCount = 1;
                 }
                 const statusClass = activeCount >= g.target_count ? 'connected' : (activeCount > 0 ? 'connecting' : 'disconnected');
-                const statusText = g.status_text || (isEn ? 'Normal' : '正常');
+                const statusText = localizeGroupStatus(g.status_text);
 
                 let fallbackInfo = '';
                 if (g.fallback_policy && g.fallback_policy !== 'none') {
@@ -1394,7 +1479,7 @@ import { I18N } from './i18n.js';
 
         function showAddDynamicGroupForm() {
             editingGroupId = null;
-            document.getElementById('dynamic-group-edit-title').innerText = '新建动态出口组';
+            document.getElementById('dynamic-group-edit-title').innerText = localize('新建动态出口组', 'New Dynamic Egress Group');
             document.getElementById('dg-name').value = '';
             const modeEl = document.getElementById('dg-connect-mode');
             if (modeEl) modeEl.value = 'tun';
@@ -1418,10 +1503,10 @@ import { I18N } from './i18n.js';
             editingGroupId = id;
             const isSys = g.is_system || g.id === 'system-primary';
             if (isSys) {
-                document.getElementById('dynamic-group-edit-title').innerText = '配置主出口自动轮换策略';
+                document.getElementById('dynamic-group-edit-title').innerText = localize('配置主出口自动轮换策略', 'Configure Primary Exit Rotation Policy');
                 document.getElementById('dg-count-container').classList.add('hidden');
             } else {
-                document.getElementById('dynamic-group-edit-title').innerText = `编辑出口组: ${g.name}`;
+                document.getElementById('dynamic-group-edit-title').innerText = localize(`编辑出口组: ${g.name}`, `Edit Egress Group: ${g.name}`);
                 document.getElementById('dg-count-container').classList.remove('hidden');
             }
             document.getElementById('dg-name').value = g.name;
@@ -1480,7 +1565,7 @@ import { I18N } from './i18n.js';
                 const ret = await res.json();
                 if (!res.ok) { tAlert('保存失败: ' + (ret.error || '未知错误'), 'Save failed: ' + (ret.error || 'Unknown error')); return; }
                 hideDynamicGroupForm();
-                appendLog({ level: 'INFO', module: 'Action', message: `动态出口组 [${name}] 已成功保存！` });
+                appendLog({ level: 'INFO', module: 'Action', message: localize(`动态出口组 [${name}] 已成功保存！`, `Dynamic egress group [${name}] saved.`) });
                 await fetchDynamicGroups();
                 fetchStatus();
             } catch(err) {
@@ -1502,7 +1587,7 @@ import { I18N } from './i18n.js';
         }
 
         async function evaluateDynamicGroups() {
-            appendLog({ level: 'INFO', module: 'Action', message: '正在触发出口组重新评估轮换...' });
+            appendLog({ level: 'INFO', module: 'Action', message: localize('正在触发出口组重新评估轮换...', 'Re-evaluating dynamic egress groups...') });
             try {
                 await fetch('/api/tunnel-groups/evaluate', { method: 'POST' });
                 setTimeout(async () => {
@@ -1555,7 +1640,7 @@ import { I18N } from './i18n.js';
                 document.execCommand('copy');
                 document.body.removeChild(ta);
             }
-            showToast(`已复制: ${label || text}`);
+            showToast(localize(`已复制: ${label || text}`, `Copied: ${label || text}`));
         }
 
         function renderMatrixTopology() {
@@ -2972,7 +3057,7 @@ import { I18N } from './i18n.js';
                     } else if (n.outbound) {
                         isSelected = n.outbound.includes(ob.addr);
                     }
-                    return `<option value="${escapeHtml(ob.addr)}" ${isSelected ? 'selected' : ''}>${escapeHtml(ob.label)}</option>`;
+                    return `<option value="${escapeHtml(ob.addr)}" ${isSelected ? 'selected' : ''}>${escapeHtml(formatOutboundLabel(ob))}</option>`;
                 }).join('');
 
                 const isChained = n.outbound && n.outbound !== 'direct';
@@ -3040,7 +3125,7 @@ import { I18N } from './i18n.js';
             const sel = document.getElementById('sb-add-outbound');
             const outbounds = singBoxOverview.available_outbounds || [];
             sel.innerHTML = outbounds.map(ob => {
-                return `<option value="${escapeHtml(ob.addr)}" ${ob.is_default ? 'selected' : ''}>${escapeHtml(ob.label)}</option>`;
+                return `<option value="${escapeHtml(ob.addr)}" ${ob.is_default ? 'selected' : ''}>${escapeHtml(formatOutboundLabel(ob))}</option>`;
             }).join('');
 
             filterProtoGrid('all');
@@ -3222,7 +3307,7 @@ import { I18N } from './i18n.js';
                     tAlert('批量修改出口失败: ' + (ret.error || '未知错误'), 'Batch egress update failed: ' + (ret.error || 'Unknown error'));
                     return;
                 }
-                showToast(`已成功将 ${ret.updated_count || localize('全部', 'All')} 个节点切换至: ${targetOutbound}`);
+                showToast(localize(`已成功将 ${ret.updated_count || '全部'} 个节点切换至: ${targetOutbound}`, `Updated ${ret.updated_count || 'all'} nodes to egress: ${targetOutbound}`));
                 await fetchSingBoxOverview();
             } catch (err) {
                 alert(localize('网络请求失败: ', 'Network request failed: ') + err);
@@ -3319,7 +3404,7 @@ import { I18N } from './i18n.js';
                 tAlert('该节点暂无有效客户端分享链接', 'No valid client share link for this node');
                 return;
             }
-            copyText(url, `${proto || '代理'} 客户端分享链接`);
+            copyText(url, localize(`${proto || '代理'} 客户端分享链接`, `${proto || 'Proxy'} client share link`));
         }
 
         function showNodeQRCode(url, title) {
@@ -3598,7 +3683,7 @@ import { I18N } from './i18n.js';
                     toggleEl.checked = !isEnabled;
                     return;
                 }
-                showToast(`age 订阅端到端加密已${isEnabled ? '开启' : '关闭'}`);
+                showToast(localize(`age 订阅端到端加密已${isEnabled ? '开启' : '关闭'}`, `age subscription encryption ${isEnabled ? 'enabled' : 'disabled'}`));
                 await fetchSingBoxOverview();
             } catch (err) {
                 alert(localize('网络请求失败: ', 'Network request failed: ') + err);

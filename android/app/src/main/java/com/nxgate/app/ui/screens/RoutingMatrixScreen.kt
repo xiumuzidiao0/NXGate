@@ -1,7 +1,7 @@
 package com.nxgate.app.ui.screens
 
 import com.nxgate.app.util.policyLabel
-
+import com.nxgate.app.util.localizeOutboundLabel
 import com.nxgate.app.util.localized
 
 import android.content.res.Configuration
@@ -492,7 +492,7 @@ fun RoutingMatrixScreen(
                                     val masterIp = (masterTunnel?.nodeIp ?: masterInfo.nodeIp.ifEmpty { activeServer?.exitIp ?: "" }).ifEmpty { if (isEn) "Connected" else "已连通" }
                                     val masterPort = if ((masterTunnel?.nodePort ?: 0) > 0) masterTunnel!!.nodePort else 443
                                     val masterLat = if ((masterTunnel?.latencyMs ?: 0) > 0) masterTunnel!!.latencyMs else masterInfo.latencyMs
-                                    val masterLeaves = if (masterIp != "未连接" && masterIp.isNotEmpty()) {
+                                    val masterLeaves = if (masterIp !in listOf("", "未连接", "Disconnected")) {
                                         listOf(
                                             PipelineLeaf(
                                                 devName = masterTunnel?.devName ?: (if (masterInfo.isZeroTun) "sstp-1422" else "tun0"),
@@ -1229,21 +1229,21 @@ fun RoutingMatrixScreen(
     if (showAddInboundDialog) {
         val protoCategories = listOf(
             (if (isEn) "Recommended (No Domain)" else "推荐免域名") to listOf(
-                "reality" to "VLESS-REALITY (免域名)",
-                "rh2" to "VLESS-H2-REALITY (多路复用)",
-                "hy2" to "Hysteria2 (QUIC丢包克星)",
-                "tuic" to "TUIC v5 (BBR拥塞控制)",
+                "reality" to if (isEn) "VLESS-REALITY (No Domain)" else "VLESS-REALITY (免域名)",
+                "rh2" to if (isEn) "VLESS-H2-REALITY (Multiplex)" else "VLESS-H2-REALITY (多路复用)",
+                "hy2" to if (isEn) "Hysteria2 (QUIC)" else "Hysteria2 (QUIC丢包克星)",
+                "tuic" to if (isEn) "TUIC v5 (BBR)" else "TUIC v5 (BBR拥塞控制)",
                 "ss" to "Shadowsocks 2022"
             ),
             (if (isEn) "Popular Direct" else "经典穿透") to listOf(
-                "trojan" to "Trojan (经典HTTPS伪装)",
-                "anytls" to "AnyTLS (抗阻断传输)",
-                "socks" to "Socks5 (标准局域网代理)",
-                "direct" to "Direct (端口转发中继)"
+                "trojan" to if (isEn) "Trojan (HTTPS)" else "Trojan (经典HTTPS伪装)",
+                "anytls" to if (isEn) "AnyTLS (Anti-Blocking)" else "AnyTLS (抗阻断传输)",
+                "socks" to if (isEn) "Socks5 (Standard Proxy)" else "Socks5 (标准局域网代理)",
+                "direct" to if (isEn) "Direct (Port Forward)" else "Direct (端口转发中继)"
             ),
             (if (isEn) "CDN / Domain TLS" else "CDN/域名TLS") to listOf(
-                "vws" to "VLESS-WS-TLS (CDN优选)",
-                "wss" to "VMess-WS-TLS (救砖方案)",
+                "vws" to if (isEn) "VLESS-WS-TLS (CDN)" else "VLESS-WS-TLS (CDN优选)",
+                "wss" to if (isEn) "VMess-WS-TLS (CDN)" else "VMess-WS-TLS (救砖方案)",
                 "tws" to "Trojan-WS-TLS",
                 "vhu" to "VLESS-HTTPUpgrade-TLS",
                 "hu" to "VMess-HTTPUpgrade-TLS",
@@ -1253,9 +1253,9 @@ fun RoutingMatrixScreen(
                 "th2" to "Trojan-H2-TLS"
             ),
             (if (isEn) "Raw Transport" else "原生传输") to listOf(
-                "ws" to "VMess-WS (明文反代)",
+                "ws" to if (isEn) "VMess-WS (Plaintext)" else "VMess-WS (明文反代)",
                 "tcp" to "VMess-TCP",
-                "http" to "HTTP 代理",
+                "http" to if (isEn) "HTTP Proxy" else "HTTP 代理",
                 "quic" to "VMess-QUIC"
             )
         )
@@ -1314,7 +1314,7 @@ fun RoutingMatrixScreen(
                         options = availableOutbounds,
                         selectedOption = selectedInboundOutboundOption,
                         onOptionSelected = { selectedInboundOutboundOption = it },
-                        optionLabel = { it.label }
+                        optionLabel = { localizeOutboundLabel(it.label, it.addr, it.port, isEn) }
                     )
                 }
             },
@@ -1371,7 +1371,7 @@ fun RoutingMatrixScreen(
                         options = availableOutbounds,
                         selectedOption = switchOutboundTargetOption,
                         onOptionSelected = { switchOutboundTargetOption = it },
-                        optionLabel = { it.label }
+                        optionLabel = { localizeOutboundLabel(it.label, it.addr, it.port, isEn) }
                     )
                 }
             },
@@ -1385,7 +1385,8 @@ fun RoutingMatrixScreen(
                                     if (it.id == inbound.id) it.copy(outbound = switchOutboundTargetOption.addr, outboundLabel = switchOutboundTargetOption.label) else it
                                 }
                                 inbounds = updated
-                                Toast.makeText(context, strings.localized("[${inbound.name}] 出口已改挂至: ${switchOutboundTargetOption.label}", "[${inbound.name}] egress changed to: ${switchOutboundTargetOption.label}"), Toast.LENGTH_SHORT).show()
+                                val dispLabel = localizeOutboundLabel(switchOutboundTargetOption.label, switchOutboundTargetOption.addr, switchOutboundTargetOption.port, isEn)
+                                Toast.makeText(context, strings.localized("[${inbound.name}] 出口已改挂至: $dispLabel", "[${inbound.name}] egress changed to: $dispLabel"), Toast.LENGTH_SHORT).show()
                             }
                         }
                         selectedInboundForOutboundSwitch = null

@@ -15,6 +15,7 @@ import com.nxgate.app.R
 import com.nxgate.app.model.LiveTrafficInfo
 import com.nxgate.app.model.MasterGatewayInfo
 import com.nxgate.app.model.ServerProfile
+import com.nxgate.app.util.isAppEnglish
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -76,11 +77,7 @@ class NXGateWidgetProvider : AppWidgetProvider() {
             )
             views.setOnClickPendingIntent(R.id.widget_btn_refresh, refreshPendingIntent)
 
-            val isEn = when (NXGateApplication.instance.serverStore.appLanguage.value) {
-                "en" -> true
-                "zh" -> false
-                else -> !java.util.Locale.getDefault().language.startsWith("zh")
-            }
+            val isEn = isAppEnglish()
             views.setTextViewText(R.id.widget_btn_rotate, if (isEn) "Rotate" else "换线")
             views.setTextViewText(R.id.widget_btn_refresh, if (isEn) "Refresh" else "刷新")
             views.setTextViewText(R.id.widget_btn_open, if (isEn) "Console" else "控制台")
@@ -184,21 +181,22 @@ class NXGateWidgetProvider : AppWidgetProvider() {
 
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent)
+        val isEn = isAppEnglish()
         when (intent.action) {
             ACTION_WIDGET_ROTATE -> {
                 val server = NXGateApplication.instance.serverStore.activeServer.value
                     ?: NXGateApplication.instance.serverStore.servers.value.firstOrNull()
                 if (server == null) {
-                    Toast.makeText(context, "未配置任何网关服务器", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, if (isEn) "No gateway server configured" else "未配置任何网关服务器", Toast.LENGTH_SHORT).show()
                     return
                 }
 
-                Toast.makeText(context, "正在为 [${server.name}] 换线...", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, if (isEn) "Rotating [${server.name}]..." else "正在为 [${server.name}] 换线...", Toast.LENGTH_SHORT).show()
                 val pendingResult = goAsync()
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
                         val res = NXGateApplication.instance.apiClient.triggerRotate(server)
-                        val msg = res.getOrDefault("已触发换线评估")
+                        val msg = res.getOrDefault(if (isEn) "Rotation triggered" else "已触发换线评估")
                         withContext(Dispatchers.Main) {
                             Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                         }
@@ -219,7 +217,7 @@ class NXGateWidgetProvider : AppWidgetProvider() {
                         }
                     } catch (e: Exception) {
                         withContext(Dispatchers.Main) {
-                            Toast.makeText(context, "换线失败: ${e.message}", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "${if (isEn) "Rotation failed: " else "换线失败: "}${e.message}", Toast.LENGTH_SHORT).show()
                         }
                     } finally {
                         pendingResult.finish()
@@ -248,7 +246,7 @@ class NXGateWidgetProvider : AppWidgetProvider() {
                                         appWidgetManager.updateAppWidget(id, views)
                                     }
                                     withContext(Dispatchers.Main) {
-                                        Toast.makeText(context, "网关状态已刷新", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, if (isEn) "Gateway status refreshed" else "网关状态已刷新", Toast.LENGTH_SHORT).show()
                                     }
                                 }
                             }
@@ -258,7 +256,7 @@ class NXGateWidgetProvider : AppWidgetProvider() {
                         }
                     }
                 } else {
-                    Toast.makeText(context, "网关状态已刷新", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, if (isEn) "Gateway status refreshed" else "网关状态已刷新", Toast.LENGTH_SHORT).show()
                 }
             }
         }

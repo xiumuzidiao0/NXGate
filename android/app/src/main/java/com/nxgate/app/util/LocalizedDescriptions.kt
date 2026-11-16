@@ -21,11 +21,39 @@ fun AppStrings.bindingLabel(rule: PortRuleItem): String = if (this != AppStrings
 fun AppStrings.inboundTitle(inbound: InboundProtocolItem): String =
     if (this == AppStringsEn) "Inbound: ${inbound.protocol} (port ${inbound.port})" else inbound.title
 
+fun localizeOutboundLabel(label: String, outbound: String = "direct", port: Int = 0, isEn: Boolean): String {
+    if (!isEn) {
+        return label.ifEmpty { if (outbound == "direct") "直连出口 (VPS 本机原生网络)" else "出口指向: $outbound" }
+    }
+    if (label.isEmpty()) {
+        return if (outbound == "direct") "Direct (VPS network)" else outbound
+    }
+    if (label.startsWith("直连出口")) {
+        return "Direct Exit (VPS native network, no chain)"
+    }
+    if (label.startsWith("NXGate 默认出口")) {
+        val p = Regex("""PORT\s+(\d+)""").find(label)?.groupValues?.get(1) ?: (if (port > 0) "$port" else "7928")
+        val auth = if (label.contains("密码保护")) "Auth" else "No Auth"
+        return "NXGate Default Exit (PORT $p - SOCKS5 TCP+UDP $auth)"
+    }
+    if (label.startsWith("多端口出口")) {
+        val p = Regex("""PORT\s+(\d+)""").find(label)?.groupValues?.get(1) ?: (if (port > 0) "$port" else "")
+        val auth = if (label.contains("密码保护")) "Auth" else "No Auth"
+        val tCount = Regex("""(\d+)\s*隧道""").find(label)?.groupValues?.get(1)
+        val gCount = Regex("""(\d+)\s*动态组""").find(label)?.groupValues?.get(1)
+        val extras = listOfNotNull(
+            tCount?.let { "$it tunnels" },
+            gCount?.let { "$it groups" }
+        ).joinToString(", ")
+        val suffix = if (extras.isNotEmpty()) " - $extras" else ""
+        return "Multi-Port Exit (PORT $p - SOCKS5 TCP+UDP $auth$suffix)"
+    }
+    return label
+}
+
 fun AppStrings.inboundSubtitle(inbound: InboundProtocolItem): String {
     if (this != AppStringsEn) return inbound.subtitle
-    val egress = inbound.outboundLabel.ifEmpty {
-        if (inbound.outbound == "direct") "Direct (VPS network)" else inbound.outbound
-    }
+    val egress = localizeOutboundLabel(inbound.outboundLabel, inbound.outbound, inbound.outboundPort, isEn = true)
     return "Port ${inbound.port} • $egress"
 }
 

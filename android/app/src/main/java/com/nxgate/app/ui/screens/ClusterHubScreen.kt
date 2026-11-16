@@ -240,7 +240,7 @@ fun ClusterHubScreen(
                                             val res = NXGateApplication.instance.apiClient.triggerRotate(server)
                                             Toast.makeText(
                                                 context,
-                                                res.getOrDefault("已触发 [${server.name}] 动态重评换线！"),
+                                                res.getOrDefault(strings.localized("已触发 [${server.name}] 动态重评换线！", "Triggered [${server.name}] re-evaluation & rotation!")),
                                                 Toast.LENGTH_SHORT
                                             ).show()
                                         }

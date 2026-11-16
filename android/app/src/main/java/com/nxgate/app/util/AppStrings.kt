@@ -632,3 +632,13 @@ val LocalAppStrings = staticCompositionLocalOf<AppStrings> { AppStringsZh }
 /** Select app-owned UI copy; never use this to translate user or server content. */
 fun AppStrings.localized(chinese: String, english: String): String =
     if (this == AppStringsEn) english else chinese
+
+fun isAppEnglish(): Boolean {
+    val lang = runCatching { com.nxgate.app.NXGateApplication.instance.serverStore.appLanguage.value }
+        .getOrDefault("auto")
+    return when (lang) {
+        "en" -> true
+        "zh" -> false
+        else -> !java.util.Locale.getDefault().language.startsWith("zh")
+    }
+}

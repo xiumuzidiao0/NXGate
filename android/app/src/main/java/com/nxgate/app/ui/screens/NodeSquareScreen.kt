@@ -309,7 +309,7 @@ fun FullNodeCard(
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                    text = "${node.score} 分",
+                    text = if (strings == AppStringsEn) "${node.score} pts" else "${node.score} 分",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.Bold
@@ -991,9 +991,9 @@ fun NodeSquareScreen(
                         val targetNodeId = if (isSubnet && subnet24.isNotEmpty()) subnet24 else node.id
                         val targetIp = if (isSubnet && subnet24.isNotEmpty()) subnet24 else node.ip
                         val reasonStr = when (blockOptionSelected) {
-                            2 -> "用户手动永久屏蔽网段 ($subnet24)"
-                            1 -> "用户临时隔离 24 小时"
-                            else -> "用户手动永久屏蔽"
+                            2 -> strings.localized("用户手动永久屏蔽网段 ($subnet24)", "Manual permanent subnet block ($subnet24)")
+                            1 -> strings.localized("用户临时隔离 24 小时", "Manual 24h temporary quarantine")
+                            else -> strings.localized("用户手动永久屏蔽", "Manual permanent block")
                         }
                         if (activeServer != null) {
                             scope.launch {
