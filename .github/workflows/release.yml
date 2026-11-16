@@ -54,11 +54,11 @@ jobs:
           npx --prefix web playwright install --with-deps chromium
           npm --prefix web run test:ui
 
-      - name: Set up JDK 17 for Android Build
+      - name: Set up JDK 21 for Android Build
         uses: actions/setup-java@v5
         with:
           distribution: "temurin"
-          java-version: "17"
+          java-version: "21"
 
       - name: Build Android Release APK
         run: |
