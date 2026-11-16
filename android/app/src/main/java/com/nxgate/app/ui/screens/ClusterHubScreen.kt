@@ -52,6 +52,7 @@ import com.nxgate.app.ui.components.ConnectedButtonGroup
 import com.nxgate.app.ui.components.ConnectedButtonStyle
 import com.nxgate.app.ui.components.SubscriptionDialog
 import com.nxgate.app.util.LocalAppStrings
+import com.nxgate.app.util.localized
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
