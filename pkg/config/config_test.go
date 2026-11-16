@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -122,14 +123,52 @@ func TestLoadConfigPreservesExplicitUIHost(t *testing.T) {
 }
 
 func TestWebAccessURL(t *testing.T) {
-	for _, tc := range []struct{ host, want string }{
-		{"", "<SERVER-IP>"}, {"0.0.0.0", "<SERVER-IP>"}, {"::", "<SERVER-IP>"},
-		{"127.0.0.1", "127.0.0.1"}, {"::1", "[::1]"}, {"[2001:db8::1]", "[2001:db8::1]"},
-		{"console.example.com", "console.example.com"},
+	for _, tc := range []struct{ host, path, want string }{
+		{"", "/enter/", "http://<SERVER-IP>:8787/enter/"},
+		{"0.0.0.0", "/enter/", "http://<SERVER-IP>:8787/enter/"},
+		{"::", "/enter/", "http://<SERVER-IP>:8787/enter/"},
+		{"127.0.0.1", "/enter/", "http://127.0.0.1:8787/enter/"},
+		{"::1", "/enter/", "http://[::1]:8787/enter/"},
+		{"[2001:db8::1]", "/enter/", "http://[2001:db8::1]:8787/enter/"},
+		{"console.example.com", "/enter/", "http://console.example.com:8787/enter/"},
+		{"0.0.0.0", "", "http://<SERVER-IP>:8787/"},
 	} {
-		got := WebAccessURL(tc.host, 8787, "/enter/")
-		if want := "http://" + tc.want + ":8787/enter/"; got != want {
-			t.Errorf("host %q: got %q, want %q", tc.host, got, want)
+		got := WebAccessURL(tc.host, 8787, tc.path)
+		if got != tc.want {
+			t.Errorf("host %q path %q: got %q, want %q", tc.host, tc.path, got, tc.want)
 		}
+	}
+}
+
+func TestLoadConfigExplicitEmptyDisablesPathAndAuth(t *testing.T) {
+	dataDir := t.TempDir()
+	t.Setenv("DATA_DIR", dataDir)
+	t.Setenv("UI_PATH", "")
+	t.Setenv("UI_USERNAME", "")
+	t.Setenv("UI_PASSWORD", "")
+
+	cfg := LoadConfig()
+	if cfg.UIPath != "" {
+		t.Fatalf("expected UIPath to be disabled when UI_PATH='', got %q", cfg.UIPath)
+	}
+	if cfg.UIUsername != "" || cfg.UIPassword != "" || cfg.IsUIAuthEnabled() {
+		t.Fatalf("expected UI auth to be disabled when UI_USERNAME='' and UI_PASSWORD='', got user=%q auth=%v", cfg.UIUsername, cfg.IsUIAuthEnabled())
+	}
+	if _, err := os.Stat(filepath.Join(dataDir, "admin_path.txt")); !os.IsNotExist(err) {
+		t.Fatalf("expected admin_path.txt not to be created when UI_PATH='', err=%v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dataDir, "ui_password.txt")); !os.IsNotExist(err) {
+		t.Fatalf("expected ui_password.txt not to be created when UI_PASSWORD='', err=%v", err)
+	}
+
+	// Persisting unrelated settings while path & auth are disabled must survive restart cleanly.
+	dto := cfg.GetSettings()
+	dto.TelegramChatID = "123456"
+	if err := cfg.UpdateSettings(dto); err != nil {
+		t.Fatalf("UpdateSettings failed with auth disabled: %v", err)
+	}
+	cfg2 := LoadConfig()
+	if cfg2.UIPath != "" || cfg2.IsUIAuthEnabled() || cfg2.TelegramChatID != "123456" {
+		t.Fatalf("unexpected reloaded config: path=%q auth=%v chat=%q", cfg2.UIPath, cfg2.IsUIAuthEnabled(), cfg2.TelegramChatID)
 	}
 }

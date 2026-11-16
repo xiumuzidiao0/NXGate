@@ -30,13 +30,28 @@ func TestSecuritySettingsSurviveRestart(t *testing.T) {
 		t.Fatal("password exposed by GetSettings")
 	}
 }
+func unsetEnvForTest(t *testing.T, key string) {
+	t.Helper()
+	prev, had := os.LookupEnv(key)
+	_ = os.Unsetenv(key)
+	t.Cleanup(func() {
+		if had {
+			_ = os.Setenv(key, prev)
+		} else {
+			_ = os.Unsetenv(key)
+		}
+	})
+}
+
 func TestSecurityInitialPassword(t *testing.T) {
 	t.Setenv("DATA_DIR", t.TempDir())
-	t.Setenv("UI_PASSWORD", "")
-	t.Setenv("UI_USERNAME", "")
+	unsetEnvForTest(t, "UI_PASSWORD")
+	unsetEnvForTest(t, "UI_USERNAME")
+	unsetEnvForTest(t, "UI_PATH")
+	unsetEnvForTest(t, "ADMIN_SECRET_PATH")
 	t.Setenv("UI_HOST", "")
 	c := LoadConfig()
-	if c.UIPassword == "aimilivpn" || len(c.UIPassword) < 32 || c.UIHost != "0.0.0.0" || !c.IsUIAuthEnabled() {
+	if c.UIPassword == "aimilivpn" || len(c.UIPassword) < 32 || c.UIHost != "0.0.0.0" || !c.IsUIAuthEnabled() || c.UIPath == "" {
 		t.Fatal("insecure defaults")
 	}
 	if c.UIPassword != LoadConfig().UIPassword {
@@ -75,7 +90,8 @@ func TestSecurityCorruptSettingsFailClosed(t *testing.T) {
 
 func TestSecuritySavedCredentialsDoNotRebootstrap(t *testing.T) {
 	t.Setenv("DATA_DIR", t.TempDir())
-	t.Setenv("UI_PASSWORD", "")
+	unsetEnvForTest(t, "UI_PASSWORD")
+	unsetEnvForTest(t, "UI_USERNAME")
 	c := LoadConfig()
 	if err := c.UpdateSettings(SettingsDTO{UIPassword: "saved-new-password"}); err != nil {
 		t.Fatal(err)
@@ -89,4 +105,18 @@ func TestSecuritySavedCredentialsDoNotRebootstrap(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(c.DataDir, "ui_password.txt")); !os.IsNotExist(err) {
 		t.Fatal("rebootstrapped despite saved credentials")
 	}
+}
+
+func TestSecurityHalfEmptySettingsFailClosed(t *testing.T) {
+	t.Setenv("DATA_DIR", t.TempDir())
+	c := LoadConfig()
+	if err := os.WriteFile(filepath.Join(c.DataDir, "settings.json"), []byte(`{"ui_username":"admin","ui_password":""}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if recover() == nil {
+			t.Fatal("half-empty saved credentials silently accepted")
+		}
+	}()
+	LoadConfig()
 }

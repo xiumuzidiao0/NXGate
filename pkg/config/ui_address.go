@@ -13,5 +13,9 @@ func WebAccessURL(host string, port int, path string) string {
 	if host == "" || host == "0.0.0.0" || host == "::" {
 		host = "<SERVER-IP>"
 	}
-	return fmt.Sprintf("http://%s/%s/", net.JoinHostPort(host, fmt.Sprint(port)), strings.Trim(path, "/"))
+	trimmedPath := strings.Trim(path, "/")
+	if trimmedPath == "" {
+		return fmt.Sprintf("http://%s/", net.JoinHostPort(host, fmt.Sprint(port)))
+	}
+	return fmt.Sprintf("http://%s/%s/", net.JoinHostPort(host, fmt.Sprint(port)), trimmedPath)
 }

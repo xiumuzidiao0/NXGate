@@ -163,25 +163,38 @@ func LoadConfig() *Config {
 		if err := json.Unmarshal(saved, &dto); err != nil {
 			panic(fmt.Errorf("invalid persisted settings: %w", err))
 		}
-		if strings.TrimSpace(dto.UIUsername) == "" || strings.TrimSpace(dto.UIPassword) == "" {
-			panic("persisted settings must contain nonempty UI credentials")
+		userEmpty := strings.TrimSpace(dto.UIUsername) == ""
+		passEmpty := strings.TrimSpace(dto.UIPassword) == ""
+		if userEmpty != passEmpty {
+			panic("persisted settings must contain nonempty UI credentials or leave both empty to disable auth")
 		}
 		persisted = &dto
 	} else if !os.IsNotExist(err) {
 		panic(fmt.Errorf("read persisted settings: %w", err))
 	}
+	uiUsername, uiUserSet := os.LookupEnv("UI_USERNAME")
+	if uiUserSet {
+		uiUsername = strings.TrimSpace(uiUsername)
+	} else {
+		uiUsername = "admin"
+	}
+
 	uiPassword := ""
 	if persisted != nil {
 		uiPassword = persisted.UIPassword
+	} else if passVal, passSet := os.LookupEnv("UI_PASSWORD"); passSet {
+		uiPassword = strings.TrimSpace(passVal)
 	} else {
 		uiPassword = initialUIPassword(dataDir)
 	}
 
-	uiPath := getEnv("UI_PATH", "")
-	if uiPath == "" {
-		uiPath = getEnv("ADMIN_SECRET_PATH", "")
+	uiPath, uiPathSet := os.LookupEnv("UI_PATH")
+	if !uiPathSet {
+		uiPath, uiPathSet = os.LookupEnv("ADMIN_SECRET_PATH")
 	}
-	if uiPath == "" {
+	if uiPathSet {
+		uiPath = strings.Trim(strings.TrimSpace(uiPath), "/")
+	} else {
 		// Check if saved before
 		secretFile := filepath.Join(dataDir, "admin_path.txt")
 		// #nosec G304 -- path is rooted in the operator-controlled data directory.
@@ -192,8 +205,8 @@ func LoadConfig() *Config {
 			_ = os.WriteFile(secretFile, []byte(uiPath), 0600)
 			_ = os.Chmod(secretFile, 0600)
 		}
+		uiPath = strings.Trim(uiPath, "/")
 	}
-	uiPath = strings.Trim(uiPath, "/")
 
 	subToken := getEnv("SUB_TOKEN", "")
 	if subToken == "" {
@@ -274,7 +287,7 @@ func LoadConfig() *Config {
 		UIHost:            getEnv("UI_HOST", "0.0.0.0"),
 		UIPort:            getEnvInt("UI_PORT", 8787, 1, 65535),
 		UIPath:            uiPath,
-		UIUsername:        getEnv("UI_USERNAME", "admin"),
+		UIUsername:        uiUsername,
 		UIPassword:        uiPassword,
 		SubToken:          subToken,
 		AgeEncryptEnabled: ageEncryptEnabled,

@@ -233,14 +233,22 @@ func main() {
 	fmt.Printf("NXGate Web 监听   : %s:%d\n", cfg.UIHost, cfg.UIPort)
 	fmt.Printf("NXGate Web 控制台 : %s\n", adminURL)
 	fmt.Printf("访问提示         : <SERVER-IP> 请替换为可达的服务器 IP/域名；公网访问需防火墙/NAT 放行，建议 HTTPS 反代。\n")
-	fmt.Printf("管理账号 / 密码   : %s / %s\n", cfg.UIUsername, cfg.UIPassword)
+	if cfg.IsUIAuthEnabled() {
+		fmt.Printf("管理账号 / 密码   : %s / %s\n", cfg.UIUsername, cfg.UIPassword)
+	} else {
+		fmt.Printf("管理账号 / 密码   : 已禁用 (无鉴权)\n")
+	}
 	fmt.Printf("本地代理网关     : %s:%d (支持 SOCKS5 / HTTP / HTTPS CONNECT)\n", cfg.ProxyHost, cfg.ProxyPort)
 	fmt.Printf("Prometheus 指标  : http://<VPS-IP>:%d/metrics\n", cfg.UIPort)
 	fmt.Printf("-------------------------------------------------------------\n\n")
 
 	// Log masked version into RingLog for telemetry and SSE safety
 	stats.LogInfo("Main", "Web 管理控制台 : %s", adminURL)
-	stats.LogInfo("Main", "管理账号 : %s (密码已就绪，已安全脱敏)", cfg.UIUsername)
+	if cfg.IsUIAuthEnabled() {
+		stats.LogInfo("Main", "管理账号 : %s (密码已就绪，已安全脱敏)", cfg.UIUsername)
+	} else {
+		stats.LogInfo("Main", "管理鉴权 : 已禁用 (无基础认证)")
+	}
 	stats.LogInfo("Main", "本地代理网关   : %s:%d (支持 SOCKS5 / HTTP / HTTPS CONNECT)", cfg.ProxyHost, cfg.ProxyPort)
 	stats.LogInfo("Main", "Prometheus 指标: http://<VPS-IP>:%d/metrics", cfg.UIPort)
 	stats.LogInfo("Main", "-------------------------------------------------------------")

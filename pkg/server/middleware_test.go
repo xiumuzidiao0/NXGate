@@ -28,3 +28,25 @@ func TestLimitRequestBody(t *testing.T) {
 		t.Fatalf("expected status 413, got %d", rec.Code)
 	}
 }
+
+func TestMiddlewareDisabledPathAndAuth(t *testing.T) {
+	t.Setenv("DATA_DIR", t.TempDir())
+	t.Setenv("UI_PATH", "")
+	t.Setenv("UI_USERNAME", "")
+	t.Setenv("UI_PASSWORD", "")
+
+	cfg := config.LoadConfig()
+	mw := NewMiddleware(cfg)
+	handler := mw.SecretPathGuard(mw.BasicAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})))
+
+	for _, path := range []string{"/", "/api/status", "/api/settings"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200 on %s when path and auth are disabled, got %d", path, rec.Code)
+		}
+	}
+}

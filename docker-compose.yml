@@ -16,7 +16,7 @@ services:
       - UI_PORT=8787
       - LOCAL_PROXY_HOST=0.0.0.0
       - LOCAL_PROXY_PORT=7928
-      # 可选自定义后台路径与认证（默认随机安全路径）
+      # 可选自定义后台路径与认证（不设置变量时默认生成随机安全路径与随机密码；显式设为空值 '' 则对应禁用）
       # - UI_PATH=/enter
       # - UI_USERNAME=admin
       # - UI_PASSWORD=your_password

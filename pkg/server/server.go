@@ -162,7 +162,11 @@ func (s *Server) Start(ctx context.Context) error {
 	s.mu.Unlock()
 
 	adminURL := config.WebAccessURL(uiHost, ln.Addr().(*net.TCPAddr).Port, s.cfg.UIPath)
-	stats.LogInfo("Server", "Web 控制台已启动，监听: %s，访问入口: %s (用户名: %s；<SERVER-IP> 请替换为可达的服务器地址)", ln.Addr().String(), adminURL, s.cfg.UIUsername)
+	authLabel := s.cfg.UIUsername
+	if !s.cfg.IsUIAuthEnabled() {
+		authLabel = "已禁用(无鉴权)"
+	}
+	stats.LogInfo("Server", "Web 控制台已启动，监听: %s，访问入口: %s (用户名: %s；<SERVER-IP> 请替换为可达的服务器地址)", ln.Addr().String(), adminURL, authLabel)
 	if !isLoopbackHost(uiHost) && s.cfg.IsUIAuthEnabled() {
 		stats.LogWarn("Server", "Web 控制台正在非回环地址上使用明文 HTTP，请务必通过 TLS 反向代理或防火墙限制访问")
 	}

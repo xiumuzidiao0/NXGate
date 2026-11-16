@@ -16,8 +16,17 @@ import (
 
 func TestSecurityRejectDefaultAuth(t *testing.T) {
 	t.Setenv("DATA_DIR", t.TempDir())
-	t.Setenv("UI_USERNAME", "")
-	t.Setenv("UI_PASSWORD", "")
+	for _, key := range []string{"UI_USERNAME", "UI_PASSWORD"} {
+		prev, had := os.LookupEnv(key)
+		_ = os.Unsetenv(key)
+		t.Cleanup(func() {
+			if had {
+				_ = os.Setenv(key, prev)
+			} else {
+				_ = os.Unsetenv(key)
+			}
+		})
+	}
 	cfg := config.LoadConfig()
 	mw := NewMiddleware(cfg)
 	handler := mw.SecretPathGuard(mw.BasicAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(204) })))
