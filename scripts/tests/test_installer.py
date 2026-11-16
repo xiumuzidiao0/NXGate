@@ -355,7 +355,7 @@ setup_singbox_integration
     def go_fixture(self, corrupt=False, wrong_arch=False, fail_download=False, arm=False):
         # Tiny fake toolchain, not a downloaded executable. Exercises the real
         # metadata selection, hashing, staging and final move entirely in tempdir.
-        script = b'#!/bin/bash\nif [ "$1" = env ]; then echo go1.26.10; else echo "go version go1.26.10 linux/amd64"; fi\n'
+        script = b'#!/bin/bash\nif [ "$1" = env ]; then echo go1.26.11; else echo "go version go1.26.11 linux/amd64"; fi\n'
         archive = self.dir / "go.tar.gz"
         with tarfile.open(archive, "w:gz") as tf:
             info = tarfile.TarInfo("go/bin/go")
@@ -364,7 +364,7 @@ setup_singbox_integration
             tf.addfile(info, io.BytesIO(script))
         digest = hashlib.sha256(archive.read_bytes()).hexdigest()
         arch = "armv6l" if arm else "amd64"
-        metadata = [{"version": "go1.26.10", "files": [{"filename": f"go1.26.10.linux-{arch}.tar.gz",
+        metadata = [{"version": "go1.26.11", "files": [{"filename": f"go1.26.11.linux-{arch}.tar.gz",
                      "os": "linux", "arch": "arm64" if wrong_arch else arch, "kind": "archive",
                      "sha256": "0" * 64 if corrupt else digest}]}]
         (self.dir / "metadata.json").write_text(json.dumps(metadata))
@@ -378,7 +378,7 @@ curl() {
     done
     case "$url" in
         'https://go.dev/dl/?mode=json&include=all') cp "$TEST_DIR/metadata.json" "$out" ;;
-        https://go.dev/dl/go1.26.10.linux-*.tar.gz) ''' + ("return 22" if fail_download else 'cp "$TEST_DIR/go.tar.gz" "$out"') + ''' ;;
+        https://go.dev/dl/go1.26.11.linux-*.tar.gz) ''' + ("return 22" if fail_download else 'cp "$TEST_DIR/go.tar.gz" "$out"') + ''' ;;
         *) return 99 ;;
     esac
 }
@@ -391,14 +391,14 @@ install_verified_go
             with self.subTest(arm=arm):
                 shutil.rmtree(self.dir / "install", ignore_errors=True)
                 self.shell(self.go_fixture(arm=arm))
-                target = self.dir / "install/toolchains/go1.26.10/bin/go"
+                target = self.dir / "install/toolchains/go1.26.11/bin/go"
                 self.assertTrue(os.access(target, os.X_OK))
                 urls = (self.dir / "curls").read_text()
                 self.assertIn("--proto =https --proto-redir =https", urls)
                 self.assertIn("linux-armv6l.tar.gz" if arm else "linux-amd64.tar.gz", urls)
 
     def test_go_checksum_mismatch_no_extraction_or_overwrite(self):
-        target = self.dir / "install/toolchains/go1.26.10/bin/go"
+        target = self.dir / "install/toolchains/go1.26.11/bin/go"
         target.parent.mkdir(parents=True)
         target.write_text("existing sentinel")
         result = self.shell(self.go_fixture(corrupt=True), check=False)
