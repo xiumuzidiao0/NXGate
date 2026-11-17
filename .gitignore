@@ -3,8 +3,12 @@
 /dist/
 aimili-vpngate
 *.exe
+*.apk
 *.test
 __debug_bin*
+
+# Published snapshots live on the orphan data branch
+/mirror/
 
 # Configuration & Secrets
 *.env

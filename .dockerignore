@@ -1,0 +1,24 @@
+# Exclude VCS metadata, non-Go projects, local build outputs, and snapshots from Docker build context.
+# Note: web/dist/ and scripts/singbox/ MUST stay included because Go embeds them at compile time.
+.git/
+.github/
+.githooks/
+.codegraph/
+.pi/
+.vscode/
+.idea/
+android/
+bin/
+data/
+dist/
+mirror/
+scripts/tests/
+web/node_modules/
+web/tests/
+web/test-results/
+*.apk
+*.log
+*.tmp
+*.md
+Dockerfile
+docker-compose.yml
