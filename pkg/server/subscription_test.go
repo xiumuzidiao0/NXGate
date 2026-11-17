@@ -502,4 +502,3 @@ func TestSubscriptionGroupPrefixAndFiltering(t *testing.T) {
 		t.Errorf("expected filter=favorites in generated clash URL, got %s", clashSubURL)
 	}
 }
-

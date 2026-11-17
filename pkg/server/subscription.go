@@ -16,9 +16,9 @@ import (
 )
 
 var (
-	reLeadingGroup   = regexp.MustCompile(`^\[[^\]]+\]\s*`)
-	reCountryPrefix  = regexp.MustCompile(`^(?i)(JP|KR|US|SG|HK|TW|UK|GB|DE|FR|CA|AU|DIRECT|FAV)[-_]`)
-	reDigits         = regexp.MustCompile(`\d+`)
+	reLeadingGroup  = regexp.MustCompile(`^\[[^\]]+\]\s*`)
+	reCountryPrefix = regexp.MustCompile(`^(?i)(JP|KR|US|SG|HK|TW|UK|GB|DE|FR|CA|AU|DIRECT|FAV)[-_]`)
+	reDigits        = regexp.MustCompile(`\d+`)
 )
 
 // isEnglishRequest checks if the incoming HTTP request explicitly or implicitly prefers English.

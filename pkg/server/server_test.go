@@ -76,6 +76,15 @@ func TestServerAPI(t *testing.T) {
 	if wUpdate.Code != http.StatusOK {
 		t.Fatalf("expected update settings 200, got %d", wUpdate.Code)
 	}
+	var updateResp struct {
+		RestartRequired bool `json:"restart_required"`
+	}
+	if err := json.Unmarshal(wUpdate.Body.Bytes(), &updateResp); err != nil {
+		t.Fatalf("decode update response: %v", err)
+	}
+	if !updateResp.RestartRequired {
+		t.Fatalf("expected restart_required=true when ports change, body=%s", wUpdate.Body.String())
+	}
 	if srv.cfg.GetSettings().UIUsername != "newadmin" {
 		t.Fatalf("expected newadmin, got %s", srv.cfg.GetSettings().UIUsername)
 	}

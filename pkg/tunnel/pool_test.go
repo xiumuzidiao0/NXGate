@@ -327,4 +327,3 @@ func TestDetectSSHPorts(t *testing.T) {
 		t.Errorf("failed to parse custom sshd ports: %+v", customPorts)
 	}
 }
-

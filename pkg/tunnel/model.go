@@ -21,21 +21,21 @@ const (
 )
 
 type Tunnel struct {
-	ID            string        `json:"id"`               // e.g. "tunnel-0", "tunnel-1"
-	DevName       string        `json:"dev_name"`         // e.g. "tun0", "tun1"
-	DevIndex      int           `json:"dev_index"`        // 0, 1, 2...
-	Node          *nodes.Node   `json:"node"`             // VPNGate node information
-	Status        TunnelStatus  `json:"status"`           // connecting, connected, failed, stopped
-	Message       string        `json:"message"`          // latest status description
-	ConnectedAt   time.Time     `json:"connected_at"`     // handshake completed time
-	Uptime        int64         `json:"uptime"`           // seconds online
-	LatencyMs     int           `json:"latency_ms"`       // real-time probe latency
-	Unlock        *UnlockResult `json:"unlock,omitempty"` // AI and Streaming unlock probe status
-	CircuitBroken bool          `json:"circuit_broken"`   // true if in cooldown due to consecutive failures
-	IsUserland    bool          `json:"is_userland,omitempty"` // true if pure userland SSTP (Zero-TUN)
-	Dialer        func(ctx context.Context, network, addr string) (net.Conn, error) `json:"-"`
-	OpenPacketConn func() (net.PacketConn, error) `json:"-"`
-	Closer        io.Closer     `json:"-"`
+	ID             string                                                            `json:"id"`                    // e.g. "tunnel-0", "tunnel-1"
+	DevName        string                                                            `json:"dev_name"`              // e.g. "tun0", "tun1"
+	DevIndex       int                                                               `json:"dev_index"`             // 0, 1, 2...
+	Node           *nodes.Node                                                       `json:"node"`                  // VPNGate node information
+	Status         TunnelStatus                                                      `json:"status"`                // connecting, connected, failed, stopped
+	Message        string                                                            `json:"message"`               // latest status description
+	ConnectedAt    time.Time                                                         `json:"connected_at"`          // handshake completed time
+	Uptime         int64                                                             `json:"uptime"`                // seconds online
+	LatencyMs      int                                                               `json:"latency_ms"`            // real-time probe latency
+	Unlock         *UnlockResult                                                     `json:"unlock,omitempty"`      // AI and Streaming unlock probe status
+	CircuitBroken  bool                                                              `json:"circuit_broken"`        // true if in cooldown due to consecutive failures
+	IsUserland     bool                                                              `json:"is_userland,omitempty"` // true if pure userland SSTP (Zero-TUN)
+	Dialer         func(ctx context.Context, network, addr string) (net.Conn, error) `json:"-"`
+	OpenPacketConn func() (net.PacketConn, error)                                    `json:"-"`
+	Closer         io.Closer                                                         `json:"-"`
 
 	// Internal lifecycle management
 	mu                 sync.RWMutex
