@@ -5,6 +5,7 @@
 [![Release](https://img.shields.io/github/v/release/xiumuzidiao0/NXGate?style=flat-square&label=Release)](https://github.com/xiumuzidiao0/NXGate/releases/latest)
 [![CI](https://img.shields.io/github/actions/workflow/status/xiumuzidiao0/NXGate/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/xiumuzidiao0/NXGate/actions/workflows/ci.yml)
 [![Go](https://img.shields.io/badge/Go-1.26+-00ADD8?style=flat-square)](go.mod)
+[![License: MIT](https://img.shields.io/badge/License-MIT-334155?style=flat-square)](LICENSE)
 
 NXGate is a Go-based multi-egress proxy gateway for Linux servers. It maintains concurrent VPN tunnels or custom upstream proxies, routes local HTTP and SOCKS5 listeners across filtered exits, optionally manages `sing-box` inbounds and encrypted subscriptions, and ships with an embedded Web UI and a companion Android app.
 
@@ -118,3 +119,9 @@ npm --prefix web run test:ui
 ```
 
 Android unit tests can be run inside `android/` via `./gradlew testDebugUnitTest --no-daemon`.
+
+---
+
+## License
+
+Licensed under the [MIT License](LICENSE).

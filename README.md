@@ -5,6 +5,7 @@
 [![Release](https://img.shields.io/github/v/release/xiumuzidiao0/NXGate?style=flat-square&label=Release)](https://github.com/xiumuzidiao0/NXGate/releases/latest)
 [![CI](https://img.shields.io/github/actions/workflow/status/xiumuzidiao0/NXGate/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/xiumuzidiao0/NXGate/actions/workflows/ci.yml)
 [![Go](https://img.shields.io/badge/Go-1.26+-00ADD8?style=flat-square)](go.mod)
+[![License: MIT](https://img.shields.io/badge/License-MIT-334155?style=flat-square)](LICENSE)
 
 NXGate 是一个面向 Linux 服务器的多出口代理网关，用于维护并发 VPN 隧道或外部代理，并将本地 HTTP / SOCKS5 代理端口按策略路由到筛选后的出口节点；支持可选集成 `sing-box` 入站与加密订阅分发，内置 Web 管理控制台并提供配套 Android 客户端。
 
@@ -118,3 +119,9 @@ npm --prefix web run test:ui
 ```
 
 Android 单元测试可在 `android/` 目录下执行 `./gradlew testDebugUnitTest --no-daemon`。
+
+---
+
+## 开源协议
+
+基于 [MIT License](LICENSE) 开源。
