@@ -1,246 +1,39 @@
-# NXGate (自适应多出口智能路由网关)
+# NXGate
 
-<div align="center">
+[简体中文](README.md) | [English](README_EN.md)
 
-**面向 Linux VPS 的多出口流量调度、全球原生住宅宽带智能发现与边缘抗封锁单端口代理网关系统**
+[![Release](https://img.shields.io/github/v/release/xiumuzidiao0/NXGate?style=flat-square&label=Release)](https://github.com/xiumuzidiao0/NXGate/releases/latest)
+[![CI](https://img.shields.io/github/actions/workflow/status/xiumuzidiao0/NXGate/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/xiumuzidiao0/NXGate/actions/workflows/ci.yml)
+[![Go](https://img.shields.io/badge/Go-1.26+-00ADD8?style=flat-square)](go.mod)
 
-[English](README_EN.md) | [简体中文](README.md)
-
-[![Release](https://img.shields.io/github/v/release/xiumuzidiao0/NXGate?style=flat-square&label=Release&color=16a34a)](https://github.com/xiumuzidiao0/NXGate/releases/latest)
-[![Go Version](https://img.shields.io/badge/Go-1.26.11+-00ADD8?style=flat-square&logo=go)](https://go.dev/)
-[![Platform](https://img.shields.io/badge/Platform-amd64%20%7C%20arm64%20%7C%20386%20%7C%20arm-6366f1?style=flat-square)](https://github.com/xiumuzidiao0/NXGate/releases/latest)
-[![License](https://img.shields.io/badge/License-GPL--3.0-334155?style=flat-square)](LICENSE)
-
-</div>
-
-NXGate 是一款采用 **Go 1.26.11+ 原生高并发模型与 Linux 内核策略路由** 构建的高性能自适应多出口智能路由网关系统。系统被构建为单一静态可执行二进制文件（内置 5 视图响应式 SPA Web 管理控制台，并提供 Material 3 原生 Android 配套客户端），常驻内存小于 15MB，专为 Linux VPS 与边缘节点设计，具备高并发高吞吐、零路由污染与底层硬件级策略路由强隔离能力。
+NXGate 是一个面向 Linux 服务器的多出口代理网关，用于维护并发 VPN 隧道或外部代理，并将本地 HTTP / SOCKS5 代理端口按策略路由到筛选后的出口节点；支持可选集成 `sing-box` 入站与加密订阅分发，内置 Web 管理控制台并提供配套 Android 客户端。
 
 ---
 
-## 目录
+## 核心特性
 
-- [系统全景架构](#系统全景架构)
-- [核心子系统工程设计](#核心子系统工程设计)
-  - [1. L3/L4 策略路由与宿主机安全内核模型](#1-l3l4-策略路由与宿主机安全内核模型)
-  - [2. 多协议代理中继与 SOCKS5 UDP Associate 穿透](#2-多协议代理中继与-socks5-udp-associate-穿透)
-  - [3. M:N 多端口分流调度与动态自适应出口矩阵](#3-mn-多端口分流调度与动态自适应出口矩阵)
-  - [4. 四阶段节点全生命周期发现与过滤流水线](#4-四阶段节点全生命周期发现与过滤流水线)
-  - [5. 边缘抗审查网关与 7×24h 守护看门狗](#5-边缘抗审查网关与-724h-守护看门狗)
-  - [6. 客户端矩阵 (SPA 控制台与 Android 原生应用)](#6-客户端矩阵-spa-控制台与-android-原生应用)
-- [快速部署与运维管理](#快速部署与运维管理)
-  - [一键安装与部署](#一键安装与部署)
-  - [CLI 快捷指令参考](#cli-快捷指令参考)
-  - [Systemd 服务生命周期](#systemd-服务生命周期)
-- [配置参数规范](#配置参数规范)
-- [源码构建与质量准入](#源码构建与质量准入)
-  - [本地编译运行](#本地编译运行)
-  - [全架构静态交叉编译](#全架构静态交叉编译)
-  - [自动化质量准入审计](#自动化质量准入审计)
-- [开源协议](#开源协议)
+- **双连接驱动与路由隔离**
+  - **内核 TUN（OpenVPN）**：通过 `route-noexec` / `route-nopull` 与策略路由表（`100 + devIndex`）隔离各隧道流量，同时保留宿主机 SSH 与默认路由。
+  - **用户态 SSTP（Zero-TUN）**：无需 `/dev/net/tun` 设备与 `CAP_NET_ADMIN` 特权即可在常规容器或非 Linux 环境下建连出网。
+- **节点筛选与动态出口组**
+  - 支持从多源镜像、本地快照及自定义外部 HTTP/SOCKS5 代理中筛选可用节点，支持按国家/地区、IP 类型（住宅 / 机房）、风险评分及目标服务连通性排序与过滤。
+  - 支持固定绑定或按策略自动维护主出口与并发动态组，内置健康探测与失败降权/隔离机制。
+- **多端口代理中继**
+  - 单端口兼容 HTTP CONNECT 与 SOCKS5（TCP + UDP Associate），可绑定全部健康隧道、指定隧道或动态出口组，支持 `round_robin`、`random`、`interval` 与 `least_rtt` 调度。
+- **`sing-box` 入站与订阅分发（可选）**
+  - 统一管理多协议入站并将其出站链式指向直连或任意本地代理端口。
+  - 由 Web 端口直接提供通用订阅（Raw/Base64）与 Clash YAML，支持随机 `SUB_TOKEN` 隔离及 `age`（`X25519` / `MLKEM768-X25519`）端到端加密。
+- **多端控制**
+  - 单个 Go 静态二进制通过 `go:embed` 内嵌中/英双语 Web 控制台，支持 SSE 实时状态与配置持久化。
+  - 配套 Kotlin / Jetpack Compose Android 客户端，支持扫码录入配置、生物识别锁及远程策略切换。
 
 ---
 
-## 系统全景架构
+## 快速部署
 
-NXGate 构建了从公网边缘抗封锁入站到全球原生住宅家宽出口的多层解耦流水线：
+### Linux（systemd）
 
-```text
-                                       ┌──────────────────────────────────────────────────────────┐
-                                       │                    Client Applications                   │
-                                       │   Android Client / Clash Meta / Web / Headless Scraper   │
-                                       └────────────────────────────┬─────────────────────────────┘
-                                                                    │
-                                                 VLESS / Hysteria2 / TUIC / Direct SOCKS5
-                                                                    ▼
-┌─────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
-│ NXGate Ingress & Core Gateway                                                                                   │
-│                                                                                                                 │
-│   ┌────────────────────────────────────────┐       ┌────────────────────────────────────────────────────────┐   │
-│   │ Edge Anti-Censorship Ingress (sing-box)│       │ Unified Proxy Demuxer (RFC 1928)                       │   │
-│   │ 22 Inbound Protocols (Reality/Hy2/TUIC)├──────►│ Dual-Stack Sniffer: HTTP CONNECT / SOCKS5 TCP / UDP  │   │
-│   │ 30s Heartbeat Watchdog Supervisor      │       │ Isolated Auth Provider (Random Base64 Credential)      │   │
-│   └────────────────────────────────────────┘       └──────────────────────────┬─────────────────────────────┘   │
-│                                                                               │                                 │
-│                                    M:N Port Scheduler (Round-Robin / Random / Interval / Sticky)                │
-│                                                                               │                                 │
-│                                                                               ▼                                 │
-│   ┌─────────────────────────────────────────────────────────────────────────────────────────────────────────┐   │
-│   │ Dynamic Egress Pool & Circuit Breaker                                                                   │   │
-│   │   • System Primary Group (tun0, Priority System Egress)                                                 │   │
-│   │   • Dynamic Groups (tun1..tunN, Auto-Balanced by Country / Residential / Physical AI Unlock)           │   │
-│   │   • Sliding-Window Failure Counter & 15s Sub-Second Failover Engine                                     │   │
-│   └───────────────────────────────────────────────────┬─────────────────────────────────────────────────────┘   │
-└───────────────────────────────────────────────────────┼─────────────────────────────────────────────────────────┘
-                                                        │
-                         Linux Policy Routing (SO_BINDTODEVICE + Isolated Table IDs)
-                                                        │
-┌───────────────────────────────────────────────────────▼─────────────────────────────────────────────────────────┐
-│ Linux Kernel & Network Stack                                                                                    │
-│                                                                                                                 │
-│   [Priority 50]  sport/dport 22 ───────────────────► Table main (Host eth0 Default Gateway, 100% Locked)       │
-│   [Priority 1000] oif tun0      ───────────────────► Table 100  (Default via tun0 dev, route-noexec)           │
-│   [Priority 1000] oif tun1      ───────────────────► Table 101  (Default via tun1 dev, route-noexec)           │
-│   [Priority 1000] oif tunN      ───────────────────► Table 100+N(Default via tunN dev, route-noexec)           │
-└───────────────────────────────────────────────────────┬─────────────────────────────────────────────────────────┘
-                                                        │
-                                                        ▼
-                                       ┌──────────────────────────────────┐
-                                       │     Global VPNGate Exit Matrix   │
-                                       │  Residential Broadband & Datacenter│
-                                       └──────────────────────────────────┘
-```
-
----
-
-## 核心子系统工程设计
-
-### 1. L3/L4 策略路由与宿主机安全内核模型
-
-为彻底杜绝 OpenVPN 隧道接管宿主机全局网络导致 SSH 失联这一行业通病，NXGate 构筑了内核级防线：
-
-- **路由完全禁执 (`route-noexec` & `route-nopull`)**：
-  OpenVPN 进程以底层标志位启动，物理级剥夺其执行 `ip route` 或修改系统路由表的权限；配合全量过滤链：
-  ```text
-  route-noexec
-  route-nopull
-  pull-filter ignore "redirect-gateway"
-  pull-filter ignore "redirect-private"
-  pull-filter ignore "route-gateway"
-  pull-filter ignore "route"
-  pull-filter ignore "route-ipv6"
-  pull-filter ignore "dhcp-option"
-  pull-filter ignore "topology"
-  pull-filter ignore "block-outside-dns"
-  pull-filter ignore "register-dns"
-  pull-filter ignore "ip-win32"
-  script-security 1
-  ```
-  远端节点推送的任何默认网关、子网路由与 DNS 均被原地丢弃，杜绝系统 `/etc/resolv.conf` 污染。
-- **独占隔离策略路由表 (`Table 100 + devIndex`)**：
-  每个虚拟网卡（`tun0`, `tun1`...）仅在其专属的数字路由表中配置默认出站；宿主机 `main` 路由表永不注入 VPN 路由。
-- **SSH 内核级策略锁定 (`Priority 50`)**：
-  网关启动及运行时自动检索 `/etc/ssh/sshd_config` 及其 `.d` 目录下的所有监听端口，在内核策略路由最高优先级（`priority 50`）注入：
-  ```bash
-  ip rule add sport <SSH_PORT> table main priority 50
-  ip rule add dport <SSH_PORT> table main priority 50
-  ```
-  确保不论 VPN 接口发生任何翻转、换线或宕机，主机 SSH 流量无条件由物理网卡 `eth0` 承载。
-- **反向路径过滤自愈 (`rp_filter = 2`)**：
-  动态开启松散反向路径过滤，在隧道释放时自动恢复内核初始 sysctl 状态。
-
----
-
-### 2. 多协议代理中继与 SOCKS5 UDP Associate 穿透
-
-NXGate 实现了一套单端口双栈协议嗅探与中继引擎：
-
-- **自适应协议分流 (Protocol Sniffing)**：
-  单监听端口同时接纳 HTTP/1.1、HTTP CONNECT 隧道握手与 RFC 1928 SOCKS5 握手，根据首包特征动态切换状态机。
-- **全链路 RFC 1928 UDP 穿透**：
-  原生实现 SOCKS5 UDP Associate 规范。客户端请求创建 UDP 中继时，网关动态分配独立中继端口，维护 TCP 状态机生命周期关联；上游 Socket 通过 `SO_BINDTODEVICE` 绑定特定 `tunX` 虚拟网卡，完整支持 DNS over UDP、QUIC/HTTP3、VoIP 通话及实时游戏包出海。
-- **高吞吐网络参数调优**：
-  全链路启用 `TCP_NODELAY` 禁用 Nagle 算法，配置 512KB BDP Socket 发送/接收缓冲区，降低大规模流媒体与大文件传输时的上下文切换开销。
-
----
-
-### 3. M:N 多端口分流调度与动态自适应出口矩阵
-
-支持将 VPS 构建为多端口分布式出海集群：
-
-- **解耦的 M:N 端口规则**：
-  管理员可开启任意数量的本地代理端口（如 `7928`、`7929`、`7930`...），并将端口绑定到任意自适应出口组或特定静态隧道。
-- **四种出口调度策略**：
-  - `round_robin`：请求级轮询切换出口，实现 IP 负载均衡；
-  - `random`：权重随机分发；
-  - `interval`：按设定周期（如每 10 分钟）平滑轮替主用出口；
-  - `sticky`：基于源 IP 维持长连接会话亲和性。
-- **主网关保留规范 (`system-primary`)**：
-  底层严格锁定 `devIndex = 0`（`tun0`）专属于系统主网关出口，并发动态组统一从 `tun1` 向上单调递增，消除网卡资源竞态。
-- **滑动窗口熔断器 (Circuit Breaker) 与零宕机兜底**：
-  自适应组以 15 秒为周期对纳管隧道执行端到端有效性探活。遇出口异常（如志愿节点下线），熔断器在毫秒级将请求透明回退至全局健康出口，杜绝向上游抛出 HTTP 502。
-
----
-
-### 4. 四阶段节点全生命周期发现与过滤流水线
-
-面向全球海量公网志愿节点，NXGate 引入四阶段严格过滤管道，仅准入高可用优质连接：
-
-```text
-  Raw VPNGate Mirror Feed (~1,000 Nodes)
-                    │
-                    ▼
-  [Phase 1] 48-Worker Concurrent TCP Port Knock (2.5s Timeout)
-            淘汰离线端点与端口阻断，节约 90% 拨号开销
-                    │
-                    ▼
-  [Phase 2] L4 Throughput Check (5s Sampling Download)
-            强制要求物理下行速率 >= 70 KB/s，剔除假死与限速节点
-                    │
-                    ▼
-  [Phase 3] L7 Triple-AI Physical Endpoint Verification
-            物理接口实测通过 OpenAI + Claude + Gemini 官方端点校验
-                    │
-                    ▼
-  [Phase 4] 6-Signal Heuristic Residential Broadband Classifier
-            Cloudflare CDN 黑名单 + ASN 黑名单 + 运营商白名单 + rDNS 逆向分析
-                    │
-                    ▼
-  Active Candidate Pool for Dynamic Routing (~50-100 High-Quality Exits)
-```
-
-1. **Phase 1: 毫秒级端口敲门 (TCP Port Knock)**：并发 48 goroutine 对全量镜像执行轻量 SYN 探测，2.5 秒内排查死端。
-2. **Phase 2: 真实吞吐采样 (Throughput Probing)**：拨号就绪后，经专属出口向测速端点执行切片下载，未达到连续 70 KB/s 阈值者直接淘汰。
-3. **Phase 3: 三大 AI 物理端点核验**：
-   - OpenAI：验证 `ios.chat.openai.com` 鉴权与 `cdn-cgi/trace` 归属；
-   - Claude：验证 `api.anthropic.com` 消息路由鉴权响应与 Cloudflare 边缘阻断；
-   - Gemini：验证 `gemini.google.com` 服务可用性。
-4. **Phase 4: 住宅宽带甄别引擎**：瀑布流评估 ISP、ASN 属性，准确标定原生住宅家宽（Residential）与数据中心（Datacenter）。
-
----
-
-### 5. 边缘抗审查网关与 7×24h 守护看门狗
-
-- **22 种原生入站协议矩阵**：
-  深度纳管 sing-box 内核，支持 VLESS-REALITY（借用亚马逊/苹果权威 TLS 指纹）、Hysteria2（极速 UDP 拥塞控制）、TUIC v5、Shadowsocks 2022、AnyTLS 等抗审查入站协议，并链式分流至 NXGate 住宅出口。
-- **7×24h 自愈看门狗 (Watchdog)**：
-  独立协程以 30 秒为周期监控进程健康度，遇宿主机 OOM 或意外崩溃自动执行冷启动自愈。
-- **纯 Go 原生全协议订阅生成与 age 端到端安全加密**：
-  - **原生 WebUI 端口集成**：通用订阅 (Base64/Raw) 与 Clash 订阅 (YAML) 统一由 WebUI 端口高效内存流分发，免除第三方 Caddy/Python 依赖及未放行端口风险；
-  - **安全随机 Token 防护**：通过专属 `SubToken` 隔离未授权探测，扫描器探测直接隐形 404，支持 `/<token>/api/singbox/subscription` 与 `/sub/<token>` 短链拉取；
-  - **age 端到端前向安全加密 (RFC 5234 / RFC 7405)**：支持现代 `X25519` 与 `MLKEM768-X25519` (X-Wing 混合后量子抗量子计算) 两种原生公钥规范。开启后下发标准 ASCII Armored age 加密文本，彻底杜绝订阅在中间链路中被嗅探或缓存泄露。
-- **四阶段动态自适应节点池与智能屏蔽库**：
-  - **热池容量上限与修剪**：限制热池最大 250 优质节点，全局冷库 600 容量压制，防止内存无限累积膨胀；
-  - **多维出口安全风控评级 (Risk Scoring)**：结合 Bogon 判定、机房 ASN、代理标签及高置信家宽白名单，精准输出 5 级出口纯净度（极度纯净 / 纯净住宅 / 轻微风险 / 高风险 / 极度危险）；
-  - **自定义外部代理池 (Custom Egress Proxies)**：支持商用住宅 SOCKS5/HTTP 代理导入、RFC 1928 客户端握手与实时 RTT 探活，无缝接驳多端口矩阵分流；
-  - **DoH 双引擎防污染解析 (Cloudflare + Google)**：内置基于 HTTPS 的双源抗污染域名解析器，具备直接 IP 短路与 TTL 内存缓存，彻底杜绝 DNS 劫持；
-  - **三级故障降权模型**：偶发超时只降权（Tier 1），连续 3 次临时隔离观察（Tier 2，10分钟），连续 5 次或认证失败深度硬拉黑（Tier 3，指数退避）；
-  - **整机 IP 级屏蔽与永久墓碑规则**：支持单节点/整机 IP 屏蔽，永久墓碑节点在镜像合并阶段直接拦截丢弃；
-  - **影子协议特征探活与假复活终结**：对隔离节点定期发送真实的 OpenVPN Hard Reset（Opcode 7）握手帧，严格校验服务端的真实 Opcode 8/TLS 回包，彻底消除端口死循环假复活。
-
----
-
-### 6. 客户端矩阵 (SPA 控制台与 Android 原生应用)
-
-- **深空 5 视图响应式 SPA 控制台与全球态势地图**：
-  内置于 Go 二进制文件（`go:embed`），采用 7 级深空 Surface 色阶。内嵌**全球出口动态拓扑大屏 (Leaflet.js)**，支持动态脉冲出口打点、沉浸式节点卡片与一键直连；包含仪表盘（Dashboard）、边缘入站（sing-box）、多端口矩阵（Matrix）、节点广场（Nodes）及安全配置（Settings）。覆盖 390px 至 1440px+ 视口。
-- **Material 3 原生 Android 配套客户端 (`com.nxgate.app`)**：
-  - 全流程 Material 3 规范与 Android 12+ 莫奈壁纸动态取色；
-  - 手机端原生贴底 `NavigationBar`，平板横屏自适应左侧 `NavigationRail`；
-  - CameraX + ZXing 离线安全扫码添加服务器与集群配置一键 JSON 导入/导出/系统分享；
-  - Android 生物识别硬件锁（BiometricPrompt 指纹/面容/凭据，支持自定义 0 秒立即锁定至 10 分钟切后台缓冲）；
-  - 双订阅一键获取与系统分享组件（同时支持通用全量 Base64 订阅与 Clash Meta 专属 YAML 订阅）；
-  - 全场景触感反馈（HapticFeedback）与节点长列表 200ms 防抖后台过滤；
-  - 服务端 `/api/events` SSE 实时流式通信（低功耗、毫秒级日志与状态推流）；
-  - Android 原生下拉快捷设置磁贴（`TileService`，通知栏一眼看状态并支持一键换线）；
-  - 本地断流与 Failover 故障转移横幅推送通知（`NotificationCompat`）。
-
----
-
-## 快速部署与运维管理
-
-### 一键安装与部署
-
-在使用 systemd 的目标 Linux VPS（Debian / Ubuntu / CentOS / RHEL / Rocky / AlmaLinux / Fedora）中，以 `root` 权限执行。先下载并检查脚本，再运行：
+在支持 `systemd` 的 Linux 主机（Debian / Ubuntu / CentOS / RHEL / Rocky / AlmaLinux / Fedora）上先审阅安装脚本再运行：
 
 ```bash
 curl -fL https://raw.githubusercontent.com/xiumuzidiao0/NXGate/main/install.sh -o install.sh
@@ -248,143 +41,80 @@ less install.sh
 bash install.sh
 ```
 
-安装器需要交互终端，最终确认前不安装依赖；sing-box 及其公开入站默认跳过。脚本不再自动修改 SSH、防火墙或策略路由，后台默认监听 `0.0.0.0`（全部 IPv4 接口），代理端口默认仅监听回环地址。普通 Alpine/OpenRC 或无 systemd 容器请使用独立进程或 Docker Compose。已有旧脚本写入的规则不会自动删除，详见 [安装器行为与安全边界](docs/INSTALLER_SAFETY.md)。
+- 脚本需在交互终端（`/dev/tty`）下确认后才会安装依赖，默认跳过 `sing-box`，且不自动修改系统防火墙、SSH 规则或策略路由；旧版脚本此前写入的规则不会自动删除。
 
-安装脚本按架构下载并校验发行二进制，配置 systemd 服务和管理命令；下载失败时可能回退源码构建。可选 sing-box 管理脚本优先从本地源码或 NXGate 内嵌资源提取，必要时从仓库下载；实际时间取决于网络、工具链和主机性能。
+### Docker Compose
 
-### CLI 快捷指令参考
-
-在服务器任意终端位置，使用 `nx` 进行管理：
+仓库提供的 [`docker-compose.yml`](docker-compose.yml) 默认以用户态模式运行（无需特权与 TUN 设备）：
 
 ```bash
-nx               # 唤出终端交互式可视化控制中心
-nx status        # 打印当前网关运行状态、sing-box 状态与入口地址
-nx update        # 检查并拉取最新 Release 版本执行热更新与自愈
-nx restart       # 平滑重启网关服务
-nx start         # 启动网关服务
-nx stop          # 停止网关服务
-nx logs          # 查看实时运行日志 (journalctl -u nxgate -f 或 aimilivpn)
+docker compose up -d
 ```
 
-### Systemd 服务生命周期
+默认将 Web 端口映射至 `0.0.0.0:8787`，代理端口仅绑定在 `127.0.0.1:7928`。若仅需本地访问控制台，可在 `.env` 中设置 `NXGATE_UI_PUBLISH_HOST=127.0.0.1` 后重启容器。
+
+### 常用管理命令
+
+安装器部署后会注册 `nx` 命令（以及 `nxgate` systemd 服务）：
 
 ```bash
-# 检查守护进程运行状态
-systemctl status nxgate
-
-# 重启网关核心服务
-systemctl restart nxgate
-
-# 查看开机启动项
-systemctl is-enabled nxgate
+nx               # 打开交互式终端菜单
+nx status        # 查看服务状态、访问地址与监听信息
+nx start         # 启动服务
+nx stop          # 停止服务
+nx restart       # 重启服务
+nx update        # 检查并更新发行二进制
+journalctl -u nxgate -f
 ```
 
 ---
 
-## 配置参数规范
+## 配置说明
 
-系统安装可通过 systemd 的 `EnvironmentFile` 加载 `/opt/nxgate/config.env`（兼容 `/opt/aimilivpn/config.env`）。终端菜单读取/更新已保存设置需要 `jq`（新版安装脚本已列为依赖）。裸二进制不自动读取该 env 文件；请导出环境变量或由进程管理器加载。网页修改的设置以 `${DATA_DIR}/settings.json` 为权威源，启动时覆盖对应的初始化环境变量，包括旧 `UI_PASSWORD`。要重设初始化配置，请停机并先备份该文件，再修改或迁移它，不要直接删除后无意恢复旧密码。
+- **配置来源与优先级**：systemd 部署默认读取 `/opt/nxgate/config.env` 环境变量；通过网页或 API 保存的修改持久化在 `${DATA_DIR}/settings.json`，并在后续启动时优先于对应初始化环境变量。裸二进制直接运行仅读取当前进程环境变量。
+- **安全默认值**：
+  - 首次未指定 `UI_PATH` / `UI_PASSWORD` 时会生成随机管理路径（`${DATA_DIR}/admin_path.txt`）与随机密码（`${DATA_DIR}/ui_password.txt`），默认用户名 `admin`。
+  - 允许在设置中显式清空 `ui_path` 或勾选关闭 Web 认证；若控制台处于 `0.0.0.0` 等通配监听且未开启认证，服务端日志与 Web 控制台会持续展示安全警告。公网部署建议前置 HTTPS 反向代理并限制来源 IP。
+  - 代理端口默认绑定 `127.0.0.1`，不直接暴露公网。
 
-| 环境变量名 | 默认值 | 允许范围 / 格式 | 功能说明 |
-| :--- | :--- | :--- | :--- |
-| `UI_HOST` | `0.0.0.0` | 字符串 (IP) | Web 管理控制台监听绑定地址 |
-| `UI_PORT` | `8787` | `1-65535` | Web 管理控制台对外服务端口 |
-| `UI_PATH` | *(随机生成并持久化)* | 纯字母数字字符串 | 控制台访问安全路径前缀（防扫描，如 `/enter/`） |
-| `UI_USERNAME` | `admin` | 字符串 | Web 管理后台登录账号 |
-| `UI_PASSWORD` | *(随机生成)* | 字符串 | Web 管理后台登录强密码 |
-| `SUB_TOKEN` | *(随机生成)* | 16位安全字符串 | 专属免密拉取订阅的随机安全令牌 |
-| `AGE_ENCRYPT_ENABLED` | `false` | `true/false` | 是否开启 age 订阅端到端安全加密 (默认关闭) |
-| `AGE_PUBLIC_KEY` | *(空)* | `age1...` / `age1pq...` | 用于加密下发订阅的 age Recipient 公钥 |
-| `LOCAL_PROXY_HOST`| `127.0.0.1` | 字符串 (IP) | 本地默认代理监听地址 |
-| `LOCAL_PROXY_PORT`| `7928` | `1-65535` | 本地默认代理监听端口 (HTTP/SOCKS5 单端口自适应) |
-| `LOCAL_PROXY_MAX_CONNECTIONS` | `512` | `16-4096` | 单代理端口最大允许并发连接数 |
-| `FETCH_INTERVAL_SECONDS` | `900` | `60-86400` | VPNGate 节点镜像全量拉取刷新周期（秒） |
-| `CHECK_INTERVAL_SECONDS` | `20` | `5-300` | 在线主连接与活跃出口健康探测心跳间隔（秒） |
-| `TARGET_VALID_NODES` | `5` | `1-50` | 内存池最小维持的经过端口预检的优质候选节点数 |
-| `MAX_SCAN_ROWS` | `1000` | `10-5000` | 单次从镜像 CSV 中解析的最大行数 |
-| `DISCOVERY_COUNTRIES` | *(空)* | 逗号分隔 ISO 代码 (如 `JP,US`) | 节点发现首选国家过滤白名单（留空为全球） |
-| `DATA_DIR` | `data`（安装脚本可覆盖）| 绝对路径 | 运行时证书、路由配置与日志存储目录 |
-
----
-
-### 安全默认值与升级行为
-
-- 不设置 `UI_PASSWORD` 时首次生成随机密码，保存在 `${DATA_DIR}/ui_password.txt`（0600）；用户名默认 `admin`。该文件只表示初始密码，网页后续修改以 `settings.json` 为准。备份 `DATA_DIR` 时按敏感配置保护，不能公开上传。
-- 管理服务默认监听 `0.0.0.0`（全部 IPv4 接口）；访问时使用服务器的可达 IP/域名，不是 `0.0.0.0`。脚本不自动放行防火墙；公网是否可达仍取决于防火墙、云安全组及 NAT；HTTP 会明文传输凭据，建议通过 HTTPS 反代并限制来源。随机路径不替代认证。代理仍默认只监听 `127.0.0.1`，没有自动对公网开放。
-- 已有 `/opt/nxgate/config.env` 中显式设置的 `UI_HOST` 会保留；升级不会自动把旧回环配置公开。要改为公网监听，编辑该文件中的 `UI_HOST=0.0.0.0`，然后 `sudo systemctl restart nxgate`；只需本地管理时设置 `UI_HOST=127.0.0.1`，可用 SSH 隧道访问。裸二进制需由启动环境设置 `UI_HOST`，不会自动读取环境文件。
-- Compose 默认发布 Web 到全部 IPv4 接口，代理端口仍只发布到宿主机回环地址；在 Compose 的 `.env` 文件写入 `NXGATE_UI_PUBLISH_HOST=127.0.0.1` 后运行 `docker compose up -d`，可持续限制 Web 为本地。源码修改后需执行 `docker compose up -d --build` 使用本地构建；现有 Release/`latest` 不会随源码推送而更新，安装脚本优先下载的发行二进制也不会自动包含尚未发布的功能修复。
-- 出口绑定是硬约束：没有匹配健康出口或全部熔断时拒绝新连接，不跨组回退、不从 VPS 原始出口直连。显式配置的自定义代理及用户态出口仍可用；非 Linux 平台不支持设备绑定出口，须使用显式用户态出口。
-- SSTP（Zero-TUN）探测与连接由于 VPNGate/SoftEther 公共中继通常签发 `opengw.net` 通用证书且以裸 IP 建连，默认跳过 TLS 证书链与主机名校验以保证公共中继连通性，但仍强制保留出口绑定与防黑洞/非转发自动拉黑。
-- 开启 age 加密后 raw、clash、base64、JSON 订阅全部加密，调用者不能替换管理员配置公钥，密钥错误返回失败。客户端必须支持解密；旧客户端不再收到明文 JSON。管理元数据迁移到需管理员认证的 `/api/singbox/subscription-info`（不含节点凭据），配套 Android 请求已同步调整。
-- 旧的空凭据 `custom` 规则会被拒绝认证，必须补齐用户名/密码；只有显式 `none` 才免密。SOCKS5 UDP 仅接受 TCP 认证对端 IP，并固定客户端 UDP 源端口；NAT 换端口后需重新关联。
-- 备份恢复可能部分成功；错误会返回 `ok:false`、`partial` 和 `errors`，不是事务回滚。请修正错误后核对恢复结果。
+| 环境变量 | 默认值 | 说明 |
+| :--- | :--- | :--- |
+| `UI_HOST` | `0.0.0.0` | Web 控制台监听地址 |
+| `UI_PORT` | `8787` | Web 控制台端口（`1-65535`） |
+| `UI_PATH` | 随机生成并持久化 | 控制台访问路径前缀 |
+| `UI_USERNAME` / `UI_PASSWORD` | `admin` / 随机密码 | Web Basic Auth 凭据 |
+| `SUB_TOKEN` | 随机生成并持久化 | 订阅链接访问令牌 |
+| `AGE_ENCRYPT_ENABLED` | `false` | 是否开启订阅 `age` 加密（`true` / `false`） |
+| `AGE_PUBLIC_KEY` | 空 | `age1...` 或 `age1pq...` 接收端公钥 |
+| `LOCAL_PROXY_HOST` | `127.0.0.1` | 默认代理监听地址 |
+| `LOCAL_PROXY_PORT` | `7928` | 默认代理端口（`1-65535`） |
+| `LOCAL_PROXY_GLOBAL_MAX_CONNECTIONS` | `1024` | 全局代理总并发上限（`1-65536`） |
+| `LOCAL_PROXY_MAX_CONNECTIONS` | `512` | 单端口并发上限（`16-4096`） |
+| `DISCOVERY_COUNTRIES` | 空 | 逗号分隔的国家过滤列表（如 `JP,US`，留空为全球） |
+| `DATA_DIR` | `data` | 运行时状态与配置持久化目录 |
 
 ---
 
-## 源码构建与质量准入
+## 源码构建与验证
 
-### 本地编译运行
-
-构建环境需满足 Go 1.26.11+：
+前置依赖：Go `1.26+`、Node.js `20+`（仅修改 Web 前端时需要）、JDK `21` 与 Android SDK（仅构建或单测 Android 客户端时需要）。
 
 ```bash
-# 1. 克隆代码仓库
-git clone https://github.com/xiumuzidiao0/NXGate.git
-cd NXGate
+# 1. 构建 Web 前端产物（如修改 web/src/*）
+npm --prefix web install
+npm --prefix web run build
 
-# 2. 编译当前平台二进制文件
+# 2. 编译服务端二进制或四架构发行包
 CGO_ENABLED=0 go build -ldflags="-s -w" -o bin/nxgate ./cmd/nxgate
-
-# 3. 运行网关服务 (需 root 权限以管理虚拟网卡)
-sudo ./bin/nxgate
-```
-
-### 全架构静态交叉编译
-
-内置发行编译脚本可一次性输出 4 种 CPU 架构的无依赖静态程序包：
-
-```bash
-chmod +x scripts/build.sh
 ./scripts/build.sh
+
+# 3. 运行验证测试
+go vet ./...
+go test -count=1 ./...
+npm --prefix web run test:i18n
+npm --prefix web run test:status
+npm --prefix web run test:ui
+./scripts/check-version.sh
 ```
 
-输出文件位于 `dist/` 目录：
-- `nxgate_linux_amd64` (x86_64 服务器通用未压缩 ELF 与 Gzip 包)
-- `nxgate_linux_arm64` (aarch64 树莓派 / 鲲鹏 / 飞腾 / 甲骨文 ARM)
-- `nxgate_linux_386` (32位 x86)
-- `nxgate_linux_arm` (32位 ARMv7)
-- `SHA256SUMS.txt` (全产物哈希校验清单)
-
-### 自动化质量准入审计
-
-代码库受本地 Git Pre-Push 钩子与 GitHub Actions CI/CD 双重准入约束：
-
-```bash
-# 1. 静态代码分析与 CVE 漏洞扫描
-bash scripts/audit.sh
-
-# 2. 全量单元与集成测试 (覆盖全部 Go 测试包)
-go test -count=1 -v ./...
-
-# 3. 代码库全链路版本一致性核验
-bash scripts/check-version.sh
-
-# 4. 前端视口回归测试
-cd web && npm test
-```
-
----
-
-## 开源协议
-
-本项目采用 [GNU General Public License v3.0 (GPL-3.0)](LICENSE) 开源协议授权。
-引用或二次分发请遵循开源许可证要求保留原作者信息。
-
-
-### 本地安全与性能修订的资源预算
-
-本修订保留严格出口绑定、断线拒绝连接等安全基线（SSTP Zero-TUN 针对 VPNGate `opengw.net` 中继跳过证书校验以保障建连）。全局代理 TCP 并发预算默认 1024，所有多端口共用，并保留每端口原有 512 上限。可通过 `LOCAL_PROXY_GLOBAL_MAX_CONNECTIONS=1024` 初始化，或网页设置/API `proxy_global_max_connections`（1–65536）修改；保存后的 `DATA_DIR/settings.json` 优先于环境变量。降低上限不踢掉现有连接，只拒绝新连接直至回落。默认预算按两个满载默认端口保守设定，不代表 RAM、FD 或整个 sing-box 的硬上限（独立 sing-box 入站不在该计数内）。`/metrics` 提供 `nxgate_proxy_budget_active`、`nxgate_proxy_budget_limit` 和拒绝累计数 `nxgate_proxy_budget_rejected_total`。
-
-DoH 每个 resolver 最多缓存 1024 个域名、128 个进行中域名查询，过期淘汰并合并相同冷查询；尊重返回 TTL（不超过一小时），不缓存失败/零 TTL。SSTP 每条隧道独占缓存和 DoH transport，关闭时取消与清空，且 DoH 连接走该隧道，不回退系统 DNS。TUN 使用绑定网卡及当前地址的 resolver，每次拨号重新捕获接口身份，不跨重连持久缓存，以免复用 `tunN` 导致串出口。
-
-动态组每轮最多 4 个健康探测、8 秒健康预算，总监控预算 12 秒；同一隧道短期结果共享，连续两次明确失败才熔断，超时/取消属于未知。恢复需两个成功样本且不提前解除原有 60 秒熔断。慢速补线独立进入有界去重 FIFO（64 组，满时后续轮次重试），单 worker 避免设备分配竞争，每组补线最多 90 秒；因此握手不会阻塞其他组的健康监控，但补线仍按顺序执行。没有重写 SSTP/TCP 协议栈，也不承诺真实 VPN 带宽倍率。
+Android 单元测试可在 `android/` 目录下执行 `./gradlew testDebugUnitTest --no-daemon`。
