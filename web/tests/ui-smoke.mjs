@@ -105,6 +105,7 @@ const nodes = [{
 
 let lastOutboundPost = null;
 let lastSettingsPost=null;
+let lastPortRulesPost = null;
 
 async function mockAPI(route) {
   const path = new URL(route.request().url()).pathname;
@@ -133,7 +134,14 @@ async function mockAPI(route) {
     } catch {}
     body = { ok: true };
   } else if (path.endsWith("/api/proxy/ports")) {
-    body = status.port_rules;
+    if (route.request().method() === "POST") {
+      try {
+        lastPortRulesPost = JSON.parse(route.request().postData() || "{}");
+      } catch {}
+      body = { ok: true, rules: Array.isArray(lastPortRulesPost?.rules) ? lastPortRulesPost.rules : [] };
+    } else {
+      body = status.port_rules;
+    }
   } else if (path.endsWith("/api/tunnel-groups")) {
     body = [
       {
@@ -268,6 +276,15 @@ try {
     const drawerOpen = await page.locator("#port-edit-card").evaluate((element) => element.classList.contains("open"));
     await page.locator("#port-edit-card [data-drawer-close]").click();
     await page.waitForTimeout(260);
+    lastPortRulesPost = null;
+    await page.locator('[data-action="showAddPortForm"]').click();
+    await page.waitForTimeout(250);
+    await page.locator('#port-edit-card [data-action="savePortRule"]').click();
+    await page.waitForTimeout(150);
+    const drawerClosedAfterSave = await page.locator("#port-edit-card").evaluate((element) => !element.classList.contains("open"));
+    if (!drawerClosedAfterSave || !Array.isArray(lastPortRulesPost?.rules) || lastPortRulesPost.rules.length === 0) {
+      failures.push(`${viewport}px: savePortRule failed to post rules or close drawer`);
+    }
 
     const topoVisible = await page.locator("#matrix-topology-card").isVisible();
     if (!topoVisible) failures.push(`${viewport}px: matrix topology card is not visible`);
@@ -332,6 +349,14 @@ try {
     if (!blPermVisible) failures.push(`${viewport}px: blacklist perm content not visible`);
     await page.locator('[data-action="switchBlacklistTab"][data-args*="temp"]').click();
     await page.waitForTimeout(60);
+    await page.locator('[data-action="clearTempBlacklist"]').click();
+    await page.waitForTimeout(60);
+    const dialogVisible = await page.locator('#app-dialog-modal').isVisible();
+    if (!dialogVisible) failures.push(`${viewport}px: custom confirm dialog did not open`);
+    await page.locator('#app-dialog-cancel').click();
+    await page.waitForTimeout(60);
+    const dialogHidden = await page.locator('#app-dialog-modal').isHidden();
+    if (!dialogHidden) failures.push(`${viewport}px: custom confirm dialog did not close on cancel`);
     await page.locator('[data-action="closeBlacklistModal"]').first().click();
     await page.waitForTimeout(80);
 

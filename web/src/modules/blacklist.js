@@ -196,7 +196,7 @@ export async function removeNodeFromBlacklist(nodeId, ip) {
 }
 
 export async function clearTempBlacklist() {
-    if (!tConfirm('确定清空临时故障隔离池吗？隔离节点将立即放回可用候选池重测。', 'Clear temporary quarantine? Nodes will return to candidate pool for probing.')) return;
+    if (!(await tConfirm('确定清空临时故障隔离池吗？隔离节点将立即放回可用候选池重测。', 'Clear temporary quarantine? Nodes will return to candidate pool for probing.'))) return;
     try {
         const res = await fetch('/api/blacklist/clear?type=temporary', { method: 'POST' });
         const ret = await res.json();
@@ -214,7 +214,7 @@ export async function clearTempBlacklist() {
 }
 
 export async function clearPermBlacklist() {
-    if (!tConfirm('确定清空所有用户永久黑名单吗？被拉黑的节点将重新在节点列表中显示。', 'Are you sure you want to clear all permanent blacklisted nodes? They will reappear in the node list.')) return;
+    if (!(await tConfirm('确定清空所有用户永久黑名单吗？被拉黑的节点将重新在节点列表中显示。', 'Are you sure you want to clear all permanent blacklisted nodes? They will reappear in the node list.'))) return;
     try {
         const res = await fetch('/api/blacklist/clear?type=permanent', { method: 'POST' });
         const ret = await res.json();
@@ -274,7 +274,7 @@ export async function addNodeToBlacklist(nodeId, ip, country) {
 
     const promptZh = `请选择对节点 [${nodeId}] 的屏蔽方式：\n\n1 = 永久屏蔽此节点 (单机，永不连接，从列表彻底隐藏) [推荐]\n2 = 永久屏蔽整个 /24 网段 (${derivedSubnet || ip + '/24'} 动态规则，未来该网段新节点均自动屏蔽)\n3 = 永久屏蔽整机 IP (${ip} 所有端口)\n4 = 临时隔离 24 小时 (仅在故障隔离池中观察)\n\n请输入 1, 2, 3 或 4:`;
     const promptEn = `Choose blocking method for [${nodeId}]:\n\n1 = Permanent block (Single node, never connect, hidden) [Recommended]\n2 = Permanent /24 subnet block (${derivedSubnet || ip + '/24'} dynamic rule, auto-blocks future nodes)\n3 = Permanent IP block (${ip} all ports)\n4 = Temporary quarantine 24 hours\n\nEnter 1, 2, 3, or 4:`;
-    const mode = tPrompt(promptZh, promptEn, "1");
+    const mode = await tPrompt(promptZh, promptEn, "1");
     if (!mode) return;
 
     let dur = 1440;
@@ -340,7 +340,7 @@ export async function addNodeToBlacklist(nodeId, ip, country) {
 }
 
 export async function promptAddCidrBlock() {
-    const input = tPrompt(
+    const input = await tPrompt(
         '请输入要永久屏蔽的目标网段 (CIDR 格式，例如 1.1.1.0/24 或 198.51.100.0/24)：\n\n该网段现有及未来所有新节点都将自动被物理屏蔽与隐藏！',
         'Enter target subnet to permanently block (CIDR format, e.g. 1.1.1.0/24 or 198.51.100.0/24):\n\nAll current and future nodes in this subnet will be blocked and hidden automatically!',
         '1.1.1.0/24'

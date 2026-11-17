@@ -155,13 +155,27 @@ export async function saveSettings(e) {
             return;
         }
 
-        tAlert('配置修改成功并已生效！', 'Configuration updated and applied successfully!');
         closeSettingsModal();
 
         const curPort = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
         const curPath = window.location.pathname.replace(/^\/+|\/+$/g, '');
-        if (webPort.toString() !== curPort || curPath !== webPath) {
-            const newUrl = `${window.location.protocol}//${window.location.hostname}:${webPort}/${webPath}`;
+        const portSuffix = window.location.port ? `:${window.location.port}` : '';
+        if (ret.restart_required) {
+            tAlert(
+                `端口配置已保存，新端口将在重启 NXGate 服务后生效（当前仍运行在端口 ${curPort}）。`,
+                `Port settings saved. Restart NXGate for the new ports to take effect (currently listening on ${curPort}).`
+            );
+            if (curPath !== webPath) {
+                window.location.href = `${window.location.protocol}//${window.location.hostname}${portSuffix}/${webPath}`;
+                return;
+            }
+            fetchStatus();
+            return;
+        }
+
+        tAlert('配置修改成功并已生效！', 'Configuration updated and applied successfully!');
+        if (curPath !== webPath) {
+            const newUrl = `${window.location.protocol}//${window.location.hostname}${portSuffix}/${webPath}`;
             tAlert(`Web 访问入口已变更，即将跳转至新地址:\n${newUrl}`, `Web console URL changed. Redirecting to new address:\n${newUrl}`);
             window.location.href = newUrl;
         } else {
@@ -473,7 +487,7 @@ export async function checkForUpdates(silent = false) {
 export async function triggerSystemUpdate(force = false) {
     if (appState.isUpdating) return;
     const actionDesc = force ? localize('强制重新安装当前最新构建', 'reinstall the latest build') : localize('升级至最新版本', 'upgrade to the latest version');
-    if (!tConfirm(`确认立即执行系统更新（${actionDesc}）并重启服务吗？`, `Proceed with system update (${actionDesc}) and restart service?`)) return;
+    if (!(await tConfirm(`确认立即执行系统更新（${actionDesc}）并重启服务吗？`, `Proceed with system update (${actionDesc}) and restart service?`))) return;
 
     appState.isUpdating = true;
     const progressBoxes = [

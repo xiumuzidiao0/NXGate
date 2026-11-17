@@ -36,6 +36,7 @@ export function localize(zh, en) {
 }
 
 export const NODE_SOURCE_MAP_EN = {
+    'NXGate 主镜像源': 'NXGate Primary Mirror',
     'GitHub Pages 实时镜像': 'GitHub Pages Live Mirror',
     'VPNGate 官方 HTTPS API': 'VPNGate Official HTTPS API',
     'VPNGate 官方 HTTP API': 'VPNGate Official HTTP API',
@@ -158,12 +159,115 @@ export function formatOutboundLabel(ob) {
     return `Multi-Port Exit (PORT ${portMatch} - SOCKS5 TCP+UDP ${authNote}${boundDesc})`;
 }
 
+let activeDialogResolver = null;
+
+function openAppDialog({ mode, title, message, defaultValue = '' }) {
+    const modal = typeof document !== 'undefined' ? document.getElementById('app-dialog-modal') : null;
+    if (!modal) {
+        if (mode === 'prompt') {
+            return Promise.resolve(typeof window !== 'undefined' && typeof window.prompt === 'function' ? window.prompt(message, defaultValue) : null);
+        }
+        return Promise.resolve(typeof window !== 'undefined' && typeof window.confirm === 'function' ? window.confirm(message) : false);
+    }
+
+    if (activeDialogResolver) {
+        activeDialogResolver(mode === 'prompt' ? null : false);
+        activeDialogResolver = null;
+    }
+
+    const titleEl = document.getElementById('app-dialog-title');
+    const msgEl = document.getElementById('app-dialog-message');
+    const inputWrap = document.getElementById('app-dialog-input-wrap');
+    const inputEl = document.getElementById('app-dialog-input');
+    const confirmBtn = document.getElementById('app-dialog-confirm');
+    const cancelBtn = document.getElementById('app-dialog-cancel');
+    const closeBtn = document.getElementById('app-dialog-close');
+    const prevFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const isEn = getLanguage() === 'en';
+
+    if (titleEl) titleEl.textContent = title;
+    if (msgEl) msgEl.textContent = message;
+    if (confirmBtn) confirmBtn.textContent = isEn ? 'Confirm' : '确认';
+    if (cancelBtn) cancelBtn.textContent = isEn ? 'Cancel' : '取消';
+    if (closeBtn) closeBtn.setAttribute('aria-label', isEn ? 'Close dialog' : '关闭弹窗');
+
+    const isPrompt = mode === 'prompt';
+    if (inputWrap) inputWrap.classList.toggle('hidden', !isPrompt);
+    if (inputEl) inputEl.value = isPrompt ? String(defaultValue ?? '') : '';
+
+    return new Promise(resolve => {
+        let settled = false;
+        const cleanup = () => {
+            modal.classList.remove('open');
+            confirmBtn?.removeEventListener('click', onConfirm);
+            cancelBtn?.removeEventListener('click', onCancel);
+            closeBtn?.removeEventListener('click', onCancel);
+            modal.removeEventListener('click', onBackdrop);
+            document.removeEventListener('keydown', onKeydown);
+            if (activeDialogResolver === finish) {
+                activeDialogResolver = null;
+            }
+            if (prevFocus && typeof prevFocus.focus === 'function') {
+                prevFocus.focus();
+            }
+        };
+        const finish = value => {
+            if (settled) return;
+            settled = true;
+            cleanup();
+            resolve(value);
+        };
+        const onConfirm = () => finish(isPrompt ? (inputEl ? inputEl.value : '') : true);
+        const onCancel = () => finish(isPrompt ? null : false);
+        const onBackdrop = event => {
+            if (event.target === modal) onCancel();
+        };
+        const onKeydown = event => {
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                onCancel();
+            } else if (event.key === 'Enter' && (!isPrompt || event.target === inputEl)) {
+                event.preventDefault();
+                onConfirm();
+            }
+        };
+
+        activeDialogResolver = finish;
+        confirmBtn?.addEventListener('click', onConfirm);
+        cancelBtn?.addEventListener('click', onCancel);
+        closeBtn?.addEventListener('click', onCancel);
+        modal.addEventListener('click', onBackdrop);
+        document.addEventListener('keydown', onKeydown);
+
+        modal.classList.add('open');
+        setTimeout(() => {
+            if (isPrompt && inputEl) {
+                inputEl.focus();
+                inputEl.select();
+            } else {
+                confirmBtn?.focus();
+            }
+        }, 0);
+    });
+}
+
 export function tConfirm(zhMsg, enMsg) {
-    return confirm(getLanguage() === 'en' ? enMsg : zhMsg);
+    const isEn = getLanguage() === 'en';
+    return openAppDialog({
+        mode: 'confirm',
+        title: isEn ? 'Confirm Action' : '确认操作',
+        message: isEn ? enMsg : zhMsg,
+    });
 }
 
 export function tPrompt(zhMsg, enMsg, defaultVal) {
-    return prompt(getLanguage() === 'en' ? enMsg : zhMsg, defaultVal);
+    const isEn = getLanguage() === 'en';
+    return openAppDialog({
+        mode: 'prompt',
+        title: isEn ? 'Input Required' : '输入参数',
+        message: isEn ? enMsg : zhMsg,
+        defaultValue: defaultVal,
+    });
 }
 
 export function applyLanguage(lang = getLanguage(), container = document) {

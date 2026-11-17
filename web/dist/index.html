@@ -1234,6 +1234,24 @@
         </div>
     </div>
 
+    <!-- In-page Confirm / Prompt Dialog Modal -->
+    <div id="app-dialog-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="app-dialog-title">
+        <div class="modal-card modal-sm app-dialog-card">
+            <div class="card-header mb-4">
+                <div class="card-title" id="app-dialog-title">确认操作</div>
+                <button type="button" class="btn btn-outline btn-icon" id="app-dialog-close" aria-label="关闭弹窗">×</button>
+            </div>
+            <div id="app-dialog-message" class="app-dialog-message"></div>
+            <div id="app-dialog-input-wrap" class="form-group mt-3 hidden">
+                <input id="app-dialog-input" class="input-field w-full mono" type="text" autocomplete="off">
+            </div>
+            <div class="form-actions mt-4">
+                <button type="button" class="btn btn-outline" id="app-dialog-cancel">取消</button>
+                <button type="button" class="btn" id="app-dialog-confirm">确定</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Toast Notification -->
     <div id="toast" role="status" aria-live="polite" data-type="success">
         <svg aria-hidden="true"  viewBox="0 0 24 24" class="icon-sm icon-success"><polyline points="20 6 9 17 4 12"/></svg>

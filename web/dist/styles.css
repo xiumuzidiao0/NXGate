@@ -1519,6 +1519,19 @@ button {
         .modal-overlay.open {
             display: flex;
         }
+        #app-dialog-modal {
+            z-index: 1150;
+        }
+        .app-dialog-card {
+            max-width: 460px;
+        }
+        .app-dialog-message {
+            color: var(--text-muted);
+            font-size: 13px;
+            line-height: 1.65;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
         .modal-card {
             background: var(--surface-2);
             border: 1px solid var(--border-default);
