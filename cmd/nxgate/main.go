@@ -269,7 +269,15 @@ func main() {
 	tunnelPool.CloseAll()
 	portMgr.StopAll()
 
-	// Wait brief moment for processes and sockets to release
-	time.Sleep(500 * time.Millisecond)
+	waitDone := make(chan struct{})
+	go func() {
+		vpnMgr.Wait()
+		close(waitDone)
+	}()
+	select {
+	case <-waitDone:
+	case <-time.After(3 * time.Second):
+		stats.LogWarn("Main", "等待后台 VPN 协程退出超时，继续退出进程")
+	}
 	stats.LogInfo("Main", "NXGate 服务已成功安全停止。")
 }

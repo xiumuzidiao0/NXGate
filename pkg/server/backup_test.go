@@ -16,11 +16,13 @@ import (
 func TestBackupExportAndImport(t *testing.T) {
 	tempDir1 := t.TempDir()
 	cfg1 := &config.Config{
-		DataDir:   tempDir1,
-		ProxyPort: 7928,
-		UIHost:    "127.0.0.1",
-		UIPort:    8787,
-		UIPath:    "admin",
+		DataDir:    tempDir1,
+		ProxyPort:  7928,
+		UIHost:     "127.0.0.1",
+		UIPort:     8787,
+		UIPath:     "admin",
+		UIUsername: "ops",
+		UIPassword: "secret-password",
 	}
 
 	np1 := nodes.NewNodePool(cfg1)
@@ -41,11 +43,11 @@ func TestBackupExportAndImport(t *testing.T) {
 
 	_ = pm1.ApplyRules([]proxy.PortRule{
 		{
-			Port:           1099,
-			Enabled:        true,
-			BoundGroupIDs:  []string{"dg-backup-test"},
-			Policy:         proxy.PolicyRoundRobin,
-			AuthMode:       "none",
+			Port:          1099,
+			Enabled:       true,
+			BoundGroupIDs: []string{"dg-backup-test"},
+			Policy:        proxy.PolicyRoundRobin,
+			AuthMode:      "none",
 		},
 	})
 
@@ -111,6 +113,12 @@ func TestBackupExportAndImport(t *testing.T) {
 
 	if wImp.Code != http.StatusOK {
 		t.Fatalf("expected import 200, got %d, body: %s", wImp.Code, wImp.Body.String())
+	}
+	if cfg2.IsUIAuthEnabled() || cfg2.UIUsername != "" {
+		t.Fatalf("expected unauthenticated target auth preserved when importing password-redacted backup, got user=%q auth=%v", cfg2.UIUsername, cfg2.IsUIAuthEnabled())
+	}
+	if cfg2.UIPath != "admin" {
+		t.Fatalf("expected exported ui_path restored, got %q", cfg2.UIPath)
 	}
 
 	// Verify restored items in Server 2

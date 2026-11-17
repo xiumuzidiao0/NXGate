@@ -2,8 +2,10 @@ package server
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"aimili-vpngate-go/pkg/config"
@@ -13,14 +15,109 @@ type contextKey string
 
 const secretPathVerifiedKey contextKey = "secret_path_verified"
 
-const maxRequestBodyBytes = 1 << 20
+const (
+	maxRequestBodyBytes = 1 << 20
+	authFailureWindow   = time.Minute
+	authMaxFailures     = 10
+	authLockDuration    = time.Minute
+	authMaxTrackedIPs   = 1024
+)
+
+type authAttemptState struct {
+	failures     int
+	windowStart  time.Time
+	blockedUntil time.Time
+}
+
+type authRateLimiter struct {
+	mu      sync.Mutex
+	entries map[string]authAttemptState
+}
+
+func newAuthRateLimiter() *authRateLimiter {
+	return &authRateLimiter{entries: make(map[string]authAttemptState)}
+}
+
+func (l *authRateLimiter) isBlocked(ip string, now time.Time) bool {
+	if l == nil {
+		return false
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	state, ok := l.entries[ip]
+	if !ok {
+		return false
+	}
+	if !state.blockedUntil.IsZero() {
+		if now.Before(state.blockedUntil) {
+			return true
+		}
+		delete(l.entries, ip)
+	}
+	return false
+}
+
+func (l *authRateLimiter) recordFailure(ip string, now time.Time) {
+	if l == nil {
+		return
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	if len(l.entries) >= authMaxTrackedIPs {
+		for k, st := range l.entries {
+			if (!st.blockedUntil.IsZero() && !now.Before(st.blockedUntil)) ||
+				(st.blockedUntil.IsZero() && now.Sub(st.windowStart) > authFailureWindow) {
+				delete(l.entries, k)
+			}
+		}
+		if len(l.entries) >= authMaxTrackedIPs {
+			return
+		}
+	}
+
+	state := l.entries[ip]
+	if state.windowStart.IsZero() || now.Sub(state.windowStart) > authFailureWindow {
+		state = authAttemptState{failures: 1, windowStart: now}
+	} else {
+		state.failures++
+	}
+	if state.failures >= authMaxFailures {
+		state.blockedUntil = now.Add(authLockDuration)
+	}
+	l.entries[ip] = state
+}
+
+func (l *authRateLimiter) reset(ip string) {
+	if l == nil {
+		return
+	}
+	l.mu.Lock()
+	delete(l.entries, ip)
+	l.mu.Unlock()
+}
+
+func middlewareClientIP(r *http.Request) string {
+	host := strings.TrimSpace(r.RemoteAddr)
+	if host == "" {
+		return "unknown"
+	}
+	if h, _, err := net.SplitHostPort(host); err == nil && h != "" {
+		return h
+	}
+	return host
+}
 
 type Middleware struct {
-	cfg *config.Config
+	cfg         *config.Config
+	authLimiter *authRateLimiter
 }
 
 func NewMiddleware(cfg *config.Config) *Middleware {
-	return &Middleware{cfg: cfg}
+	return &Middleware{
+		cfg:         cfg,
+		authLimiter: newAuthRateLimiter(),
+	}
 }
 
 // SecurityHeaders injects defensive HTTP headers on all responses
@@ -79,6 +176,14 @@ func (m *Middleware) BasicAuth(next http.Handler) http.Handler {
 			}
 		}
 
+		ip := middlewareClientIP(r)
+		now := time.Now()
+		if m.authLimiter.isBlocked(ip, now) {
+			w.Header().Set("Retry-After", "60")
+			http.Error(w, "Too Many Failed Attempts", http.StatusTooManyRequests)
+			return
+		}
+
 		user, pass, ok := r.BasicAuth()
 		if !ok {
 			qUser := r.URL.Query().Get("user")
@@ -90,12 +195,14 @@ func (m *Middleware) BasicAuth(next http.Handler) http.Handler {
 			}
 		}
 		if !ok || !m.cfg.VerifyUICredentials(user, pass) {
+			m.authLimiter.recordFailure(ip, now)
 			// Anti brute-force delay on invalid attempt
 			time.Sleep(300 * time.Millisecond)
 			w.Header().Set("WWW-Authenticate", `Basic realm="Restricted Access"`)
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
+		m.authLimiter.reset(ip)
 
 		next.ServeHTTP(w, r)
 	})
@@ -169,6 +276,12 @@ func (m *Middleware) SecretPathGuard(next http.Handler) http.Handler {
 		// If unauthenticated, stealthily return 404 to avoid revealing that this API exists to scanners.
 		if strings.HasPrefix(reqPath, "/api/") || reqPath == "/api" || reqPath == "/metrics" {
 			if m.cfg.IsUIAuthEnabled() {
+				ip := middlewareClientIP(r)
+				now := time.Now()
+				if m.authLimiter.isBlocked(ip, now) {
+					http.NotFound(w, r)
+					return
+				}
 				user, pass, ok := r.BasicAuth()
 				if !ok {
 					qUser := r.URL.Query().Get("user")
@@ -180,6 +293,9 @@ func (m *Middleware) SecretPathGuard(next http.Handler) http.Handler {
 					}
 				}
 				if !ok || !m.cfg.VerifyUICredentials(user, pass) {
+					if ok {
+						m.authLimiter.recordFailure(ip, now)
+					}
 					http.NotFound(w, r)
 					return
 				}

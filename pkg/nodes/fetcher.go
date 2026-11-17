@@ -52,8 +52,9 @@ func (f *Fetcher) fetchURL(ctx context.Context, url string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if len(body) > MaxSnapshotBytes {
-		return nil, fmt.Errorf("response exceeds max snapshot size %d bytes", MaxSnapshotBytes)
+	body, err = DecompressSnapshotCSV(body)
+	if err != nil {
+		return nil, err
 	}
 
 	// Validate content is actually VPNGate CSV and not an ISP intercept error
@@ -83,16 +84,14 @@ func (f *Fetcher) FetchNodes(ctx context.Context) (*FetchResult, error) {
 		name string
 		url  string
 	}{
-		{"GitHub Pages 实时镜像", f.mirrorURL},
+		{"NXGate 主镜像源", f.mirrorURL},
 		{"VPNGate 官方 HTTPS API", f.apiURL},
 		{"VPNGate 官方 HTTP API", "http://www.vpngate.net/api/iphone/"},
 		{"NXGate 实时镜像 (Data 分支)", "https://raw.githubusercontent.com/xiumuzidiao0/NXGate/data/mirror/vpngate.csv"},
 		{"NXGate 高速压缩镜像 (Gzip)", "https://raw.githubusercontent.com/xiumuzidiao0/NXGate/data/mirror/vpngate.csv.gz"},
-		{"GitHub Raw 直链镜像", "https://raw.githubusercontent.com/baoweise-bot/aimili-vpngate/main/mirror/vpngate.csv"},
-		{"Fastly 全球加速 CDN", "https://fastly.jsdelivr.net/gh/baoweise-bot/aimili-vpngate@main/mirror/vpngate.csv"},
-		{"GitHub 镜像加速源", "https://ghproxy.net/https://raw.githubusercontent.com/baoweise-bot/aimili-vpngate/main/mirror/vpngate.csv"},
-		{"用户 GitHub 镜像源 (Main 种子)", "https://raw.githubusercontent.com/xiumuzidiao0/NXGate/main/mirror/vpngate.csv"},
-		{"jsDelivr 全球加速 CDN", "https://cdn.jsdelivr.net/gh/baoweise-bot/aimili-vpngate@main/mirror/vpngate.csv"},
+		{"Fastly 全球加速 CDN", "https://fastly.jsdelivr.net/gh/xiumuzidiao0/NXGate@data/mirror/vpngate.csv"},
+		{"jsDelivr 全球加速 CDN", "https://cdn.jsdelivr.net/gh/xiumuzidiao0/NXGate@data/mirror/vpngate.csv"},
+		{"GitHub 镜像加速源", "https://ghproxy.net/https://raw.githubusercontent.com/xiumuzidiao0/NXGate/data/mirror/vpngate.csv"},
 	}
 
 	type sourceData struct {

@@ -71,6 +71,27 @@ singbox_core_sha256() {
     esac
 }
 
+nxgate_github_urls() {
+    local url
+    local raw_mirrors="${GITHUB_MIRRORS-${NXGATE_GITHUB_MIRRORS-https://ghproxy.net,https://mirror.ghproxy.com,https://gh-proxy.com}}"
+    local mirrors=()
+    local entry prefix
+    if [[ -n "$raw_mirrors" && "${raw_mirrors,,}" != "direct" && "${raw_mirrors,,}" != "none" ]]; then
+        IFS=',' read -r -a mirrors <<< "$raw_mirrors"
+    fi
+    for url in "$@"; do
+        printf '%s\n' "$url"
+        if [[ "$url" =~ ^https://(github\.com|raw\.githubusercontent\.com)/ ]]; then
+            for entry in "${mirrors[@]}"; do
+                prefix="${entry#"${entry%%[![:space:]]*}"}"
+                prefix="${prefix%"${prefix##*[![:space:]]}"}"
+                prefix="${prefix%/}"
+                [[ "$prefix" =~ ^https:// ]] && printf '%s/%s\n' "$prefix" "$url"
+            done
+        fi
+    done
+}
+
 get_latest_version() {
     case $1 in
     core)
@@ -162,14 +183,8 @@ download() {
     unset latest_ver
 }
 download_file() {
-    local candidate_links=("$link")
-    if [[ "$link" =~ ^https://github\.com/ ]]; then
-        candidate_links+=(
-            "https://ghproxy.net/${link}"
-            "https://mirror.ghproxy.com/${link}"
-            "https://gh-proxy.com/${link}"
-        )
-    fi
+    local candidate_links=()
+    readarray -t candidate_links < <(nxgate_github_urls "$link")
 
     if ! nxgate_download_file "$tmpfile" "${expected_sha:-}" "${candidate_links[@]}"; then
         rm -rf "$tmpdir"

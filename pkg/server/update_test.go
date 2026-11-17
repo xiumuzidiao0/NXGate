@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 )
 
@@ -66,5 +67,23 @@ func TestUpdateEndpointsLifecycle(t *testing.T) {
 	}
 	if checkResp.CurrentVersion == "" {
 		t.Fatalf("current version should not be empty")
+	}
+}
+
+func TestGitHubCandidateURLsMirrorsOverride(t *testing.T) {
+	t.Setenv("GITHUB_MIRRORS", "https://edge.example.com/, http://insecure.local")
+	got := githubCandidateURLs("https://github.com/a/b")
+	want := []string{
+		"https://github.com/a/b",
+		"https://edge.example.com/https://github.com/a/b",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+
+	t.Setenv("GITHUB_MIRRORS", "direct")
+	directOnly := githubCandidateURLs("https://github.com/a/b")
+	if !reflect.DeepEqual(directOnly, []string{"https://github.com/a/b"}) {
+		t.Fatalf("expected direct only, got %v", directOnly)
 	}
 }

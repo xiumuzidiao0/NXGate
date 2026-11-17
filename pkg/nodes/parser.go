@@ -63,25 +63,35 @@ func parseRemoteFromConfig(configText string) (string, int, string) {
 	return ip, port, proto
 }
 
-func ParseVPNGateCSV(data []byte, maxRows int) ([]*Node, error) {
+// DecompressSnapshotCSV transparently decompresses a gzip-encoded VPNGate CSV
+// payload while enforcing MaxSnapshotBytes to bound memory usage.
+func DecompressSnapshotCSV(data []byte) ([]byte, error) {
 	if len(data) == 0 {
 		return nil, errors.New("vpngate csv is empty")
 	}
-
-	// Transparently decompress gzip payload if detected by magic header (0x1f 0x8b)
 	if len(data) >= 2 && data[0] == 0x1f && data[1] == 0x8b {
 		gz, err := gzip.NewReader(bytes.NewReader(data))
-		if err == nil {
-			defer gz.Close()
-			limited := io.LimitReader(gz, int64(MaxSnapshotBytes+1))
-			if decompressed, err := io.ReadAll(limited); err == nil {
-				data = decompressed
-			}
+		if err != nil {
+			return nil, fmt.Errorf("invalid gzip snapshot header: %w", err)
 		}
+		defer gz.Close()
+		decompressed, err := io.ReadAll(io.LimitReader(gz, int64(MaxSnapshotBytes+1)))
+		if err != nil {
+			return nil, fmt.Errorf("decompress gzip snapshot: %w", err)
+		}
+		data = decompressed
 	}
-
 	if len(data) > MaxSnapshotBytes {
 		return nil, fmt.Errorf("vpngate csv exceeds max size %d bytes", MaxSnapshotBytes)
+	}
+	return data, nil
+}
+
+func ParseVPNGateCSV(data []byte, maxRows int) ([]*Node, error) {
+	var err error
+	data, err = DecompressSnapshotCSV(data)
+	if err != nil {
+		return nil, err
 	}
 
 	// Filter out comment lines starting with '*' and empty lines

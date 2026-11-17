@@ -21,9 +21,8 @@ type Config struct {
 	mu sync.RWMutex
 
 	// API & Mirror sources
-	ApiURL        string
-	MirrorURL     string
-	MirrorMetaURL string
+	ApiURL    string
+	MirrorURL string
 
 	// Web UI settings
 	UIHost     string
@@ -290,9 +289,8 @@ func LoadConfig() *Config {
 	_ = os.Chmod(proxyAuthFile, 0600)
 
 	cfg := &Config{
-		ApiURL:        getEnv("VPNGATE_API_HTTPS_URL", "https://www.vpngate.net/api/iphone/"),
-		MirrorURL:     getEnv("VPNGATE_MIRROR_HTTPS_URL", "https://baoweise-bot.github.io/aimili-vpngate/vpngate.csv"),
-		MirrorMetaURL: getEnv("VPNGATE_MIRROR_META_URL", "https://baoweise-bot.github.io/aimili-vpngate/vpngate.meta.json"),
+		ApiURL:    getEnv("VPNGATE_API_HTTPS_URL", "https://www.vpngate.net/api/iphone/"),
+		MirrorURL: getEnv("VPNGATE_MIRROR_HTTPS_URL", "https://raw.githubusercontent.com/xiumuzidiao0/NXGate/data/mirror/vpngate.csv"),
 
 		UIHost:            getEnv("UI_HOST", "0.0.0.0"),
 		UIPort:            getEnvInt("UI_PORT", 8787, 1, 65535),

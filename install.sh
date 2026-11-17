@@ -114,14 +114,10 @@ download_release_binary() {
     local target_file="$1"
     detect_arch
 
-    local urls=(
-        "https://github.com/xiumuzidiao0/NXGate/releases/latest/download/nxgate_linux_${GO_ARCH}"
-        "https://ghproxy.net/https://github.com/xiumuzidiao0/NXGate/releases/latest/download/nxgate_linux_${GO_ARCH}"
-        "https://mirror.ghproxy.com/https://github.com/xiumuzidiao0/NXGate/releases/latest/download/nxgate_linux_${GO_ARCH}"
-        "https://github.com/xiumuzidiao0/NXGate/releases/download/v${DEFAULT_VERSION}/nxgate_linux_${GO_ARCH}"
-        "https://ghproxy.net/https://github.com/xiumuzidiao0/NXGate/releases/download/v${DEFAULT_VERSION}/nxgate_linux_${GO_ARCH}"
-        "https://mirror.ghproxy.com/https://github.com/xiumuzidiao0/NXGate/releases/download/v${DEFAULT_VERSION}/nxgate_linux_${GO_ARCH}"
-    )
+    local urls=()
+    readarray -t urls < <(nxgate_github_urls \
+        "https://github.com/xiumuzidiao0/NXGate/releases/latest/download/nxgate_linux_${GO_ARCH}" \
+        "https://github.com/xiumuzidiao0/NXGate/releases/download/v${DEFAULT_VERSION}/nxgate_linux_${GO_ARCH}")
 
     for u in "${urls[@]}"; do
         echo -e "  -> 尝试从源拉取预编译程序: ${u} ..."
@@ -538,12 +534,9 @@ build_and_deploy() {
         echo -e "  -> 正在下载初始节点快照镜像..."
         local mirror_csv_urls=(
             "https://raw.githubusercontent.com/xiumuzidiao0/NXGate/data/mirror/vpngate.csv"
-            "https://fastly.jsdelivr.net/gh/baoweise-bot/aimili-vpngate@main/mirror/vpngate.csv"
-            "https://baoweise-bot.github.io/aimili-vpngate/vpngate.csv"
-            "https://raw.githubusercontent.com/baoweise-bot/aimili-vpngate/main/mirror/vpngate.csv"
-            "https://ghproxy.net/https://raw.githubusercontent.com/baoweise-bot/aimili-vpngate/main/mirror/vpngate.csv"
-            "https://raw.githubusercontent.com/xiumuzidiao0/NXGate/main/mirror/vpngate.csv"
-            "https://cdn.jsdelivr.net/gh/baoweise-bot/aimili-vpngate@main/mirror/vpngate.csv"
+            "https://fastly.jsdelivr.net/gh/xiumuzidiao0/NXGate@data/mirror/vpngate.csv"
+            "https://cdn.jsdelivr.net/gh/xiumuzidiao0/NXGate@data/mirror/vpngate.csv"
+            "https://ghproxy.net/https://raw.githubusercontent.com/xiumuzidiao0/NXGate/data/mirror/vpngate.csv"
         )
         for m_url in "${mirror_csv_urls[@]}"; do
             if curl -sSL -f -m 10 "$m_url" -o "${INSTALL_DIR}/mirror/vpngate.csv" 2>/dev/null && [ -s "${INSTALL_DIR}/mirror/vpngate.csv" ]; then
@@ -1138,6 +1131,27 @@ singbox_core_sha256() {
     esac
 }
 
+nxgate_github_urls() {
+    local url
+    local raw_mirrors="${GITHUB_MIRRORS-${NXGATE_GITHUB_MIRRORS-https://ghproxy.net,https://mirror.ghproxy.com,https://gh-proxy.com}}"
+    local mirrors=()
+    local entry prefix
+    if [[ -n "$raw_mirrors" && "${raw_mirrors,,}" != "direct" && "${raw_mirrors,,}" != "none" ]]; then
+        IFS=',' read -r -a mirrors <<< "$raw_mirrors"
+    fi
+    for url in "$@"; do
+        printf '%s\n' "$url"
+        if [[ "$url" =~ ^https://(github\.com|raw\.githubusercontent\.com)/ ]]; then
+            for entry in "${mirrors[@]}"; do
+                prefix="${entry#"${entry%%[![:space:]]*}"}"
+                prefix="${prefix%"${prefix##*[![:space:]]}"}"
+                prefix="${prefix%/}"
+                [[ "$prefix" =~ ^https:// ]] && printf '%s/%s\n' "$prefix" "$url"
+            done
+        fi
+    done
+}
+
 do_install_singbox() {
     echo -e "\n${YELLOW}正在准备安装部署 sing-box 边缘抗封锁网关...${PLAIN}"
     detect_arch
@@ -1204,12 +1218,8 @@ do_install_singbox() {
     if [ "$scripts_installed" = "0" ]; then
         echo -e "  -> 尝试从 NXGate 官方代码库拉取工程管理脚本..."
         local repo_tar="/tmp/nxgate_repo_$$.tar.gz"
-        local repo_urls=(
-            "https://github.com/xiumuzidiao0/NXGate/archive/refs/heads/main.tar.gz"
-            "https://ghproxy.net/https://github.com/xiumuzidiao0/NXGate/archive/refs/heads/main.tar.gz"
-            "https://mirror.ghproxy.com/https://github.com/xiumuzidiao0/NXGate/archive/refs/heads/main.tar.gz"
-            "https://gh-proxy.com/https://github.com/xiumuzidiao0/NXGate/archive/refs/heads/main.tar.gz"
-        )
+        local repo_urls=()
+        readarray -t repo_urls < <(nxgate_github_urls "https://github.com/xiumuzidiao0/NXGate/archive/refs/heads/main.tar.gz")
         for ru in "${repo_urls[@]}"; do
             echo -e "    • 尝试拉取源: ${ru} ..."
             if curl -sSL -f -m 25 "$ru" -o "$repo_tar" 2>/dev/null && [ -s "$repo_tar" ]; then
@@ -1264,12 +1274,8 @@ do_install_singbox() {
             *)     sb_arch="amd64" ;;
         esac
 
-        local core_urls=(
-            "https://github.com/SagerNet/sing-box/releases/download/${sb_ver}/sing-box-${sb_ver#v}-linux-${sb_arch}.tar.gz"
-            "https://ghproxy.net/https://github.com/SagerNet/sing-box/releases/download/${sb_ver}/sing-box-${sb_ver#v}-linux-${sb_arch}.tar.gz"
-            "https://mirror.ghproxy.com/https://github.com/SagerNet/sing-box/releases/download/${sb_ver}/sing-box-${sb_ver#v}-linux-${sb_arch}.tar.gz"
-            "https://gh-proxy.com/https://github.com/SagerNet/sing-box/releases/download/${sb_ver}/sing-box-${sb_ver#v}-linux-${sb_arch}.tar.gz"
-        )
+        local core_urls=()
+        readarray -t core_urls < <(nxgate_github_urls "https://github.com/SagerNet/sing-box/releases/download/${sb_ver}/sing-box-${sb_ver#v}-linux-${sb_arch}.tar.gz")
 
         local core_stage core_tar expected core_member
         expected=$(singbox_core_sha256 "$sb_ver" "$sb_arch") || {

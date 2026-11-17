@@ -1,12 +1,15 @@
 package nodes
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"errors"
 	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -68,5 +71,40 @@ func TestFetchNodesEarlyExit(t *testing.T) {
 	// With early-exit trigger, it should complete well before the 5s context deadline and 12s individual timeout
 	if elapsed > 3500*time.Millisecond {
 		t.Errorf("FetchNodes took %v, expected early exit within ~2 seconds", elapsed)
+	}
+}
+
+func TestFetchURLDecompressesGzipCSV(t *testing.T) {
+	sampleCSV := "*vpn_servers\n#HostName,IP,Score,Ping,Speed,CountryLong,CountryShort,NumVpnSessions,Uptime,TotalUsers,TotalTraffic,LogType,Operator,Message,OpenVPN_ConfigData_Base64\nvpn1,1.1.1.1,100,20,1000,Japan,JP,1,100,10,1000,2,op,msg,Y29uZmln\n"
+	var gzBuf bytes.Buffer
+	gw := gzip.NewWriter(&gzBuf)
+	_, _ = gw.Write([]byte(sampleCSV))
+	_ = gw.Close()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/vpngate.csv.gz":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(gzBuf.Bytes())
+		case "/corrupt.csv.gz":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte{0x1f, 0x8b, 0x08, 0x00, 0xff, 0xff})
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	fetcher := NewFetcher("", "", NewSnapshotManager(t.TempDir()))
+	got, err := fetcher.fetchURL(context.Background(), srv.URL+"/vpngate.csv.gz")
+	if err != nil {
+		t.Fatalf("expected gzip mirror fetch to succeed, got %v", err)
+	}
+	if !strings.Contains(string(got), "HostName") || !strings.Contains(string(got), "1.1.1.1") {
+		t.Fatalf("expected decompressed CSV content, got %q", string(got))
+	}
+
+	if _, err := fetcher.fetchURL(context.Background(), srv.URL+"/corrupt.csv.gz"); err == nil {
+		t.Fatalf("expected corrupt gzip payload to fail validation")
 	}
 }

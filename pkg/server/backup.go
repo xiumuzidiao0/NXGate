@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"aimili-vpngate-go/pkg/config"
@@ -77,9 +78,15 @@ func (s *Server) handleImportBackup(w http.ResponseWriter, r *http.Request) {
 	restoredCount := 0
 	var restoreErrors []string
 
-	// 1. Restore Settings if provided
+	// 1. Restore Settings if provided.
+	// Exported backups strip UIPassword; avoid applying an orphan UIUsername onto
+	// target instances (especially unauthenticated ones) when UIPassword is empty.
 	if pkg.Settings != nil {
-		if err := s.cfg.UpdateSettings(*pkg.Settings); err == nil {
+		settingsDTO := *pkg.Settings
+		if strings.TrimSpace(settingsDTO.UIPassword) == "" {
+			settingsDTO.UIUsername = ""
+		}
+		if err := s.cfg.UpdateSettings(settingsDTO); err == nil {
 			restoredCount++
 		} else {
 			restoreErrors = append(restoreErrors, "settings: "+err.Error())

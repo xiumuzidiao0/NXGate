@@ -263,6 +263,45 @@ func CompareVersions(v1, v2 string) int {
 	return 0
 }
 
+var defaultGitHubMirrors = []string{
+	"https://ghproxy.net",
+	"https://mirror.ghproxy.com",
+}
+
+func githubMirrorPrefixes() []string {
+	raw, ok := os.LookupEnv("GITHUB_MIRRORS")
+	if !ok {
+		raw, ok = os.LookupEnv("NXGATE_GITHUB_MIRRORS")
+	}
+	if !ok {
+		return defaultGitHubMirrors
+	}
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" || strings.EqualFold(trimmed, "direct") || strings.EqualFold(trimmed, "none") {
+		return nil
+	}
+	var mirrors []string
+	for _, entry := range strings.Split(trimmed, ",") {
+		prefix := strings.TrimRight(strings.TrimSpace(entry), "/")
+		if strings.HasPrefix(prefix, "https://") {
+			mirrors = append(mirrors, prefix)
+		}
+	}
+	return mirrors
+}
+
+func githubCandidateURLs(rawURLs ...string) []string {
+	mirrors := githubMirrorPrefixes()
+	out := make([]string, 0, len(rawURLs)*(1+len(mirrors)))
+	for _, rawURL := range rawURLs {
+		out = append(out, rawURL)
+		for _, m := range mirrors {
+			out = append(out, m+"/"+rawURL)
+		}
+	}
+	return out
+}
+
 // FetchLatestRelease attempts to get release info from GitHub API, with fallback to raw VERSION file.
 func FetchLatestRelease(ctx context.Context) (*GitHubReleaseInfo, error) {
 	client := &http.Client{Timeout: 6 * time.Second}
@@ -293,11 +332,7 @@ func FetchLatestRelease(ctx context.Context) (*GitHubReleaseInfo, error) {
 	}
 
 	// Fallback to raw VERSION file
-	versionURLs := []string{
-		"https://raw.githubusercontent.com/xiumuzidiao0/NXGate/main/VERSION",
-		"https://ghproxy.net/https://raw.githubusercontent.com/xiumuzidiao0/NXGate/main/VERSION",
-		"https://mirror.ghproxy.com/https://raw.githubusercontent.com/xiumuzidiao0/NXGate/main/VERSION",
-	}
+	versionURLs := githubCandidateURLs("https://raw.githubusercontent.com/xiumuzidiao0/NXGate/main/VERSION")
 
 	for _, u := range versionURLs {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
@@ -429,13 +464,10 @@ func resolveBinaryDestination() string {
 }
 
 func fetchExpectedSHA256(ctx context.Context, targetVer, targetFileName string) (string, error) {
-	urls := []string{
+	urls := githubCandidateURLs(
 		fmt.Sprintf("https://github.com/xiumuzidiao0/NXGate/releases/download/v%s/SHA256SUMS.txt", targetVer),
-		fmt.Sprintf("https://ghproxy.net/https://github.com/xiumuzidiao0/NXGate/releases/download/v%s/SHA256SUMS.txt", targetVer),
-		fmt.Sprintf("https://mirror.ghproxy.com/https://github.com/xiumuzidiao0/NXGate/releases/download/v%s/SHA256SUMS.txt", targetVer),
 		"https://github.com/xiumuzidiao0/NXGate/releases/latest/download/SHA256SUMS.txt",
-		"https://ghproxy.net/https://github.com/xiumuzidiao0/NXGate/releases/latest/download/SHA256SUMS.txt",
-	}
+	)
 
 	for _, u := range urls {
 		content, err := downloadHTTPText(ctx, u)
@@ -462,13 +494,10 @@ func fetchExpectedSHA256(ctx context.Context, targetVer, targetFileName string) 
 }
 
 func downloadBinaryWithMirrors(ctx context.Context, targetVer, targetFileName string) ([]byte, error) {
-	urls := []string{
+	urls := githubCandidateURLs(
 		fmt.Sprintf("https://github.com/xiumuzidiao0/NXGate/releases/download/v%s/%s", targetVer, targetFileName),
-		fmt.Sprintf("https://ghproxy.net/https://github.com/xiumuzidiao0/NXGate/releases/download/v%s/%s", targetVer, targetFileName),
-		fmt.Sprintf("https://mirror.ghproxy.com/https://github.com/xiumuzidiao0/NXGate/releases/download/v%s/%s", targetVer, targetFileName),
 		fmt.Sprintf("https://github.com/xiumuzidiao0/NXGate/releases/latest/download/%s", targetFileName),
-		fmt.Sprintf("https://ghproxy.net/https://github.com/xiumuzidiao0/NXGate/releases/latest/download/%s", targetFileName),
-	}
+	)
 
 	client := &http.Client{Timeout: 45 * time.Second}
 

@@ -88,13 +88,17 @@ func (sm *SnapshotManager) Load() ([]byte, *SnapshotMeta, error) {
 	for _, p := range fallbackPaths {
 		// #nosec G304 -- fallback paths are fixed application-provided locations.
 		if fbData, err := os.ReadFile(p); err == nil && len(fbData) > 0 {
+			decoded, decErr := DecompressSnapshotCSV(fbData)
+			if decErr != nil {
+				continue
+			}
 			meta := SnapshotMeta{
 				Source:    fmt.Sprintf("安装包内置镜像 (%s)", p),
 				CachedAt:  time.Now(),
 				RowCount:  0,
-				ByteCount: len(fbData),
+				ByteCount: len(decoded),
 			}
-			return fbData, &meta, nil
+			return decoded, &meta, nil
 		}
 	}
 
