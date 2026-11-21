@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "source": "多源聚合 (NXGate 高速压缩镜像 (Gzip) 等 4 个在线数据源)",
+  "generated_at": 1795242269,
+  "generated_at_iso": "2026-11-21T06:24:29Z",
+  "row_count": 1918,
+  "byte_count": 25830803,
+  "sha256": "43b5292532f6f7b166f6968687612e41b28e590715e4140819d4b07c9a67b1d7"
+}
