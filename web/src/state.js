@@ -3,6 +3,7 @@
  */
 export const appState = {
     allNodes: [],
+    nodeScope: 'active',
     currentState: null,
     cachedUnlockMap: {},
     activeQuickFilter: 'all',

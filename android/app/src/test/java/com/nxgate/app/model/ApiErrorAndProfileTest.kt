@@ -1,6 +1,7 @@
 package com.nxgate.app.model
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.net.ConnectException
@@ -66,5 +67,31 @@ class ApiErrorAndProfileTest {
         val pathErr = Exception("HTTP 404: Not Found").toApiError(sampleServer)
         assertTrue(pathErr is ApiError.SecretPathInvalid)
         assertTrue(pathErr.userFriendlyMessage(isEn = false).contains("secret"))
+    }
+
+    @Test
+    fun nodePoolFieldsAndDefaultsArePreservedOnModels() {
+        val active = NodeCandidate(id = "n1", ip = "198.51.100.1", port = 443, countryShort = "JP")
+        assertTrue(active.inActivePool)
+
+        val cold = active.copy(id = "n2", countryShort = "CH", inActivePool = false)
+        assertFalse(cold.inActivePool)
+
+        val defaults = ServerSettingsDTO()
+        assertEquals(250, defaults.nodeHotPoolSize)
+        assertEquals(600, defaults.nodeStoreMaxSize)
+        assertEquals(3, defaults.nodeMinPerCountry)
+        assertEquals(40, defaults.nodeMajorCountryCap)
+
+        val updated = defaults.copy(
+            nodeHotPoolSize = -1,
+            nodeStoreMaxSize = 1200,
+            nodeMinPerCountry = 5,
+            nodeMajorCountryCap = 15
+        )
+        assertEquals(-1, updated.nodeHotPoolSize)
+        assertEquals(1200, updated.nodeStoreMaxSize)
+        assertEquals(5, updated.nodeMinPerCountry)
+        assertEquals(15, updated.nodeMajorCountryCap)
     }
 }

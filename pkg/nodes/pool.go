@@ -3,6 +3,7 @@ package nodes
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -71,6 +72,7 @@ type NodePool struct {
 	mu           sync.RWMutex
 	nodeStore    map[string]*Node // 全量持久化增量节点库 (主键: node.ID)
 	candidates   []*Node          // 当前有效、过滤并已排序的优质候选节点列表
+	activeIDs    map[string]bool  // 当前活跃池内节点 ID 集合
 	allRawNodes  []*Node          // 当前库中全部已知节点清单
 	lastUpdated  time.Time
 	lastSource   string
@@ -95,11 +97,96 @@ func NewNodePool(cfg *config.Config) *NodePool {
 		reputation: reputation,
 		storePath:  filepath.Join(cfg.DataDir, "nodes_store.json"),
 		nodeStore:  make(map[string]*Node),
+		activeIDs:  make(map[string]bool),
 		lastStatus: "初始化中",
 	}
 
 	np.loadStore()
 	return np
+}
+
+func isMajorCountry(code string) bool {
+	switch strings.ToUpper(strings.TrimSpace(code)) {
+	case "JP", "KR", "US":
+		return true
+	default:
+		return false
+	}
+}
+
+func (np *NodePool) hotPoolLimit() int {
+	if np.cfg != nil {
+		return np.cfg.GetNodeHotPoolSize()
+	}
+	return MaxHotPoolSize
+}
+
+func (np *NodePool) storeMaxLimit() int {
+	if np.cfg != nil {
+		return np.cfg.GetNodeStoreMaxSize()
+	}
+	return MaxStoreNodes
+}
+
+func (np *NodePool) minPerCountry() int {
+	if np.cfg != nil {
+		return np.cfg.GetNodeMinPerCountry()
+	}
+	return 0
+}
+
+func (np *NodePool) majorCountryCap() int {
+	if np.cfg != nil {
+		return np.cfg.GetNodeMajorCountryCap()
+	}
+	return 0
+}
+
+func formatPoolLimitLabel(limit int) string {
+	if limit < 0 {
+		return "不限"
+	}
+	return strconv.Itoa(limit)
+}
+
+func (np *NodePool) nodeTier(node *Node) int {
+	if node.LatencyMs > 0 || node.ProbeStatus == "connected" {
+		if node.FailCount == 0 {
+			return 0 // Tier 0: 完全健康优质节点 (无失败历史)
+		}
+		return 1 // Tier 1: 可达但有偶发失败记录的降权节点
+	}
+	if node.LatencyMs == 0 {
+		return 2 // Tier 2: 未验证节点，包括尚未握手的 UDP 候选
+	}
+	return 3 // Tier 3: 探测失败/死端口节点
+}
+
+func (np *NodePool) sortNodesByRank(list []*Node) {
+	sort.Slice(list, func(i, j int) bool {
+		a := list[i]
+		b := list[j]
+
+		aFav := np.favorites != nil && np.favorites.IsFavorite(a.ID)
+		bFav := np.favorites != nil && np.favorites.IsFavorite(b.ID)
+		if aFav != bFav {
+			return aFav
+		}
+
+		tierA := np.nodeTier(a)
+		tierB := np.nodeTier(b)
+		if tierA != tierB {
+			return tierA < tierB
+		}
+
+		if a.Score != b.Score {
+			return a.Score > b.Score
+		}
+		if a.Ping != b.Ping {
+			return a.Ping < b.Ping
+		}
+		return a.ID < b.ID
+	})
 }
 
 func (np *NodePool) loadStore() {
@@ -144,7 +231,7 @@ func (np *NodePool) loadStore() {
 	np.evictStaleNodesLocked(now)
 	np.rebuildCandidatesLocked()
 	if len(np.candidates) > 0 {
-		np.lastStatus = fmt.Sprintf("已恢复历史节点库 (优质热池: %d/%d, 历史总库: %d)", len(np.candidates), MaxHotPoolSize, len(np.nodeStore))
+		np.lastStatus = fmt.Sprintf("已恢复历史节点库 (优质热池: %d/%s, 历史总库: %d)", len(np.candidates), formatPoolLimitLabel(np.hotPoolLimit()), len(np.nodeStore))
 		np.lastUpdated = now
 		np.lastSource = "本地持久化节点库"
 	}
@@ -196,8 +283,9 @@ func (np *NodePool) evictStaleNodesLocked(now time.Time) int {
 		}
 	}
 
-	// 5. Soft limit enforcement: if store exceeds MaxStoreNodes (600), prune the worst dead/unreachable nodes
-	if len(np.nodeStore) > MaxStoreNodes {
+	// 5. Soft limit enforcement: if store exceeds configured storeMaxLimit, prune the worst dead/unreachable nodes
+	storeLimit := np.storeMaxLimit()
+	if storeLimit > 0 && len(np.nodeStore) > storeLimit {
 		type evictCandidate struct {
 			id       string
 			lastSeen time.Time
@@ -232,7 +320,7 @@ func (np *NodePool) evictStaleNodesLocked(now time.Time) int {
 			return pruneList[i].score < pruneList[j].score
 		})
 
-		excess := len(np.nodeStore) - MaxStoreNodes
+		excess := len(np.nodeStore) - storeLimit
 		if excess > len(pruneList) {
 			excess = len(pruneList)
 		}
@@ -248,63 +336,139 @@ func (np *NodePool) evictStaleNodesLocked(now time.Time) int {
 // rebuildCandidatesLocked filters and sorts the candidates from the internal nodeStore.
 func (np *NodePool) rebuildCandidatesLocked() {
 	var all []*Node
-	var filtered []*Node
+	var ranked []*Node
 
 	for _, n := range np.nodeStore {
 		all = append(all, n)
 		if np.blacklist != nil && np.blacklist.IsNodeBlocked(n.ID, n.IP) {
 			continue
 		}
-		filtered = append(filtered, n)
+		ranked = append(ranked, n)
 	}
 
-	// Stable multi-tier sorting:
-	// Priority 0: Favorites always on top
-	// Tier 0: TCP-reachable or previously connected nodes, sorted by Score desc, source Ping asc
-	// Tier 1: Un-probed / Ready nodes (LatencyMs == 0), sorted by Score desc, Ping asc
-	// Last tier: Probe-failed nodes (LatencyMs < 0)
-	sort.Slice(filtered, func(i, j int) bool {
-		a := filtered[i]
-		b := filtered[j]
+	np.sortNodesByRank(ranked)
 
-		// Priority 0: Favorites
-		aFav := np.favorites.IsFavorite(a.ID)
-		bFav := np.favorites.IsFavorite(b.ID)
-		if aFav != bFav {
-			return aFav
+	hotLimit := np.hotPoolLimit()
+	minPer := np.minPerCountry()
+	majorCap := np.majorCountryCap()
+
+	selected := make([]*Node, 0, len(ranked))
+	selectedIDs := make(map[string]bool, len(ranked))
+	countryCounts := make(map[string]int)
+
+	withinLimit := func() bool {
+		return hotLimit < 0 || len(selected) < hotLimit
+	}
+	countryKey := func(n *Node) string {
+		c := strings.ToUpper(strings.TrimSpace(n.CountryShort))
+		if c == "" {
+			return "ZZ"
+		}
+		return c
+	}
+
+	// Pass 1: Favorites always stay in the active pool and bypass major-country cap.
+	for _, n := range ranked {
+		if !withinLimit() {
+			break
+		}
+		if np.favorites != nil && np.favorites.IsFavorite(n.ID) {
+			selected = append(selected, n)
+			selectedIDs[n.ID] = true
+			countryCounts[countryKey(n)]++
+		}
+	}
+
+	// Pass 2: Guarantee at least minPer slots per country (non-major countries first so rare regions aren't crowded out).
+	if minPer > 0 && withinLimit() {
+		byCountry := make(map[string][]*Node)
+		bestRank := make(map[string]int)
+		for idx, n := range ranked {
+			if selectedIDs[n.ID] {
+				continue
+			}
+			c := countryKey(n)
+			if _, ok := bestRank[c]; !ok {
+				bestRank[c] = idx
+			}
+			byCountry[c] = append(byCountry[c], n)
 		}
 
-		tier := func(node *Node) int {
-			if node.LatencyMs > 0 || node.ProbeStatus == "connected" {
-				if node.FailCount == 0 {
-					return 0 // Tier 0: 完全健康优质节点 (无失败历史)
+		orderedCountries := make([]string, 0, len(byCountry))
+		for c := range byCountry {
+			orderedCountries = append(orderedCountries, c)
+		}
+		sort.Slice(orderedCountries, func(i, j int) bool {
+			ci, cj := orderedCountries[i], orderedCountries[j]
+			mi, mj := isMajorCountry(ci), isMajorCountry(cj)
+			if mi != mj {
+				return !mi // non-major countries first
+			}
+			if bestRank[ci] != bestRank[cj] {
+				return bestRank[ci] < bestRank[cj]
+			}
+			return ci < cj
+		})
+
+		cursors := make(map[string]int, len(orderedCountries))
+		for round := 0; round < minPer && withinLimit(); round++ {
+			addedInRound := false
+			for _, c := range orderedCountries {
+				if !withinLimit() {
+					break
 				}
-				return 1 // Tier 1: 可达但有偶发失败记录的降权节点
+				if countryCounts[c] >= minPer {
+					continue
+				}
+				if majorCap > 0 && isMajorCountry(c) && countryCounts[c] >= majorCap {
+					continue
+				}
+				queue := byCountry[c]
+				cur := cursors[c]
+				for cur < len(queue) && selectedIDs[queue[cur].ID] {
+					cur++
+				}
+				if cur < len(queue) {
+					n := queue[cur]
+					cur++
+					selected = append(selected, n)
+					selectedIDs[n.ID] = true
+					countryCounts[c]++
+					addedInRound = true
+				}
+				cursors[c] = cur
 			}
-			if node.LatencyMs == 0 {
-				return 2 // Tier 2: 未验证节点，包括尚未握手的 UDP 候选
+			if !addedInRound {
+				break
 			}
-			return 3 // Tier 3: 探测失败/死端口节点
 		}
-
-		tierA := tier(a)
-		tierB := tier(b)
-		if tierA != tierB {
-			return tierA < tierB
-		}
-
-		if a.Score != b.Score {
-			return a.Score > b.Score
-		}
-		return a.Ping < b.Ping
-	})
-
-	// 严格限制热池最大容量为 MaxHotPoolSize (250)
-	if len(filtered) > MaxHotPoolSize {
-		filtered = filtered[:MaxHotPoolSize]
 	}
 
-	np.candidates = filtered
+	// Pass 3: Fill remaining hot pool slots in rank order, enforcing JP/KR/US cap when enabled.
+	for _, n := range ranked {
+		if !withinLimit() {
+			break
+		}
+		if selectedIDs[n.ID] {
+			continue
+		}
+		c := countryKey(n)
+		isFav := np.favorites != nil && np.favorites.IsFavorite(n.ID)
+		if majorCap > 0 && !isFav && isMajorCountry(c) && countryCounts[c] >= majorCap {
+			continue
+		}
+		selected = append(selected, n)
+		selectedIDs[n.ID] = true
+		countryCounts[c]++
+	}
+
+	np.sortNodesByRank(selected)
+
+	np.activeIDs = make(map[string]bool, len(selected))
+	for _, n := range selected {
+		np.activeIDs[n.ID] = true
+	}
+	np.candidates = selected
 	np.allRawNodes = all
 }
 
@@ -377,7 +541,7 @@ func (np *NodePool) MergeFreshNodesLocked(fresh []*Node, source string) (int, in
 
 	np.lastUpdated = now
 	np.lastSource = source
-	np.lastStatus = fmt.Sprintf("就绪 (优质热池 %d/%d, 历史总库 %d)", len(np.candidates), MaxHotPoolSize, len(np.nodeStore))
+	np.lastStatus = fmt.Sprintf("就绪 (优质热池 %d/%s, 历史总库 %d)", len(np.candidates), formatPoolLimitLabel(np.hotPoolLimit()), len(np.nodeStore))
 
 	return newCount, updatedCount, evictedCount
 }
@@ -427,8 +591,8 @@ func (np *NodePool) Refresh(ctx context.Context) error {
 	precheckStarted := time.Now()
 	np.mu.Unlock()
 
-	stats.LogInfo("Nodes", "节点池增量刷新完成 (新增: %d, 更新: %d, 淘汰失效: %d)，当前全量库: %d 个，优质热池: %d/%d 个 (来自: %s)",
-		newCount, updatedCount, evictedCount, len(np.allRawNodes), len(currentFiltered), MaxHotPoolSize, result.Source)
+	stats.LogInfo("Nodes", "节点池增量刷新完成 (新增: %d, 更新: %d, 淘汰失效: %d)，当前全量库: %d 个，优质热池: %d/%s 个 (来自: %s)",
+		newCount, updatedCount, evictedCount, len(np.allRawNodes), len(currentFiltered), formatPoolLimitLabel(np.hotPoolLimit()), result.Source)
 
 	// Phase 1: Port Knock Pre-Filter (快速淘汰死端口，节省测速时间)
 	stats.LogInfo("Nodes", "🚪 端口预检：快速扫描热池 %d 个候选节点的 TCP 连通性...", len(currentFiltered))
@@ -688,22 +852,72 @@ func (np *NodePool) ProbeSpecificNodes(ctx context.Context, ids []string) []*Nod
 	return targets
 }
 
+func (np *NodePool) cloneNodeWithMetadata(n *Node, inActive bool) *Node {
+	cp := *n
+	cp.IsFavorite = np.favorites != nil && np.favorites.IsFavorite(n.ID)
+	cp.InActivePool = inActive
+	if np.reputation != nil {
+		cp.ReputationScore = np.reputation.GetScore(n.IP)
+	} else {
+		cp.ReputationScore = 60
+	}
+	return &cp
+}
+
 func (np *NodePool) GetCandidates() []*Node {
 	np.mu.RLock()
 	defer np.mu.RUnlock()
 
 	res := make([]*Node, len(np.candidates))
 	for i, n := range np.candidates {
-		cp := *n
-		cp.IsFavorite = np.favorites.IsFavorite(n.ID)
-		if np.reputation != nil {
-			cp.ReputationScore = np.reputation.GetScore(n.IP)
-		} else {
-			cp.ReputationScore = 60
-		}
-		res[i] = &cp
+		res[i] = np.cloneNodeWithMetadata(n, true)
 	}
 	return res
+}
+
+// GetAllNodes returns all non-blacklisted nodes across both the active hot pool and cold storage.
+// Active pool nodes appear first (InActivePool=true), followed by ranked cold-storage nodes (InActivePool=false).
+func (np *NodePool) GetAllNodes() []*Node {
+	np.mu.RLock()
+	defer np.mu.RUnlock()
+
+	res := make([]*Node, 0, len(np.nodeStore))
+	seen := make(map[string]bool, len(np.candidates))
+	for _, n := range np.candidates {
+		res = append(res, np.cloneNodeWithMetadata(n, true))
+		seen[n.ID] = true
+	}
+
+	var cold []*Node
+	for _, n := range np.nodeStore {
+		if seen[n.ID] {
+			continue
+		}
+		if np.blacklist != nil && np.blacklist.IsNodeBlocked(n.ID, n.IP) {
+			continue
+		}
+		cold = append(cold, n)
+	}
+	np.sortNodesByRank(cold)
+	for _, n := range cold {
+		res = append(res, np.cloneNodeWithMetadata(n, false))
+	}
+	return res
+}
+
+// NonBlacklistedCount returns the total number of stored non-blacklisted nodes.
+func (np *NodePool) NonBlacklistedCount() int {
+	np.mu.RLock()
+	defer np.mu.RUnlock()
+
+	count := 0
+	for _, n := range np.nodeStore {
+		if np.blacklist != nil && np.blacklist.IsNodeBlocked(n.ID, n.IP) {
+			continue
+		}
+		count++
+	}
+	return count
 }
 
 func (np *NodePool) Favorites() *FavoritesManager {
@@ -808,10 +1022,25 @@ func (np *NodePool) SelectBestWithFilter(ipType string, countries []string, pref
 		return reachable[0]
 	}
 
-	// 3. Fallback to any node matching filter
+	// 3. Fallback to any node matching filter in active pool
 	for _, n := range np.candidates {
 		if matchesFilter(n) {
 			return n
+		}
+	}
+
+	// 3.5 Cold storage fallback when explicit countries were requested
+	if len(countryMap) > 0 {
+		var coldMatched []*Node
+		for _, n := range np.nodeStore {
+			if (np.activeIDs != nil && np.activeIDs[n.ID]) || !matchesFilter(n) {
+				continue
+			}
+			coldMatched = append(coldMatched, n)
+		}
+		if len(coldMatched) > 0 {
+			np.sortNodesByRank(coldMatched)
+			return coldMatched[0]
 		}
 	}
 
@@ -880,7 +1109,9 @@ func (np *NodePool) SetCandidatesForTest(candidates []*Node) {
 	defer np.mu.Unlock()
 	np.candidates = candidates
 	np.allRawNodes = candidates
+	np.activeIDs = make(map[string]bool, len(candidates))
 	for _, c := range candidates {
+		np.activeIDs[c.ID] = true
 		np.nodeStore[c.ID] = c
 	}
 }
@@ -1017,7 +1248,15 @@ func FilterReachableNodes(nodes []*Node, timeout time.Duration) []*Node {
 		return nodes
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), timeout+1*time.Second)
+	batches := (len(nodes) + 47) / 48
+	budget := timeout + 2*time.Second
+	if scaled := time.Duration(batches) * timeout; scaled > budget {
+		budget = scaled
+	}
+	if budget > 20*time.Second {
+		budget = 20 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), budget)
 	defer cancel()
 
 	results := BatchPortKnock(ctx, nodes, timeout)
@@ -1040,6 +1279,9 @@ func FilterReachableNodes(nodes []*Node, timeout time.Duration) []*Node {
 				res.Node.LastChecked = now
 			}
 			res.Node.FailCount = 0
+		} else if res.Error != nil && (errors.Is(res.Error, context.Canceled) || errors.Is(res.Error, context.DeadlineExceeded)) {
+			// Context cancellation/budget expiry is not proof the remote port is dead; keep node unpenalized.
+			reachable = append(reachable, res.Node)
 		} else if strings.ToLower(res.Node.Proto) != "udp" {
 			res.Node.LatencyMs = -1
 			res.Node.ProbeStatus = "unreachable"

@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -408,5 +409,85 @@ func TestHandleUpdateSettingsClearsPathAndAuthExplicitly(t *testing.T) {
 	srv.handleUpdateSettings(wDisable, httptest.NewRequest("POST", "/api/settings", strings.NewReader(`{"disable_ui_auth":true}`)))
 	if wDisable.Code != http.StatusOK || cfg.IsUIAuthEnabled() || !cfg.IsPublicUnauthenticated() {
 		t.Fatalf("expected auth disabled & public exposure true, code=%d auth=%v public=%v body=%s", wDisable.Code, cfg.IsUIAuthEnabled(), cfg.IsPublicUnauthenticated(), wDisable.Body.String())
+	}
+}
+
+func TestHandleNodesScopeAndLiveSettingsRebuild(t *testing.T) {
+	cfg := &config.Config{
+		DataDir:             t.TempDir(),
+		UIPort:              8787,
+		ProxyPort:           7928,
+		NodeHotPoolSize:     50,
+		NodeStoreMaxSize:    600,
+		NodeMinPerCountry:   0,
+		NodeMajorCountryCap: 2,
+	}
+	pool := nodes.NewNodePool(cfg)
+	tunnelPool := tunnel.NewPool(cfg, pool)
+	vpnMgr := vpn.NewManager(cfg, pool, tunnelPool)
+	srv := &Server{
+		cfg:        cfg,
+		pool:       pool,
+		tunnelPool: tunnelPool,
+		vpn:        vpnMgr,
+	}
+
+	var batch []*nodes.Node
+	for i := 1; i <= 5; i++ {
+		batch = append(batch, &nodes.Node{
+			ID:           fmt.Sprintf("10.8.0.%d:443", i),
+			IP:           fmt.Sprintf("10.8.0.%d", i),
+			Port:         443,
+			CountryShort: "JP",
+			Score:        int64(1000 - i),
+			LatencyMs:    20,
+		})
+	}
+	pool.SetCandidatesForTest(batch)
+	pool.RebuildCandidates()
+
+	// Default scope=active reflects major_country_cap=2.
+	wActive := httptest.NewRecorder()
+	srv.handleNodes(wActive, httptest.NewRequest("GET", "/api/nodes", nil))
+	var activeNodes []nodes.Node
+	if err := json.Unmarshal(wActive.Body.Bytes(), &activeNodes); err != nil {
+		t.Fatalf("decode active nodes: %v", err)
+	}
+	if len(activeNodes) != 2 {
+		t.Fatalf("expected 2 active nodes with major_country_cap=2, got %d", len(activeNodes))
+	}
+
+	// scope=all exposes all 5 nodes with accurate InActivePool flags.
+	wAll := httptest.NewRecorder()
+	srv.handleNodes(wAll, httptest.NewRequest("GET", "/api/nodes?scope=all", nil))
+	var allNodes []nodes.Node
+	if err := json.Unmarshal(wAll.Body.Bytes(), &allNodes); err != nil {
+		t.Fatalf("decode all nodes: %v", err)
+	}
+	if len(allNodes) != 5 {
+		t.Fatalf("expected 5 total stored nodes via scope=all, got %d", len(allNodes))
+	}
+
+	// Updating settings to disable major cap (0) and expand pool (-1) immediately rebuilds /api/nodes.
+	wSet := httptest.NewRecorder()
+	srv.handleUpdateSettings(wSet, httptest.NewRequest("POST", "/api/settings", strings.NewReader(`{"node_hot_pool_size":-1,"node_major_country_cap":0}`)))
+	if wSet.Code != http.StatusOK {
+		t.Fatalf("expected 200 updating pool settings, got %d (%s)", wSet.Code, wSet.Body.String())
+	}
+
+	wActiveAfter := httptest.NewRecorder()
+	srv.handleNodes(wActiveAfter, httptest.NewRequest("GET", "/api/nodes", nil))
+	var rebuilt []nodes.Node
+	if err := json.Unmarshal(wActiveAfter.Body.Bytes(), &rebuilt); err != nil {
+		t.Fatalf("decode rebuilt active nodes: %v", err)
+	}
+	if len(rebuilt) != 5 {
+		t.Fatalf("expected 5 active nodes immediately after live settings update, got %d", len(rebuilt))
+	}
+
+	// /api/status exposes pool limits & counts.
+	status := srv.buildStatusResponse()
+	if status.NodeCount != 5 || status.StoredAvailableCount != 5 || status.HotPoolLimit != -1 || status.MajorCountryCap != 0 {
+		t.Fatalf("unexpected status pool metadata: %+v", status)
 	}
 }

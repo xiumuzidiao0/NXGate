@@ -41,6 +41,7 @@ import androidx.compose.material.icons.rounded.LinearScale
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.LockOpen
 import androidx.compose.material.icons.rounded.Notifications
+import androidx.compose.material.icons.rounded.Public
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material.icons.rounded.Sync
@@ -96,6 +97,7 @@ import com.nxgate.app.model.ServerSettingsDTO
 import com.nxgate.app.model.ServerUpdateCheck
 import com.nxgate.app.model.ServerUpdateStatus
 import com.nxgate.app.model.SystemLogEntry
+import com.nxgate.app.ui.components.AppExposedDropdown
 import com.nxgate.app.ui.components.ConnectedButtonItem
 import com.nxgate.app.ui.components.ConnectedButtonGroup
 import com.nxgate.app.ui.components.ConnectedButtonStyle
@@ -152,6 +154,13 @@ fun ServerSystemScreen(
     // SubToken draft
     var subToken by remember { mutableStateOf("") }
 
+    // Node Pool & Regional Balance drafts
+    var nodeHotPoolSize by remember { mutableStateOf(250) }
+    var nodeStoreMaxSize by remember { mutableStateOf(600) }
+    var nodeMinPerCountry by remember { mutableStateOf(3) }
+    var nodeMajorCountryCap by remember { mutableStateOf(40) }
+    var isSavingPoolPolicy by remember { mutableStateOf(false) }
+
     // Telegram draft
     var telegramToken by remember { mutableStateOf("") }
     var telegramChatId by remember { mutableStateOf("") }
@@ -193,6 +202,10 @@ fun ServerSystemScreen(
                     ageEnabled = s.ageEncryptEnabled
                     agePublicKey = s.agePublicKey
                     subToken = s.subToken
+                    nodeHotPoolSize = s.nodeHotPoolSize
+                    nodeStoreMaxSize = s.nodeStoreMaxSize
+                    nodeMinPerCountry = s.nodeMinPerCountry
+                    nodeMajorCountryCap = s.nodeMajorCountryCap
                     telegramToken = s.telegramBotToken
                     telegramChatId = s.telegramChatID
                 }
@@ -926,6 +939,182 @@ fun ServerSystemScreen(
                                 ) {
                                     Text(strings.saveTelegramConfig)
                                 }
+                            }
+                        }
+                    }
+
+                    // ==========================================
+                    // 4.5 节点池与地区均衡策略 (Node Pool & Balance)
+                    // ==========================================
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(20.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainer
+                        ),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(20.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            val isEn = strings == AppStringsEn
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Public,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                                Text(
+                                    text = if (isEn) "Node Pool & Regional Balance" else "节点池与地区均衡策略",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+
+                            Text(
+                                text = if (isEn) {
+                                    "Adjust active pool capacity, total stored cap, and JP/KR/US limits so smaller regions stay visible while controlling refresh probing cost."
+                                } else {
+                                    "自定义活跃池容量、历史总库上限及日/韩/美 (JP/KR/US) 单国上限，既可覆盖全量节点、保留冷门地区，也能按设备性能自主权衡探测开销。"
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+
+                            val hotPresets = remember(isEn, nodeHotPoolSize) {
+                                val base = mutableListOf(
+                                    150 to (if (isEn) "150 — Lightweight" else "150 — 轻量省资源"),
+                                    250 to (if (isEn) "250 — Balanced (Default)" else "250 — 标准均衡（默认）"),
+                                    500 to (if (isEn) "500 — Extended Coverage" else "500 — 扩展覆盖"),
+                                    1000 to (if (isEn) "1000 — Extra Large" else "1000 — 超大池"),
+                                    -1 to (if (isEn) "Unlimited — All Stored" else "不限 — 全量纳入活跃池")
+                                )
+                                if (base.none { it.first == nodeHotPoolSize }) {
+                                    base.add(nodeHotPoolSize to "$nodeHotPoolSize")
+                                }
+                                base
+                            }
+                            AppExposedDropdown(
+                                label = if (isEn) "Active Pool Limit" else "活跃节点池上限",
+                                options = hotPresets,
+                                selectedOption = hotPresets.first { it.first == nodeHotPoolSize },
+                                onOptionSelected = { nodeHotPoolSize = it.first },
+                                optionLabel = { it.second },
+                                leadingIcon = Icons.Rounded.Tune,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            val storePresets = remember(isEn, nodeStoreMaxSize) {
+                                val base = mutableListOf(
+                                    600 to (if (isEn) "600 — Standard (Default)" else "600 — 标准（默认）"),
+                                    1200 to (if (isEn) "1200 — Extended History" else "1200 — 扩展历史库"),
+                                    2500 to (if (isEn) "2500 — Large History" else "2500 — 海量历史库"),
+                                    -1 to (if (isEn) "Unlimited — Keep All" else "不限 — 永久增量累积")
+                                )
+                                if (base.none { it.first == nodeStoreMaxSize }) {
+                                    base.add(nodeStoreMaxSize to "$nodeStoreMaxSize")
+                                }
+                                base
+                            }
+                            AppExposedDropdown(
+                                label = if (isEn) "Stored Node Retention Limit" else "本地总库保留上限",
+                                options = storePresets,
+                                selectedOption = storePresets.first { it.first == nodeStoreMaxSize },
+                                onOptionSelected = { nodeStoreMaxSize = it.first },
+                                optionLabel = { it.second },
+                                leadingIcon = Icons.Rounded.Dns,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            val minCountryPresets = remember(isEn, nodeMinPerCountry) {
+                                val base = mutableListOf(
+                                    0 to (if (isEn) "Off (Score cutoff only)" else "关闭（纯粹按总分截断）"),
+                                    2 to (if (isEn) "At least 2 per region" else "每个地区保底 2 个"),
+                                    3 to (if (isEn) "At least 3 per region (Default)" else "每个地区保底 3 个（默认）"),
+                                    5 to (if (isEn) "At least 5 per region" else "每个地区保底 5 个"),
+                                    10 to (if (isEn) "At least 10 per region" else "每个地区保底 10 个")
+                                )
+                                if (base.none { it.first == nodeMinPerCountry }) {
+                                    base.add(nodeMinPerCountry to "$nodeMinPerCountry")
+                                }
+                                base
+                            }
+                            AppExposedDropdown(
+                                label = if (isEn) "Min Slots per Country" else "按国家/地区保底名额",
+                                options = minCountryPresets,
+                                selectedOption = minCountryPresets.first { it.first == nodeMinPerCountry },
+                                onOptionSelected = { nodeMinPerCountry = it.first },
+                                optionLabel = { it.second },
+                                leadingIcon = Icons.Rounded.Public,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            val majorCapPresets = remember(isEn, nodeMajorCountryCap) {
+                                val base = mutableListOf(
+                                    0 to (if (isEn) "No cap" else "不限制"),
+                                    15 to (if (isEn) "Up to 15 per JP/KR/US" else "日/韩/美单国最多 15 个"),
+                                    30 to (if (isEn) "Up to 30 per JP/KR/US" else "日/韩/美单国最多 30 个"),
+                                    40 to (if (isEn) "Up to 40 per JP/KR/US (Default)" else "日/韩/美单国最多 40 个（默认）"),
+                                    60 to (if (isEn) "Up to 60 per JP/KR/US" else "日/韩/美单国最多 60 个"),
+                                    100 to (if (isEn) "Up to 100 per JP/KR/US" else "日/韩/美单国最多 100 个")
+                                )
+                                if (base.none { it.first == nodeMajorCountryCap }) {
+                                    base.add(nodeMajorCountryCap to "$nodeMajorCountryCap")
+                                }
+                                base
+                            }
+                            AppExposedDropdown(
+                                label = if (isEn) "JP/KR/US Active Pool Cap" else "日/韩/美 (JP/KR/US) 单国上限",
+                                options = majorCapPresets,
+                                selectedOption = majorCapPresets.first { it.first == nodeMajorCountryCap },
+                                onOptionSelected = { nodeMajorCountryCap = it.first },
+                                optionLabel = { it.second },
+                                leadingIcon = Icons.Rounded.Tune,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            Button(
+                                onClick = {
+                                    if (serverSettings == null) return@Button
+                                    scope.launch {
+                                        isSavingPoolPolicy = true
+                                        val updated = serverSettings!!.copy(
+                                            nodeHotPoolSize = nodeHotPoolSize,
+                                            nodeStoreMaxSize = nodeStoreMaxSize,
+                                            nodeMinPerCountry = nodeMinPerCountry,
+                                            nodeMajorCountryCap = nodeMajorCountryCap
+                                        )
+                                        val res = NXGateApplication.instance.apiClient.saveServerSettings(activeServer, updated)
+                                        isSavingPoolPolicy = false
+                                        if (res.isSuccess) {
+                                            serverSettings = updated
+                                            Toast.makeText(
+                                                context,
+                                                if (isEn) "Node pool policy saved and applied!" else "节点池策略已保存并立即生效！",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+                                        } else {
+                                            Toast.makeText(
+                                                context,
+                                                strings.localized("保存失败: ${res.exceptionOrNull()?.message}", "Save failed: ${res.exceptionOrNull()?.message}"),
+                                                Toast.LENGTH_LONG
+                                            ).show()
+                                        }
+                                    }
+                                },
+                                enabled = !isSavingPoolPolicy && serverSettings != null,
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(if (isEn) "Save Node Pool Policy" else "保存节点池策略")
                             }
                         }
                     }

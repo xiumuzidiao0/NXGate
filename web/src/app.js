@@ -2,7 +2,7 @@ import { appState } from './state.js';
 import { applyLanguage, getLanguage, onUiLanguageChanged, toggleLanguage } from './i18n-runtime.js';
 import { addNodeToBlacklist, clearPermBlacklist, clearTempBlacklist, closeBlacklistModal, fetchBlacklist, openBlacklistModal, promptAddCidrBlock, removeNodeFromBlacklist, resurrectBlacklist, switchBlacklistTab } from './modules/blacklist.js';
 import { closePortMatrixModal, deleteDynamicGroup, deletePortRule, editDynamicGroup, editPortRule, evaluateDynamicGroups, fetchDynamicGroups, fetchPortRules, generateRandomPortAuth, hideDynamicGroupForm, hideEditPortForm, onAllTunnelsCheckChanged, onSpecificTunnelCheckChanged, openPortMatrixModal, renderMatrixTopology, saveDynamicGroup, savePortRule, selectAuthMode, selectPolicy, setIntervalVal, setPortVal, showAddDynamicGroupForm, showAddPortForm, startNewTunnel, stopTunnel, suggestNextPort, switchMatrixTab } from './modules/matrix.js';
-import { connectToNode, disconnectVPN, fetchNodes, probeCurrentNodes, quickConnect, refreshNodes, renderNodes, resetMapView, selectQuickFilter, toggleFavorite, toggleMapCollapse, toggleSort } from './modules/nodes.js';
+import { connectToNode, disconnectVPN, fetchNodes, probeCurrentNodes, probeSingleNode, quickConnect, refreshNodes, renderNodes, resetMapView, selectNodeScope, selectQuickFilter, toggleFavorite, toggleMapCollapse, toggleSort } from './modules/nodes.js';
 import { checkForUpdates, closeMobileAppModal, closeSettingsModal, closeUpdateModal, downloadBackupPackage, onAppProfileFieldChanged, onBackupFileSelected, onDisableAuthChanged, openMobileAppModal, openSystemPrimaryConfig, openUpdateModal, randomPassword, randomPath, saveSettings, switchSettingsTab, testMobileApiConnectivity, testTelegramAlert, triggerBackupFileSelect, triggerForceUpdate, triggerSystemUpdate } from './modules/settings.js';
 import { closeEditorDrawer, enhanceInteractiveElements, initSidebarState, switchView, toggleSidebar } from './modules/shell.js';
 import { applyAgePublicKey, batchSetSingBoxOutbound, closeAddSingBoxModal, closeAgeKeyHelper, closeSingBoxQRModal, closeSubFilterModal, copyAgePublicKey, copyAgeSecretKey, copyClashSubURL, copyFilteredClashSub, copyFilteredGenericSub, copyNodeShareLink, copyQuickRelayedSub, copySingBoxSubURL, deleteSingBoxNode, deriveAgePublicKey, downloadClashConfig, fetchSingBoxOverview, filterProtoGrid, generateAgeKey, onAgeToggleChanged, openAddSingBoxModal, openAgeKeyHelper, openSubFilterModal, selectSingBoxProto, setSingBoxPortAuto, showFilteredQR, showNodeQRCode, submitAddSingBoxNode, switchAgeType, updateNodeOutbound, updateNodeOutboundFromSelect, updateSubFilterPreview } from './modules/singbox.js';
@@ -24,7 +24,9 @@ const uiActions = {
     downloadClashConfig,
     fetchSingBoxOverview,
     probeCurrentNodes,
+    probeSingleNode,
     refreshNodes,
+    selectNodeScope,
     selectQuickFilter,
     toggleSort,
     closeSettingsModal,

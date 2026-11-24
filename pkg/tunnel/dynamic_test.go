@@ -500,4 +500,68 @@ func TestProbeDialerConnectivityAndPrimaryExclusion(t *testing.T) {
 	if got := mgr.GetGroup("dg-us"); got != nil && len(got.ActiveTunnelIDs) != 0 {
 		t.Fatalf("expected 0 tunnels started when only candidate is primary node, got %v", got.ActiveTunnelIDs)
 	}
+
+	// 5. Secondary dynamic group falls back to cold storage when target country is outside capped active pool.
+	coldCfg := &config.Config{
+		DataDir:             t.TempDir(),
+		NodeHotPoolSize:     50,
+		NodeStoreMaxSize:    500,
+		NodeMinPerCountry:   0,
+		NodeMajorCountryCap: 0,
+	}
+	coldTunnelPool := NewPool(coldCfg, nil)
+	coldNodePool := nodes.NewNodePool(coldCfg)
+	var batch []*nodes.Node
+	for i := 1; i <= 55; i++ {
+		batch = append(batch, &nodes.Node{
+			ID:           "jp-fill-" + strconv.Itoa(i),
+			IP:           "198.51.10." + strconv.Itoa(i),
+			Port:         443,
+			Proto:        "tcp",
+			CountryShort: "JP",
+			LatencyMs:    15,
+			Score:        int64(10000 - i),
+			FirstSeen:    time.Now(),
+			LastSeen:     time.Now(),
+		})
+	}
+	brIP, brPort := dynamicProbeFixture(t)
+	coldBR := &nodes.Node{
+		ID:           "cold-br-node",
+		IP:           brIP,
+		Port:         brPort,
+		SSTPPort:     brPort,
+		Proto:        "tcp",
+		CountryShort: "BR",
+		LatencyMs:    20,
+		Score:        1,
+		FirstSeen:    time.Now(),
+		LastSeen:     time.Now(),
+	}
+	batch = append(batch, coldBR)
+	coldNodePool.SetCandidatesForTest(batch)
+	coldNodePool.RebuildCandidates()
+	for _, n := range coldNodePool.GetCandidates() {
+		if n.CountryShort == "BR" {
+			t.Fatal("expected cold BR node to be excluded from 50-slot capped hot pool")
+		}
+	}
+
+	coldMgr := NewDynamicGroupManager(coldCfg, coldTunnelPool, coldNodePool)
+	brGroup := &DynamicGroup{
+		ID:              "dg-br",
+		Name:            "BR Group",
+		Enabled:         true,
+		ConnectMode:     "zero_tun",
+		Country:         "BR",
+		TargetCount:     1,
+		IntervalMinutes: 15,
+	}
+	_ = coldMgr.SaveGroup(brGroup)
+	evalCtx, evalBRCancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer evalBRCancel()
+	coldMgr.EvaluateGroup(evalCtx, brGroup)
+	if got := coldMgr.GetGroup("dg-br"); got == nil || strings.Contains(got.StatusText, "无匹配候选节点") {
+		t.Fatalf("expected cold-storage fallback to find BR candidate, got group=%+v", got)
+	}
 }

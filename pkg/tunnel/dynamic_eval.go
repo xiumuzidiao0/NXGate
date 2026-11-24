@@ -41,15 +41,30 @@ func (m *DynamicGroupManager) EvaluateGroup(ctx context.Context, g *DynamicGroup
 	}
 
 	allCandidates := m.nodePool.GetCandidates()
-	if len(allCandidates) == 0 {
-		return
-	}
 
 	// 1. Filter candidates by country & IP type
 	targetCountry := strings.ToUpper(strings.TrimSpace(g.Country))
 	isFavoritesGroup := targetCountry == "FAVORITES"
 
-	matched := m.filterCandidatesForGroup(allCandidates, g.Country, g.IPType, g.PurityLevel, g.UnlockFilter)
+	var matched []*nodes.Node
+	if len(allCandidates) > 0 {
+		matched = m.filterCandidatesForGroup(allCandidates, g.Country, g.IPType, g.PurityLevel, g.UnlockFilter)
+	}
+	// If the active hot pool has no matching nodes for an explicit country/favorites target,
+	// expand search to non-blacklisted cold-storage nodes before falling back.
+	if len(matched) == 0 && targetCountry != "" && targetCountry != "ALL" {
+		storedNodes := m.nodePool.GetAllNodes()
+		if len(storedNodes) > 0 {
+			matched = m.filterCandidatesForGroup(storedNodes, g.Country, g.IPType, g.PurityLevel, g.UnlockFilter)
+			if len(matched) > 0 {
+				allCandidates = storedNodes
+				stats.LogInfo("DynamicGroup", "[%s] 活跃池无 [%s] 匹配节点，已从全量冷库补充 %d 个候选", g.Name, targetCountry, len(matched))
+			}
+		}
+	}
+	if len(allCandidates) == 0 {
+		return
+	}
 
 	inFallback := false
 	fallbackReason := ""

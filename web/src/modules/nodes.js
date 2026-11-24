@@ -4,15 +4,85 @@ import { fetchStatus, fetchUnlockCache } from '../transport.js';
 import { appendLog, escapeHtml, getCountryFlagSVG, getCountryName, jsonAttr, renderUnlockBadges } from '../utils.js';
 import { updateDynamicGroupCountryOptions } from './matrix/groups.js';
 
+export function updateNodePoolSummary() {
+    const isEn = getLanguage() === 'en';
+    const st = appState.currentState || {};
+    const activeCount = typeof st.node_count === 'number'
+        ? st.node_count
+        : (appState.nodeScope === 'active' ? appState.allNodes.length : appState.allNodes.filter(n => n.in_active_pool !== false).length);
+    const storedCount = typeof st.stored_available_count === 'number'
+        ? st.stored_available_count
+        : (typeof st.total_node_count === 'number' && st.total_node_count > activeCount ? st.total_node_count : appState.allNodes.length);
+    const hotLimit = st.hot_pool_limit ?? 250;
+    const minCountry = st.min_per_country ?? 0;
+    const majorCap = st.major_country_cap ?? 0;
+
+    const activeCountEl = document.getElementById('scope-active-count');
+    if (activeCountEl) activeCountEl.innerText = activeCount;
+    const allCountEl = document.getElementById('scope-all-count');
+    if (allCountEl) allCountEl.innerText = storedCount;
+
+    const activeBtn = document.getElementById('scope-active');
+    const allBtn = document.getElementById('scope-all');
+    if (activeBtn) activeBtn.classList.toggle('active', appState.nodeScope !== 'all');
+    if (allBtn) allBtn.classList.toggle('active', appState.nodeScope === 'all');
+
+    const summaryEl = document.getElementById('nodes-pool-summary');
+    if (!summaryEl) return;
+
+    const limitLabel = hotLimit < 0 ? (isEn ? 'Unlimited' : '不限') : String(hotLimit);
+    const parts = [];
+    if (appState.nodeScope === 'all') {
+        parts.push(isEn
+            ? `Showing all ${storedCount} non-blacklisted relays (${activeCount} active + ${Math.max(0, storedCount - activeCount)} cold)`
+            : `正在查看全量 ${storedCount} 个可用节点（活跃池 ${activeCount} + 冷库 ${Math.max(0, storedCount - activeCount)}）`);
+    } else {
+        parts.push(isEn
+            ? `Active pool ${activeCount} (cap ${limitLabel}) / Stored ${storedCount}`
+            : `活跃池 ${activeCount}（上限 ${limitLabel}）/ 总库 ${storedCount}`);
+    }
+    if (minCountry > 0) {
+        parts.push(isEn ? `≥${minCountry}/region` : `单国保底≥${minCountry}`);
+    }
+    if (majorCap > 0) {
+        parts.push(isEn ? `JP/KR/US cap ${majorCap}` : `日韩美上限 ${majorCap}`);
+    }
+    summaryEl.innerText = parts.join(' · ');
+}
+
+export function selectNodeScope(scope) {
+    appState.nodeScope = scope === 'all' ? 'all' : 'active';
+    updateNodePoolSummary();
+    return fetchNodes();
+}
+
+export async function probeSingleNode(nodeId) {
+    if (!nodeId) return;
+    appendLog({ level: 'INFO', module: 'Action', message: localize(`正在对节点 ${nodeId} 发起单点测速与解锁检测...`, `Probing connectivity and service access for ${nodeId}...`) });
+    await fetch('/api/nodes/probe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ node_ids: [nodeId] })
+    });
+    setTimeout(async () => {
+        await fetchNodes();
+        await fetchUnlockCache();
+    }, 1500);
+}
+
 export async function fetchNodes() {
     try {
-        const res = await fetch('/api/nodes');
+        const endpoint = appState.nodeScope === 'all' ? '/api/nodes?scope=all' : '/api/nodes';
+        const res = await fetch(endpoint);
         if (!res.ok) return;
         appState.allNodes = await res.json();
         const nBadge = document.getElementById('nav-node-badge');
         if (nBadge) {
-            nBadge.innerText = appState.allNodes.length;
+            nBadge.innerText = (appState.currentState && typeof appState.currentState.node_count === 'number')
+                ? appState.currentState.node_count
+                : appState.allNodes.length;
         }
+        updateNodePoolSummary();
         updateCountryFilter();
         updateDynamicGroupCountryOptions();
         renderNodes();
@@ -68,6 +138,8 @@ export async function toggleFavorite(nodeId) {
                 node.is_favorite = ret.is_favorite;
                 renderNodes();
             }
+            fetchStatus();
+            fetchNodes();
         }
     } catch (err) {}
 }
@@ -366,6 +438,7 @@ export function renderNodes() {
     });
 
     const isEn = getLanguage() === 'en';
+    updateNodePoolSummary();
     document.getElementById('filtered-count').innerText = `${isEn ? 'Showing ' : '已筛选出 '}${filtered.length} / ${appState.allNodes.length} ${isEn ? 'nodes' : '个节点'}`;
 
     updateNodesMapMarkers(filtered);
@@ -431,7 +504,7 @@ export function renderNodes() {
                 </td>
                 <td data-label="${isEn ? 'Endpoint' : '出口端点'}">
                     <div class="node-endpoint">${escapeHtml(n.ip)}:${escapeHtml(n.port)}</div>
-                    <span class="badge badge-proto">${escapeHtml(String(n.proto || '').toUpperCase())}</span>
+                    <span class="badge badge-proto">${escapeHtml(String(n.proto || '').toUpperCase())}</span>${n.in_active_pool === false ? ` <span class="badge badge-cold" title="${isEn ? 'Cold storage relay outside auto-probe pool' : '位于全量冷库，未纳入活跃自动测速'}">${isEn ? 'Cold' : '冷库'}</span>` : ''}
                 </td>
                 <td data-label="${isEn ? 'Type' : '网络类型'}">${typeTag} ${riskBadge}${ispInfo}</td>
                 <td data-label="${isEn ? 'Latency' : '延迟'}">${latencyBadge}</td>
@@ -456,6 +529,7 @@ export function renderNodes() {
                                 <button class="btn btn-xs" data-action="connectToNode" data-args="${jsonAttr([n.id, 'kernel'])}" title="${isEn ? 'Connect via OpenVPN (kernel TUN)' : '内核 OpenVPN 直连'}">${isEn ? 'Kernel' : '内核连'}</button>
                                 <button class="btn btn-outline btn-xs" data-action="connectToNode" data-args="${jsonAttr([n.id, 'sstp'])}" title="${isEn ? 'Zero-TUN userland direct connect via SSTP 443' : '纯用户态免虚拟网卡直连 (SSTP 443)'}">⚡${isEn ? 'ZeroTUN' : '免TUN'}</button>
                                 <button class="btn btn-outline btn-xs" data-action="startNewTunnel" data-args="${jsonAttr([n.id])}" title="${isEn ? 'Launch as new independent tunnel exit' : '启动为新的独立并发出口'}">${isEn ? '+Tunnel' : '+并发'}</button>
+                                ${n.in_active_pool === false ? `<button class="btn btn-outline btn-xs" data-action="probeSingleNode" data-args="${jsonAttr([n.id])}" title="${isEn ? 'Probe latency and unlock status for this cold node' : '立即测速并检测此冷库节点解锁'}">${isEn ? 'Probe' : '测速'}</button>` : ''}
                                 <button class="btn btn-outline btn-xs btn-icon-danger" data-action="addNodeToBlacklist" data-args="${jsonAttr([n.id, n.ip, n.country_short])}" title="${isEn ? 'Blacklist node for 24h' : '屏蔽/拉黑此节点24小时'}">×</button>
                             </div>`
                         )

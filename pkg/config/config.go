@@ -17,6 +17,19 @@ import (
 
 var ErrInvalidSettings = errors.New("invalid settings")
 
+const (
+	DefaultNodeHotPoolSize     = 250
+	MinNodeHotPoolSize         = 50
+	MaxNodeHotPoolSize         = 5000
+	DefaultNodeStoreMaxSize    = 600
+	MinNodeStoreMaxSize        = 200
+	MaxNodeStoreMaxSize        = 10000
+	DefaultNodeMinPerCountry   = 3
+	MaxNodeMinPerCountry       = 50
+	DefaultNodeMajorCountryCap = 40
+	MaxNodeMajorCountryCap     = 500
+)
+
 type Config struct {
 	mu sync.RWMutex
 
@@ -47,12 +60,16 @@ type Config struct {
 	proxyRejected             uint64
 
 	// Intervals & Limits
-	FetchInterval      time.Duration
-	CheckInterval      time.Duration
-	TargetValidNodes   int
-	MaxScanRows        int
-	InvalidBackoff     time.Duration
-	DiscoveryCountries []string
+	FetchInterval       time.Duration
+	CheckInterval       time.Duration
+	TargetValidNodes    int
+	MaxScanRows         int
+	NodeHotPoolSize     int
+	NodeStoreMaxSize    int
+	NodeMinPerCountry   int
+	NodeMajorCountryCap int
+	InvalidBackoff      time.Duration
+	DiscoveryCountries  []string
 
 	// 自动轮换策略
 	AutoRotateMinutes int    // 0 = 禁用, > 0 轮换周期分钟
@@ -83,6 +100,10 @@ type SettingsDTO struct {
 	ProxyPort                 int      `json:"proxy_port"`
 	ProxyUser                 string   `json:"proxy_user"`
 	ProxyPass                 string   `json:"proxy_pass,omitempty"`
+	NodeHotPoolSize           *int     `json:"node_hot_pool_size,omitempty"`
+	NodeStoreMaxSize          *int     `json:"node_store_max_size,omitempty"`
+	NodeMinPerCountry         *int     `json:"node_min_per_country,omitempty"`
+	NodeMajorCountryCap       *int     `json:"node_major_country_cap,omitempty"`
 	AutoRotateMinutes         int      `json:"auto_rotate_minutes"`
 	AutoRotateIPType          string   `json:"auto_rotate_ip_type"`
 	DiscoveryCountries        []string `json:"discovery_countries"`
@@ -127,6 +148,28 @@ func getEnvInt(key string, defaultVal, minVal, maxVal int, fallbackKeys ...strin
 		if val > maxVal {
 			return maxVal
 		}
+	}
+	return val
+}
+
+// getEnvLimit parses a configurable capacity limit supporting -1, 0, or "unlimited" as unlimited (-1).
+func getEnvLimit(key string, defaultVal, minVal, maxVal int) int {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return defaultVal
+	}
+	if raw == "-1" || raw == "0" || strings.EqualFold(raw, "unlimited") {
+		return -1
+	}
+	val, err := strconv.Atoi(raw)
+	if err != nil {
+		return defaultVal
+	}
+	if val < minVal {
+		return minVal
+	}
+	if val > maxVal {
+		return maxVal
 	}
 	return val
 }
@@ -316,10 +359,14 @@ func LoadConfig() *Config {
 			}
 			return time.Duration(fetchSec) * time.Second
 		}(),
-		CheckInterval:      time.Duration(getEnvInt("CHECK_INTERVAL_SECONDS", 20, 5, 300)) * time.Second,
-		TargetValidNodes:   getEnvInt("TARGET_VALID_NODES", 5, 1, 50),
-		MaxScanRows:        getEnvInt("MAX_SCAN_ROWS", 1000, 10, 5000),
-		InvalidBackoff:     time.Duration(getEnvInt("INVALID_BACKOFF_SECONDS", 1800, 60, 86400)) * time.Second,
+		CheckInterval:       time.Duration(getEnvInt("CHECK_INTERVAL_SECONDS", 20, 5, 300)) * time.Second,
+		TargetValidNodes:    getEnvInt("TARGET_VALID_NODES", 5, 1, 50),
+		MaxScanRows:         getEnvInt("MAX_SCAN_ROWS", 1000, 10, 5000),
+		NodeHotPoolSize:     getEnvLimit("NODE_HOT_POOL_SIZE", DefaultNodeHotPoolSize, MinNodeHotPoolSize, MaxNodeHotPoolSize),
+		NodeStoreMaxSize:    getEnvLimit("NODE_STORE_MAX_SIZE", DefaultNodeStoreMaxSize, MinNodeStoreMaxSize, MaxNodeStoreMaxSize),
+		NodeMinPerCountry:   getEnvInt("NODE_MIN_PER_COUNTRY", DefaultNodeMinPerCountry, 0, MaxNodeMinPerCountry),
+		NodeMajorCountryCap: getEnvInt("NODE_MAJOR_COUNTRY_CAP", DefaultNodeMajorCountryCap, 0, MaxNodeMajorCountryCap),
+		InvalidBackoff:      time.Duration(getEnvInt("INVALID_BACKOFF_SECONDS", 1800, 60, 86400)) * time.Second,
 		DiscoveryCountries: countries,
 
 		AutoRotateMinutes: getEnvInt("AUTO_ROTATE_INTERVAL_MINUTES", 0, 0, 1440),
@@ -355,15 +402,63 @@ func (c *Config) settingsLocked() SettingsDTO {
 	if limit <= 0 {
 		limit = DefaultProxyGlobalMaxConnections
 	}
+	hot := c.NodeHotPoolSize
+	if hot == 0 {
+		hot = DefaultNodeHotPoolSize
+	}
+	store := c.NodeStoreMaxSize
+	if store == 0 {
+		store = DefaultNodeStoreMaxSize
+	}
+	minCountry := c.NodeMinPerCountry
+	majorCap := c.NodeMajorCountryCap
 	return SettingsDTO{
 		ProxyGlobalMaxConnections: &limit,
 		UIPort:                    c.UIPort, UIPath: c.UIPath, UIUsername: c.UIUsername, UIPassword: c.UIPassword,
 		SubToken: c.SubToken, AgeEncryptEnabled: c.AgeEncryptEnabled, AgePublicKey: c.AgePublicKey,
 		ProxyPort: c.ProxyPort, ProxyUser: c.ProxyUser, ProxyPass: c.ProxyPass,
-		AutoRotateMinutes: c.AutoRotateMinutes, AutoRotateIPType: c.AutoRotateIPType,
+		NodeHotPoolSize:     &hot,
+		NodeStoreMaxSize:    &store,
+		NodeMinPerCountry:   &minCountry,
+		NodeMajorCountryCap: &majorCap,
+		AutoRotateMinutes:   c.AutoRotateMinutes, AutoRotateIPType: c.AutoRotateIPType,
 		DiscoveryCountries: append([]string(nil), c.DiscoveryCountries...),
 		TelegramBotToken:   c.TelegramBotToken, TelegramChatID: c.TelegramChatID,
 	}
+}
+
+// GetNodeHotPoolSize returns the configured active hot pool limit (-1 means unlimited).
+func (c *Config) GetNodeHotPoolSize() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.NodeHotPoolSize == 0 {
+		return DefaultNodeHotPoolSize
+	}
+	return c.NodeHotPoolSize
+}
+
+// GetNodeStoreMaxSize returns the configured persistent node store limit (-1 means unlimited).
+func (c *Config) GetNodeStoreMaxSize() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.NodeStoreMaxSize == 0 {
+		return DefaultNodeStoreMaxSize
+	}
+	return c.NodeStoreMaxSize
+}
+
+// GetNodeMinPerCountry returns the minimum guaranteed active pool slots per country (0 = disabled).
+func (c *Config) GetNodeMinPerCountry() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.NodeMinPerCountry
+}
+
+// GetNodeMajorCountryCap returns the per-country active pool cap for JP/KR/US (0 = disabled).
+func (c *Config) GetNodeMajorCountryCap() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.NodeMajorCountryCap
 }
 
 func (c *Config) GetSubscriptionToken() string {
@@ -423,6 +518,18 @@ func (c *Config) IsPublicUnauthenticated() bool {
 func validateSettingsDTO(dto SettingsDTO) error {
 	if dto.ProxyGlobalMaxConnections != nil && (*dto.ProxyGlobalMaxConnections < 1 || *dto.ProxyGlobalMaxConnections > MaxProxyGlobalMaxConnections) {
 		return fmt.Errorf("%w: proxy_global_max_connections must be 1..%d", ErrInvalidSettings, MaxProxyGlobalMaxConnections)
+	}
+	if dto.NodeHotPoolSize != nil && *dto.NodeHotPoolSize != -1 && (*dto.NodeHotPoolSize < MinNodeHotPoolSize || *dto.NodeHotPoolSize > MaxNodeHotPoolSize) {
+		return fmt.Errorf("%w: node_hot_pool_size must be -1 or %d..%d", ErrInvalidSettings, MinNodeHotPoolSize, MaxNodeHotPoolSize)
+	}
+	if dto.NodeStoreMaxSize != nil && *dto.NodeStoreMaxSize != -1 && (*dto.NodeStoreMaxSize < MinNodeStoreMaxSize || *dto.NodeStoreMaxSize > MaxNodeStoreMaxSize) {
+		return fmt.Errorf("%w: node_store_max_size must be -1 or %d..%d", ErrInvalidSettings, MinNodeStoreMaxSize, MaxNodeStoreMaxSize)
+	}
+	if dto.NodeMinPerCountry != nil && (*dto.NodeMinPerCountry < 0 || *dto.NodeMinPerCountry > MaxNodeMinPerCountry) {
+		return fmt.Errorf("%w: node_min_per_country must be 0..%d", ErrInvalidSettings, MaxNodeMinPerCountry)
+	}
+	if dto.NodeMajorCountryCap != nil && (*dto.NodeMajorCountryCap < 0 || *dto.NodeMajorCountryCap > MaxNodeMajorCountryCap) {
+		return fmt.Errorf("%w: node_major_country_cap must be 0..%d", ErrInvalidSettings, MaxNodeMajorCountryCap)
 	}
 	for name, value := range map[string]string{
 		"ui_path":             dto.UIPath,
@@ -536,6 +643,26 @@ func (c *Config) applySettingsLocked(dto SettingsDTO) {
 	}
 	if dto.ProxyPass != "" {
 		c.ProxyPass = strings.TrimSpace(dto.ProxyPass)
+	}
+	if dto.NodeHotPoolSize != nil {
+		v := *dto.NodeHotPoolSize
+		if v == 0 {
+			v = DefaultNodeHotPoolSize
+		}
+		c.NodeHotPoolSize = v
+	}
+	if dto.NodeStoreMaxSize != nil {
+		v := *dto.NodeStoreMaxSize
+		if v == 0 {
+			v = DefaultNodeStoreMaxSize
+		}
+		c.NodeStoreMaxSize = v
+	}
+	if dto.NodeMinPerCountry != nil {
+		c.NodeMinPerCountry = *dto.NodeMinPerCountry
+	}
+	if dto.NodeMajorCountryCap != nil {
+		c.NodeMajorCountryCap = *dto.NodeMajorCountryCap
 	}
 	if dto.AutoRotateMinutes >= 0 {
 		c.AutoRotateMinutes = dto.AutoRotateMinutes

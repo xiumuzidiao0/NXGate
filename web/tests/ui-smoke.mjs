@@ -66,8 +66,12 @@ const status = {
     active_connections: 37,
   },
   proxy_addr: "127.0.0.1:7928",
-  node_count: 1,
-  total_node_count: 1,
+  node_count: 3,
+  total_node_count: 4,
+  stored_available_count: 4,
+  hot_pool_limit: 250,
+  min_per_country: 3,
+  major_country_cap: 40,
   node_source: "Fastly",
   blacklist_count: 0,
   version: "2.5.0",
@@ -164,6 +168,35 @@ const nodes = [{
   risk_label: "低风险",
   fraud_flags: [],
   unlock: { google: "unlocked" },
+  in_active_pool: true,
+}];
+
+const coldNodes = [{
+  id: "ch-1",
+  ip: "198.51.100.30",
+  port: 443,
+  country_short: "CH",
+  country_long: "瑞士",
+  region: "Zurich",
+  city: "Zurich",
+  hostname: "ch.example.test",
+  proto: "tcp",
+  score: 12000,
+  speed: 15000000,
+  latency_ms: 0,
+  ping: 95,
+  reputation_score: 60,
+  is_favorite: false,
+  ip_type: "residential",
+  isp: "Swisscom",
+  latitude: 47.3769,
+  longitude: 8.5417,
+  risk_score: 0.15,
+  risk_level: "pure",
+  risk_label: "极度纯净",
+  fraud_flags: [],
+  unlock: {},
+  in_active_pool: false,
 }];
 
 let lastOutboundPost = null;
@@ -171,14 +204,15 @@ let lastSettingsPost=null;
 let lastPortRulesPost = null;
 
 async function mockAPI(route) {
-  const path = new URL(route.request().url()).pathname;
+  const reqUrl = new URL(route.request().url());
+  const path = reqUrl.pathname;
   if (path.endsWith("/api/events")) {
     await route.fulfill({ status: 200, contentType: "text/event-stream", body: ": connected\n\n" });
     return;
   }
   let body = { ok: true };
   if (path.endsWith("/api/status")) body = status;
-  else if (path.endsWith("/api/nodes")) body = nodes;
+  else if (path.endsWith("/api/nodes")) body = reqUrl.searchParams.get("scope") === "all" ? [...nodes, ...coldNodes] : nodes;
   else if (path.endsWith("/api/unlock")) body = {};
   else if (path.endsWith("/api/singbox/overview")) {
     body = {
@@ -243,6 +277,10 @@ async function mockAPI(route) {
       ui_username: "admin",
       proxy_port: 7928,
       proxy_global_max_connections: 777,
+      node_hot_pool_size: 250,
+      node_store_max_size: 600,
+      node_min_per_country: 3,
+      node_major_country_cap: 40,
       auto_rotate_minutes: 15,
       auto_rotate_ip_type: "residential",
       discovery_countries: ["JP", "US"],
@@ -511,6 +549,17 @@ try {
     }
 
     await page.locator('[data-view="nodes"]:visible').click();
+    await page.waitForTimeout(80);
+    await page.locator("#scope-all").click();
+    await page.waitForTimeout(100);
+    const allNodesText = await page.locator("#nodes-tbody").innerText();
+    if (!allNodesText.includes("198.51.100.30") || !allNodesText.includes("冷库")) {
+      failures.push(`${viewport}px: #scope-all did not display cold node with badge: ${allNodesText}`);
+    }
+    const nodesScopeOverflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1);
+    if (nodesScopeOverflow) failures.push(`${viewport}px: nodes view with pool scope bar overflows horizontally`);
+    await page.locator("#scope-active").click();
+    await page.waitForTimeout(100);
     await page.locator("#chip-fav").click();
 
     // Test Language Toggle (zh <-> en)
@@ -547,6 +596,23 @@ try {
       failures.push(`${viewport}px: disable-auth checkbox did not disable credential inputs`);
     }
     await page.locator('#cfg-disable-auth').uncheck();
+    await page.selectOption('#cfg-node-hot-pool-size', '-1');
+    await page.selectOption('#cfg-node-store-max-size', '1200');
+    await page.selectOption('#cfg-node-min-per-country', '5');
+    await page.selectOption('#cfg-node-major-country-cap', '15');
+    const settingsOverflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1);
+    if (settingsOverflow) failures.push(`${viewport}px: settings view overflows horizontally`);
+    lastSettingsPost = null;
+    await page.locator('#settings-form button[type="submit"]').click();
+    await page.waitForTimeout(100);
+    if (await page.locator('#app-dialog-ok').isVisible()) {
+      await page.locator('#app-dialog-ok').click();
+      await page.waitForTimeout(60);
+    }
+    if (!lastSettingsPost || lastSettingsPost.node_hot_pool_size !== -1 || lastSettingsPost.node_store_max_size !== 1200 ||
+        lastSettingsPost.node_min_per_country !== 5 || lastSettingsPost.node_major_country_cap !== 15) {
+      failures.push(`${viewport}px: settings POST missing node pool policy fields: ${JSON.stringify(lastSettingsPost)}`);
+    }
     await page.evaluate(data => window.__statusSources[0].handlers.status({data:JSON.stringify(data)}), {
       ...status,
       node_source: "多源聚合 (Fastly 全球加速 CDN 等 3 个在线数据源)",

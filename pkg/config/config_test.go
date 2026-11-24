@@ -224,3 +224,67 @@ func TestUpdateSettingsWithPresenceAndPublicExposure(t *testing.T) {
 		t.Fatalf("expected stale ui_password.txt removed, err=%v", err)
 	}
 }
+
+func TestNodePoolSettingsEnvValidationAndPersistence(t *testing.T) {
+	dataDir := t.TempDir()
+	t.Setenv("DATA_DIR", dataDir)
+	t.Setenv("NODE_HOT_POOL_SIZE", "unlimited")
+	t.Setenv("NODE_STORE_MAX_SIZE", "1200")
+	t.Setenv("NODE_MIN_PER_COUNTRY", "5")
+	t.Setenv("NODE_MAJOR_COUNTRY_CAP", "25")
+
+	cfg := LoadConfig()
+	if cfg.GetNodeHotPoolSize() != -1 {
+		t.Fatalf("expected NODE_HOT_POOL_SIZE=unlimited -> -1, got %d", cfg.GetNodeHotPoolSize())
+	}
+	if cfg.GetNodeStoreMaxSize() != 1200 {
+		t.Fatalf("expected NODE_STORE_MAX_SIZE=1200, got %d", cfg.GetNodeStoreMaxSize())
+	}
+	if cfg.GetNodeMinPerCountry() != 5 {
+		t.Fatalf("expected NODE_MIN_PER_COUNTRY=5, got %d", cfg.GetNodeMinPerCountry())
+	}
+	if cfg.GetNodeMajorCountryCap() != 25 {
+		t.Fatalf("expected NODE_MAJOR_COUNTRY_CAP=25, got %d", cfg.GetNodeMajorCountryCap())
+	}
+
+	// Validation rejections
+	for _, tc := range []struct {
+		name string
+		dto  SettingsDTO
+	}{
+		{"hot too small", SettingsDTO{NodeHotPoolSize: intPtr(10)}},
+		{"hot invalid negative", SettingsDTO{NodeHotPoolSize: intPtr(-2)}},
+		{"store too small", SettingsDTO{NodeStoreMaxSize: intPtr(50)}},
+		{"min per country too large", SettingsDTO{NodeMinPerCountry: intPtr(MaxNodeMinPerCountry + 1)}},
+		{"major cap negative", SettingsDTO{NodeMajorCountryCap: intPtr(-1)}},
+	} {
+		if err := cfg.UpdateSettings(tc.dto); !errors.Is(err, ErrInvalidSettings) {
+			t.Fatalf("%s: expected ErrInvalidSettings, got %v", tc.name, err)
+		}
+	}
+
+	// Update pool limits and verify persistence + partial update preservation
+	if err := cfg.UpdateSettings(SettingsDTO{
+		NodeHotPoolSize:     intPtr(500),
+		NodeStoreMaxSize:    intPtr(-1),
+		NodeMinPerCountry:   intPtr(0),
+		NodeMajorCountryCap: intPtr(15),
+	}); err != nil {
+		t.Fatalf("UpdateSettings failed: %v", err)
+	}
+	if err := cfg.UpdateSettings(SettingsDTO{TelegramChatID: "999"}); err != nil {
+		t.Fatalf("partial UpdateSettings failed: %v", err)
+	}
+
+	reloaded := LoadConfig()
+	if reloaded.GetNodeHotPoolSize() != 500 || reloaded.GetNodeStoreMaxSize() != -1 ||
+		reloaded.GetNodeMinPerCountry() != 0 || reloaded.GetNodeMajorCountryCap() != 15 ||
+		reloaded.TelegramChatID != "999" {
+		t.Fatalf("unexpected reloaded pool settings: hot=%d store=%d min=%d cap=%d chat=%q",
+			reloaded.GetNodeHotPoolSize(), reloaded.GetNodeStoreMaxSize(),
+			reloaded.GetNodeMinPerCountry(), reloaded.GetNodeMajorCountryCap(),
+			reloaded.TelegramChatID)
+	}
+}
+
+func intPtr(v int) *int { return &v }

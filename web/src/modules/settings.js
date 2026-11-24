@@ -2,8 +2,24 @@ import { appState } from '../state.js';
 import { getLanguage, localize, t, tAlert, tConfirm } from '../i18n-runtime.js';
 import { editDynamicGroup, fetchDynamicGroups, fetchPortRules, switchMatrixTab } from './matrix.js';
 import { switchView } from './shell.js';
+import { fetchNodes } from './nodes.js';
 import { fetchStatus } from '../transport.js';
 import { alert, escapeHtml, showToast } from '../utils.js';
+
+function setSelectNumericValue(id, value, fallbackValue) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const raw = value === undefined || value === null ? fallbackValue : value;
+    const strVal = String(raw);
+    const hasOption = [...el.options].some(opt => opt.value === strVal);
+    if (!hasOption) {
+        const opt = document.createElement('option');
+        opt.value = strVal;
+        opt.textContent = strVal === '-1' ? (getLanguage() === 'en' ? 'Unlimited' : '不限') : strVal;
+        el.appendChild(opt);
+    }
+    el.value = strVal;
+}
 
 export async function testTelegramAlert() {
     try {
@@ -61,7 +77,11 @@ export async function loadSettingsForm() {
         }
         onDisableAuthChanged();
         document.getElementById('cfg-proxy-port').value = data.proxy_port || 7928;
- document.getElementById('cfg-proxy-global-max').value = data.proxy_global_max_connections ?? 1024;
+        document.getElementById('cfg-proxy-global-max').value = data.proxy_global_max_connections ?? 1024;
+        setSelectNumericValue('cfg-node-hot-pool-size', data.node_hot_pool_size, 250);
+        setSelectNumericValue('cfg-node-store-max-size', data.node_store_max_size, 600);
+        setSelectNumericValue('cfg-node-min-per-country', data.node_min_per_country, 3);
+        setSelectNumericValue('cfg-node-major-country-cap', data.node_major_country_cap, 40);
         document.getElementById('cfg-tg-token').value = data.telegram_bot_token || '';
         document.getElementById('cfg-tg-chatid').value = data.telegram_chat_id || '';
         const agePubEl = document.getElementById('cfg-age-pubkey');
@@ -132,6 +152,10 @@ export async function saveSettings(e) {
         ui_username: disableAuth ? '' : user,
         proxy_port: proxyPort,
         proxy_global_max_connections: Number(document.getElementById('cfg-proxy-global-max').value),
+        node_hot_pool_size: Number(document.getElementById('cfg-node-hot-pool-size')?.value ?? 250),
+        node_store_max_size: Number(document.getElementById('cfg-node-store-max-size')?.value ?? 600),
+        node_min_per_country: Number(document.getElementById('cfg-node-min-per-country')?.value ?? 3),
+        node_major_country_cap: Number(document.getElementById('cfg-node-major-country-cap')?.value ?? 40),
         telegram_bot_token: tgToken,
         telegram_chat_id: tgChatID,
         age_public_key: agePub,
@@ -180,6 +204,7 @@ export async function saveSettings(e) {
             window.location.href = newUrl;
         } else {
             fetchStatus();
+            fetchNodes();
         }
     } catch (err) {
         alert(localize('网络请求失败: ', 'Network request failed: ') + err);

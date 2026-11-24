@@ -239,6 +239,20 @@ fun FullNodeCard(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
+                    if (!node.inActivePool) {
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerHighest
+                        ) {
+                            Text(
+                                text = strings.localized("冷库", "Cold"),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
                     if (node.sstpPort > 0) {
                         Surface(
                             shape = RoundedCornerShape(4.dp),
@@ -408,6 +422,7 @@ fun NodeSquareScreen(
     )
 
     // Full nodes list from server (dynamically loaded)
+    var nodeScope by remember { mutableStateOf("active") }
     var allNodes by remember { mutableStateOf<List<NodeCandidate>>(emptyList()) }
     var isLoadingNodes by remember { mutableStateOf(false) }
     var nodeLoadError by remember { mutableStateOf<String?>(null) }
@@ -465,7 +480,7 @@ fun NodeSquareScreen(
             isLoadingNodes = true
             nodeLoadError = null
             scope.launch {
-                val nodesRes = NXGateApplication.instance.apiClient.fetchNodes(activeServer)
+                val nodesRes = NXGateApplication.instance.apiClient.fetchNodes(activeServer, nodeScope)
                 isLoadingNodes = false
                 if (nodesRes.isSuccess) {
                     allNodes = nodesRes.getOrNull() ?: emptyList()
@@ -489,8 +504,8 @@ fun NodeSquareScreen(
         }
     }
 
-    // Pull real nodes whenever active server changes
-    LaunchedEffect(activeServer?.id) {
+    // Pull real nodes whenever active server or scope changes
+    LaunchedEffect(activeServer?.id, nodeScope) {
         refreshAllNodes()
     }
 
@@ -618,6 +633,24 @@ fun NodeSquareScreen(
                         singleLine = true,
                         shape = RoundedCornerShape(16.dp),
                         modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                // 0. 活跃池 / 全量库 视角切换 (把黑盒打开给用户自由选)
+                val scopeLabels = remember(isEn) {
+                    if (isEn) listOf("Active Pool", "All Stored") else listOf("活跃候选池", "全量节点库")
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    ConnectedChipGroup(
+                        chips = scopeLabels,
+                        selectedIndex = if (nodeScope == "all") 1 else 0,
+                        onSelected = { idx ->
+                            nodeScope = if (idx == 1) "all" else "active"
+                        }
                     )
                 }
 

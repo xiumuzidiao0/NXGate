@@ -2,7 +2,7 @@ import { createStatusTransport } from './status-transport.js';
 import { appState } from './state.js';
 import { getLanguage, localize, tAlert } from './i18n-runtime.js';
 import { renderStatus } from './modules/dashboard.js';
-import { renderNodes } from './modules/nodes.js';
+import { renderNodes, updateNodePoolSummary } from './modules/nodes.js';
 import { appendLog, clearAppAlert, showAppAlert } from './utils.js';
 
 export const apiPrefix = (() => {
@@ -104,7 +104,10 @@ export async function fetchStatus() {
         if (res.ok) {
             const data = await res.json();
             // Do not overwrite a newer pushed snapshot with an older HTTP response.
-            if (eventVersion === appState.statusEventVersion) renderStatus(data);
+            if (eventVersion === appState.statusEventVersion) {
+                renderStatus(data);
+                updateNodePoolSummary();
+            }
         }
     } catch (err) {
         console.error("fetch status error:", err);
@@ -116,7 +119,7 @@ export function setupSSE() {
     appState.statusTransport = createStatusTransport({
         url: (apiPrefix || '') + '/api/events',
         fetchStatus,
-        renderStatus: data => { appState.statusEventVersion++; renderStatus(data); },
+        renderStatus: data => { appState.statusEventVersion++; renderStatus(data); updateNodePoolSummary(); },
         onOpen: () => appendLog({ level: 'INFO', module: 'SSE', message: localize('已成功连通服务器实时推流总线', 'Live server updates connected') })
     });
     const es = appState.statusTransport.start();

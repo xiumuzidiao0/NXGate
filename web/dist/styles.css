@@ -2875,6 +2875,111 @@ button {
             border: 1px solid rgba(239, 68, 68, 0.3);
         }
 
+        .pool-scope-bar {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px 14px;
+            padding: 10px 12px;
+            margin-bottom: 12px;
+            background: var(--surface-3);
+            border: 1px solid var(--border-subtle);
+            border-radius: 10px;
+            min-width: 0;
+            max-width: 100%;
+        }
+        .pool-scope-tabs {
+            display: inline-flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            min-width: 0;
+            max-width: 100%;
+        }
+        .pool-scope-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            border-radius: 8px;
+            border: 1px solid var(--border-default);
+            background: var(--surface-2);
+            color: var(--text-muted);
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+        .pool-scope-btn:hover {
+            color: var(--text-main);
+            border-color: var(--border-strong);
+        }
+        .pool-scope-btn.active {
+            background: rgba(77, 202, 220, 0.14);
+            color: var(--primary);
+            border-color: var(--border-highlight);
+        }
+        .scope-count {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 22px;
+            padding: 1px 6px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 600;
+            background: rgba(255, 255, 255, 0.08);
+            color: inherit;
+        }
+        .pool-scope-meta {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px 10px;
+            min-width: 0;
+            max-width: 100%;
+            flex: 1 1 280px;
+            justify-content: flex-end;
+        }
+        .pool-scope-summary {
+            font-size: 12px;
+            line-height: 1.4;
+            color: var(--text-muted);
+            min-width: 0;
+        }
+        .badge-cold {
+            background: rgba(148, 163, 184, 0.14);
+            color: #cbd5e1;
+            border: 1px solid rgba(148, 163, 184, 0.28);
+        }
+        .settings-section {
+            margin: 14px 0;
+            padding: 12px 14px;
+            border-radius: 10px;
+            border: 1px solid var(--border-subtle);
+            background: var(--surface-3);
+        }
+        .settings-section-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-main);
+            margin-bottom: 4px;
+        }
+        .settings-section-desc {
+            display: block;
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-bottom: 12px;
+            line-height: 1.45;
+        }
+
+        @media (max-width: 640px) {
+            .pool-scope-meta {
+                justify-content: flex-start;
+                flex-basis: 100%;
+            }
+        }
+
         @media (prefers-reduced-motion: reduce) {
             html {
                 scroll-behavior: auto;

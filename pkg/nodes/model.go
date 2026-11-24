@@ -52,9 +52,10 @@ type Node struct {
 	Unlock          *UnlockResult `json:"unlock,omitempty"`      // AI与主流流媒体解锁状态
 
 	// 增量更新与生命周期跟踪
-	FirstSeen time.Time `json:"first_seen,omitempty"`
-	LastSeen  time.Time `json:"last_seen,omitempty"`
-	FailCount int       `json:"fail_count,omitempty"` // 连续探测失败次数
+	FirstSeen    time.Time `json:"first_seen,omitempty"`
+	LastSeen     time.Time `json:"last_seen,omitempty"`
+	FailCount    int       `json:"fail_count,omitempty"` // 连续探测失败次数
+	InActivePool bool      `json:"in_active_pool"`
 }
 
 func (n *Node) String() string {

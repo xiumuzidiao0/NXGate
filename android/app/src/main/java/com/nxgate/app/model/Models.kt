@@ -380,7 +380,8 @@ data class NodeCandidate(
     val gemini: String = "unknown",
     val google: String = "unknown",
     val cloudflare: String = "unknown",
-    val netflix: String = "unknown"
+    val netflix: String = "unknown",
+    val inActivePool: Boolean = true
 ) {
     val title: String
         get() = "${countryLong}节点 $ip 延迟${if (latencyMs > 0) "${latencyMs}ms" else "待测"}"
@@ -482,6 +483,10 @@ data class ServerSettingsDTO(
     val proxyPort: Int = 7928,
     val proxyUser: String = "",
     val proxyPass: String = "",
+    val nodeHotPoolSize: Int = 250,
+    val nodeStoreMaxSize: Int = 600,
+    val nodeMinPerCountry: Int = 3,
+    val nodeMajorCountryCap: Int = 40,
     val autoRotateMinutes: Int = 0,
     val autoRotateIPType: String = "",
     val discoveryCountries: List<String> = emptyList(),

@@ -19,12 +19,16 @@ import (
 )
 
 type StatusResponse struct {
-	VPN              any                    `json:"vpn"`
-	Traffic          stats.TrafficSnapshot  `json:"traffic"`
-	ProxyAddr        string                 `json:"proxy_addr"`
-	NodeCount        int                    `json:"node_count"`
-	TotalNodeCount   int                    `json:"total_node_count"`
-	NodeSource       string                 `json:"node_source"`
+	VPN                  any                    `json:"vpn"`
+	Traffic              stats.TrafficSnapshot  `json:"traffic"`
+	ProxyAddr            string                 `json:"proxy_addr"`
+	NodeCount            int                    `json:"node_count"`
+	TotalNodeCount       int                    `json:"total_node_count"`
+	StoredAvailableCount int                    `json:"stored_available_count"`
+	HotPoolLimit         int                    `json:"hot_pool_limit"`
+	MinPerCountry        int                    `json:"min_per_country"`
+	MajorCountryCap      int                    `json:"major_country_cap"`
+	NodeSource           string                 `json:"node_source"`
 	BlacklistCount   int                    `json:"blacklist_count"`
 	AdminPath        string                 `json:"admin_path"`
 	UIAuthEnabled    bool                   `json:"ui_auth_enabled"`
@@ -57,12 +61,16 @@ func (s *Server) buildStatusResponse() StatusResponse {
 	}
 
 	return StatusResponse{
-		VPN:              vpnState,
-		Traffic:          traffic,
-		ProxyAddr:        fmt.Sprintf("%s:%d", proxyHost, s.cfg.ProxyPort),
-		NodeCount:        count,
-		TotalNodeCount:   totalCount,
-		NodeSource:       source,
+		VPN:                  vpnState,
+		Traffic:              traffic,
+		ProxyAddr:            fmt.Sprintf("%s:%d", proxyHost, s.cfg.ProxyPort),
+		NodeCount:            count,
+		TotalNodeCount:       totalCount,
+		StoredAvailableCount: s.pool.NonBlacklistedCount(),
+		HotPoolLimit:         s.cfg.GetNodeHotPoolSize(),
+		MinPerCountry:        s.cfg.GetNodeMinPerCountry(),
+		MajorCountryCap:      s.cfg.GetNodeMajorCountryCap(),
+		NodeSource:           source,
 		BlacklistCount:   blCount,
 		AdminPath:        s.cfg.UIPath,
 		UIAuthEnabled:    s.cfg.IsUIAuthEnabled(),
@@ -80,7 +88,13 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleNodes(w http.ResponseWriter, r *http.Request) {
-	candidates := s.pool.GetCandidates()
+	scope := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("scope")))
+	var candidates []*nodes.Node
+	if scope == "all" {
+		candidates = s.pool.GetAllNodes()
+	} else {
+		candidates = s.pool.GetCandidates()
+	}
 	if s.tunnelPool != nil && s.tunnelPool.UnlockDetector() != nil {
 		detector := s.tunnelPool.UnlockDetector()
 		for _, n := range candidates {
@@ -108,7 +122,7 @@ func (s *Server) handleProbeNodes(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewDecoder(r.Body).Decode(&req)
 
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
 		targets := s.pool.ProbeSpecificNodes(ctx, req.NodeIDs)
@@ -141,6 +155,7 @@ func (s *Server) handleToggleFavorite(w http.ResponseWriter, r *http.Request) {
 	}
 
 	isFav := s.pool.Favorites().Toggle(req.NodeID)
+	s.pool.RebuildCandidates()
 	s.writeJSON(w, http.StatusOK, map[string]any{
 		"node_id":     req.NodeID,
 		"is_favorite": isFav,
@@ -387,6 +402,9 @@ func (s *Server) handleUpdateSettings(w http.ResponseWriter, r *http.Request) {
 		}
 		s.writeError(w, status, fmt.Sprintf("更新配置失败: %v", err))
 		return
+	}
+	if s.pool != nil {
+		s.pool.RebuildCandidates()
 	}
 
 	current := s.cfg.GetSettings()

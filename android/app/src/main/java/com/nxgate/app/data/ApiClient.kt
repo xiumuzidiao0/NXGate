@@ -608,9 +608,10 @@ class ApiClient {
         }
     }
 
-    suspend fun fetchNodes(profile: ServerProfile): Result<List<NodeCandidate>> = withContext(Dispatchers.IO) {
+    suspend fun fetchNodes(profile: ServerProfile, scope: String = "active"): Result<List<NodeCandidate>> = withContext(Dispatchers.IO) {
         try {
-            executeCall(profile, "/api/nodes").use { resp ->
+            val endpoint = if (scope == "all") "/api/nodes?scope=all" else "/api/nodes"
+            executeCall(profile, endpoint).use { resp ->
                 if (!resp.isSuccessful) return@withContext Result.failure(Exception("HTTP ${resp.code}: ${resp.message}"))
                 val rawStr = resp.body?.string() ?: "[]"
                 val arr = JSONArray(rawStr)
@@ -644,6 +645,7 @@ class ApiClient {
                     val riskLabel = obj.optString("risk_label", "")
                     val sstpPort = obj.optInt("sstp_port", 0)
                     val resConfidence = obj.optInt("res_confidence", 0)
+                    val inActivePool = obj.optBoolean("in_active_pool", true)
                     val fraudFlagsArr = obj.optJSONArray("fraud_flags")
                     val fraudFlags = mutableListOf<String>()
                     if (fraudFlagsArr != null) {
@@ -678,7 +680,8 @@ class ApiClient {
                             gemini = gemini,
                             google = google,
                             cloudflare = cloudflare,
-                            netflix = netflix
+                            netflix = netflix,
+                            inActivePool = inActivePool
                         )
                     )
                 }
@@ -913,6 +916,10 @@ class ApiClient {
                     proxyPort = obj.optInt("proxy_port", 7928),
                     proxyUser = obj.optString("proxy_user", ""),
                     proxyPass = obj.optString("proxy_pass", ""),
+                    nodeHotPoolSize = obj.optInt("node_hot_pool_size", 250),
+                    nodeStoreMaxSize = obj.optInt("node_store_max_size", 600),
+                    nodeMinPerCountry = obj.optInt("node_min_per_country", 3),
+                    nodeMajorCountryCap = obj.optInt("node_major_country_cap", 40),
                     autoRotateMinutes = obj.optInt("auto_rotate_minutes", 0),
                     autoRotateIPType = obj.optString("auto_rotate_ip_type", ""),
                     discoveryCountries = countries,
@@ -942,6 +949,10 @@ class ApiClient {
                 put("proxy_port", settings.proxyPort)
                 put("proxy_user", settings.proxyUser)
                 if (settings.proxyPass.isNotBlank()) put("proxy_pass", settings.proxyPass)
+                put("node_hot_pool_size", settings.nodeHotPoolSize)
+                put("node_store_max_size", settings.nodeStoreMaxSize)
+                put("node_min_per_country", settings.nodeMinPerCountry)
+                put("node_major_country_cap", settings.nodeMajorCountryCap)
                 put("auto_rotate_minutes", settings.autoRotateMinutes)
                 put("auto_rotate_ip_type", settings.autoRotateIPType)
                 put("discovery_countries", JSONArray(settings.discoveryCountries))
