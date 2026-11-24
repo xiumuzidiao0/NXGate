@@ -34,14 +34,13 @@ NXGate is a Go-based multi-egress proxy gateway for Linux servers. It maintains 
 
 ### Linux (`systemd`)
 
-Review the installer first, then run on a `systemd`-based Linux host (Debian, Ubuntu, CentOS, RHEL, Rocky, AlmaLinux, Fedora):
+Download and run the installer on a `systemd`-based Linux host (Debian, Ubuntu, CentOS, RHEL, Rocky, AlmaLinux, Fedora):
 
 ```bash
-curl -fL https://raw.githubusercontent.com/xiumuzidiao0/NXGate/main/install.sh -o install.sh
-less install.sh
-bash install.sh
+curl -fL https://raw.githubusercontent.com/xiumuzidiao0/NXGate/main/install.sh -o install.sh && bash install.sh
 ```
 
+- If you want to inspect the script before running it, download `install.sh` first, review it locally, and then run `bash install.sh`.
 - Requires an interactive terminal (`/dev/tty`) before installing dependencies; skips `sing-box` by default and does not modify firewall, SSH, or policy routing rules automatically (pre-existing rules from older scripts are left intact).
 
 ### Docker Compose

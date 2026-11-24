@@ -34,14 +34,13 @@ NXGate 是一个面向 Linux 服务器的多出口代理网关，用于维护并
 
 ### Linux（systemd）
 
-在支持 `systemd` 的 Linux 主机（Debian / Ubuntu / CentOS / RHEL / Rocky / AlmaLinux / Fedora）上先审阅安装脚本再运行：
+在支持 `systemd` 的 Linux 主机（Debian / Ubuntu / CentOS / RHEL / Rocky / AlmaLinux / Fedora）上下载并运行安装脚本：
 
 ```bash
-curl -fL https://raw.githubusercontent.com/xiumuzidiao0/NXGate/main/install.sh -o install.sh
-less install.sh
-bash install.sh
+curl -fL https://raw.githubusercontent.com/xiumuzidiao0/NXGate/main/install.sh -o install.sh && bash install.sh
 ```
 
+- 如需先审阅脚本内容再执行，可只运行前半段 `curl` 下载到本地后查看 `install.sh`，再运行 `bash install.sh`。
 - 脚本需在交互终端（`/dev/tty`）下确认后才会安装依赖，默认跳过 `sing-box`，且不自动修改系统防火墙、SSH 规则或策略路由；旧版脚本此前写入的规则不会自动删除。
 
 ### Docker Compose
