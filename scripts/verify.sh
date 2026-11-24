@@ -149,7 +149,9 @@ while IFS= read -r -d '' f; do
 done < <(find . -maxdepth 4 \( -name "install.sh" -o -path "./scripts/*.sh" -o -path "./scripts/*/*.sh" \) -type f -print0)
 sh_files+=(".githooks/commit-msg" ".githooks/pre-push")
 for f in "${sh_files[@]}"; do
-    [ -f "$f" ] && bash -n "$f"
+    if [ -f "$f" ]; then
+        bash -n "$f"
+    fi
 done
 if command -v shellcheck >/dev/null 2>&1; then
     shellcheck --severity=error install.sh scripts/verify.sh

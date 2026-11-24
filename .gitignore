@@ -46,3 +46,4 @@ web/test-results/
 # Local agent & goal runtime
 .pi/
 .agents/
+.githooks/
