@@ -166,7 +166,7 @@ func (t *Tunnel) Snapshot() *Tunnel {
 		ID:             t.ID,
 		DevName:        t.DevName,
 		DevIndex:       t.DevIndex,
-		Node:           t.Node,
+		Node:           t.Node.CloneWithoutConfig(),
 		Status:         t.Status,
 		Message:        t.Message,
 		ConnectedAt:    t.ConnectedAt,

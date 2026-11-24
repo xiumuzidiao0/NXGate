@@ -108,3 +108,64 @@ func TestFetchURLDecompressesGzipCSV(t *testing.T) {
 		t.Fatalf("expected corrupt gzip payload to fail validation")
 	}
 }
+
+func TestFetchNodesDeduplicatesURLAndMergesFamilies(t *testing.T) {
+	csvMirror := "*vpn_servers\n#HostName,IP,Score,Ping,Speed,CountryLong,CountryShort,NumVpnSessions,Uptime,TotalUsers,TotalTraffic,LogType,Operator,Message,OpenVPN_ConfigData_Base64\nvpn-a,1.1.1.1,100,20,1000,Japan,JP,1,100,10,1000,2,op,msg,Y29uZmln\n"
+	csvOfficial := "*vpn_servers\n#HostName,IP,Score,Ping,Speed,CountryLong,CountryShort,NumVpnSessions,Uptime,TotalUsers,TotalTraffic,LogType,Operator,Message,OpenVPN_ConfigData_Base64\nvpn-a-dup,1.1.1.1,90,30,900,Japan,JP,1,100,10,1000,2,op,msg,Y29uZmln\nvpn-b,2.2.2.2,120,15,2000,Korea,KR,2,200,20,2000,2,op,msg,Y29uZmln\n"
+
+	var hitsMirror, hitsOfficial int
+	srvMirror := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hitsMirror++
+		_, _ = w.Write([]byte(csvMirror))
+	}))
+	defer srvMirror.Close()
+
+	srvOfficial := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hitsOfficial++
+		_, _ = w.Write([]byte(csvOfficial))
+	}))
+	defer srvOfficial.Close()
+
+	// Set both apiURL and mirrorURL to srvMirror.URL? No: official=srvOfficial, mirror=srvMirror,
+	// plus test identical URL dedup by setting both apiURL and mirrorURL to the same URL.
+	sameFetcher := NewFetcher(srvMirror.URL, srvMirror.URL, NewSnapshotManager(t.TempDir()))
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.Proxy = nil
+	transport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+		host, _, err := net.SplitHostPort(addr)
+		if err != nil || host != "127.0.0.1" {
+			return nil, fmt.Errorf("non-local test dial blocked: %s", addr)
+		}
+		return (&net.Dialer{}).DialContext(ctx, network, addr)
+	}
+	defer transport.CloseIdleConnections()
+	sameFetcher.client.Transport = transport
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	resSame, err := sameFetcher.FetchNodes(ctx)
+	cancel()
+	if err != nil || resSame == nil {
+		t.Fatalf("same-url fetch failed: %v", err)
+	}
+	if hitsMirror != 1 {
+		t.Fatalf("expected duplicate URL to be fetched once, got %d hits", hitsMirror)
+	}
+
+	hitsMirror = 0
+	fetcher := NewFetcher(srvOfficial.URL, srvMirror.URL, NewSnapshotManager(t.TempDir()))
+	fetcher.client.Transport = transport
+
+	ctx2, cancel2 := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel2()
+	res, err := fetcher.FetchNodes(ctx2)
+	if err != nil {
+		t.Fatalf("FetchNodes merge failed: %v", err)
+	}
+	got := string(res.Data)
+	if strings.Count(got, "1.1.1.1") != 1 || strings.Count(got, "2.2.2.2") != 1 {
+		t.Fatalf("expected deduplicated IPs (1.1.1.1 and 2.2.2.2 once each), got:\n%s", got)
+	}
+	if hitsMirror != 1 || hitsOfficial != 1 {
+		t.Fatalf("expected 1 hit per family, got mirror=%d official=%d", hitsMirror, hitsOfficial)
+	}
+}

@@ -61,3 +61,14 @@ func (n *Node) String() string {
 	return fmt.Sprintf("[%s] %s (%s:%d %s, Score: %d, Speed: %.2f Mbps, Ping: %dms)",
 		n.CountryShort, n.HostName, n.IP, n.Port, n.Proto, n.Score, float64(n.Speed)/1000000.0, n.Ping)
 }
+
+// CloneWithoutConfig returns a shallow copy of the node without raw ConfigData
+// so API/SSE status snapshots do not serialize large OpenVPN PEM payloads.
+func (n *Node) CloneWithoutConfig() *Node {
+	if n == nil {
+		return nil
+	}
+	cp := *n
+	cp.ConfigData = ""
+	return &cp
+}

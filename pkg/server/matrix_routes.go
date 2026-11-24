@@ -34,7 +34,7 @@ func (s *Server) getActiveTunnels() []*tunnel.Tunnel {
 				ID:          "primary-userland",
 				DevName:     fmt.Sprintf("sstp-%d", activeNode.Port),
 				DevIndex:    0,
-				Node:        activeNode,
+				Node:        activeNode.CloneWithoutConfig(),
 				Status:      tunnel.StatusConnected,
 				Message:     "系统主连网关 (用户态免TUN直连)",
 				ConnectedAt: s.vpn.ConnectedAt(),

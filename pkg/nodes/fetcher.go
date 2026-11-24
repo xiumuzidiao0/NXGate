@@ -80,18 +80,34 @@ func (f *Fetcher) FetchNodes(ctx context.Context) (*FetchResult, error) {
 		return nil, err
 	}
 
-	sources := []struct {
-		name string
-		url  string
-	}{
-		{"NXGate 主镜像源", f.mirrorURL},
-		{"VPNGate 官方 HTTPS API", f.apiURL},
-		{"VPNGate 官方 HTTP API", "http://www.vpngate.net/api/iphone/"},
-		{"NXGate 实时镜像 (Data 分支)", "https://raw.githubusercontent.com/xiumuzidiao0/NXGate/data/mirror/vpngate.csv"},
-		{"NXGate 高速压缩镜像 (Gzip)", "https://raw.githubusercontent.com/xiumuzidiao0/NXGate/data/mirror/vpngate.csv.gz"},
-		{"Fastly 全球加速 CDN", "https://fastly.jsdelivr.net/gh/xiumuzidiao0/NXGate@data/mirror/vpngate.csv"},
-		{"jsDelivr 全球加速 CDN", "https://cdn.jsdelivr.net/gh/xiumuzidiao0/NXGate@data/mirror/vpngate.csv"},
-		{"GitHub 镜像加速源", "https://ghproxy.net/https://raw.githubusercontent.com/xiumuzidiao0/NXGate/data/mirror/vpngate.csv"},
+	type fetchSource struct {
+		name   string
+		url    string
+		family string
+	}
+
+	rawSources := []fetchSource{
+		{name: "NXGate 主镜像源", url: f.mirrorURL, family: "mirror"},
+		{name: "VPNGate 官方 HTTPS API", url: f.apiURL, family: "official"},
+		{name: "VPNGate 官方 HTTP API", url: "http://www.vpngate.net/api/iphone/", family: "official"},
+		{name: "NXGate 实时镜像 (Data 分支)", url: "https://raw.githubusercontent.com/xiumuzidiao0/NXGate/data/mirror/vpngate.csv", family: "mirror"},
+		{name: "NXGate 高速压缩镜像 (Gzip)", url: "https://raw.githubusercontent.com/xiumuzidiao0/NXGate/data/mirror/vpngate.csv.gz", family: "mirror"},
+		{name: "Fastly 全球加速 CDN", url: "https://fastly.jsdelivr.net/gh/xiumuzidiao0/NXGate@data/mirror/vpngate.csv", family: "mirror"},
+		{name: "jsDelivr 全球加速 CDN", url: "https://cdn.jsdelivr.net/gh/xiumuzidiao0/NXGate@data/mirror/vpngate.csv", family: "mirror"},
+		{name: "GitHub 镜像加速源", url: "https://ghproxy.net/https://raw.githubusercontent.com/xiumuzidiao0/NXGate/data/mirror/vpngate.csv", family: "mirror"},
+	}
+
+	// Deduplicate identical URLs so a default mirrorURL never fetches the same feed twice.
+	seenURLs := make(map[string]bool, len(rawSources))
+	sources := make([]fetchSource, 0, len(rawSources))
+	activeFamilies := make(map[string]bool, 2)
+	for _, src := range rawSources {
+		if src.url == "" || seenURLs[src.url] {
+			continue
+		}
+		seenURLs[src.url] = true
+		activeFamilies[src.family] = true
+		sources = append(sources, src)
 	}
 
 	type sourceData struct {
@@ -100,47 +116,71 @@ func (f *Fetcher) FetchNodes(ctx context.Context) (*FetchResult, error) {
 	}
 
 	var mu sync.Mutex
-	var successes []sourceData
+	familySuccess := make(map[string]*sourceData, 2)
 
 	fetchCtx, cancelAll := context.WithCancel(ctx)
 	defer cancelAll()
+
+	officialCtx, officialCancel := context.WithCancel(fetchCtx)
+	defer officialCancel()
+	mirrorCtx, mirrorCancel := context.WithCancel(fetchCtx)
+	defer mirrorCancel()
 
 	var triggerEarlyExitOnce sync.Once
 	doneCh := make(chan struct{})
 
 	var wg sync.WaitGroup
 	for _, src := range sources {
-		if src.url == "" {
-			continue
-		}
 		wg.Add(1)
-		go func(name, u string) {
+		go func(s fetchSource) {
 			defer wg.Done()
-			reqCtx, reqCancel := context.WithTimeout(fetchCtx, 12*time.Second)
+			famCtx := mirrorCtx
+			famCancel := mirrorCancel
+			if s.family == "official" {
+				famCtx = officialCtx
+				famCancel = officialCancel
+			}
+
+			reqCtx, reqCancel := context.WithTimeout(famCtx, 12*time.Second)
 			defer reqCancel()
 
-			data, err := f.fetchURL(reqCtx, u)
-			if err == nil && len(data) > 0 {
-				mu.Lock()
-				successes = append(successes, sourceData{name: name, data: data})
-				count := len(successes)
-				mu.Unlock()
-				stats.LogInfo("Nodes", "成功从 [%s] 拉取到节点数据 (%d 字节)", name, len(data))
-
-				// 一旦有至少 2 个高速镜像拉取成功，开启 1.5 秒早退宽限期，避免等待死链接卡满 12 秒
-				if count >= 2 {
-					triggerEarlyExitOnce.Do(func() {
-						go func() {
-							select {
-							case <-time.After(1500 * time.Millisecond):
-								cancelAll()
-							case <-doneCh:
-							}
-						}()
-					})
-				}
+			data, err := f.fetchURL(reqCtx, s.url)
+			if err != nil || len(data) == 0 {
+				return
 			}
-		}(src.name, src.url)
+
+			mu.Lock()
+			if _, already := familySuccess[s.family]; already {
+				mu.Unlock()
+				return
+			}
+			familySuccess[s.family] = &sourceData{name: s.name, data: data}
+			// First win per source family cancels sibling mirrors immediately.
+			famCancel()
+			wonCount := len(familySuccess)
+			allWon := wonCount >= len(activeFamilies)
+			mu.Unlock()
+
+			stats.LogInfo("Nodes", "成功从 [%s] 拉取到节点数据 (%d 字节)", s.name, len(data))
+
+			if allWon {
+				cancelAll()
+				return
+			}
+
+			// One family succeeded; allow a short 1.5s grace window for the other family before early exit.
+			triggerEarlyExitOnce.Do(func() {
+				go func() {
+					timer := time.NewTimer(1500 * time.Millisecond)
+					defer timer.Stop()
+					select {
+					case <-timer.C:
+						cancelAll()
+					case <-doneCh:
+					}
+				}()
+			})
+		}(src)
 	}
 
 	go func() {
@@ -150,34 +190,63 @@ func (f *Fetcher) FetchNodes(ctx context.Context) (*FetchResult, error) {
 
 	<-doneCh
 
-	if err := ctx.Err(); err != nil && len(successes) == 0 {
+	if err := ctx.Err(); err != nil && len(familySuccess) == 0 {
 		return nil, err
 	}
 
-	if len(successes) > 0 {
+	if len(familySuccess) > 0 {
 		var combined bytes.Buffer
 		combined.WriteString("*vpn_servers\n#HostName,IP,Score,Ping,Speed,CountryLong,CountryShort,NumVpnSessions,Uptime,TotalUsers,TotalTraffic,LogType,Operator,Message,OpenVPN_ConfigData_Base64\n")
 
-		sourceNames := make([]string, 0, len(successes))
+		sourceNames := make([]string, 0, len(familySuccess))
 		seenIPs := make(map[string]bool)
-		for _, s := range successes {
-			sourceNames = append(sourceNames, s.name)
-			lines := strings.Split(string(s.data), "\n")
-			for _, l := range lines {
-				trimmed := strings.TrimSpace(l)
-				if trimmed == "" || strings.HasPrefix(trimmed, "*") || strings.HasPrefix(trimmed, "#") {
+
+		appendCSVLines := func(data []byte) {
+			for len(data) > 0 {
+				var line []byte
+				if idx := bytes.IndexByte(data, '\n'); idx >= 0 {
+					line = data[:idx]
+					data = data[idx+1:]
+				} else {
+					line = data
+					data = nil
+				}
+				trimmed := bytes.TrimSpace(line)
+				if len(trimmed) == 0 || trimmed[0] == '*' || trimmed[0] == '#' {
 					continue
 				}
-				parts := strings.SplitN(trimmed, ",", 3)
-				if len(parts) >= 2 {
-					ip := strings.TrimSpace(parts[1])
-					if ip != "" && !seenIPs[ip] {
-						seenIPs[ip] = true
-						combined.WriteString(trimmed)
-						combined.WriteString("\n")
-					}
+				c1 := bytes.IndexByte(trimmed, ',')
+				if c1 < 0 {
+					continue
+				}
+				rest := trimmed[c1+1:]
+				var ipRaw []byte
+				if c2 := bytes.IndexByte(rest, ','); c2 >= 0 {
+					ipRaw = rest[:c2]
+				} else {
+					ipRaw = rest
+				}
+				ipBytes := bytes.TrimSpace(ipRaw)
+				if len(ipBytes) == 0 {
+					continue
+				}
+				ip := string(ipBytes)
+				if !seenIPs[ip] {
+					seenIPs[ip] = true
+					combined.Write(trimmed)
+					combined.WriteByte('\n')
 				}
 			}
+		}
+
+		for _, fam := range []string{"mirror", "official"} {
+			sd := familySuccess[fam]
+			if sd == nil {
+				continue
+			}
+			sourceNames = append(sourceNames, sd.name)
+			appendCSVLines(sd.data)
+			sd.data = nil
 		}
 
 		summarySource := strings.Join(sourceNames, " + ")
@@ -185,7 +254,7 @@ func (f *Fetcher) FetchNodes(ctx context.Context) (*FetchResult, error) {
 			summarySource = fmt.Sprintf("多源聚合 (%s 等 %d 个在线数据源)", sourceNames[0], len(sourceNames))
 		}
 
-		stats.LogInfo("Nodes", "多源聚合拉取完成，合并来自 %d 个数据源，总数据包: %d 字节", len(successes), combined.Len())
+		stats.LogInfo("Nodes", "多源聚合拉取完成，合并来自 %d 个数据源，总数据包: %d 字节", len(sourceNames), combined.Len())
 		return &FetchResult{
 			Data:   combined.Bytes(),
 			Source: summarySource,

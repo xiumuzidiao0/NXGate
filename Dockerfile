@@ -15,6 +15,8 @@ WORKDIR /app
 COPY --from=builder /bin/nxgate /app/nxgate
 
 ENV DATA_DIR=/app/data \
+    GOGC=50 \
+    GOMEMLIMIT=96MiB \
     UI_HOST=0.0.0.0 \
     UI_PORT=8787 \
     LOCAL_PROXY_HOST=0.0.0.0 \

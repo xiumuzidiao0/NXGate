@@ -258,7 +258,7 @@ func (m *Manager) Snapshot() StateSnapshot {
 		Status:         status,
 		StatusText:     string(status),
 		ActiveNodeID:   activeID,
-		ActiveNode:     activeNode,
+		ActiveNode:     activeNode.CloneWithoutConfig(),
 		DriverMode:     driverMode,
 		ZeroTUN:        driverMode == DriverUserland,
 		TunnelReady:    status == StatusConnected,
@@ -753,6 +753,13 @@ func (m *Manager) GetActiveNode() *nodes.Node {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.activeNode
+}
+
+// SetActiveNodeForTest sets activeNode directly in unit tests.
+func (m *Manager) SetActiveNodeForTest(n *nodes.Node) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.activeNode = n
 }
 
 func (m *Manager) GetStatus() string {

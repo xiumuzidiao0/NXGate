@@ -25,6 +25,8 @@ type RingLog struct {
 	mu          sync.RWMutex
 	capacity    int
 	entries     []LogEntry
+	head        int
+	count       int
 	subscribers map[chan LogEntry]struct{}
 }
 
@@ -36,7 +38,7 @@ func InitRingLog(capacity int) *RingLog {
 	}
 	r := &RingLog{
 		capacity:    capacity,
-		entries:     make([]LogEntry, 0, capacity),
+		entries:     make([]LogEntry, capacity),
 		subscribers: make(map[chan LogEntry]struct{}),
 	}
 	globalRingLog = r
@@ -63,11 +65,10 @@ func (r *RingLog) Log(level LogLevel, module, format string, args ...any) {
 	fmt.Printf("[%s] [%s] [%s] %s\n", entry.Timestamp.Format("15:04:05"), entry.Level, entry.Module, entry.Message)
 
 	r.mu.Lock()
-	if len(r.entries) >= r.capacity {
-		copy(r.entries, r.entries[1:])
-		r.entries[r.capacity-1] = entry
-	} else {
-		r.entries = append(r.entries, entry)
+	r.entries[r.head] = entry
+	r.head = (r.head + 1) % r.capacity
+	if r.count < r.capacity {
+		r.count++
 	}
 
 	// Broadcast to active SSE/WebSocket subscribers
@@ -85,12 +86,21 @@ func (r *RingLog) Recent(limit int) []LogEntry {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	n := len(r.entries)
-	if limit <= 0 || limit > n {
-		limit = n
+	if r.count == 0 {
+		return []LogEntry{}
+	}
+	if limit <= 0 || limit > r.count {
+		limit = r.count
 	}
 	res := make([]LogEntry, limit)
-	copy(res, r.entries[n-limit:])
+	start := (r.head - limit + r.capacity) % r.capacity
+	if start+limit <= r.capacity {
+		copy(res, r.entries[start:start+limit])
+	} else {
+		first := r.capacity - start
+		copy(res[:first], r.entries[start:])
+		copy(res[first:], r.entries[:limit-first])
+	}
 	return res
 }
 

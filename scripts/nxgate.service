@@ -7,6 +7,8 @@ Wants=network-online.target
 Type=simple
 User=root
 WorkingDirectory=/opt/nxgate
+Environment="GOGC=50"
+Environment="GOMEMLIMIT=96MiB"
 EnvironmentFile=-/opt/nxgate/config.env
 ExecStart=/opt/nxgate/nxgate
 Restart=always

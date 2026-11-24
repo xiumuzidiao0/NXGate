@@ -156,7 +156,7 @@ func (np *NodePool) saveStoreLocked() {
 		list = append(list, n)
 	}
 
-	data, err := json.MarshalIndent(list, "", "  ")
+	data, err := json.Marshal(list)
 	if err != nil {
 		return
 	}
@@ -453,10 +453,13 @@ func (np *NodePool) Refresh(ctx context.Context) error {
 	np.mu.Unlock()
 
 	// Phase 2: 后台并发测试核心节点的真实延迟
-	// 分级按需探测：优先测热池前 50 个高优先级节点，其余节点保持轻量就绪态，按需懒加载测速
+	// 分级按需探测：跳过 Phase 1 刚完成测速的活跃节点，仅补充探测延迟过期或未测速的高优先级节点
 	probeLimit := 50
 	var highPriorityNodes []*Node
 	for _, n := range currentCandidates {
+		if !n.LastChecked.IsZero() && time.Since(n.LastChecked) < 2*time.Minute && n.LatencyMs > 0 {
+			continue
+		}
 		if n.LatencyMs > 0 || n.ProbeStatus == "connected" {
 			highPriorityNodes = append(highPriorityNodes, n)
 			if len(highPriorityNodes) >= probeLimit {

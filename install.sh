@@ -596,6 +596,8 @@ Wants=network-online.target
 Type=simple
 User=root
 WorkingDirectory=${INSTALL_DIR}
+Environment="GOGC=50"
+Environment="GOMEMLIMIT=96MiB"
 EnvironmentFile=${CONFIG_FILE}
 ExecStart=${BIN_PATH}
 Restart=always
