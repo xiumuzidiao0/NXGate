@@ -63,6 +63,10 @@ func NewScheduler(pool *tunnel.Pool, dm *tunnel.DynamicGroupManager) *DefaultSch
 }
 
 func (s *DefaultScheduler) SelectTunnel(port int, boundIDs []string, boundGroupIDs []string, policy PortPolicy, intervalSec int) *tunnel.Tunnel {
+	return s.SelectTunnelExcluding(port, boundIDs, boundGroupIDs, policy, intervalSec, nil)
+}
+
+func (s *DefaultScheduler) SelectTunnelExcluding(port int, boundIDs []string, boundGroupIDs []string, policy PortPolicy, intervalSec int, exclude map[string]bool) *tunnel.Tunnel {
 	if s.pool == nil {
 		return nil
 	}
@@ -74,7 +78,7 @@ func (s *DefaultScheduler) SelectTunnel(port int, boundIDs []string, boundGroupI
 	if s.dynamicMgr != nil && len(boundGroupIDs) > 0 {
 		groupTunnels := s.dynamicMgr.GetTunnelsForGroups(boundGroupIDs)
 		for _, t := range groupTunnels {
-			if t.IsHealthy() && !seen[t.ID] {
+			if t.IsHealthy() && !seen[t.ID] && !exclude[t.ID] {
 				healthy = append(healthy, t)
 				seen[t.ID] = true
 			}
@@ -85,7 +89,7 @@ func (s *DefaultScheduler) SelectTunnel(port int, boundIDs []string, boundGroupI
 	if len(boundIDs) > 0 {
 		staticTunnels := s.pool.GetHealthyTunnels(boundIDs)
 		for _, t := range staticTunnels {
-			if t.IsHealthy() && !seen[t.ID] {
+			if t.IsHealthy() && !seen[t.ID] && !exclude[t.ID] {
 				healthy = append(healthy, t)
 				seen[t.ID] = true
 			}
@@ -94,7 +98,11 @@ func (s *DefaultScheduler) SelectTunnel(port int, boundIDs []string, boundGroupI
 
 	// Explicit bindings are constraints, not preferences. Never escape the set.
 	if len(boundIDs) == 0 && len(boundGroupIDs) == 0 {
-		healthy = s.pool.GetHealthyTunnels(nil)
+		for _, t := range s.pool.GetHealthyTunnels(nil) {
+			if !exclude[t.ID] {
+				healthy = append(healthy, t)
+			}
+		}
 	}
 	available := make([]*tunnel.Tunnel, 0, len(healthy))
 	for _, t := range healthy {

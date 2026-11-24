@@ -61,9 +61,10 @@ type DynamicGroupManager struct {
 	groups           map[string]*DynamicGroup
 	evalMutex        sync.Mutex
 	roundMu          sync.Mutex
-	health           map[*Tunnel]*tunnelHealth
-	healthProbe      func(context.Context, string, time.Duration) (bool, error)
-	loopOnce         sync.Once
+	health              map[*Tunnel]*tunnelHealth
+	healthProbe         func(context.Context, string, time.Duration) (bool, error)
+	userlandHealthProbe func(context.Context, func(context.Context, string, string) (net.Conn, error), time.Duration) (bool, error)
+	loopOnce            sync.Once
 	queueMu          sync.Mutex
 	evalQueue        chan string
 	evalPending      map[string]bool

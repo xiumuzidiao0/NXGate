@@ -2,6 +2,7 @@ package tunnel
 
 import (
 	"context"
+	"errors"
 	"net"
 	"strconv"
 	"strings"
@@ -414,5 +415,89 @@ func TestSystemPrimaryGroupReconnectsWhenNotInFlight(t *testing.T) {
 
 	if pc.connectCalls == 0 {
 		t.Fatal("expected the group to drive a connect when nothing is in flight")
+	}
+}
+
+func TestProbeDialerConnectivityAndPrimaryExclusion(t *testing.T) {
+	// 1. Failing dialer while context is still alive must return (false, nil)
+	ok, err := probeDialerConnectivity(context.Background(), func(context.Context, string, string) (net.Conn, error) {
+		return nil, errors.New("connection refused")
+	}, 200*time.Millisecond)
+	if ok || err != nil {
+		t.Fatalf("expected (false, nil) for dead dialer with active parent ctx, got (%v, %v)", ok, err)
+	}
+
+	// 2. Canceled parent context must report context error (unknown, not hard failure)
+	canceledCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+	ok, err = probeDialerConnectivity(canceledCtx, func(context.Context, string, string) (net.Conn, error) {
+		return nil, context.Canceled
+	}, 200*time.Millisecond)
+	if ok || !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected (false, context.Canceled), got (%v, %v)", ok, err)
+	}
+
+	// 3. Working dialer returns (true, nil)
+	ln, lerr := net.Listen("tcp", "127.0.0.1:0")
+	if lerr != nil {
+		t.Fatal(lerr)
+	}
+	defer ln.Close()
+	go func() {
+		for {
+			c, aerr := ln.Accept()
+			if aerr != nil {
+				return
+			}
+			_ = c.Close()
+		}
+	}()
+	ok, err = probeDialerConnectivity(context.Background(), func(ctx context.Context, _, _ string) (net.Conn, error) {
+		return (&net.Dialer{Timeout: 500 * time.Millisecond}).DialContext(ctx, "tcp", ln.Addr().String())
+	}, 500*time.Millisecond)
+	if !ok || err != nil {
+		t.Fatalf("expected (true, nil) for live dialer, got (%v, %v)", ok, err)
+	}
+
+	// 4. Secondary dynamic group must skip the primary connector's active node even in userland mode.
+	cfg := &config.Config{DataDir: t.TempDir()}
+	pool := NewPool(cfg, nil)
+	np := nodes.NewNodePool(cfg)
+	mgr := NewDynamicGroupManager(cfg, pool, np)
+
+	ip, port := dynamicProbeFixture(t)
+	primaryNode := &nodes.Node{
+		ID:           "node-primary-sstp",
+		IP:           ip,
+		Port:         port,
+		SSTPPort:     port,
+		Proto:        "tcp",
+		CountryShort: "US",
+		LatencyMs:    10,
+		Score:        1000,
+	}
+	np.SetCandidatesForTest([]*nodes.Node{primaryNode})
+	mgr.SetPrimaryConnector(&mockPrimaryConnector{connectedNode: primaryNode, status: "connected"})
+
+	secGroup := &DynamicGroup{
+		ID:              "dg-us",
+		Name:            "US Group",
+		Enabled:         true,
+		ConnectMode:     "zero_tun",
+		Country:         "US",
+		TargetCount:     1,
+		IntervalMinutes: 15,
+	}
+	_ = mgr.SaveGroup(secGroup)
+
+	ctx, evalCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer evalCancel()
+	mgr.EvaluateGroup(ctx, secGroup)
+
+	if np.Blacklist().IsNodeBlocked(primaryNode.ID, primaryNode.IP) {
+		t.Fatal("secondary dynamic group should not dial or blacklist the active primary node")
+	}
+	if got := mgr.GetGroup("dg-us"); got != nil && len(got.ActiveTunnelIDs) != 0 {
+		t.Fatalf("expected 0 tunnels started when only candidate is primary node, got %v", got.ActiveTunnelIDs)
 	}
 }

@@ -232,8 +232,14 @@ func (m *DynamicGroupManager) EvaluateGroup(ctx context.Context, g *DynamicGroup
 	chosenTunnelIDs := make([]string, 0, targetN)
 	usedNodeIDs := make(map[string]bool)
 
-	// Prevent collision with Primary Connection (tun0) and other running tunnels:
+	// Prevent collision with Primary Connection (tun0 or primary userland) and other running tunnels:
 	// Mark all nodes already in use outside this group as used so this group never steals or conflicts with them.
+	if m.primaryConnector != nil {
+		if primaryNode := m.primaryConnector.GetActiveNode(); primaryNode != nil {
+			usedNodeIDs[primaryNode.ID] = true
+			usedNodeIDs[primaryNode.IP] = true
+		}
+	}
 	for _, t := range m.pool.ListTunnels() {
 		if t.Node != nil {
 			if _, isOwn := activeTunnels[t.ID]; !isOwn {
@@ -342,9 +348,11 @@ func (m *DynamicGroupManager) EvaluateGroup(ctx context.Context, g *DynamicGroup
 			}
 
 			if connected {
-				// Verify genuine outbound Internet connectivity through this tunnel (skip device route check for userland SSTP)
-				connOK := true
-				if !newTun.IsUserland {
+				// Verify genuine outbound Internet connectivity through this tunnel (both kernel TUN and userland SSTP).
+				var connOK bool
+				if newTun.IsUserland {
+					connOK = CheckDialerConnectivityContext(ctx, newTun.Dialer, 2*time.Second)
+				} else {
 					if !waitContext(ctx, 300*time.Millisecond) {
 						_ = m.pool.StopTunnel(newTun.ID)
 						return
@@ -379,7 +387,7 @@ func (m *DynamicGroupManager) EvaluateGroup(ctx context.Context, g *DynamicGroup
 				} else {
 					stats.LogWarn("DynamicGroup", "[%s] 候选节点 %s 握手成功但无法出网 (被对端阻断)，释放重试...", g.Name, n.ID)
 					_ = m.pool.StopTunnel(newTun.ID)
-					m.nodePool.Blacklist().Mark(n, "握手成功但无法出网", 600*time.Second)
+					m.nodePool.Blacklist().MarkManual(n.ID, n.IP, n.CountryShort, "握手成功但无法出网", 10*time.Minute)
 				}
 			} else {
 				st := newTun.GetStatus()
@@ -547,6 +555,9 @@ func (m *DynamicGroupManager) evaluateAll(ctx context.Context) {
 				hasPrimary := false
 				if m.primaryConnector != nil {
 					hasPrimary = m.primaryConnector.GetStatus() == "connected"
+					if hasPrimary && len(g.ActiveTunnelIDs) == 0 {
+						m.syncPrimaryActiveTunnelID(g.ID)
+					}
 				} else {
 					for _, t := range m.pool.ListTunnels() {
 						if t.DevIndex == 0 && t.IsHealthy() && t.IsAvailable() {
@@ -562,7 +573,7 @@ func (m *DynamicGroupManager) evaluateAll(ctx context.Context) {
 				valid := 0
 				for _, id := range g.ActiveTunnelIDs {
 					t := m.pool.GetTunnel(id)
-					if t != nil && t.IsAvailable() {
+					if t != nil && t.IsHealthy() && t.IsAvailable() {
 						if allowed, known := health[t]; !known || allowed {
 							valid++
 						}
@@ -590,6 +601,9 @@ func (m *DynamicGroupManager) evaluateAll(ctx context.Context) {
 				if m.primaryConnector != nil {
 					if m.primaryConnector.GetStatus() == "connected" {
 						validCount = 1
+						if len(g.ActiveTunnelIDs) == 0 {
+							m.syncPrimaryActiveTunnelID(g.ID)
+						}
 					}
 				} else {
 					for _, t := range m.pool.ListTunnels() {
@@ -645,6 +659,45 @@ func (m *DynamicGroupManager) evaluateAll(ctx context.Context) {
 			stats.LogWarn("DynamicGroup", "回收无归属孤儿出口网卡: %s (%s)", t.ID, t.DevName)
 			_ = m.pool.StopTunnel(t.ID)
 		}
+	}
+}
+
+func (m *DynamicGroupManager) syncPrimaryActiveTunnelID(gid string) {
+	if m.primaryConnector == nil || m.primaryConnector.GetStatus() != "connected" {
+		return
+	}
+	var activeIDs []string
+	var isZeroTun bool
+	if m.pool != nil {
+		for _, t := range m.pool.ListTunnels() {
+			if t.DevIndex == 0 && t.IsHealthy() && t.IsAvailable() {
+				activeIDs = []string{t.ID}
+				break
+			}
+		}
+	}
+	if len(activeIDs) == 0 {
+		if reporter, ok := m.primaryConnector.(interface{ IsZeroTun() bool }); ok && reporter.IsZeroTun() {
+			activeIDs = []string{"primary-userland"}
+			isZeroTun = true
+		}
+	}
+	if len(activeIDs) == 0 {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	stored, ok := m.groups[gid]
+	if !ok || !stored.Enabled || len(stored.ActiveTunnelIDs) > 0 {
+		return
+	}
+	stored.ActiveTunnelIDs = activeIDs
+	if activeNode := m.primaryConnector.GetActiveNode(); activeNode != nil {
+		modeTag := "tun0"
+		if isZeroTun {
+			modeTag = "免TUN"
+		}
+		stored.StatusText = fmt.Sprintf("主网关正常运行: %s (%s, %s)", activeNode.IP, activeNode.CountryShort, modeTag)
 	}
 }
 

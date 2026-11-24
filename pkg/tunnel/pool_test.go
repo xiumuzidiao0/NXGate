@@ -1,7 +1,9 @@
 package tunnel
 
 import (
+	"context"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -325,5 +327,69 @@ func TestDetectSSHPorts(t *testing.T) {
 	parseSSHDConfigFile(tmpFile, customPorts)
 	if !customPorts[2222] || !customPorts[50022] || customPorts[9999] {
 		t.Errorf("failed to parse custom sshd ports: %+v", customPorts)
+	}
+}
+
+type mockHealthCloser struct {
+	healthy bool
+	closed  bool
+}
+
+func (m *mockHealthCloser) Close() error {
+	m.closed = true
+	return nil
+}
+
+func (m *mockHealthCloser) IsHealthy() bool {
+	return m.healthy
+}
+
+func TestUserlandTunnelHealthAndReap(t *testing.T) {
+	cfg := &config.Config{DataDir: t.TempDir()}
+	pool := NewPool(cfg, nil)
+
+	hc := &mockHealthCloser{healthy: true}
+	dummyDialer := func(context.Context, string, string) (net.Conn, error) {
+		return nil, fmt.Errorf("unused")
+	}
+
+	tun := &Tunnel{
+		ID:         "tun-userland-1",
+		DevName:    "sstp1",
+		DevIndex:   1,
+		Status:     StatusConnected,
+		IsUserland: true,
+		Dialer:     dummyDialer,
+		Closer:     hc,
+		done:       make(chan struct{}),
+	}
+
+	pool.mu.Lock()
+	pool.usedDevs[1] = true
+	pool.tunnels[tun.ID] = tun
+	pool.mu.Unlock()
+
+	if !tun.IsHealthy() || !tun.IsAvailable() {
+		t.Fatal("expected connected userland tunnel with healthy closer to be healthy and available")
+	}
+
+	// Simulate dead/black-holed SSTP session while status hasn't flipped yet.
+	hc.healthy = false
+	if tun.IsHealthy() || tun.IsAvailable() {
+		t.Fatal("expected userland tunnel with unhealthy closer to report unhealthy and unavailable")
+	}
+
+	pool.ReapStaleTunnels()
+	if !hc.closed {
+		t.Fatal("expected ReapStaleTunnels to close unhealthy userland tunnel")
+	}
+	if pool.GetTunnel(tun.ID) != nil {
+		t.Fatal("expected unhealthy userland tunnel to be removed from pool")
+	}
+	pool.mu.Lock()
+	reusedIdx := pool.allocConcurrentDevIndexLocked()
+	pool.mu.Unlock()
+	if reusedIdx != 1 {
+		t.Fatalf("expected devIndex 1 to be recycled after reaping unhealthy userland tunnel, got %d", reusedIdx)
 	}
 }

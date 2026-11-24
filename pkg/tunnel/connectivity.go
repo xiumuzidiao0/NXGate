@@ -9,6 +9,42 @@ import (
 	"time"
 )
 
+var userlandConnectivityTargets = []string{"1.1.1.1:443", "8.8.8.8:443", "9.9.9.9:443"}
+
+// CheckDialerConnectivityContext tests whether a userland dialer can establish an outbound TCP connection.
+func CheckDialerConnectivityContext(ctx context.Context, dialer func(context.Context, string, string) (net.Conn, error), timeout time.Duration) bool {
+	ok, _ := probeDialerConnectivity(ctx, dialer, timeout)
+	return ok
+}
+
+func probeDialerConnectivity(ctx context.Context, dialer func(context.Context, string, string) (net.Conn, error), timeout time.Duration) (bool, error) {
+	if ctx.Err() != nil {
+		return false, ctx.Err()
+	}
+	if dialer == nil {
+		return false, nil
+	}
+	if timeout <= 0 {
+		timeout = 2 * time.Second
+	}
+	for _, target := range userlandConnectivityTargets {
+		if ctx.Err() != nil {
+			return false, ctx.Err()
+		}
+		dialCtx, cancel := context.WithTimeout(ctx, timeout)
+		conn, err := dialer(dialCtx, "tcp", target)
+		cancel()
+		if err == nil {
+			_ = conn.Close()
+			return true, nil
+		}
+		if ctx.Err() != nil {
+			return false, ctx.Err()
+		}
+	}
+	return false, nil
+}
+
 // CheckTunnelConnectivity tests whether a specific network interface has functional egress to the Internet.
 func CheckTunnelConnectivity(devName string, timeout time.Duration) bool {
 	return CheckTunnelConnectivityContext(context.Background(), devName, timeout)

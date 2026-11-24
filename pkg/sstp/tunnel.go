@@ -886,6 +886,11 @@ func (t *Tunnel) Port() int {
 	return t.port
 }
 
+// Done returns a channel that is closed when the SSTP tunnel closes.
+func (t *Tunnel) Done() <-chan struct{} {
+	return t.closeCh
+}
+
 // pppMagic is the LCP Magic-Number advertised by this client. PPP requires an
 // Echo-Reply to carry the replying peer's own magic number.
 var pppMagic = []byte{0x4e, 0x58, 0x47, 0x54} // "NXGT"

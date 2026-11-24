@@ -3,6 +3,7 @@ package tunnel
 import (
 	"context"
 	"fmt"
+	"net"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -131,5 +132,53 @@ func TestOptimizationGroupSnapshotsOwnSlices(t *testing.T) {
 	m.ListGroups()[0].ActiveTunnelIDs[0] = "changed again"
 	if got := m.GetGroup("fixture").ActiveTunnelIDs[0]; got != "original" {
 		t.Fatal("caller mutated manager storage", got)
+	}
+}
+
+func TestOptimizationUserlandHealthBatchDetectsBlackhole(t *testing.T) {
+	var calls atomic.Int32
+	healthyFlag := true
+	userlandOK := false
+	tun := &Tunnel{
+		ID:          "tun-sstp-1",
+		DevName:     "sstp1",
+		Status:      StatusConnected,
+		IsUserland:  true,
+		HealthCheck: func() bool { return healthyFlag },
+		Dialer: func(context.Context, string, string) (net.Conn, error) {
+			return nil, fmt.Errorf("dead dialer")
+		},
+	}
+	m := &DynamicGroupManager{
+		userlandHealthProbe: func(_ context.Context, _ func(context.Context, string, string) (net.Conn, error), _ time.Duration) (bool, error) {
+			calls.Add(1)
+			return userlandOK, nil
+		},
+	}
+
+	// First failure does not trip immediately (hysteresis).
+	res := m.healthBatch(context.Background(), []*Tunnel{tun})
+	if !res[tun] || calls.Load() != 1 {
+		t.Fatalf("expected first probe failure to tolerate transient error and run once, got res=%v calls=%d", res[tun], calls.Load())
+	}
+
+	// Cached within userlandHealthResultTTL (45s).
+	res = m.healthBatch(context.Background(), []*Tunnel{tun})
+	if calls.Load() != 1 || !res[tun] {
+		t.Fatalf("expected second call within TTL to reuse cached probe result, calls=%d", calls.Load())
+	}
+
+	// Expire cache: second consecutive failure trips the circuit breaker.
+	m.health[tun].checked = time.Time{}
+	res = m.healthBatch(context.Background(), []*Tunnel{tun})
+	if res[tun] || tun.IsAvailable() {
+		t.Fatalf("expected two consecutive userland probe failures to block tunnel and trip circuit breaker")
+	}
+
+	// If underlying session dies, healthBatch immediately marks false without even probing.
+	healthyFlag = false
+	res = m.healthBatch(context.Background(), []*Tunnel{tun})
+	if res[tun] || calls.Load() != 2 {
+		t.Fatalf("expected dead userland session to immediately return false without probing, calls=%d", calls.Load())
 	}
 }

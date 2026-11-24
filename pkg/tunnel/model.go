@@ -36,6 +36,7 @@ type Tunnel struct {
 	Dialer         func(ctx context.Context, network, addr string) (net.Conn, error) `json:"-"`
 	OpenPacketConn func() (net.PacketConn, error)                                    `json:"-"`
 	Closer         io.Closer                                                         `json:"-"`
+	HealthCheck    func() bool                                                       `json:"-"`
 
 	// Internal lifecycle management
 	mu                 sync.RWMutex
@@ -58,11 +59,24 @@ func (t *Tunnel) GetStatus() TunnelStatus {
 	return t.Status
 }
 
+func (t *Tunnel) userlandHealthyLocked() bool {
+	if t.Dialer == nil {
+		return false
+	}
+	if t.HealthCheck != nil && !t.HealthCheck() {
+		return false
+	}
+	if hc, ok := t.Closer.(interface{ IsHealthy() bool }); ok && !hc.IsHealthy() {
+		return false
+	}
+	return true
+}
+
 func (t *Tunnel) IsHealthy() bool {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	if t.IsUserland {
-		return t.Status == StatusConnected && t.Dialer != nil
+		return t.Status == StatusConnected && t.userlandHealthyLocked()
 	}
 	return t.Status == StatusConnected
 }
@@ -73,7 +87,7 @@ func (t *Tunnel) IsAvailable() bool {
 	if t.Status != StatusConnected {
 		return false
 	}
-	if t.IsUserland && t.Dialer == nil {
+	if t.IsUserland && !t.userlandHealthyLocked() {
 		return false
 	}
 	if !t.circuitBrokenUntil.IsZero() && time.Now().Before(t.circuitBrokenUntil) {
@@ -178,5 +192,6 @@ func (t *Tunnel) Snapshot() *Tunnel {
 		Dialer:         t.Dialer,
 		OpenPacketConn: t.OpenPacketConn,
 		Closer:         t.Closer,
+		HealthCheck:    t.HealthCheck,
 	}
 }

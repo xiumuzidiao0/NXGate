@@ -114,8 +114,12 @@ func (l *PortListener) Start(ctx context.Context) error {
 	}
 
 	l.mu.Lock()
+	if l.closed {
+		l.mu.Unlock()
+		_ = ln.Close()
+		return nil
+	}
 	l.listener = ln
-	l.closed = false
 	l.mu.Unlock()
 
 	stats.LogInfo("Proxy", "代理端口 [%d] 已就绪监听于 %s (策略: %s, 绑定隧道数: %d)",
@@ -212,18 +216,15 @@ func (l *PortListener) dispatch(client net.Conn) {
 
 	// 2. Resolve tunnel from scheduler if custom proxy was not used
 	var userlandPacketConn func() (net.PacketConn, error)
+	var outboundTun *tunnel.Tunnel
 	if dialer == nil && len(l.rule.BoundCustomProxyIDs) == 0 && l.scheduler != nil {
 		if tun := l.scheduler.SelectTunnel(l.rule.Port, l.rule.BoundTunnelIDs, l.rule.BoundGroupIDs, l.rule.Policy, l.rule.IntervalSeconds); tun != nil {
 			selectedTun = tun
 			devName = tun.DevName
-			if tun.IsUserland {
-				if tun.Dialer != nil {
-					dialer = tun.Dialer
-				}
-				if tun.OpenPacketConn != nil {
-					userlandPacketConn = tun.OpenPacketConn
-				}
+			if tun.OpenPacketConn != nil {
+				userlandPacketConn = tun.OpenPacketConn
 			}
+			dialer = l.dialScheduledWithFailover(tun)
 		}
 	}
 
@@ -243,9 +244,56 @@ func (l *PortListener) dispatch(client net.Conn) {
 	}
 
 	if firstByte[0] == socks5Version {
-		_ = handleSocks5(bConn, auth, devName, selectedTun, dialer, userlandPacketConn)
+		_ = handleSocks5(bConn, auth, devName, outboundTun, dialer, userlandPacketConn)
 	} else {
-		_ = handleHTTP(bConn, br, auth, devName, selectedTun, dialer)
+		_ = handleHTTP(bConn, br, auth, devName, outboundTun, dialer)
+	}
+}
+
+type excludingTunnelSelector interface {
+	SelectTunnelExcluding(port int, boundIDs []string, boundGroupIDs []string, policy PortPolicy, intervalSec int, exclude map[string]bool) *tunnel.Tunnel
+}
+
+func dialTunnelTarget(ctx context.Context, tun *tunnel.Tunnel, network, addr string) (net.Conn, error) {
+	if tun == nil {
+		return nil, fmt.Errorf("no tunnel selected")
+	}
+	if tun.Dialer != nil {
+		return tun.Dialer(ctx, network, addr)
+	}
+	if tun.IsUserland {
+		return nil, fmt.Errorf("userland tunnel %s has no dialer", tun.ID)
+	}
+	return dialUpstream(addr, tun.DevName, 10*time.Second)
+}
+
+func (l *PortListener) dialScheduledWithFailover(first *tunnel.Tunnel) func(context.Context, string, string) (net.Conn, error) {
+	exSelector, _ := l.scheduler.(excludingTunnelSelector)
+	return func(ctx context.Context, network, addr string) (net.Conn, error) {
+		tried := make(map[string]bool, 3)
+		cur := first
+		var lastErr error
+		for attempt := 0; attempt < 3 && cur != nil; attempt++ {
+			tried[cur.ID] = true
+			conn, err := dialTunnelTarget(ctx, cur, network, addr)
+			if err == nil {
+				cur.RecordSuccess()
+				return conn, nil
+			}
+			lastErr = err
+			cur.RecordFailure()
+			if cur.IsUserland && !cur.IsHealthy() {
+				cur.TripCircuitBreaker(60 * time.Second)
+			}
+			if exSelector == nil || ctx.Err() != nil {
+				break
+			}
+			cur = exSelector.SelectTunnelExcluding(l.rule.Port, l.rule.BoundTunnelIDs, l.rule.BoundGroupIDs, l.rule.Policy, l.rule.IntervalSeconds, tried)
+		}
+		if lastErr != nil {
+			stats.LogWarn("Proxy", "端口 %d 转发 %s 失败: %v", l.rule.Port, addr, lastErr)
+		}
+		return nil, lastErr
 	}
 }
 

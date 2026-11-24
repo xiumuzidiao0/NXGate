@@ -222,6 +222,12 @@ func (p *Pool) StartUserlandTunnel(node *nodes.Node) (*Tunnel, error) {
 		}
 
 		tun.mu.Lock()
+		if tun.Status == StatusStopped {
+			tun.mu.Unlock()
+			_ = st.Close()
+			p.cleanupTunnel(tun, tunnelID)
+			return
+		}
 		tun.Status = StatusConnected
 		tun.ConnectedAt = time.Now()
 		tun.Message = fmt.Sprintf("用户态免 TUN 已就绪 (虚拟 IP: %s, 端口: %d)", st.AssignedIP(), st.Port())
@@ -231,6 +237,32 @@ func (p *Pool) StartUserlandTunnel(node *nodes.Node) (*Tunnel, error) {
 		tun.mu.Unlock()
 
 		stats.LogInfo("TunnelPool", "用户态免 TUN 隧道 [%s] (%s) 已连接就绪 (端口: %d)", tunnelID, devName, st.Port())
+
+		// Watch the underlying SSTP session so disconnects transition status and reap the slot.
+		<-st.Done()
+
+		tun.mu.Lock()
+		statusBefore := tun.Status
+		wasStopped := statusBefore == StatusStopped
+		connectedAt := tun.ConnectedAt
+		tunNode := tun.Node
+		if tun.Status == StatusConnecting || tun.Status == StatusConnected {
+			tun.Status = StatusFailed
+			tun.Message = "用户态隧道连接已断开"
+		}
+		tun.mu.Unlock()
+
+		if p.nodePool != nil && tunNode != nil && !connectedAt.IsZero() {
+			uptimeSec := int64(time.Since(connectedAt).Seconds())
+			if rep := p.nodePool.Reputation(); rep != nil {
+				rep.RecordUptime(tunNode.IP, tunNode.ID, uptimeSec)
+				if uptimeSec < 180 && !wasStopped {
+					rep.RecordFail(tunNode.IP, tunNode.ID, true)
+				}
+			}
+		}
+
+		p.cleanupTunnel(tun, tunnelID)
 	}()
 
 	return tun, nil
@@ -747,14 +779,23 @@ func (p *Pool) ReapStaleTunnels() {
 		t.mu.RLock()
 		status := t.Status
 		monitored := t.monitored
+		isUserland := t.IsUserland
 		t.mu.RUnlock()
 		if (status == StatusFailed || status == StatusStopped) && !monitored {
+			stale = append(stale, t)
+		} else if isUserland && status == StatusConnected && !t.IsHealthy() {
 			stale = append(stale, t)
 		}
 	}
 	p.mu.RUnlock()
 
 	for _, t := range stale {
+		t.mu.Lock()
+		if t.IsUserland && t.Status == StatusConnected {
+			t.Status = StatusFailed
+			t.Message = "用户态隧道心跳超时或已断开"
+		}
+		t.mu.Unlock()
 		p.cleanupTunnel(t, t.ID)
 	}
 }

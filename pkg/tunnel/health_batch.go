@@ -9,6 +9,7 @@ import (
 const healthWorkers = 4
 const healthRoundBudget = 8 * time.Second
 const healthResultTTL = 8 * time.Second
+const userlandHealthResultTTL = 45 * time.Second
 
 type tunnelHealth struct {
 	checked             time.Time
@@ -23,10 +24,16 @@ func (m *DynamicGroupManager) healthBatch(ctx context.Context, tunnels []*Tunnel
 	if m.health == nil {
 		m.health = make(map[*Tunnel]*tunnelHealth)
 	}
+	results := make(map[*Tunnel]bool)
 	unique := make(map[*Tunnel]bool)
 	for _, t := range tunnels {
-		if t != nil && !t.IsUserland && t.IsHealthy() {
+		if t == nil {
+			continue
+		}
+		if t.IsHealthy() {
 			unique[t] = true
+		} else if t.IsUserland {
+			results[t] = false
 		}
 	}
 	for t := range m.health {
@@ -34,13 +41,16 @@ func (m *DynamicGroupManager) healthBatch(ctx context.Context, tunnels []*Tunnel
 			delete(m.health, t)
 		}
 	}
-	results := make(map[*Tunnel]bool)
 	jobs := make(chan *Tunnel)
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	probe := m.healthProbe
 	if probe == nil {
 		probe = probeTunnelConnectivity
+	}
+	userlandProbe := m.userlandHealthProbe
+	if userlandProbe == nil {
+		userlandProbe = probeDialerConnectivity
 	}
 	for w := 0; w < healthWorkers; w++ {
 		wg.Add(1)
@@ -55,11 +65,27 @@ func (m *DynamicGroupManager) healthBatch(ctx context.Context, tunnels []*Tunnel
 					m.health[t] = state
 				}
 				results[t] = !state.blocked
-				fresh := time.Since(state.checked) < healthResultTTL
+				ttl := healthResultTTL
+				if t.IsUserland {
+					ttl = userlandHealthResultTTL
+				}
+				fresh := time.Since(state.checked) < ttl
 				mu.Unlock()
 				if !fresh {
-					probeCtx, cancel := context.WithTimeout(ctx, 6*time.Second)
-					ok, err := probe(probeCtx, t.DevName, 2*time.Second)
+					probeTimeout := 6 * time.Second
+					if t.IsUserland {
+						// 3 targets * 2s per target <= 6s; keep context timeout slightly above 6s
+						// so all-timeout black-holes return (false, nil) instead of context.DeadlineExceeded.
+						probeTimeout = 7 * time.Second
+					}
+					probeCtx, cancel := context.WithTimeout(ctx, probeTimeout)
+					var ok bool
+					var err error
+					if t.IsUserland {
+						ok, err = userlandProbe(probeCtx, t.Dialer, 2*time.Second)
+					} else {
+						ok, err = probe(probeCtx, t.DevName, 2*time.Second)
+					}
 					cancel()
 					// The batch budget/caller cancellation is not a failed health sample.
 					if ctx.Err() != nil || err != nil {
