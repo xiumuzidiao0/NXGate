@@ -4,15 +4,46 @@ export const countryNames = {
     JP: '日本', US: '美国', KR: '韩国', TW: '台湾', HK: '香港',
     SG: '新加坡', GB: '英国', DE: '德国', FR: '法国', CA: '加拿大',
     AU: '澳大利亚', VN: '越南', TH: '泰国', MY: '马来西亚', IN: '印度',
-    RU: '俄罗斯', NL: '荷兰', BR: '巴西', PH: '菲律宾', ID: '印尼'
+    RU: '俄罗斯', NL: '荷兰', BR: '巴西', PH: '菲律宾', ID: '印尼',
+    IT: '意大利', ES: '西班牙', SE: '瑞典', CH: '瑞士', NZ: '新西兰',
+    PL: '波兰', UA: '乌克兰', TR: '土耳其', ZA: '南非', AR: '阿根廷',
+    CL: '智利', CO: '哥伦比亚', MX: '墨西哥', NO: '挪威', FI: '芬兰',
+    DK: '丹麦', IE: '爱尔兰', AT: '奥地利', BE: '比利时', CZ: '捷克',
+    RO: '罗马尼亚', IL: '以色列', AE: '阿联酋', SA: '沙特阿拉伯', CN: '中国',
+    PT: '葡萄牙', GR: '希腊', HU: '匈牙利', SK: '斯洛伐克', BG: '保加利亚',
+    HR: '克罗地亚', RS: '塞尔维亚', LT: '立陶宛', LV: '拉脱维亚', EE: '爱沙尼亚',
+    KZ: '哈萨克斯坦', PK: '巴基斯坦', KH: '柬埔寨', PE: '秘鲁'
 };
 
 export const countryNamesEn = {
     JP: 'Japan', US: 'United States', KR: 'South Korea', TW: 'Taiwan', HK: 'Hong Kong',
     SG: 'Singapore', GB: 'United Kingdom', DE: 'Germany', FR: 'France', CA: 'Canada',
     AU: 'Australia', VN: 'Vietnam', TH: 'Thailand', MY: 'Malaysia', IN: 'India',
-    RU: 'Russia', NL: 'Netherlands', BR: 'Brazil', PH: 'Philippines', ID: 'Indonesia'
+    RU: 'Russia', NL: 'Netherlands', BR: 'Brazil', PH: 'Philippines', ID: 'Indonesia',
+    IT: 'Italy', ES: 'Spain', SE: 'Sweden', CH: 'Switzerland', NZ: 'New Zealand',
+    PL: 'Poland', UA: 'Ukraine', TR: 'Turkey', ZA: 'South Africa', AR: 'Argentina',
+    CL: 'Chile', CO: 'Colombia', MX: 'Mexico', NO: 'Norway', FI: 'Finland',
+    DK: 'Denmark', IE: 'Ireland', AT: 'Austria', BE: 'Belgium', CZ: 'Czech Republic',
+    RO: 'Romania', IL: 'Israel', AE: 'UAE', SA: 'Saudi Arabia', CN: 'China',
+    PT: 'Portugal', GR: 'Greece', HU: 'Hungary', SK: 'Slovakia', BG: 'Bulgaria',
+    HR: 'Croatia', RS: 'Serbia', LT: 'Lithuania', LV: 'Latvia', EE: 'Estonia',
+    KZ: 'Kazakhstan', PK: 'Pakistan', KH: 'Cambodia', PE: 'Peru'
 };
+
+let displayNamesZh = null;
+let displayNamesEn = null;
+
+function getRegionDisplayNames(lang) {
+    if (typeof Intl === 'undefined' || typeof Intl.DisplayNames !== 'function') return null;
+    try {
+        if (lang === 'en') {
+            return displayNamesEn || (displayNamesEn = new Intl.DisplayNames(['en'], { type: 'region' }));
+        }
+        return displayNamesZh || (displayNamesZh = new Intl.DisplayNames(['zh-Hans'], { type: 'region' }));
+    } catch {
+        return null;
+    }
+}
 
 export const flagSVGs = {
     JP: '<svg aria-hidden="true" class="flag-img" viewBox="0 0 900 600"><rect fill="#fff" width="900" height="600"/><circle fill="#bc002d" cx="450" cy="300" r="180"/></svg>',
@@ -36,11 +67,20 @@ export function getCountryFlagSVG(code) {
 }
 
 export function getCountryName(code) {
-    code = (code || '').toUpperCase();
-    if (getLanguage() === 'en') {
-        return countryNamesEn[code] || code;
+    code = (code || '').trim().toUpperCase();
+    if (!code) return '';
+    const normalized = code === 'UK' ? 'GB' : code;
+    const lang = getLanguage() === 'en' ? 'en' : 'zh';
+    const map = lang === 'en' ? countryNamesEn : countryNames;
+    if (map[normalized]) return map[normalized];
+    const dn = getRegionDisplayNames(lang);
+    if (dn) {
+        try {
+            const name = dn.of(normalized);
+            if (name && name.toUpperCase() !== normalized) return name;
+        } catch {}
     }
-    return countryNames[code] || code;
+    return code;
 }
 
 export function escapeHtml(value) {

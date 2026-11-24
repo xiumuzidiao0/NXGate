@@ -1,7 +1,7 @@
 import { I18N } from './i18n.js';
 import { appState } from './state.js';
 import { renderStatus } from './modules/dashboard.js';
-import { renderDynamicGroups, renderPortRules, renderTunnelCheckboxes } from './modules/matrix.js';
+import { renderDynamicGroups, renderPortRules, renderTunnelCheckboxes, updateDynamicGroupCountryOptions } from './modules/matrix.js';
 import { renderNodes, updateCountryFilter } from './modules/nodes.js';
 import { switchView } from './modules/shell.js';
 import { renderSingBox, updateProtoHelpText } from './modules/singbox.js';
@@ -322,6 +322,7 @@ export function setLanguage(lang) {
     if (appState.currentDynamicGroups) renderDynamicGroups();
     if (appState.currentPortRules) renderPortRules();
     updateCountryFilter();
+    updateDynamicGroupCountryOptions();
     if (document.getElementById('port-edit-card')?.classList.contains('open')) {
         const selectedTunnels = [...document.querySelectorAll('.chk-single-tunnel:checked')].map(el => el.value);
         const selectedGroups = [...document.querySelectorAll('.chk-dynamic-group:checked')].map(el => el.value);

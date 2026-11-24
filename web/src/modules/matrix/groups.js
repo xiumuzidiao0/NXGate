@@ -2,8 +2,90 @@ import { appState } from '../../state.js';
 import { getLanguage, localize, localizeGroupStatus, tAlert, tConfirm } from '../../i18n-runtime.js';
 import { closeEditorDrawer, openEditorDrawer } from '../shell.js';
 import { fetchStatus } from '../../transport.js';
+import { fetchNodes } from '../nodes.js';
 import { alert, appendLog, escapeHtml, getCountryName, jsonAttr } from '../../utils.js';
 import { renderMatrixTopology } from './topology.js';
+
+const PRESET_COUNTRY_CODES = [
+    'JP', 'US', 'KR', 'TW', 'HK', 'SG', 'GB', 'DE', 'FR', 'CA', 'AU',
+    'NL', 'VN', 'TH', 'MY', 'IN', 'RU', 'BR', 'PH', 'ID', 'IT', 'ES',
+    'SE', 'CH', 'NZ', 'PL', 'UA', 'TR', 'ZA', 'AR', 'CL', 'CO', 'MX',
+    'NO', 'FI', 'DK', 'IE', 'AT', 'BE', 'CZ', 'RO', 'IL', 'AE', 'SA', 'CN'
+];
+const FALLBACK_STRATEGY_CODES = new Set(['', 'none', 'favorites', 'auto_low_latency', 'auto_speed']);
+
+export function updateDynamicGroupCountryOptions(selectedCountry, selectedFallback) {
+    const isEn = getLanguage() === 'en';
+    const countMap = {};
+    (appState.allNodes || []).forEach(n => {
+        const code = (n?.country_short || '').trim().toUpperCase();
+        if (code && code.length === 2) {
+            countMap[code] = (countMap[code] || 0) + 1;
+        }
+    });
+
+    const presetRank = new Map(PRESET_COUNTRY_CODES.map((c, idx) => [c, idx]));
+    const codeSet = new Set(PRESET_COUNTRY_CODES);
+    Object.keys(countMap).forEach(c => codeSet.add(c));
+    (appState.currentDynamicGroups || []).forEach(g => {
+        const c = (g?.country || '').trim().toUpperCase();
+        if (c && c !== 'ALL' && c !== 'FAVORITES' && c.length === 2) codeSet.add(c);
+        const fb = (g?.fallback_policy || '').trim().toUpperCase();
+        if (fb && fb.length === 2) codeSet.add(fb);
+    });
+    const extraC = (selectedCountry || '').trim().toUpperCase();
+    if (extraC && extraC !== 'ALL' && extraC !== 'FAVORITES' && extraC.length === 2) codeSet.add(extraC);
+    const extraFb = (selectedFallback || '').trim();
+    if (extraFb && !FALLBACK_STRATEGY_CODES.has(extraFb.toLowerCase()) && extraFb.length === 2) {
+        codeSet.add(extraFb.toUpperCase());
+    }
+
+    const sortedCodes = Array.from(codeSet).sort((a, b) => {
+        const ca = countMap[a] || 0;
+        const cb = countMap[b] || 0;
+        if ((ca > 0) !== (cb > 0)) return cb > 0 ? 1 : -1;
+        if (ca !== cb) return cb - ca;
+        const ra = presetRank.has(a) ? presetRank.get(a) : Number.MAX_SAFE_INTEGER;
+        const rb = presetRank.has(b) ? presetRank.get(b) : Number.MAX_SAFE_INTEGER;
+        if (ra !== rb) return ra - rb;
+        return a.localeCompare(b);
+    });
+
+    const countrySelect = document.getElementById('dg-country');
+    if (countrySelect) {
+        const targetVal = selectedCountry !== undefined ? String(selectedCountry) : countrySelect.value;
+        const opts = [
+            `<option value="">${isEn ? 'All countries / regions' : '全部国家/地区'}</option>`,
+            `<option value="FAVORITES">${isEn ? '⭐ My Favorites (Cross-Country)' : '⭐ 我的收藏节点 (跨国收藏池)'}</option>`,
+            ...sortedCodes.map(code => {
+                const countSuffix = countMap[code] > 0 ? ` · ${countMap[code]}` : '';
+                return `<option value="${escapeHtml(code)}">${escapeHtml(getCountryName(code))} (${escapeHtml(code)})${countSuffix}</option>`;
+            })
+        ];
+        countrySelect.innerHTML = opts.join('');
+        const normalizedTarget = targetVal.toUpperCase() === 'ALL' ? '' : (targetVal === 'FAVORITES' ? 'FAVORITES' : (targetVal ? targetVal.toUpperCase() : ''));
+        countrySelect.value = normalizedTarget;
+    }
+
+    const fallbackSelect = document.getElementById('dg-fallback');
+    if (fallbackSelect) {
+        const targetFb = selectedFallback !== undefined ? String(selectedFallback) : fallbackSelect.value;
+        const fbOpts = [
+            `<option value="none">${isEn ? 'No Fallback (Keep state / Block)' : '不启用兜底 (保持原状/无节点阻断)'}</option>`,
+            `<option value="favorites">${isEn ? '⭐ Cascade to My Favorites (Recommended)' : '⭐ 级联降级至我的收藏节点 (推荐)'}</option>`,
+            `<option value="auto_low_latency">${isEn ? '⚡ Cascade to Global Lowest Latency' : '⚡ 级联降级至全球最低延迟节点'}</option>`,
+            `<option value="auto_speed">${isEn ? '🚀 Cascade to Global Highest Bandwidth' : '🚀 级联降级至全球最高带宽节点'}</option>`,
+            ...sortedCodes.map(code => {
+                const label = isEn
+                    ? `Cascade to ${getCountryName(code)} (${code}) Exit`
+                    : `级联降级至 ${getCountryName(code)} (${code}) 出口`;
+                return `<option value="${escapeHtml(code)}">${escapeHtml(label)}</option>`;
+            })
+        ];
+        fallbackSelect.innerHTML = fbOpts.join('');
+        fallbackSelect.value = targetFb || 'none';
+    }
+}
 
 export async function fetchDynamicGroups() {
     try {
@@ -129,14 +211,13 @@ export function showAddDynamicGroupForm() {
     document.getElementById('dg-name').value = '';
     const modeEl = document.getElementById('dg-connect-mode');
     if (modeEl) modeEl.value = 'tun';
-    document.getElementById('dg-country').value = 'JP';
+    updateDynamicGroupCountryOptions('JP', 'none');
+    if (!appState.allNodes || appState.allNodes.length === 0) fetchNodes();
     document.getElementById('dg-iptype').value = 'residential';
     const purityEl = document.getElementById('dg-purity');
     if (purityEl) purityEl.value = 'any';
     document.getElementById('dg-unlock').value = 'none';
     document.getElementById('dg-sortby').value = 'latency';
-    const fallbackEl = document.getElementById('dg-fallback');
-    if (fallbackEl) fallbackEl.value = 'none';
     document.getElementById('dg-count-container').classList.remove('hidden');
     document.getElementById('dg-count').value = 3;
     document.getElementById('dg-interval').value = 15;
@@ -158,14 +239,13 @@ export function editDynamicGroup(id) {
     document.getElementById('dg-name').value = g.name;
     const modeEl = document.getElementById('dg-connect-mode');
     if (modeEl) modeEl.value = g.connect_mode || 'tun';
-    document.getElementById('dg-country').value = g.country || '';
+    updateDynamicGroupCountryOptions(g.country || '', g.fallback_policy || 'none');
+    if (!appState.allNodes || appState.allNodes.length === 0) fetchNodes();
     document.getElementById('dg-iptype').value = g.ip_type || 'all';
     const purityEl = document.getElementById('dg-purity');
     if (purityEl) purityEl.value = g.purity_level || 'any';
     document.getElementById('dg-unlock').value = g.unlock_filter || 'none';
     document.getElementById('dg-sortby').value = g.sort_by || 'latency';
-    const fallbackEl = document.getElementById('dg-fallback');
-    if (fallbackEl) fallbackEl.value = g.fallback_policy || 'none';
     document.getElementById('dg-count').value = g.target_count || (isSys ? 1 : 3);
     document.getElementById('dg-interval').value = g.interval_minutes || 15;
     openEditorDrawer('dynamic-group-edit-card');

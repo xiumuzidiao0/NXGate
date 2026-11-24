@@ -102,12 +102,18 @@ fun countryChineseName(code: String): String {
 }
 
 fun countryDisplayName(code: String, isEnglish: Boolean = false): String {
-    val clean = code.trim().uppercase()
-    return if (isEnglish) {
-        COUNTRY_ENGLISH_NAMES[clean] ?: clean
-    } else {
-        COUNTRY_CHINESE_NAMES[clean] ?: clean
+    val clean = code.trim().uppercase().let { if (it == "UK") "GB" else it }
+    if (clean.isEmpty()) return ""
+    val mapped = if (isEnglish) COUNTRY_ENGLISH_NAMES[clean] else COUNTRY_CHINESE_NAMES[clean]
+    if (!mapped.isNullOrEmpty()) return mapped
+    if (clean.length == 2 && clean[0] in 'A'..'Z' && clean[1] in 'A'..'Z') {
+        val locale = if (isEnglish) java.util.Locale.ENGLISH else java.util.Locale.SIMPLIFIED_CHINESE
+        val localized = java.util.Locale("", clean).getDisplayCountry(locale)
+        if (localized.isNotBlank() && !localized.equals(clean, ignoreCase = true)) {
+            return localized
+        }
     }
+    return clean
 }
 
 @Composable

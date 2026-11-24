@@ -152,6 +152,7 @@ fun RoutingMatrixScreen(
     var dynamicGroups by remember { mutableStateOf<List<DynamicGroupCard>>(emptyList()) }
     var inbounds by remember { mutableStateOf<List<InboundProtocolItem>>(emptyList()) }
     var tunnels by remember { mutableStateOf<List<TunnelItem>>(emptyList()) }
+    var nodeCountryCounts by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
     var masterInfo by remember { mutableStateOf(MasterGatewayInfo()) }
     var availableOutbounds by remember(isEn) {
         mutableStateOf(
@@ -208,7 +209,7 @@ fun RoutingMatrixScreen(
     var deleteGroupCandidate by remember { mutableStateOf<DynamicGroupCard?>(null) }
     var groupNameInput by remember(isEn) { mutableStateOf(if (isEn) "Japan Residential Top 3" else "日本Top3住宅组") }
 
-    val groupCountryOptions = remember(isEn) {
+    val groupCountryOptions = remember(isEn, nodeCountryCounts, dynamicGroups, tunnels) {
         val list = mutableListOf(
             GroupCountryOption("ALL", if (isEn) "All Countries / Regions (Any)" else "全部国家/地区 (不限)"),
             GroupCountryOption("FAVORITES", strings.favoritesPool)
@@ -219,10 +220,29 @@ fun RoutingMatrixScreen(
             "SE", "CH", "NZ", "PL", "UA", "TR", "ZA", "AR", "CL", "CO", "MX",
             "NO", "FI", "DK", "IE", "AT", "BE", "CZ", "RO", "IL", "AE", "SA", "CN"
         )
-        majorCodes.forEach { code ->
+        val majorOrder = majorCodes.withIndex().associate { it.value to it.index }
+        val allCodes = linkedSetOf<String>().apply {
+            addAll(nodeCountryCounts.keys)
+            addAll(majorCodes)
+            dynamicGroups.forEach { g ->
+                val c = g.country.trim().uppercase()
+                if (c.length == 2 && c[0] in 'A'..'Z' && c[1] in 'A'..'Z') add(c)
+            }
+            tunnels.forEach { t ->
+                val c = t.country.trim().uppercase()
+                if (c.length == 2 && c[0] in 'A'..'Z' && c[1] in 'A'..'Z') add(c)
+            }
+        }.sortedWith(compareByDescending<String> { (nodeCountryCounts[it] ?: 0) > 0 }
+            .thenByDescending { nodeCountryCounts[it] ?: 0 }
+            .thenBy { majorOrder[it] ?: Int.MAX_VALUE }
+            .thenBy { it })
+
+        allCodes.forEach { code ->
             val flag = countryFlag(code)
             val name = countryDisplayName(code, isEn)
-            list.add(GroupCountryOption(code, "$flag $name ($code)"))
+            val count = nodeCountryCounts[code] ?: 0
+            val countSuffix = if (count > 0) " · $count" else ""
+            list.add(GroupCountryOption(code, "$flag $name ($code)$countSuffix"))
         }
         list
     }
@@ -345,6 +365,17 @@ fun RoutingMatrixScreen(
             if (tunnelsRes.isSuccess && !tunnelsRes.getOrNull().isNullOrEmpty()) {
                 tunnels = tunnelsRes.getOrNull()!!
             }
+            val nodesRes = NXGateApplication.instance.apiClient.fetchNodes(activeServer)
+            if (nodesRes.isSuccess) {
+                val counts = mutableMapOf<String, Int>()
+                nodesRes.getOrNull().orEmpty().forEach { node ->
+                    val c = node.countryShort.trim().uppercase()
+                    if (c.length == 2 && c[0] in 'A'..'Z' && c[1] in 'A'..'Z') {
+                        counts[c] = (counts[c] ?: 0) + 1
+                    }
+                }
+                nodeCountryCounts = counts
+            }
             val sbOverviewRes = NXGateApplication.instance.apiClient.fetchSingBoxOverview(activeServer)
             if (sbOverviewRes.isSuccess) {
                 val data = sbOverviewRes.getOrNull()
@@ -392,6 +423,17 @@ fun RoutingMatrixScreen(
                                     }
                                     val tunnelsRes = NXGateApplication.instance.apiClient.fetchTunnels(activeServer)
                                     if (tunnelsRes.isSuccess && !tunnelsRes.getOrNull().isNullOrEmpty()) tunnels = tunnelsRes.getOrNull()!!
+                                    val nodesRes = NXGateApplication.instance.apiClient.fetchNodes(activeServer)
+                                    if (nodesRes.isSuccess) {
+                                        val counts = mutableMapOf<String, Int>()
+                                        nodesRes.getOrNull().orEmpty().forEach { node ->
+                                            val c = node.countryShort.trim().uppercase()
+                                            if (c.length == 2 && c[0] in 'A'..'Z' && c[1] in 'A'..'Z') {
+                                                counts[c] = (counts[c] ?: 0) + 1
+                                            }
+                                        }
+                                        nodeCountryCounts = counts
+                                    }
                                     val sbOverviewRes = NXGateApplication.instance.apiClient.fetchSingBoxOverview(activeServer)
                                     if (sbOverviewRes.isSuccess) {
                                         val data = sbOverviewRes.getOrNull()
@@ -712,7 +754,12 @@ fun RoutingMatrixScreen(
                                     onEditGroup = { g ->
                                         editGroupTarget = g
                                         groupNameInput = g.name
-                                        selectedGroupCountryOption = groupCountryOptions.find { it.code.equals(g.country, true) } ?: groupCountryOptions[1]
+                                        val targetCountry = g.country.trim().uppercase()
+                                        selectedGroupCountryOption = when {
+                                            targetCountry.isEmpty() -> groupCountryOptions.first()
+                                            else -> groupCountryOptions.find { it.code.equals(targetCountry, true) }
+                                                ?: GroupCountryOption(targetCountry, "${countryFlag(targetCountry)} ${countryDisplayName(targetCountry, isEn)} ($targetCountry)".trim())
+                                        }
                                         selectedGroupIpTypeOption = groupIpTypeOptions.find { it.key.equals(g.ipType, true) } ?: groupIpTypeOptions[1]
                                         selectedGroupPurityOption = groupPurityOptions.find { it.key.equals(g.purityLevel, true) } ?: groupPurityOptions[0]
                                         selectedGroupConnectModeOption = groupConnectModeOptions.find { it.key.equals(g.connectMode, true) } ?: groupConnectModeOptions[0]
@@ -738,7 +785,12 @@ fun RoutingMatrixScreen(
                                     onEditGroup = { group ->
                                         editGroupTarget = group
                                         groupNameInput = group.name
-                                        selectedGroupCountryOption = groupCountryOptions.find { it.code.equals(group.country, true) } ?: groupCountryOptions[1]
+                                        val targetCountry = group.country.trim().uppercase()
+                                        selectedGroupCountryOption = when {
+                                            targetCountry.isEmpty() -> groupCountryOptions.first()
+                                            else -> groupCountryOptions.find { it.code.equals(targetCountry, true) }
+                                                ?: GroupCountryOption(targetCountry, "${countryFlag(targetCountry)} ${countryDisplayName(targetCountry, isEn)} ($targetCountry)".trim())
+                                        }
                                         selectedGroupIpTypeOption = groupIpTypeOptions.find { it.key.equals(group.ipType, true) } ?: groupIpTypeOptions[1]
                                         selectedGroupPurityOption = groupPurityOptions.find { it.key.equals(group.purityLevel, true) } ?: groupPurityOptions[0]
                                         selectedGroupConnectModeOption = groupConnectModeOptions.find { it.key.equals(group.connectMode, true) } ?: groupConnectModeOptions[0]

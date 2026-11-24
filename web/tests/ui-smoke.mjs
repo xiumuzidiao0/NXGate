@@ -71,8 +71,21 @@ const status = {
   node_source: "Fastly",
   blacklist_count: 0,
   version: "2.5.0",
-  tunnels: [],
-  port_rules: [{ port: 7928, enabled: true, auth_mode: "default_web", policy: "round_robin" }],
+  tunnels: [
+    {
+      id: "t-1",
+      dev_name: "sstp1",
+      dev_index: 1,
+      status: "connected",
+      is_userland: true,
+      latency_ms: 65,
+      node: { id: "vn-1", ip: "198.51.100.10", port: 443, country_short: "VN", latency_ms: 65 }
+    }
+  ],
+  port_rules: [
+    { port: 7928, enabled: true, auth_mode: "default_web", policy: "round_robin" },
+    { port: 7929, enabled: true, bound_group_ids: ["dg-1"], auth_mode: "none", policy: "round_robin" }
+  ],
   dynamic_groups: [],
 };
 
@@ -101,6 +114,56 @@ const nodes = [{
   risk_label: "极度纯净",
   fraud_flags: ["vpn"],
   unlock: { openai: "unlocked", claude: "unlocked", netflix: "unlocked", google: "unlocked" },
+}, {
+  id: "vn-1",
+  ip: "198.51.100.10",
+  port: 443,
+  country_short: "VN",
+  country_long: "越南",
+  region: "Hanoi",
+  city: "Hanoi",
+  hostname: "vn.example.test",
+  proto: "tcp",
+  score: 64000,
+  speed: 25000000,
+  latency_ms: 65,
+  ping: 30,
+  reputation_score: 85,
+  is_favorite: false,
+  ip_type: "residential",
+  isp: "VNPT",
+  latitude: 21.0285,
+  longitude: 105.8542,
+  risk_score: 0.10,
+  risk_level: "pure",
+  risk_label: "极度纯净",
+  fraud_flags: [],
+  unlock: { openai: "unlocked", google: "unlocked" },
+}, {
+  id: "ru-1",
+  ip: "198.51.100.20",
+  port: 443,
+  country_short: "RU",
+  country_long: "俄罗斯",
+  region: "Moscow",
+  city: "Moscow",
+  hostname: "ru.example.test",
+  proto: "tcp",
+  score: 52000,
+  speed: 20000000,
+  latency_ms: 120,
+  ping: 60,
+  reputation_score: 75,
+  is_favorite: false,
+  ip_type: "hosting",
+  isp: "RU DC",
+  latitude: 55.7558,
+  longitude: 37.6173,
+  risk_score: 0.30,
+  risk_level: "clean",
+  risk_label: "低风险",
+  fraud_flags: [],
+  unlock: { google: "unlocked" },
 }];
 
 let lastOutboundPost = null;
@@ -295,6 +358,8 @@ try {
       await page.waitForTimeout(80);
       const active = await page.locator(`#view-${view}`).evaluate((element) => element.classList.contains("active"));
       if (!active) failures.push(`${viewport}px: view ${view} did not activate`);
+      const viewOverflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1);
+      if (viewOverflow) failures.push(`${viewport}px: view ${view} overflows viewport horizontally`);
     }
     // Test Settings tabs visibility
     await page.evaluate(() => document.querySelector('[data-view="settings"]').click());
@@ -374,6 +439,18 @@ try {
     if (!groupsVisible) failures.push(`${viewport}px: matrix dynamic groups content is not visible`);
     const groupCardVisible = await page.locator(".dynamic-group-card").first().isVisible();
     if (!groupCardVisible) failures.push(`${viewport}px: dynamic group card is not visible in matrix tab`);
+    const groupsOverflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1);
+    if (groupsOverflow) failures.push(`${viewport}px: matrix groups tab overflows horizontally`);
+
+    // Verify dynamic group country dropdown includes discovered countries like VN and RU
+    await page.locator('[data-action="showAddDynamicGroupForm"]').click();
+    await page.waitForTimeout(260);
+    const dgCountryTextZh = await page.locator("#dg-country").innerText();
+    if (!dgCountryTextZh.includes("VN") || !dgCountryTextZh.includes("越南") || !dgCountryTextZh.includes("RU") || !dgCountryTextZh.includes("俄罗斯")) {
+      failures.push(`${viewport}px: #dg-country missing VN/RU in Chinese: ${dgCountryTextZh}`);
+    }
+    await page.locator("#dynamic-group-edit-card [data-drawer-close]").click();
+    await page.waitForTimeout(260);
 
     // Test sing-box outbound select switching and add modal
     lastOutboundPost = null;
@@ -502,6 +579,16 @@ try {
     if (englishEditorOverflow) failures.push(`${viewport}px: English port editor overflows horizontally`);
     if (screenshotDir) await page.screenshot({ path: join(screenshotDir, `english-port-editor-${viewport}.png`), fullPage: true });
     await page.locator('#port-edit-card [data-drawer-close]').click();
+    await page.waitForTimeout(260);
+    await page.locator('[data-action="switchMatrixTab"][data-args*="groups"]').click();
+    await page.waitForTimeout(60);
+    await page.locator('[data-action="showAddDynamicGroupForm"]').click();
+    await page.waitForTimeout(260);
+    const dgCountryTextEn = await page.locator("#dg-country").innerText();
+    if (!dgCountryTextEn.includes("Vietnam (VN)") || !dgCountryTextEn.includes("Russia (RU)")) {
+      failures.push(`${viewport}px: #dg-country missing Vietnam/Russia in English: ${dgCountryTextEn}`);
+    }
+    await page.locator("#dynamic-group-edit-card [data-drawer-close]").click();
     await page.waitForTimeout(260);
     await page.locator('[data-view="nodes"]:visible').click();
     await page.locator("#btn-toggle-lang").click();

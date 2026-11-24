@@ -175,12 +175,17 @@ export function renderMatrixTopology() {
                     const totalTarget = matchedGroups.reduce((acc, g) => acc + (g.target_count || 1), 0);
                     concurrencyText = `${totalTarget} ${isEn ? 'Target NICs' : '目标并发网卡'}`;
 
+                    const includesSystemPrimary = matchedGroups.some(g => g.is_system || g.id === 'system-primary');
                     const allActiveTids = [];
                     matchedGroups.forEach(g => {
                         if (g.active_tunnel_ids) allActiveTids.push(...g.active_tunnel_ids);
                     });
 
-                    const activeTuns = tunnels.filter(t => allActiveTids.includes(t.id) || allActiveTids.includes(t.dev_name));
+                    const activeTuns = tunnels.filter(t =>
+                        allActiveTids.includes(t.id) ||
+                        allActiveTids.includes(t.dev_name) ||
+                        (includesSystemPrimary && (t.id === 'primary-userland' || t.dev_index === 0))
+                    );
                     if (activeTuns.length > 0) {
                         leaves = activeTuns.map(t => {
                             const ip = (t.node && t.node.ip) || (t.node && t.node.id) || t.dev_name;
@@ -196,6 +201,8 @@ export function renderMatrixTopology() {
                                 unlock: t.unlock || (t.node ? appState.cachedUnlockMap[t.node.ip] : null)
                             };
                         });
+                    } else if (includesSystemPrimary && primaryLeaves.length > 0) {
+                        leaves = primaryLeaves;
                     } else {
                         const groupCountries = matchedGroups.map(g => g.country).filter(Boolean);
                         countryHint = groupCountries.length > 0 ? groupCountries.map(c => `${getCountryFlagSVG(c)} ${getCountryName(c)}`).join(', ') : (isEn ? 'All Regions' : '全部地区');

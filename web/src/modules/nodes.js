@@ -2,6 +2,7 @@ import { appState } from '../state.js';
 import { getLanguage, localize, t, tAlert } from '../i18n-runtime.js';
 import { fetchStatus, fetchUnlockCache } from '../transport.js';
 import { appendLog, escapeHtml, getCountryFlagSVG, getCountryName, jsonAttr, renderUnlockBadges } from '../utils.js';
+import { updateDynamicGroupCountryOptions } from './matrix/groups.js';
 
 export async function fetchNodes() {
     try {
@@ -13,6 +14,7 @@ export async function fetchNodes() {
             nBadge.innerText = appState.allNodes.length;
         }
         updateCountryFilter();
+        updateDynamicGroupCountryOptions();
         renderNodes();
         document.getElementById('nodes-table-wrap')?.setAttribute('aria-busy', 'false');
     } catch (err) {
