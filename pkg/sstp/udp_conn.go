@@ -100,12 +100,7 @@ func (u *UDPConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 		return 0, errors.New("nil destination IP")
 	}
 
-	pkt := BuildIPv4UDPPacket(u.localIP, udpAddr.IP, u.localPort, uint16(udpAddr.Port), p)
-	if pkt == nil {
-		return 0, errors.New("build udp packet failed")
-	}
-
-	if err := u.tun.sendRaw(pkt); err != nil {
+	if err := u.tun.sendUDP(u.localIP, udpAddr.IP, u.localPort, uint16(udpAddr.Port), p); err != nil {
 		return 0, err
 	}
 

@@ -1,13 +1,110 @@
 package sstp
 
 import (
-	"bytes"
-	"errors"
 	"io"
 	"net"
 	"sync"
 	"time"
 )
+
+const (
+	maxTCPReadBufCap      = 65535
+	maxOutOfOrderSegments = 64
+	maxOutOfOrderBytes    = 65535
+)
+
+type ringBuffer struct {
+	buf    []byte
+	head   int
+	length int
+}
+
+func (r *ringBuffer) Len() int {
+	return r.length
+}
+
+func (r *ringBuffer) Free(limit int) int {
+	if limit <= r.length {
+		return 0
+	}
+	return limit - r.length
+}
+
+func (r *ringBuffer) Write(p []byte) int {
+	if len(p) == 0 {
+		return 0
+	}
+	avail := r.Free(maxTCPReadBufCap)
+	if avail <= 0 {
+		return 0
+	}
+	if len(p) > avail {
+		p = p[:avail]
+	}
+
+	need := r.length + len(p)
+	if need > len(r.buf) {
+		newCap := len(r.buf)
+		if newCap == 0 {
+			newCap = 4096
+		}
+		for newCap < need && newCap < maxTCPReadBufCap {
+			newCap *= 2
+		}
+		if newCap > maxTCPReadBufCap {
+			newCap = maxTCPReadBufCap
+		}
+		nb := make([]byte, newCap)
+		if r.length > 0 {
+			tail := r.head + r.length
+			if tail <= len(r.buf) {
+				copy(nb, r.buf[r.head:tail])
+			} else {
+				first := len(r.buf) - r.head
+				copy(nb[:first], r.buf[r.head:])
+				copy(nb[first:], r.buf[:r.length-first])
+			}
+		}
+		r.buf = nb
+		r.head = 0
+	}
+
+	capBuf := len(r.buf)
+	tail := (r.head + r.length) % capBuf
+	first := min(len(p), capBuf-tail)
+	copy(r.buf[tail:tail+first], p[:first])
+	if first < len(p) {
+		copy(r.buf[:len(p)-first], p[first:])
+	}
+	r.length += len(p)
+	return len(p)
+}
+
+func (r *ringBuffer) Read(p []byte) (int, error) {
+	if r.length == 0 || len(p) == 0 {
+		return 0, nil
+	}
+	n := min(len(p), r.length)
+	capBuf := len(r.buf)
+	first := min(n, capBuf-r.head)
+	copy(p[:first], r.buf[r.head:r.head+first])
+	if first < n {
+		copy(p[first:n], r.buf[:n-first])
+	}
+	r.length -= n
+	if r.length == 0 {
+		r.head = 0
+	} else {
+		r.head = (r.head + n) % capBuf
+	}
+	return n, nil
+}
+
+func (r *ringBuffer) Release() {
+	r.buf = nil
+	r.head = 0
+	r.length = 0
+}
 
 type TCPConn struct {
 	tunnel     *Tunnel
@@ -20,12 +117,14 @@ type TCPConn struct {
 	ack uint32
 
 	mu       sync.Mutex
-	readBuf  bytes.Buffer
+	readBuf  ringBuffer
 	readCond *sync.Cond
 
-	// Sliding window & out-of-order reassembly buffer
-	outOfOrder map[uint32][]byte
-	rcvWnd     uint32
+	// Lazy-allocated sliding window & out-of-order reassembly buffer
+	outOfOrder      map[uint32][]byte
+	outOfOrderBytes int
+	rcvWnd          uint32
+	zeroWindowSent  bool
 
 	// Cumulative / Delayed ACK state
 	unackedBytes int
@@ -49,11 +148,21 @@ func newTCPConn(tunnel *Tunnel, localIP, remoteIP net.IP, localPort, remotePort 
 		remotePort: remotePort,
 		seq:        initSeq,
 		ack:        initAck,
-		outOfOrder: make(map[uint32][]byte),
-		rcvWnd:     65535,
+		rcvWnd:     maxTCPReadBufCap,
 	}
 	c.readCond = sync.NewCond(&c.mu)
 	return c
+}
+
+func (c *TCPConn) advertisedWindowLocked() uint16 {
+	free := maxTCPReadBufCap - c.readBuf.Len()
+	if free <= 0 {
+		return 0
+	}
+	if free > 65535 {
+		return 65535
+	}
+	return uint16(free)
 }
 
 func (c *TCPConn) Read(b []byte) (n int, err error) {
@@ -89,7 +198,12 @@ func (c *TCPConn) Read(b []byte) (n int, err error) {
 		}
 	}
 
-	return c.readBuf.Read(b)
+	n, _ = c.readBuf.Read(b)
+	if c.zeroWindowSent && c.advertisedWindowLocked() >= 2*DefaultTCPMSS && !c.closed && !c.peerClosed {
+		c.zeroWindowSent = false
+		c.sendAckLocked()
+	}
+	return n, nil
 }
 
 func (c *TCPConn) Write(b []byte) (n int, err error) {
@@ -116,18 +230,14 @@ func (c *TCPConn) Write(b []byte) (n int, err error) {
 		}
 		chunk := b[offset : offset+chunkSize]
 
-		pkt := BuildIPv4TCPPacket(
+		if err := c.tunnel.sendTCP(
 			c.localIP, c.remoteIP,
 			c.localPort, c.remotePort,
 			c.seq, c.ack,
 			TCPFlagACK|TCPFlagPSH,
+			c.advertisedWindowLocked(),
 			chunk,
-		)
-		if pkt == nil {
-			return offset, errors.New("failed to build sstp tcp packet")
-		}
-
-		if err := c.tunnel.sendRaw(pkt); err != nil {
+		); err != nil {
 			return offset, err
 		}
 
@@ -145,16 +255,16 @@ func (c *TCPConn) sendAckLocked() {
 	}
 	c.unackedBytes = 0
 
-	ackPkt := BuildIPv4TCPPacket(
+	wnd := c.advertisedWindowLocked()
+	c.zeroWindowSent = (wnd == 0)
+	_ = c.tunnel.sendTCP(
 		c.localIP, c.remoteIP,
 		c.localPort, c.remotePort,
 		c.seq, c.ack,
 		TCPFlagACK,
+		wnd,
 		nil,
 	)
-	if ackPkt != nil {
-		_ = c.tunnel.sendRaw(ackPkt)
-	}
 }
 
 func (c *TCPConn) scheduleAckLocked() {
@@ -209,19 +319,37 @@ func (c *TCPConn) handleIncoming(pkt *ParsedTCPPacket) {
 				validData = pkt.Payload
 			}
 
-			if len(validData) > 0 {
-				c.readBuf.Write(validData)
-				c.ack += uint32(len(validData))
-				c.unackedBytes += len(validData)
+			free := c.readBuf.Free(maxTCPReadBufCap)
+			if free <= 0 {
+				// Receive buffer full: advertise zero window and do not advance ACK.
+				c.sendAckLocked()
+				return
+			}
+			if len(validData) > free {
+				validData = validData[:free]
 			}
 
-			// Drain any buffered out-of-order packets that now line up with c.ack
-			for {
+			if len(validData) > 0 {
+				written := c.readBuf.Write(validData)
+				c.ack += uint32(written)
+				c.unackedBytes += written
+			}
+
+			// Drain any buffered out-of-order packets that now line up and fit in free space
+			for len(c.outOfOrder) > 0 {
 				buffered, exists := c.outOfOrder[c.ack]
 				if !exists {
 					break
 				}
+				remFree := c.readBuf.Free(maxTCPReadBufCap)
+				if len(buffered) > remFree {
+					break
+				}
 				delete(c.outOfOrder, c.ack)
+				c.outOfOrderBytes -= len(buffered)
+				if c.outOfOrderBytes < 0 {
+					c.outOfOrderBytes = 0
+				}
 				c.readBuf.Write(buffered)
 				c.ack += uint32(len(buffered))
 				c.unackedBytes += len(buffered)
@@ -229,16 +357,24 @@ func (c *TCPConn) handleIncoming(pkt *ParsedTCPPacket) {
 
 			c.readCond.Broadcast()
 
-			// Check cumulative ACK threshold: send if >= 2 * MSS, else schedule delayed ACK
-			if c.unackedBytes >= 2*DefaultTCPMSS {
+			// Check cumulative ACK threshold or zero-window boundary
+			if c.advertisedWindowLocked() == 0 || c.unackedBytes >= 2*DefaultTCPMSS {
 				c.sendAckLocked()
 			} else {
 				c.scheduleAckLocked()
 			}
 		} else {
 			// Out-of-order segment (sequence hole detected)
-			if startDiff < int32(c.rcvWnd) && len(c.outOfOrder) < 128 {
-				c.outOfOrder[pktSeq] = append([]byte(nil), pkt.Payload...)
+			if startDiff < int32(c.rcvWnd) && len(c.outOfOrder) < maxOutOfOrderSegments && c.outOfOrderBytes+payloadLen <= maxOutOfOrderBytes {
+				if c.outOfOrder == nil {
+					c.outOfOrder = make(map[uint32][]byte)
+				}
+				if _, dup := c.outOfOrder[pktSeq]; !dup {
+					cp := make([]byte, payloadLen)
+					copy(cp, pkt.Payload)
+					c.outOfOrder[pktSeq] = cp
+					c.outOfOrderBytes += payloadLen
+				}
 			}
 			// Send immediate ACK with current c.ack to trigger Fast Retransmit on peer
 			c.sendAckLocked()
@@ -254,16 +390,14 @@ func (c *TCPConn) handleIncoming(pkt *ParsedTCPPacket) {
 			c.readCond.Broadcast()
 
 			// Send FIN-ACK reply immediately
-			finAck := BuildIPv4TCPPacket(
+			_ = c.tunnel.sendTCP(
 				c.localIP, c.remoteIP,
 				c.localPort, c.remotePort,
 				c.seq, c.ack,
 				TCPFlagACK|TCPFlagFIN,
+				c.advertisedWindowLocked(),
 				nil,
 			)
-			if finAck != nil {
-				_ = c.tunnel.sendRaw(finAck)
-			}
 		}
 	}
 }
@@ -279,20 +413,22 @@ func (c *TCPConn) Close() error {
 		c.ackTimer.Stop()
 		c.ackScheduled = false
 	}
+	c.readBuf.Release()
+	c.outOfOrder = nil
+	c.outOfOrderBytes = 0
 	c.readCond.Broadcast()
 
-	finPkt := BuildIPv4TCPPacket(
-		c.localIP, c.remoteIP,
-		c.localPort, c.remotePort,
-		c.seq, c.ack,
-		TCPFlagACK|TCPFlagFIN,
-		nil,
-	)
+	seq, ack := c.seq, c.ack
 	c.mu.Unlock()
 
-	if finPkt != nil {
-		_ = c.tunnel.sendRaw(finPkt)
-	}
+	_ = c.tunnel.sendTCP(
+		c.localIP, c.remoteIP,
+		c.localPort, c.remotePort,
+		seq, ack,
+		TCPFlagACK|TCPFlagFIN,
+		0,
+		nil,
+	)
 
 	c.tunnel.deregisterConn(c.localPort, c.remotePort)
 	return nil

@@ -40,7 +40,9 @@ type Tunnel struct {
 	sessions     map[uint32]*TCPConn          // key: (localPort << 16) | remotePort
 	udpConns     map[uint16]*UDPConn          // key: localPort
 	pending      map[uint16]*pendingHandshake // key: srcPort
+	readBr       *bufio.Reader
 	writeMu      sync.Mutex
+	txBuf        []byte
 	lastRecv     time.Time
 	closeReason  string
 	closed       bool
@@ -313,8 +315,11 @@ func (t *Tunnel) performHandshake(ctx context.Context) error {
 		return fmt.Errorf("send sstp init handshake failed: %w", err)
 	}
 
-	// 2. Read HTTP Response Header
-	br := bufio.NewReader(t.tlsConn)
+	// 2. Read HTTP Response Header using persistent buffered reader
+	br := t.ensureReadBr()
+	if br == nil {
+		return errors.New("sstp tunnel missing tls connection")
+	}
 	statusLine, err := br.ReadString('\n')
 	if err != nil {
 		return fmt.Errorf("read http status failed: %w", err)
@@ -420,6 +425,15 @@ func (t *Tunnel) performHandshake(ctx context.Context) error {
 	return nil
 }
 
+func (t *Tunnel) ensureReadBr() *bufio.Reader {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.readBr == nil && t.tlsConn != nil {
+		t.readBr = bufio.NewReaderSize(t.tlsConn, 16*1024)
+	}
+	return t.readBr
+}
+
 func (t *Tunnel) readPacketDirect(r io.Reader) (bool, []byte, error) {
 	hdr := make([]byte, 4)
 	if _, err := io.ReadFull(r, hdr); err != nil {
@@ -438,11 +452,40 @@ func (t *Tunnel) readPacketDirect(r io.Reader) (bool, []byte, error) {
 	return isCtrl, body, nil
 }
 
+func (t *Tunnel) readPacketInto(r io.Reader, hdr *[4]byte, bodyBuf []byte) (bool, []byte, error) {
+	if _, err := io.ReadFull(r, hdr[:]); err != nil {
+		return false, nil, err
+	}
+	pktLen := int(binary.BigEndian.Uint16(hdr[2:4]) & 0x0fff)
+	isCtrl := (hdr[1] & 1) != 0
+	if pktLen < 4 {
+		return false, nil, errors.New("invalid sstp packet length")
+	}
+	bodyLen := pktLen - 4
+	if cap(bodyBuf) < bodyLen {
+		bodyBuf = make([]byte, bodyLen)
+	}
+	body := bodyBuf[:bodyLen]
+	if _, err := io.ReadFull(r, body); err != nil {
+		return false, nil, err
+	}
+	return isCtrl, body, nil
+}
+
 func (t *Tunnel) readLoop() {
 	defer t.Close()
 
+	br := t.ensureReadBr()
+	if br == nil {
+		return
+	}
+
+	var hdr [4]byte
+	rxBuf := make([]byte, 4096)
+	var tcpPkt ParsedTCPPacket
+
 	for {
-		isCtrl, body, err := t.readPacketDirect(t.tlsConn)
+		isCtrl, body, err := t.readPacketInto(br, &hdr, rxBuf)
 		if err != nil {
 			t.noteCloseReason(fmt.Sprintf("read from peer failed: %v", err))
 			return
@@ -487,8 +530,7 @@ func (t *Tunnel) readLoop() {
 
 		protoNum := ipPacket[9]
 		if protoNum == 6 { // TCP
-			tcpPkt, err := ParseIncomingIPv4TCP(ipPacket)
-			if err != nil {
+			if err := parseIncomingIPv4TCPInto(ipPacket, &tcpPkt, false); err != nil {
 				continue
 			}
 
@@ -498,21 +540,28 @@ func (t *Tunnel) readLoop() {
 			t.mu.RUnlock()
 
 			if pending != nil && pending.targetPort == tcpPkt.SrcPort {
+				// Copy packet off rxBuf before handing off to handshake goroutine.
+				hsPkt := tcpPkt
+				if len(tcpPkt.Payload) > 0 {
+					hsPkt.Payload = append([]byte(nil), tcpPkt.Payload...)
+				} else {
+					hsPkt.Payload = nil
+				}
 				select {
-				case pending.respCh <- tcpPkt:
+				case pending.respCh <- &hsPkt:
 				default:
 				}
 				continue
 			}
 
-			// Route to active TCP connection
+			// Route to active TCP connection synchronously (handleIncoming copies into readBuf/outOfOrder).
 			sessKey := (uint32(tcpPkt.DstPort) << 16) | uint32(tcpPkt.SrcPort)
 			t.mu.RLock()
 			sess := t.sessions[sessKey]
 			t.mu.RUnlock()
 
 			if sess != nil {
-				sess.handleIncoming(tcpPkt)
+				sess.handleIncoming(&tcpPkt)
 			}
 		} else if protoNum == 17 { // UDP
 			udpPkt, err := ParseIncomingIPv4UDP(ipPacket)
@@ -525,6 +574,11 @@ func (t *Tunnel) readLoop() {
 			t.mu.RUnlock()
 
 			if uConn != nil {
+				if len(udpPkt.Payload) > 0 {
+					udpPkt.Payload = append([]byte(nil), udpPkt.Payload...)
+				} else {
+					udpPkt.Payload = nil
+				}
 				uConn.handleIncoming(udpPkt)
 			}
 		}
@@ -571,6 +625,64 @@ func (t *Tunnel) sendRaw(b []byte) error {
 
 	_ = t.tlsConn.SetWriteDeadline(time.Now().Add(DefaultWriteTimeout))
 	_, err := t.tlsConn.Write(b)
+	return err
+}
+
+func (t *Tunnel) ensureTxBufLocked(needed int) []byte {
+	if cap(t.txBuf) < needed {
+		allocSize := max(2048, needed)
+		t.txBuf = make([]byte, allocSize)
+	}
+	return t.txBuf[:needed]
+}
+
+func (t *Tunnel) sendTCP(srcIP, dstIP net.IP, srcPort, dstPort uint16, seq, ack uint32, flags byte, window uint16, payload []byte) error {
+	t.writeMu.Lock()
+	defer t.writeMu.Unlock()
+
+	t.mu.RLock()
+	closed := t.closed
+	t.mu.RUnlock()
+	if closed {
+		return ErrTunnelClosed
+	}
+	if t.tlsConn == nil {
+		return nil
+	}
+
+	buf := t.ensureTxBufLocked(48 + len(payload))
+	pkt := buildIPv4TCPPacketInto(buf, srcIP, dstIP, srcPort, dstPort, seq, ack, flags, window, payload)
+	if pkt == nil {
+		return errors.New("build sstp tcp packet failed")
+	}
+
+	_ = t.tlsConn.SetWriteDeadline(time.Now().Add(DefaultWriteTimeout))
+	_, err := t.tlsConn.Write(pkt)
+	return err
+}
+
+func (t *Tunnel) sendUDP(srcIP, dstIP net.IP, srcPort, dstPort uint16, payload []byte) error {
+	t.writeMu.Lock()
+	defer t.writeMu.Unlock()
+
+	t.mu.RLock()
+	closed := t.closed
+	t.mu.RUnlock()
+	if closed {
+		return ErrTunnelClosed
+	}
+	if t.tlsConn == nil {
+		return nil
+	}
+
+	buf := t.ensureTxBufLocked(36 + len(payload))
+	pkt := buildIPv4UDPPacketInto(buf, srcIP, dstIP, srcPort, dstPort, payload)
+	if pkt == nil {
+		return errors.New("build sstp udp packet failed")
+	}
+
+	_ = t.tlsConn.SetWriteDeadline(time.Now().Add(DefaultWriteTimeout))
+	_, err := t.tlsConn.Write(pkt)
 	return err
 }
 
@@ -717,26 +829,24 @@ func (t *Tunnel) Dial(ctx context.Context, network, addr string) (net.Conn, erro
 	}()
 
 	// Send TCP SYN packet
-	synPkt := BuildIPv4TCPPacket(
+	if err := t.sendTCP(
 		t.assignedIP, targetIP,
 		srcPort, targetPort,
 		initSeq, 0,
 		TCPFlagSYN,
+		maxTCPReadBufCap,
 		nil,
-	)
-	if synPkt == nil {
-		return nil, errors.New("build sstp tcp syn packet failed")
-	}
-
-	if err := t.sendRaw(synPkt); err != nil {
+	); err != nil {
 		return nil, fmt.Errorf("send syn failed: %w", err)
 	}
 
 	// Wait for TCP SYN-ACK
+	dialTimer := time.NewTimer(6 * time.Second)
+	defer dialTimer.Stop()
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
-	case <-time.After(6 * time.Second):
+	case <-dialTimer.C:
 		return nil, fmt.Errorf("tcp handshake to %s timed out", addr)
 	case resp := <-respCh:
 		if resp.Flags&(TCPFlagSYN|TCPFlagACK) != (TCPFlagSYN | TCPFlagACK) {
@@ -748,16 +858,14 @@ func (t *Tunnel) Dial(ctx context.Context, network, addr string) (net.Conn, erro
 		localSeq := initSeq + 1
 
 		// Send TCP ACK to complete 3-way handshake
-		ackPkt := BuildIPv4TCPPacket(
+		_ = t.sendTCP(
 			t.assignedIP, targetIP,
 			srcPort, targetPort,
 			localSeq, ackNum,
 			TCPFlagACK,
+			maxTCPReadBufCap,
 			nil,
 		)
-		if ackPkt != nil {
-			_ = t.sendRaw(ackPkt)
-		}
 
 		conn := newTCPConn(t, t.assignedIP, targetIP, srcPort, targetPort, localSeq, ackNum)
 
@@ -909,6 +1017,9 @@ func (t *Tunnel) Close() error {
 		if t.tlsConn != nil {
 			_ = t.tlsConn.Close()
 		}
+		t.writeMu.Lock()
+		t.txBuf = nil
+		t.writeMu.Unlock()
 		reason := t.closeReason
 		if reason == "" {
 			reason = "closed locally"

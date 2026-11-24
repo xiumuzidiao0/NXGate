@@ -3,9 +3,11 @@ package sstp
 import (
 	"encoding/binary"
 	"errors"
-	"math/rand"
 	"net"
+	"sync/atomic"
 )
+
+var ipIDCounter atomic.Uint32
 
 type Attribute struct {
 	ID   byte
@@ -153,7 +155,7 @@ func udpChecksum(srcIP, dstIP []byte, udpSeg []byte) uint16 {
 	return chk
 }
 
-func BuildIPv4TCPPacket(srcIP, dstIP net.IP, srcPort, dstPort uint16, seq, ack uint32, flags byte, payload []byte) []byte {
+func buildIPv4TCPPacketInto(dst []byte, srcIP, dstIP net.IP, srcPort, dstPort uint16, seq, ack uint32, flags byte, window uint16, payload []byte) []byte {
 	sIPv4 := srcIP.To4()
 	dIPv4 := dstIP.To4()
 	if sIPv4 == nil || dIPv4 == nil {
@@ -161,7 +163,10 @@ func BuildIPv4TCPPacket(srcIP, dstIP net.IP, srcPort, dstPort uint16, seq, ack u
 	}
 
 	totalLen := 48 + len(payload)
-	pkt := make([]byte, totalLen)
+	if len(dst) < totalLen {
+		return nil
+	}
+	pkt := dst[:totalLen]
 
 	// 1. SSTP Data Header (6 bytes)
 	pkt[0] = SSTPVersion
@@ -178,10 +183,12 @@ func BuildIPv4TCPPacket(srcIP, dstIP net.IP, srcPort, dstPort uint16, seq, ack u
 	pkt[8] = 0x45 // Version 4, IHL 5
 	pkt[9] = 0x00
 	binary.BigEndian.PutUint16(pkt[10:12], ipLen)
-	binary.BigEndian.PutUint16(pkt[12:14], uint16(rand.Intn(60000)+1000))
+	binary.BigEndian.PutUint16(pkt[12:14], uint16(ipIDCounter.Add(1)))
 	binary.BigEndian.PutUint16(pkt[14:16], 0x4000) // DF flag
 	pkt[16] = 64                                  // TTL
 	pkt[17] = 6                                   // Protocol TCP
+	pkt[18] = 0
+	pkt[19] = 0
 	copy(pkt[20:24], sIPv4)
 	copy(pkt[24:28], dIPv4)
 	ipChk := InternetChecksum(pkt[8:28], 0, 20)
@@ -194,8 +201,11 @@ func BuildIPv4TCPPacket(srcIP, dstIP net.IP, srcPort, dstPort uint16, seq, ack u
 	binary.BigEndian.PutUint32(pkt[36:40], ack)
 	pkt[40] = 0x50 // Data offset 5 (20 bytes)
 	pkt[41] = flags
-	binary.BigEndian.PutUint16(pkt[42:44], 65535) // Window size
-	// Checksum placeholder at pkt[44:46] is 0
+	binary.BigEndian.PutUint16(pkt[42:44], window)
+	pkt[44] = 0
+	pkt[45] = 0
+	pkt[46] = 0 // Urgent pointer must be zeroed on reused buffers
+	pkt[47] = 0
 
 	if len(payload) > 0 {
 		copy(pkt[48:], payload)
@@ -205,6 +215,11 @@ func BuildIPv4TCPPacket(srcIP, dstIP net.IP, srcPort, dstPort uint16, seq, ack u
 	binary.BigEndian.PutUint16(pkt[44:46], tcpChk)
 
 	return pkt
+}
+
+func BuildIPv4TCPPacket(srcIP, dstIP net.IP, srcPort, dstPort uint16, seq, ack uint32, flags byte, payload []byte) []byte {
+	pkt := make([]byte, 48+len(payload))
+	return buildIPv4TCPPacketInto(pkt, srcIP, dstIP, srcPort, dstPort, seq, ack, flags, 65535, payload)
 }
 
 type ParsedTCPPacket struct {
@@ -218,46 +233,50 @@ type ParsedTCPPacket struct {
 	Payload  []byte
 }
 
-func ParseIncomingIPv4TCP(ipPacket []byte) (*ParsedTCPPacket, error) {
+func parseIncomingIPv4TCPInto(ipPacket []byte, dst *ParsedTCPPacket, copyIPs bool) error {
 	if len(ipPacket) < 40 {
-		return nil, errors.New("packet too short")
+		return errors.New("packet too short")
 	}
 	if ipPacket[0]>>4 != 4 {
-		return nil, errors.New("not IPv4")
+		return errors.New("not IPv4")
 	}
 	ipHdrLen := int(ipPacket[0]&0x0f) * 4
-	if len(ipPacket) < ipHdrLen+20 {
-		return nil, errors.New("truncated IPv4 header")
+	if ipHdrLen < 20 || len(ipPacket) < ipHdrLen+20 {
+		return errors.New("truncated IPv4 header")
 	}
 	if ipPacket[9] != 6 { // TCP
-		return nil, errors.New("not TCP protocol")
+		return errors.New("not TCP protocol")
 	}
 
-	srcIP := net.IPv4(ipPacket[12], ipPacket[13], ipPacket[14], ipPacket[15])
-	dstIP := net.IPv4(ipPacket[16], ipPacket[17], ipPacket[18], ipPacket[19])
+	if copyIPs {
+		dst.SrcIP = net.IPv4(ipPacket[12], ipPacket[13], ipPacket[14], ipPacket[15])
+		dst.DstIP = net.IPv4(ipPacket[16], ipPacket[17], ipPacket[18], ipPacket[19])
+	} else {
+		dst.SrcIP = nil
+		dst.DstIP = nil
+	}
 
 	tcpHdr := ipPacket[ipHdrLen:]
-	srcPort := binary.BigEndian.Uint16(tcpHdr[0:2])
-	dstPort := binary.BigEndian.Uint16(tcpHdr[2:4])
-	seq := binary.BigEndian.Uint32(tcpHdr[4:8])
-	ack := binary.BigEndian.Uint32(tcpHdr[8:12])
 	dataOffset := int((tcpHdr[12]>>4)&0x0f) * 4
-	if len(tcpHdr) < dataOffset {
-		return nil, errors.New("truncated TCP header")
+	if dataOffset < 20 || len(tcpHdr) < dataOffset {
+		return errors.New("truncated TCP header")
 	}
-	flags := tcpHdr[13]
-	payload := tcpHdr[dataOffset:]
 
-	return &ParsedTCPPacket{
-		SrcIP:   srcIP,
-		DstIP:   dstIP,
-		SrcPort: srcPort,
-		DstPort: dstPort,
-		Seq:     seq,
-		Ack:     ack,
-		Flags:   flags,
-		Payload: payload,
-	}, nil
+	dst.SrcPort = binary.BigEndian.Uint16(tcpHdr[0:2])
+	dst.DstPort = binary.BigEndian.Uint16(tcpHdr[2:4])
+	dst.Seq = binary.BigEndian.Uint32(tcpHdr[4:8])
+	dst.Ack = binary.BigEndian.Uint32(tcpHdr[8:12])
+	dst.Flags = tcpHdr[13]
+	dst.Payload = tcpHdr[dataOffset:]
+	return nil
+}
+
+func ParseIncomingIPv4TCP(ipPacket []byte) (*ParsedTCPPacket, error) {
+	var parsed ParsedTCPPacket
+	if err := parseIncomingIPv4TCPInto(ipPacket, &parsed, true); err != nil {
+		return nil, err
+	}
+	return &parsed, nil
 }
 
 type ParsedUDPPacket struct {
@@ -268,7 +287,7 @@ type ParsedUDPPacket struct {
 	Payload []byte
 }
 
-func BuildIPv4UDPPacket(srcIP, dstIP net.IP, srcPort, dstPort uint16, payload []byte) []byte {
+func buildIPv4UDPPacketInto(dst []byte, srcIP, dstIP net.IP, srcPort, dstPort uint16, payload []byte) []byte {
 	sIPv4 := srcIP.To4()
 	dIPv4 := dstIP.To4()
 	if sIPv4 == nil || dIPv4 == nil {
@@ -276,7 +295,10 @@ func BuildIPv4UDPPacket(srcIP, dstIP net.IP, srcPort, dstPort uint16, payload []
 	}
 
 	totalLen := 36 + len(payload)
-	pkt := make([]byte, totalLen)
+	if len(dst) < totalLen {
+		return nil
+	}
+	pkt := dst[:totalLen]
 
 	// 1. SSTP Data Header (6 bytes)
 	pkt[0] = SSTPVersion
@@ -293,10 +315,12 @@ func BuildIPv4UDPPacket(srcIP, dstIP net.IP, srcPort, dstPort uint16, payload []
 	pkt[8] = 0x45 // Version 4, IHL 5
 	pkt[9] = 0x00
 	binary.BigEndian.PutUint16(pkt[10:12], ipLen)
-	binary.BigEndian.PutUint16(pkt[12:14], uint16(rand.Intn(60000)+1000))
+	binary.BigEndian.PutUint16(pkt[12:14], uint16(ipIDCounter.Add(1)))
 	binary.BigEndian.PutUint16(pkt[14:16], 0x4000) // DF flag
 	pkt[16] = 64                                  // TTL
 	pkt[17] = 17                                  // Protocol UDP
+	pkt[18] = 0
+	pkt[19] = 0
 	copy(pkt[20:24], sIPv4)
 	copy(pkt[24:28], dIPv4)
 	ipChk := InternetChecksum(pkt[8:28], 0, 20)
@@ -307,7 +331,8 @@ func BuildIPv4UDPPacket(srcIP, dstIP net.IP, srcPort, dstPort uint16, payload []
 	binary.BigEndian.PutUint16(pkt[28:30], srcPort)
 	binary.BigEndian.PutUint16(pkt[30:32], dstPort)
 	binary.BigEndian.PutUint16(pkt[32:34], udpLen)
-	// Checksum placeholder at pkt[34:36] is 0
+	pkt[34] = 0
+	pkt[35] = 0
 
 	if len(payload) > 0 {
 		copy(pkt[36:], payload)
@@ -319,6 +344,11 @@ func BuildIPv4UDPPacket(srcIP, dstIP net.IP, srcPort, dstPort uint16, payload []
 	return pkt
 }
 
+func BuildIPv4UDPPacket(srcIP, dstIP net.IP, srcPort, dstPort uint16, payload []byte) []byte {
+	pkt := make([]byte, 36+len(payload))
+	return buildIPv4UDPPacketInto(pkt, srcIP, dstIP, srcPort, dstPort, payload)
+}
+
 func ParseIncomingIPv4UDP(ipPacket []byte) (*ParsedUDPPacket, error) {
 	if len(ipPacket) < 28 { // 20 IP + 8 UDP
 		return nil, errors.New("packet too short")
@@ -327,7 +357,7 @@ func ParseIncomingIPv4UDP(ipPacket []byte) (*ParsedUDPPacket, error) {
 		return nil, errors.New("not IPv4")
 	}
 	ipHdrLen := int(ipPacket[0]&0x0f) * 4
-	if len(ipPacket) < ipHdrLen+8 {
+	if ipHdrLen < 20 || len(ipPacket) < ipHdrLen+8 {
 		return nil, errors.New("truncated IPv4 header")
 	}
 	if ipPacket[9] != 17 { // UDP

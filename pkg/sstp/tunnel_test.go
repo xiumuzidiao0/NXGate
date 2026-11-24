@@ -432,3 +432,131 @@ func (lb *pppLoopback) readPPPControl(t *testing.T, timeout time.Duration) (uint
 	}
 	return proto, payload[0], payload[1], payload[4:plen]
 }
+
+func (lb *pppLoopback) readIPv4Frame(t *testing.T, timeout time.Duration) []byte {
+	t.Helper()
+	_ = lb.srv.SetReadDeadline(time.Now().Add(timeout))
+	hdr := make([]byte, 4)
+	if _, err := io.ReadFull(lb.br, hdr); err != nil {
+		t.Fatalf("read sstp frame header: %v", err)
+	}
+	pktLen := int(binary.BigEndian.Uint16(hdr[2:4]) & 0x0fff)
+	if pktLen < 6 {
+		t.Fatalf("invalid sstp frame len %d", pktLen)
+	}
+	body := make([]byte, pktLen-4)
+	if _, err := io.ReadFull(lb.br, body); err != nil {
+		t.Fatalf("read sstp frame body: %v", err)
+	}
+	if len(body) < 4 || body[0] != 0xff || body[1] != 0x03 {
+		t.Fatalf("unexpected HDLC header: %x", body)
+	}
+	return body[4:]
+}
+
+func TestTunnelReadLoopAndTxBufReuseNoAliasing(t *testing.T) {
+	lb := newLoopbackPPP(t)
+	defer lb.Close()
+
+	tun := lb.newTunnel(t)
+	defer tun.Close()
+
+	remoteTCP := net.ParseIP("93.184.216.34")
+	tcpConn := newTCPConn(tun, tun.assignedIP, remoteTCP, 45100, 80, 1000, 2000)
+	sessKey := (uint32(45100) << 16) | uint32(80)
+	tun.mu.Lock()
+	tun.sessions[sessKey] = tcpConn
+	tun.mu.Unlock()
+
+	pktConn, err := tun.OpenPacketConn()
+	if err != nil {
+		t.Fatalf("OpenPacketConn failed: %v", err)
+	}
+	uConn := pktConn.(*UDPConn)
+
+	go tun.readLoop()
+
+	// Write two UDP packets and two TCP segments back-to-back into rxLoop before consumer reads.
+	dns1 := BuildIPv4UDPPacket(net.ParseIP("8.8.8.8"), tun.assignedIP, 53, uConn.localPort, []byte("UDP-FIRST-LONGER-PAYLOAD"))
+	dns2 := BuildIPv4UDPPacket(net.ParseIP("1.1.1.1"), tun.assignedIP, 53, uConn.localPort, []byte("UDP-TWO"))
+	tcp1 := BuildIPv4TCPPacket(remoteTCP, tun.assignedIP, 80, 45100, 2000, 1000, TCPFlagACK|TCPFlagPSH, []byte("TCP-ONE-"))
+	tcp2 := BuildIPv4TCPPacket(remoteTCP, tun.assignedIP, 80, 45100, 2008, 1000, TCPFlagACK|TCPFlagPSH, []byte("TCP-TWO"))
+
+	var batch []byte
+	batch = append(batch, dns1...)
+	batch = append(batch, dns2...)
+	batch = append(batch, tcp1...)
+	batch = append(batch, tcp2...)
+	if _, err := lb.Write(batch); err != nil {
+		t.Fatalf("loopback write failed: %v", err)
+	}
+
+	_ = uConn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	uBuf := make([]byte, 128)
+	n1, _, err := uConn.ReadFrom(uBuf)
+	if err != nil || string(uBuf[:n1]) != "UDP-FIRST-LONGER-PAYLOAD" {
+		t.Fatalf("first UDP payload corrupted/aliased: %q err=%v", string(uBuf[:n1]), err)
+	}
+	n2, _, err := uConn.ReadFrom(uBuf)
+	if err != nil || string(uBuf[:n2]) != "UDP-TWO" {
+		t.Fatalf("second UDP payload mismatch: %q err=%v", string(uBuf[:n2]), err)
+	}
+
+	_ = tcpConn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	tBuf := make([]byte, 15)
+	if _, err := io.ReadFull(tcpConn, tBuf); err != nil || string(tBuf) != "TCP-ONE-TCP-TWO" {
+		t.Fatalf("TCP stream mismatch: %q err=%v", string(tBuf), err)
+	}
+
+	// Verify txBuf reuse for multiple outgoing TCP & UDP writes produces valid checksums and distinct headers.
+	if _, err := tcpConn.Write([]byte("OUT-TCP-A")); err != nil {
+		t.Fatalf("tcpConn write A failed: %v", err)
+	}
+	if _, err := tcpConn.Write([]byte("OUT-TCP-B")); err != nil {
+		t.Fatalf("tcpConn write B failed: %v", err)
+	}
+	if _, err := uConn.WriteTo([]byte("OUT-UDP-1"), &net.UDPAddr{IP: net.ParseIP("8.8.8.8"), Port: 53}); err != nil {
+		t.Fatalf("uConn write 1 failed: %v", err)
+	}
+	if _, err := uConn.WriteTo([]byte("OUT-UDP-2"), &net.UDPAddr{IP: net.ParseIP("1.1.1.1"), Port: 53}); err != nil {
+		t.Fatalf("uConn write 2 failed: %v", err)
+	}
+
+	var gotPayloads []string
+	deadline := time.Now().Add(2 * time.Second)
+	for len(gotPayloads) < 4 && time.Now().Before(deadline) {
+		ipPkt := lb.readIPv4Frame(t, 2*time.Second)
+		// Validate IPv4 checksum was recomputed cleanly on reused txBuf
+		if InternetChecksum(ipPkt, 0, 20) != 0 {
+			t.Fatalf("invalid IPv4 header checksum on reused txBuf: %x", ipPkt[:20])
+		}
+		switch ipPkt[9] {
+		case 6:
+			p, err := ParseIncomingIPv4TCP(ipPkt)
+			if err != nil {
+				t.Fatalf("parse outgoing TCP failed: %v", err)
+			}
+			// Skip pure ACK control frames triggered by delayed ACK
+			if len(p.Payload) > 0 {
+				if tcpChecksum(p.SrcIP.To4(), p.DstIP.To4(), ipPkt[20:]) != 0 {
+					t.Fatalf("invalid TCP checksum on reused txBuf")
+				}
+				gotPayloads = append(gotPayloads, string(p.Payload))
+			}
+		case 17:
+			p, err := ParseIncomingIPv4UDP(ipPkt)
+			if err != nil {
+				t.Fatalf("parse outgoing UDP failed: %v", err)
+			}
+			if udpChecksum(p.SrcIP.To4(), p.DstIP.To4(), ipPkt[20:]) != 0xffff {
+				t.Fatalf("invalid UDP checksum on reused txBuf")
+			}
+			gotPayloads = append(gotPayloads, string(p.Payload))
+		}
+	}
+
+	joined := strings.Join(gotPayloads, "|")
+	if joined != "OUT-TCP-A|OUT-TCP-B|OUT-UDP-1|OUT-UDP-2" {
+		t.Fatalf("unexpected outgoing payloads on reused txBuf: %q", joined)
+	}
+}

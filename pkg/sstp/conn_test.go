@@ -224,3 +224,157 @@ func TestTCPConnWriteDeadline(t *testing.T) {
 		t.Fatalf("expected ErrTimeout on expired write deadline, got %v", err)
 	}
 }
+
+func TestTCPConnBoundedBufferAndWindowBackpressure(t *testing.T) {
+	localIP := net.ParseIP("10.211.1.2")
+	remoteIP := net.ParseIP("1.1.1.1")
+	tun := &Tunnel{
+		assignedIP: localIP,
+		sessions:   make(map[uint32]*TCPConn),
+	}
+
+	conn := newTCPConn(tun, localIP, remoteIP, 45001, 80, 1000, 2000)
+
+	conn.mu.Lock()
+	if conn.outOfOrder != nil {
+		conn.mu.Unlock()
+		t.Fatalf("expected lazy nil outOfOrder map on new TCPConn")
+	}
+	conn.mu.Unlock()
+
+	// Fill receive buffer up to maxTCPReadBufCap.
+	seq := uint32(2000)
+	chunk := bytes.Repeat([]byte("A"), DefaultTCPMSS)
+	remaining := maxTCPReadBufCap
+	for remaining > 0 {
+		sz := min(len(chunk), remaining)
+		conn.handleIncoming(&ParsedTCPPacket{
+			SrcIP:   remoteIP,
+			DstIP:   localIP,
+			SrcPort: 80,
+			DstPort: 45001,
+			Seq:     seq,
+			Ack:     1000,
+			Flags:   TCPFlagACK,
+			Payload: chunk[:sz],
+		})
+		seq += uint32(sz)
+		remaining -= sz
+	}
+
+	conn.mu.Lock()
+	bufLen := conn.readBuf.Len()
+	wnd := conn.advertisedWindowLocked()
+	zeroSent := conn.zeroWindowSent
+	conn.mu.Unlock()
+
+	if bufLen != maxTCPReadBufCap || wnd != 0 || !zeroSent {
+		t.Fatalf("expected full bounded buffer: len=%d wnd=%d zeroSent=%v", bufLen, wnd, zeroSent)
+	}
+
+	// Extra bytes when buffer is full must be dropped without advancing ACK.
+	overflow := []byte("OVERFLOW-100")
+	conn.handleIncoming(&ParsedTCPPacket{
+		SrcIP:   remoteIP,
+		DstIP:   localIP,
+		SrcPort: 80,
+		DstPort: 45001,
+		Seq:     seq,
+		Ack:     1000,
+		Flags:   TCPFlagACK,
+		Payload: overflow,
+	})
+	if conn.ack != seq {
+		t.Fatalf("expected ACK %d unchanged on full buffer, got %d", seq, conn.ack)
+	}
+
+	// Drain 2*DefaultTCPMSS via Read; zero-window state must reopen.
+	drain := make([]byte, 2*DefaultTCPMSS)
+	if _, err := io.ReadFull(conn, drain); err != nil {
+		t.Fatalf("drain read failed: %v", err)
+	}
+
+	conn.mu.Lock()
+	reopened := !conn.zeroWindowSent && conn.advertisedWindowLocked() >= 2*DefaultTCPMSS
+	conn.mu.Unlock()
+	if !reopened {
+		t.Fatalf("expected send window to reopen after draining >= 2*MSS")
+	}
+
+	// Retransmitted segment now fits cleanly.
+	conn.handleIncoming(&ParsedTCPPacket{
+		SrcIP:   remoteIP,
+		DstIP:   localIP,
+		SrcPort: 80,
+		DstPort: 45001,
+		Seq:     seq,
+		Ack:     1000,
+		Flags:   TCPFlagACK,
+		Payload: overflow,
+	})
+	if conn.ack != seq+uint32(len(overflow)) {
+		t.Fatalf("expected ACK %d after reopen, got %d", seq+uint32(len(overflow)), conn.ack)
+	}
+
+	_ = conn.Close()
+	conn.mu.Lock()
+	released := conn.readBuf.buf == nil && conn.readBuf.Len() == 0 && conn.outOfOrder == nil
+	conn.mu.Unlock()
+	if !released {
+		t.Fatalf("expected Close to release ring buffer and outOfOrder map")
+	}
+}
+
+func TestTCPConnLazyOutOfOrderAccounting(t *testing.T) {
+	localIP := net.ParseIP("10.211.1.2")
+	remoteIP := net.ParseIP("1.1.1.1")
+	tun := &Tunnel{
+		assignedIP: localIP,
+		sessions:   make(map[uint32]*TCPConn),
+	}
+
+	conn := newTCPConn(tun, localIP, remoteIP, 45002, 80, 1000, 2000)
+
+	// In-order write must keep outOfOrder nil.
+	conn.handleIncoming(&ParsedTCPPacket{
+		SrcIP: remoteIP, DstIP: localIP, SrcPort: 80, DstPort: 45002,
+		Seq: 2000, Ack: 1000, Flags: TCPFlagACK, Payload: []byte("AB"),
+	})
+	conn.mu.Lock()
+	if conn.outOfOrder != nil {
+		conn.mu.Unlock()
+		t.Fatalf("expected nil outOfOrder after in-order segment")
+	}
+	conn.mu.Unlock()
+
+	// Out-of-order segment initializes outOfOrder and tracks bytes; duplicate is ignored.
+	ooo := &ParsedTCPPacket{
+		SrcIP: remoteIP, DstIP: localIP, SrcPort: 80, DstPort: 45002,
+		Seq: 2004, Ack: 1000, Flags: TCPFlagACK, Payload: []byte("EFG"),
+	}
+	conn.handleIncoming(ooo)
+	conn.handleIncoming(ooo)
+	conn.mu.Lock()
+	if conn.outOfOrder == nil || conn.outOfOrderBytes != 3 {
+		conn.mu.Unlock()
+		t.Fatalf("expected outOfOrderBytes=3, got %d (map=%v)", conn.outOfOrderBytes, conn.outOfOrder)
+	}
+	conn.mu.Unlock()
+
+	// Fill gap and confirm outOfOrderBytes drops back to 0.
+	conn.handleIncoming(&ParsedTCPPacket{
+		SrcIP: remoteIP, DstIP: localIP, SrcPort: 80, DstPort: 45002,
+		Seq: 2002, Ack: 1000, Flags: TCPFlagACK, Payload: []byte("CD"),
+	})
+	conn.mu.Lock()
+	remOOO := conn.outOfOrderBytes
+	conn.mu.Unlock()
+	if remOOO != 0 {
+		t.Fatalf("expected outOfOrderBytes=0 after hole fill, got %d", remOOO)
+	}
+
+	got := make([]byte, 7)
+	if _, err := io.ReadFull(conn, got); err != nil || string(got) != "ABCDEFG" {
+		t.Fatalf("expected ABCDEFG, got %q err=%v", string(got), err)
+	}
+}
