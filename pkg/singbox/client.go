@@ -9,11 +9,18 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
+const defaultStatusCacheTTL = 5 * time.Second
+
 type Client struct {
-	binaryPath string
+	binaryPath     string
+	statusMu       sync.Mutex
+	cachedStatus   *StatusResponse
+	cachedAt       time.Time
+	statusCacheTTL time.Duration
 }
 
 type ProtocolInfo struct {
@@ -197,9 +204,24 @@ func (c *Client) execAPI(ctx context.Context, args ...string) ([]byte, error) {
 	return stdout.Bytes(), nil
 }
 
+func (c *Client) InvalidateStatusCache() {
+	c.statusMu.Lock()
+	c.cachedStatus = nil
+	c.cachedAt = time.Time{}
+	c.statusMu.Unlock()
+}
+
+func (c *Client) effectiveStatusCacheTTL() time.Duration {
+	if c.statusCacheTTL > 0 {
+		return c.statusCacheTTL
+	}
+	return defaultStatusCacheTTL
+}
+
 func (c *Client) GetStatus(ctx context.Context) (*StatusResponse, error) {
 	var resp StatusResponse
 	if !c.IsInstalled() {
+		c.InvalidateStatusCache()
 		resp.OK = true
 		resp.Installed = false
 		resp.BinaryPath = c.binaryPath
@@ -207,6 +229,15 @@ func (c *Client) GetStatus(ctx context.Context) (*StatusResponse, error) {
 		resp.Core.Version = "not installed"
 		return &resp, nil
 	}
+
+	ttl := c.effectiveStatusCacheTTL()
+	c.statusMu.Lock()
+	if c.cachedStatus != nil && time.Since(c.cachedAt) < ttl {
+		cp := *c.cachedStatus
+		c.statusMu.Unlock()
+		return &cp, nil
+	}
+	c.statusMu.Unlock()
 
 	ctxTimeout, cancel := context.WithTimeout(ctx, 6*time.Second)
 	defer cancel()
@@ -222,6 +253,13 @@ func (c *Client) GetStatus(ctx context.Context) (*StatusResponse, error) {
 
 	resp.Installed = true
 	resp.BinaryPath = c.binaryPath
+
+	cp := resp
+	c.statusMu.Lock()
+	c.cachedStatus = &cp
+	c.cachedAt = time.Now()
+	c.statusMu.Unlock()
+
 	return &resp, nil
 }
 
@@ -272,6 +310,7 @@ func (c *Client) ListNodes(ctx context.Context) ([]Node, error) {
 }
 
 func (c *Client) AddNode(ctx context.Context, protocol, port, uuidOrPass, sniOrHost, outbound string) (*Node, error) {
+	defer c.InvalidateStatusCache()
 	if port == "" {
 		port = "auto"
 	}
@@ -318,6 +357,7 @@ func (c *Client) AddNode(ctx context.Context, protocol, port, uuidOrPass, sniOrH
 }
 
 func (c *Client) SetOutbound(ctx context.Context, nameOrAll, outbound string) (*OutboundResponse, error) {
+	defer c.InvalidateStatusCache()
 	if nameOrAll == "" {
 		nameOrAll = "all"
 	}
@@ -346,6 +386,7 @@ func (c *Client) SetOutbound(ctx context.Context, nameOrAll, outbound string) (*
 }
 
 func (c *Client) DeleteNode(ctx context.Context, nameOrAll string) error {
+	defer c.InvalidateStatusCache()
 	ctxTimeout, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
@@ -387,6 +428,7 @@ func (c *Client) GetSubscription(ctx context.Context) (*SubResponse, error) {
 }
 
 func (c *Client) RestartService(ctx context.Context) error {
+	defer c.InvalidateStatusCache()
 	ctxTimeout, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 

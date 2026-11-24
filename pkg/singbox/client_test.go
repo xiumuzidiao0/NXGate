@@ -1,8 +1,13 @@
 package singbox
 
 import (
+	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 )
 
 func TestParseProtocolsJSON(t *testing.T) {
@@ -70,5 +75,50 @@ func TestParseSubJSON(t *testing.T) {
 	}
 	if !resp.Enabled || resp.NodeCount != 2 || len(resp.Nodes) != 2 {
 		t.Fatalf("unexpected sub: %+v", resp)
+	}
+}
+
+func TestGetStatusCacheAndInvalidation(t *testing.T) {
+	dir := t.TempDir()
+	counterFile := filepath.Join(dir, "count")
+	script := filepath.Join(dir, "sing-box-mock.sh")
+
+	body := "#!/usr/bin/env sh\n" +
+		"echo x >> \"" + counterFile + "\"\n" +
+		"echo '{\"ok\":true,\"node_count\":2,\"subscription_enabled\":true,\"core\":{\"name\":\"sing-box\",\"version\":\"1.0.0\",\"running\":true,\"pid\":123}}'\n"
+	if err := os.WriteFile(script, []byte(body), 0700); err != nil {
+		t.Fatalf("write mock script failed: %v", err)
+	}
+
+	c := &Client{
+		binaryPath:     script,
+		statusCacheTTL: 5 * time.Second,
+	}
+
+	ctx := context.Background()
+	st1, err := c.GetStatus(ctx)
+	if err != nil || !st1.Core.Running || st1.NodeCount != 2 {
+		t.Fatalf("first GetStatus failed: st=%+v err=%v", st1, err)
+	}
+	st2, err := c.GetStatus(ctx)
+	if err != nil || !st2.Core.Running {
+		t.Fatalf("cached GetStatus failed: st=%+v err=%v", st2, err)
+	}
+
+	rawCount, err := os.ReadFile(counterFile)
+	if err != nil {
+		t.Fatalf("read count failed: %v", err)
+	}
+	if got := len(strings.Fields(string(rawCount))); got != 1 {
+		t.Fatalf("expected cached second GetStatus to avoid fork, exec count=%d", got)
+	}
+
+	c.InvalidateStatusCache()
+	if _, err := c.GetStatus(ctx); err != nil {
+		t.Fatalf("GetStatus after invalidate failed: %v", err)
+	}
+	rawCount2, _ := os.ReadFile(counterFile)
+	if got := len(strings.Fields(string(rawCount2))); got != 2 {
+		t.Fatalf("expected exec count=2 after cache invalidation, got %d", got)
 	}
 }

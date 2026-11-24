@@ -174,7 +174,7 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 
 	// Start sing-box self-healing watchdog
-	watchdog := NewSingBoxWatchdog(s, 30*time.Second)
+	watchdog := NewSingBoxWatchdog(s, 60*time.Second)
 	watchdog.Start(ctx)
 
 	// Sync sing-box outbound credentials & protocol (upgrade to SOCKS5 dual-stack) shortly after startup

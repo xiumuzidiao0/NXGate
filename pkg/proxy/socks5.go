@@ -374,6 +374,13 @@ func handleSocks5UDPAssociate(client net.Conn, atyp byte, devName string, tun *t
 
 	clearDeadline(client)
 
+	if bc, ok := client.(*bufferedConn); ok {
+		if unwrapped, br := bc.unwrapIfEmpty(); br != nil {
+			releaseBufioReader(br)
+			client = unwrapped
+		}
+	}
+
 	// 5. Manage TCP lifecycle: per RFC 1928, UDP association terminates when TCP drops
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -399,7 +406,10 @@ func handleSocks5UDPAssociate(client net.Conn, atyp byte, devName string, tun *t
 
 	// Relay Upstream -> Client
 	go func() {
-		respBuf := make([]byte, 65535)
+		respBufPtr := udpPacketBufPool.Get().(*[]byte)
+		defer udpPacketBufPool.Put(respBufPtr)
+		buf := *respBufPtr
+		payloadBuf := buf[socks5UDPPacketHeadroom:]
 		for {
 			select {
 			case <-ctx.Done():
@@ -407,7 +417,7 @@ func handleSocks5UDPAssociate(client net.Conn, atyp byte, devName string, tun *t
 			default:
 			}
 
-			n, remoteAddr, err := upstreamConn.ReadFrom(respBuf)
+			n, remoteAddr, err := upstreamConn.ReadFrom(payloadBuf)
 			if err != nil {
 				return
 			}
@@ -423,7 +433,7 @@ func handleSocks5UDPAssociate(client net.Conn, atyp byte, devName string, tun *t
 			}
 
 			if rUDP, ok := remoteAddr.(*net.UDPAddr); ok {
-				packed := packSocks5UDPPacket(rUDP, respBuf[:n])
+				packed := packSocks5UDPPacketInPlace(buf, rUDP, n)
 				if len(packed) > 0 {
 					_, _ = relayConn.WriteTo(packed, destClient)
 					stats.GetTrafficTracker().AddDownload(uint64(n))
@@ -436,7 +446,9 @@ func handleSocks5UDPAssociate(client net.Conn, atyp byte, devName string, tun *t
 	}()
 
 	// Relay Client -> Upstream
-	reqBuf := make([]byte, 65535)
+	reqBufPtr := udpPacketBufPool.Get().(*[]byte)
+	defer udpPacketBufPool.Put(reqBufPtr)
+	reqBuf := (*reqBufPtr)[:65535]
 	for {
 		select {
 		case <-ctx.Done():
@@ -492,38 +504,76 @@ func handleSocks5UDPAssociate(client net.Conn, atyp byte, devName string, tun *t
 	}
 }
 
+const socks5UDPPacketHeadroom = 22
+
+var udpPacketBufPool = sync.Pool{
+	New: func() any {
+		b := make([]byte, 65535+socks5UDPPacketHeadroom)
+		return &b
+	},
+}
+
+func writeSocks5UDPHeader(dst []byte, addr *net.UDPAddr) int {
+	if addr == nil {
+		return 0
+	}
+	if ip4 := addr.IP.To4(); ip4 != nil {
+		// RSV(2) | FRAG(1) | ATYP(1) | IP(4) | PORT(2)
+		dst[0] = 0x00
+		dst[1] = 0x00
+		dst[2] = 0x00
+		dst[3] = atypIPv4
+		copy(dst[4:8], ip4)
+		binary.BigEndian.PutUint16(dst[8:10], uint16(addr.Port))
+		return 10
+	}
+	if ip6 := addr.IP.To16(); ip6 != nil {
+		// RSV(2) | FRAG(1) | ATYP(1) | IP(16) | PORT(2)
+		dst[0] = 0x00
+		dst[1] = 0x00
+		dst[2] = 0x00
+		dst[3] = atypIPv6
+		copy(dst[4:20], ip6)
+		binary.BigEndian.PutUint16(dst[20:22], uint16(addr.Port))
+		return 22
+	}
+	return 0
+}
+
+// packSocks5UDPPacketInPlace prepends the SOCKS5 UDP header into the 22-byte
+// front headroom of buf (where payload sits at buf[22:22+payloadLen]).
+func packSocks5UDPPacketInPlace(buf []byte, addr *net.UDPAddr, payloadLen int) []byte {
+	if addr == nil || payloadLen < 0 || len(buf) < socks5UDPPacketHeadroom+payloadLen {
+		return nil
+	}
+	if ip4 := addr.IP.To4(); ip4 != nil {
+		start := socks5UDPPacketHeadroom - 10
+		writeSocks5UDPHeader(buf[start:socks5UDPPacketHeadroom], addr)
+		return buf[start : socks5UDPPacketHeadroom+payloadLen]
+	}
+	if ip6 := addr.IP.To16(); ip6 != nil {
+		writeSocks5UDPHeader(buf[0:socks5UDPPacketHeadroom], addr)
+		return buf[0 : socks5UDPPacketHeadroom+payloadLen]
+	}
+	return nil
+}
+
 func packSocks5UDPPacket(addr *net.UDPAddr, data []byte) []byte {
 	if addr == nil {
 		return nil
 	}
-	ip4 := addr.IP.To4()
-	if ip4 != nil {
-		// RSV(2) | FRAG(1) | ATYP(1) | IP(4) | PORT(2) | DATA
+	if ip4 := addr.IP.To4(); ip4 != nil {
 		header := make([]byte, 10+len(data))
-		header[0] = 0x00
-		header[1] = 0x00
-		header[2] = 0x00 // FRAG
-		header[3] = atypIPv4
-		copy(header[4:8], ip4)
-		binary.BigEndian.PutUint16(header[8:10], uint16(addr.Port))
+		writeSocks5UDPHeader(header, addr)
 		copy(header[10:], data)
 		return header
 	}
-
-	ip6 := addr.IP.To16()
-	if ip6 != nil {
-		// RSV(2) | FRAG(1) | ATYP(1) | IP(16) | PORT(2) | DATA
+	if ip6 := addr.IP.To16(); ip6 != nil {
 		header := make([]byte, 22+len(data))
-		header[0] = 0x00
-		header[1] = 0x00
-		header[2] = 0x00
-		header[3] = atypIPv6
-		copy(header[4:20], ip6)
-		binary.BigEndian.PutUint16(header[20:22], uint16(addr.Port))
+		writeSocks5UDPHeader(header, addr)
 		copy(header[22:], data)
 		return header
 	}
-
 	return nil
 }
 

@@ -10,13 +10,50 @@ import (
 	"aimili-vpngate-go/pkg/stats"
 )
 
+const (
+	relayBufferSize  = 16 * 1024
+	bufioReaderBytes = 4096
+)
+
+var bufioReaderPool = sync.Pool{
+	New: func() any {
+		return bufio.NewReaderSize(nil, bufioReaderBytes)
+	},
+}
+
+func acquireBufioReader(r io.Reader) *bufio.Reader {
+	br := bufioReaderPool.Get().(*bufio.Reader)
+	br.Reset(r)
+	return br
+}
+
+func releaseBufioReader(br *bufio.Reader) {
+	if br == nil {
+		return
+	}
+	br.Reset(nil)
+	bufioReaderPool.Put(br)
+}
+
 type bufferedConn struct {
 	net.Conn
 	br *bufio.Reader
 }
 
 func (b *bufferedConn) Read(p []byte) (int, error) {
-	return b.br.Read(p)
+	if b.br != nil {
+		return b.br.Read(p)
+	}
+	return b.Conn.Read(p)
+}
+
+func (b *bufferedConn) unwrapIfEmpty() (net.Conn, *bufio.Reader) {
+	if b != nil && b.br != nil && b.br.Buffered() == 0 {
+		br := b.br
+		b.br = nil
+		return b.Conn, br
+	}
+	return b, nil
 }
 
 func (b *bufferedConn) CloseWrite() error {
@@ -57,12 +94,19 @@ func clearDeadline(conn net.Conn) {
 
 var relayBufferPool = sync.Pool{
 	New: func() any {
-		b := make([]byte, 32*1024)
+		b := make([]byte, relayBufferSize)
 		return &b
 	},
 }
 
 func relay(client, upstream net.Conn) {
+	if bc, ok := client.(*bufferedConn); ok {
+		unwrapped, br := bc.unwrapIfEmpty()
+		if br != nil {
+			releaseBufioReader(br)
+			client = unwrapped
+		}
+	}
 	tracker := stats.GetTrafficTracker()
 	var wg sync.WaitGroup
 	wg.Add(2)

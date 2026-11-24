@@ -128,12 +128,17 @@ func handlePlainHTTP(client net.Conn, req *http.Request, devName string, tun *tu
 		return fmt.Errorf("forward request failed: %w", err)
 	}
 
-	// Read upstream HTTP response
-	upResp, err := http.ReadResponse(bufio.NewReader(upstream), req)
+	// Read upstream HTTP response using pooled bufio.Reader; release only after Body closes.
+	upBr := acquireBufioReader(upstream)
+	upResp, err := http.ReadResponse(upBr, req)
 	if err != nil {
+		releaseBufioReader(upBr)
 		return fmt.Errorf("read upstream response failed: %w", err)
 	}
-	defer upResp.Body.Close()
+	defer func() {
+		_ = upResp.Body.Close()
+		releaseBufioReader(upBr)
+	}()
 
 	// Forward response to client
 	upResp.Close = true

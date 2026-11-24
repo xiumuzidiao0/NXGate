@@ -20,7 +20,7 @@ type SingBoxWatchdog struct {
 
 func NewSingBoxWatchdog(s *Server, interval time.Duration) *SingBoxWatchdog {
 	if interval <= 0 {
-		interval = 30 * time.Second
+		interval = 60 * time.Second
 	}
 	return &SingBoxWatchdog{
 		server:   s,

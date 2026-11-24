@@ -716,3 +716,67 @@ func configureLocalTestEgress(l *PortListener) {
 	})
 	l.SetUserlandPacketConn(func() (net.PacketConn, error) { return net.ListenPacket("udp4", "127.0.0.1:0") })
 }
+
+func TestPackSocks5UDPPacketInPlaceMatchesAllocatingPack(t *testing.T) {
+	payload := []byte("hello-udp-payload")
+
+	for _, tc := range []struct {
+		name string
+		addr *net.UDPAddr
+	}{
+		{
+			name: "ipv4",
+			addr: &net.UDPAddr{IP: net.ParseIP("203.0.113.5"), Port: 5353},
+		},
+		{
+			name: "ipv6",
+			addr: &net.UDPAddr{IP: net.ParseIP("2001:db8::1"), Port: 8443},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			want := packSocks5UDPPacket(tc.addr, payload)
+			buf := make([]byte, socks5UDPPacketHeadroom+len(payload)+16)
+			copy(buf[socks5UDPPacketHeadroom:], payload)
+
+			got := packSocks5UDPPacketInPlace(buf, tc.addr, len(payload))
+			if string(got) != string(want) {
+				t.Fatalf("packed mismatch: got %x, want %x", got, want)
+			}
+		})
+	}
+}
+
+func TestBufferedConnUnwrapIfEmpty(t *testing.T) {
+	c1, c2 := net.Pipe()
+	defer c1.Close()
+	defer c2.Close()
+
+	// Empty bufio.Reader detaches cleanly and returns underlying net.Conn.
+	brEmpty := acquireBufioReader(c1)
+	bcEmpty := &bufferedConn{Conn: c1, br: brEmpty}
+	unwrapped, released := bcEmpty.unwrapIfEmpty()
+	if unwrapped != c1 || released != brEmpty || bcEmpty.br != nil {
+		t.Fatalf("expected empty bufferedConn to unwrap and yield reader")
+	}
+	releaseBufioReader(released)
+
+	// Non-empty bufio.Reader keeps bufferedConn intact so buffered bytes are not lost.
+	go func() {
+		_, _ = c2.Write([]byte("ping"))
+	}()
+	brFull := acquireBufioReader(c1)
+	if _, err := brFull.Peek(4); err != nil {
+		t.Fatalf("peek failed: %v", err)
+	}
+	bcFull := &bufferedConn{Conn: c1, br: brFull}
+	stillWrapped, notReleased := bcFull.unwrapIfEmpty()
+	if stillWrapped != bcFull || notReleased != nil || bcFull.br == nil {
+		t.Fatalf("expected non-empty bufferedConn not to unwrap")
+	}
+	buf := make([]byte, 4)
+	if _, err := bcFull.Read(buf); err != nil || string(buf) != "ping" {
+		t.Fatalf("expected buffered bytes preserved, got %q err=%v", string(buf), err)
+	}
+	releaseBufioReader(bcFull.br)
+	bcFull.br = nil
+}

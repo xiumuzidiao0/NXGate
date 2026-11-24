@@ -1,7 +1,6 @@
 package proxy
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"net"
@@ -170,10 +169,11 @@ func (l *PortListener) Start(ctx context.Context) error {
 
 func (l *PortListener) dispatch(client net.Conn) {
 	defer client.Close()
-	br := bufio.NewReader(client)
+	br := acquireBufioReader(client)
 
 	firstByte, err := br.Peek(1)
 	if err != nil {
+		releaseBufioReader(br)
 		_ = client.Close()
 		return
 	}
@@ -181,6 +181,12 @@ func (l *PortListener) dispatch(client net.Conn) {
 		Conn: client,
 		br:   br,
 	}
+	defer func() {
+		if bConn.br != nil {
+			releaseBufioReader(bConn.br)
+			bConn.br = nil
+		}
+	}()
 
 	auth := l.getAuthenticator()
 
