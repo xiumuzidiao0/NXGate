@@ -12,8 +12,8 @@ android {
         applicationId = "com.nxgate.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 20
-        versionName = "2.6.5.41"
+        versionCode = 21
+        versionName = "2.6.5.42"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
