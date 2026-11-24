@@ -97,7 +97,11 @@ singbox_available() { return 1; }
 '''
         return SOURCE.replace('# 可 source 函数用于隔离回归', mocks + '\n# 可 source 函数用于隔离回归')
 
-    def wizard_replies(self, confirm=b"y\n"):
+    def wizard_replies(self, confirm=b"y\n", english=False):
+        if english:
+            return [("1. Enter Web console port", b"\n"), ("2. Enter Web admin", b"\n"),
+                    ("3. Enter Web admin", b"\n"), ("4. Enter Web admin", b"SecretNoEcho123\n"),
+                    ("5. Enter local unified", b"\n"), ("Save this configuration", confirm)]
         return [("1. 请输入 Web", b"\n"), ("2. 请输入 Web", b"\n"),
                 ("3. 请输入 Web", b"\n"), ("4. 请输入 Web", b"SecretNoEcho123\n"),
                 ("5. 请输入 本地", b"\n"), ("确认保存以上配置", confirm)]
@@ -105,18 +109,58 @@ singbox_available() { return 1; }
     def test_file_and_piped_interaction(self):
         for pipeline in (False, True):
             with self.subTest(pipeline=pipeline):
+                shutil.rmtree(self.dir / "install", ignore_errors=True)
                 events = self.dir / "events"
                 events.unlink(missing_ok=True)
-                answers = self.wizard_replies() + [("是否安装可选 sing-box", b"\n")]
+                answers = [("Select language / 请选择语言", b"1\n")] + self.wizard_replies() + [("是否安装可选 sing-box", b"\n")]
                 rc, out = self.terminal(self.full_fixture(), answers, pipeline)
                 self.assertEqual(rc, 0, out)
                 self.assertNotIn("SecretNoEcho123", out)
                 self.assertEqual(events.read_text().splitlines(), ["deps", "build", "service", "done"])
                 config = self.dir / "install/config.env"
+                self.assertIn("NXGATE_LANG=zh", config.read_text())
                 self.assertIn("UI_PASSWORD=SecretNoEcho123", config.read_text())
                 self.assertIn("UI_HOST=0.0.0.0", config.read_text())
                 self.assertIn("LOCAL_PROXY_HOST=127.0.0.1", config.read_text())
                 self.assertEqual(config.stat().st_mode & 0o777, 0o600)
+
+    def test_existing_config_skips_language_prompt(self):
+        install_dir = self.dir / "install"
+        install_dir.mkdir(parents=True, exist_ok=True)
+        (install_dir / "config.env").write_text("NXGATE_LANG=en\nUI_HOST=0.0.0.0\nUI_PORT=8787\nUI_PATH=enter\nUI_USERNAME=admin\nUI_PASSWORD=existingpass\nLOCAL_PROXY_PORT=7928\n")
+        answers = self.wizard_replies(english=True) + [("Install optional sing-box", b"\n")]
+        rc, out = self.terminal(self.full_fixture(), answers, pipeline=False)
+        self.assertEqual(rc, 0, out)
+        self.assertNotIn("Select language / 请选择语言", out)
+        self.assertIn("Deployment Summary", out)
+
+    def test_english_language_selection_full_wizard(self):
+        events = self.dir / "events"
+        events.unlink(missing_ok=True)
+        answers = (
+            [("Select language / 请选择语言", b"2\n")]
+            + self.wizard_replies(english=True)
+            + [("Install optional sing-box", b"\n")]
+        )
+        rc, out = self.terminal(self.full_fixture(), answers, pipeline=True)
+        self.assertEqual(rc, 0, out)
+        self.assertIn("Language set to English.", out)
+        self.assertIn("Deployment Summary", out)
+        self.assertNotIn("SecretNoEcho123", out)
+        self.assertEqual(events.read_text().splitlines(), ["deps", "build", "service", "done"])
+        config = self.dir / "install/config.env"
+        self.assertIn("NXGATE_LANG=en", config.read_text())
+        self.assertIn("UI_PASSWORD=SecretNoEcho123", config.read_text())
+
+    def test_language_selection_reprompts_on_invalid_input(self):
+        code = self.base + 'select_language\nprintf "%s" "$NXGATE_LANG" > "$TEST_DIR/lang"\n'
+        rc, out = self.terminal(code, [
+            ("Select language / 请选择语言", b"9\n"),
+            ("Invalid choice / 输入无效", b""),
+            ("Select language / 请选择语言", b"2\n"),
+        ])
+        self.assertEqual(rc, 0, out)
+        self.assertEqual((self.dir / "lang").read_text(), "en")
 
     def test_explicit_installer_web_host_is_preserved(self):
         for host in ("127.0.0.1", "192.0.2.10", "::1"):
@@ -189,13 +233,15 @@ menu_status
         self.assertIn('127.0.0.1:7928:7928', compose)
 
     def test_default_confirmation_cancels_without_writes(self):
-        rc, out = self.terminal(self.full_fixture(), self.wizard_replies(b"\n"), True)
+        answers = [("Select language / 请选择语言", b"1\n")] + self.wizard_replies(b"\n")
+        rc, out = self.terminal(self.full_fixture(), answers, True)
         self.assertNotEqual(rc, 0, out)
         self.assertFalse((self.dir / "install").exists())
         self.assertFalse((self.dir / "events").exists())
 
     def test_eof_aborts_without_install(self):
-        rc, out = self.terminal(self.full_fixture(), [("1. 请输入 Web", b"\x04")], True)
+        answers = [("Select language / 请选择语言", b"1\n"), ("1. 请输入 Web", b"\x04")]
+        rc, out = self.terminal(self.full_fixture(), answers, True)
         self.assertNotEqual(rc, 0, out)
         self.assertIn("输入已中断", out)
         self.assertFalse((self.dir / "install").exists())
@@ -419,6 +465,29 @@ install_verified_go
         result = self.shell('uname() { echo riscv-unknown; }; detect_arch', check=False)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("不支持的 CPU 架构", result.stderr)
+
+    def test_english_panels_and_singbox_optin(self):
+        panel = self.shell("""
+NXGATE_LANG=en
+mkdir -p "$INSTALL_DIR"
+printf 'UI_HOST=127.0.0.1\nUI_PORT=8787\nUI_PATH=enter\nLOCAL_PROXY_PORT=7928\n' > "$CONFIG_FILE"
+get_app_version() { echo 2.6.5.41; }
+show_singbox_status() { echo stopped; }
+show_service_status() { echo active; }
+print_install_success
+menu_status
+""")
+        self.assertIn("Multi-Egress Gateway v2.6.5.41) Installed!", panel.stdout)
+        self.assertIn("Runtime Status", panel.stdout)
+
+        rc, out = self.terminal(
+            'NXGATE_LANG=en\n' + self.singbox_fixture(),
+            [("Install optional sing-box", b"y\n"), ("Create a VLESS-REALITY inbound", b"y\n")],
+        )
+        self.assertEqual(rc, 0, out)
+        self.assertIn("VLESS-REALITY inbound created", out)
+        self.assertEqual((self.dir / "events").read_text().splitlines(),
+                         ["install", "api add reality auto auto auto 127.0.0.1:7928"])
 
 
 if __name__ == "__main__":
