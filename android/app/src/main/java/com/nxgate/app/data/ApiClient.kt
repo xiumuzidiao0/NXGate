@@ -411,7 +411,6 @@ class ApiClient {
                             targetCount = obj.optInt("target_count", 3),
                             intervalMinutes = obj.optInt("interval_minutes", 15),
                             activeTunnelIds = activeTids,
-                            statusText = obj.optString("status_text", ""),
                             fallbackPolicy = obj.optString("fallback_policy", "none"),
                             inFallback = obj.optBoolean("in_fallback", false),
                             fallbackReason = obj.optString("fallback_reason", "")
@@ -504,7 +503,6 @@ class ApiClient {
                             outboundGroupCount = matchedOutbound?.groupCount,
                             uuid = obj.optString("uuid", ""),
                             password = obj.optString("password", ""),
-                            sni = obj.optString("sni", ""),
                             shareUrl = obj.optString("url", "")
                         )
                     )
@@ -594,20 +592,6 @@ class ApiClient {
         }
     }
 
-    suspend fun fetchClashSubscription(profile: ServerProfile): Result<String> = withContext(Dispatchers.IO) {
-        try {
-            executeCall(profile, "/api/singbox/subscription/clash").use { response ->
-                if (response.isSuccessful) {
-                    Result.success(response.body?.string() ?: "")
-                } else {
-                    Result.success("${profile.baseUrl}/api/singbox/subscription/clash")
-                }
-            }
-        } catch (e: Exception) {
-            Result.success("${profile.baseUrl}/api/singbox/subscription/clash")
-        }
-    }
-
     suspend fun fetchNodes(profile: ServerProfile, scope: String = "active"): Result<List<NodeCandidate>> = withContext(Dispatchers.IO) {
         try {
             val endpoint = if (scope == "all") "/api/nodes?scope=all" else "/api/nodes"
@@ -635,7 +619,6 @@ class ApiClient {
                     val claude = unlockObj?.optString("claude", "unknown") ?: "unknown"
                     val gemini = unlockObj?.optString("gemini", "unknown") ?: "unknown"
                     val google = unlockObj?.optString("google", "unknown") ?: "unknown"
-                    val cloudflare = unlockObj?.optString("cloudflare", "unknown") ?: "unknown"
                     val netflix = unlockObj?.optString("netflix", "unknown") ?: "unknown"
 
                     val isResidential = obj.optBoolean("is_residential", false)
@@ -644,15 +627,7 @@ class ApiClient {
                     val riskLevel = obj.optString("risk_level", "unknown")
                     val riskLabel = obj.optString("risk_label", "")
                     val sstpPort = obj.optInt("sstp_port", 0)
-                    val resConfidence = obj.optInt("res_confidence", 0)
                     val inActivePool = obj.optBoolean("in_active_pool", true)
-                    val fraudFlagsArr = obj.optJSONArray("fraud_flags")
-                    val fraudFlags = mutableListOf<String>()
-                    if (fraudFlagsArr != null) {
-                        for (k in 0 until fraudFlagsArr.length()) {
-                            fraudFlags.add(fraudFlagsArr.optString(k))
-                        }
-                    }
 
                     list.add(
                         NodeCandidate(
@@ -672,14 +647,11 @@ class ApiClient {
                             riskScore = riskScore,
                             riskLevel = riskLevel,
                             riskLabel = riskLabel,
-                            fraudFlags = fraudFlags,
                             sstpPort = sstpPort,
-                            resConfidence = resConfidence,
                             openai = openai,
                             claude = claude,
                             gemini = gemini,
                             google = google,
-                            cloudflare = cloudflare,
                             netflix = netflix,
                             inActivePool = inActivePool
                         )
@@ -737,8 +709,6 @@ class ApiClient {
                             ip = obj.optString("ip", ""),
                             country = obj.optString("country", "JP"),
                             reason = obj.optString("reason", if (isAppEnglish()) "Unreachable" else "不可达"),
-                            blacklistedAt = obj.optString("marked_at", obj.optString("blacklisted_at", "")),
-                            expiresAt = obj.optString("until", obj.optString("expires_at", "")),
                             isPermanent = obj.optBoolean("is_permanent", false),
                             scope = obj.optString("scope", "node")
                         )
@@ -823,7 +793,6 @@ class ApiClient {
                     hasUpdate = obj.optBoolean("has_update", false),
                     releaseName = obj.optString("release_name", ""),
                     releaseNotes = obj.optString("release_notes", ""),
-                    releaseUrl = obj.optString("release_url", ""),
                     publishedAt = obj.optString("published_at", ""),
                     error = obj.optString("error", "")
                 )
@@ -1111,11 +1080,5 @@ class ApiClient {
         awaitClose {
             eventSource.cancel()
         }
-    }
-
-    companion object {
-        fun parseNXGateUri(rawUri: String): ServerProfile? = ServerUriParser.parse(rawUri)
-
-        fun parseAimiliUri(rawUri: String): ServerProfile? = ServerUriParser.parse(rawUri)
     }
 }

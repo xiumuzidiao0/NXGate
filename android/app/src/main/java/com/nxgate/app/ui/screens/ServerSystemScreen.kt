@@ -361,7 +361,7 @@ fun ServerSystemScreen(
                                     color = MaterialTheme.colorScheme.primaryContainer
                                 ) {
                                     Text(
-                                        text = "v${updateInfo?.currentVersion ?: "2.5.9"}",
+                                        text = updateInfo?.currentVersion?.takeIf { it.isNotBlank() }?.let { "v${it.removePrefix("v")}" } ?: "--",
                                         style = MaterialTheme.typography.labelSmall,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -1437,7 +1437,7 @@ fun ServerSystemScreen(
                         value = importBackupInputText,
                         onValueChange = { importBackupInputText = it },
                         modifier = Modifier.fillMaxWidth().height(160.dp),
-                        placeholder = { Text("{\n  \"version\": \"2.5.9.4\",\n  ...\n}") }
+                        placeholder = { Text("{\n  \"version\": \"2.6.5\",\n  ...\n}") }
                     )
                 }
             },

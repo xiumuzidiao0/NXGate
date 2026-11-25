@@ -4,7 +4,6 @@ import androidx.compose.runtime.staticCompositionLocalOf
 
 data class AppStrings(
     // Common / Navigation
-    val appTitle: String,
     val navDashboard: String,
     val navMonitoring: String,
     val navRouting: String,
@@ -45,26 +44,17 @@ data class AppStrings(
     val noServers: String,
 
     // Console
-    val consoleOverview: String,
     val primaryGateway: String,
-    val concurrentExits: String,
-    val liveTrafficStats: String,
     val systemLogs: String,
     val cleartextAlertTitle: String,
-    val cleartextAlertMsg: String,
     val sseReconnecting: String,
 
     // Matrix
-    val portMatrixTitle: String,
     val portRules: String,
     val dynamicGroups: String,
     val edgeInbounds: String,
-    val evaluateRotate: String,
-    val addRule: String,
-    val addGroup: String,
 
     // Nodes
-    val nodeSquareTitle: String,
     val filterAll: String,
     val filterFavorites: String,
     val filterJapan: String,
@@ -88,7 +78,6 @@ data class AppStrings(
     val latencyPending: String,
 
     // System
-    val systemTitle: String,
     val versionAndUpdates: String,
     val currentLatest: String,
     val hasUpdateAvailable: String,
@@ -119,9 +108,7 @@ data class AppStrings(
     // Settings
     val settingsTitle: String,
     val serverList: String,
-    val securityAndPreferences: String,
     val biometricLock: String,
-    val biometricLockDesc: String,
     val backgroundTimeout: String,
     val cleartextWarning: String,
     val cleartextWarningDesc: String,
@@ -137,7 +124,6 @@ data class AppStrings(
 
     // Subscriptions dialog
     val subDialogTitle: String,
-    val subDialogSubtitle: String,
     val ageEncryptedBadge: String,
     val genericSubTitle: String,
     val genericSubDesc: String,
@@ -176,15 +162,10 @@ data class AppStrings(
     val allowInsecureTlsLabel: String,
     val testConnection: String,
     val deleteServer: String,
-    val saveServerConfig: String,
     val scanQrCode: String,
-    val manualAdd: String,
     val deleteConfirmTitle: String,
-    val deleteConfirmMsg: String,
 
     // Scanner & Biometric
-    val biometricPromptTitle: String,
-    val biometricPromptDesc: String,
     val cameraPermissionRequired: String,
     val manualImport: String,
     val pasteLinkPrompt: String,
@@ -220,7 +201,6 @@ data class AppStrings(
 )
 
 val AppStringsZh = AppStrings(
-    appTitle = "NXGate",
     navDashboard = "概览",
     navMonitoring = "监控",
     navRouting = "分流",
@@ -259,24 +239,15 @@ val AppStringsZh = AppStrings(
     addServer = "添加新服务器",
     noServers = "当前暂未纳管任何服务器，请点击右下角按钮或右上角扫码添加 VPS。",
 
-    consoleOverview = "运行概览",
     primaryGateway = "主出口 (tun0)",
-    concurrentExits = "多出口网卡",
-    liveTrafficStats = "实时流量统计",
     systemLogs = "系统运行日志",
     cleartextAlertTitle = "HTTP 未加密传输提醒",
-    cleartextAlertMsg = "当前网关通信未启用 TLS 加密，管理凭据以明文传输，请注意公共网络安全。",
     sseReconnecting = "正在尝试恢复与网关的实时事件推送...",
 
-    portMatrixTitle = "端口分流与出口组",
     portRules = "端口分流规则",
     dynamicGroups = "动态出口组",
     edgeInbounds = "sing-box 节点",
-    evaluateRotate = "立即评估换线",
-    addRule = "添加规则",
-    addGroup = "添加出口组",
 
-    nodeSquareTitle = "节点列表",
     filterAll = "全部",
     filterFavorites = "我的收藏",
     filterJapan = "日本",
@@ -299,7 +270,6 @@ val AppStringsZh = AppStrings(
     latencyHigh = "偏高",
     latencyPending = "待测",
 
-    systemTitle = "系统运维与设置",
     versionAndUpdates = "版本与系统更新",
     currentLatest = "当前已是最新构建",
     hasUpdateAvailable = "发现新版本可用",
@@ -329,9 +299,7 @@ val AppStringsZh = AppStrings(
 
     settingsTitle = "配置与安全设置",
     serverList = "纳管网关列表",
-    securityAndPreferences = "安全与偏好",
     biometricLock = "生物识别安全锁",
-    biometricLockDesc = "启用指纹、面容或系统凭证保护",
     backgroundTimeout = "后台锁定等待时间",
     cleartextWarning = "明文传输警告",
     cleartextWarningDesc = "连接未加密 HTTP 时提示风险",
@@ -346,7 +314,6 @@ val AppStringsZh = AppStrings(
     importCluster = "导入配置",
 
     subDialogTitle = "获取节点订阅",
-    subDialogSubtitle = "实时聚合多协议出口订阅",
     ageEncryptedBadge = "已开启 age 端到端安全加密保护",
     genericSubTitle = "通用格式 (Base64)",
     genericSubDesc = "Base64 / 节点 URI 列表",
@@ -383,14 +350,9 @@ val AppStringsZh = AppStrings(
     allowInsecureTlsLabel = "允许自签名/不安全 TLS 证书",
     testConnection = "测试连通性",
     deleteServer = "删除服务器",
-    saveServerConfig = "保存网关配置",
     scanQrCode = "扫码添加",
-    manualAdd = "手动添加",
     deleteConfirmTitle = "确认删除服务器？",
-    deleteConfirmMsg = "确定要从控制台移除该服务器配置吗？移除后可通过备份或再次扫码恢复。",
 
-    biometricPromptTitle = "生物识别安全验证",
-    biometricPromptDesc = "请验证指纹、面容或系统安全锁以解锁 NXGate",
     cameraPermissionRequired = "相机权限未授予，可手动粘贴配置链接",
     manualImport = "手动导入服务端",
     pasteLinkPrompt = "请粘贴来自 Web 控制台顶栏「手机 App 绑定」生成的 nxgate:// 链接：",
@@ -424,7 +386,6 @@ val AppStringsZh = AppStrings(
 )
 
 val AppStringsEn = AppStrings(
-    appTitle = "NXGate",
     navDashboard = "Dashboard",
     navMonitoring = "Monitor",
     navRouting = "Routing",
@@ -463,24 +424,15 @@ val AppStringsEn = AppStrings(
     addServer = "Add Server",
     noServers = "No servers added yet. Tap the button or scan QR to add a VPS gateway.",
 
-    consoleOverview = "Overview",
     primaryGateway = "Primary Gateway (tun0)",
-    concurrentExits = "Concurrent Exits",
-    liveTrafficStats = "Live Traffic Stats",
     systemLogs = "System Logs",
     cleartextAlertTitle = "Unencrypted HTTP Warning",
-    cleartextAlertMsg = "Current gateway communication is not encrypted with TLS. Credentials are sent in cleartext.",
     sseReconnecting = "Restoring real-time SSE stream...",
 
-    portMatrixTitle = "Port Proxy & Routing",
     portRules = "Port Rules",
     dynamicGroups = "Dynamic Groups",
     edgeInbounds = "Edge Inbounds",
-    evaluateRotate = "Evaluate & Rotate",
-    addRule = "Add Rule",
-    addGroup = "Add Group",
 
-    nodeSquareTitle = "Nodes",
     filterAll = "All",
     filterFavorites = "Favorites",
     filterJapan = "Japan",
@@ -503,7 +455,6 @@ val AppStringsEn = AppStrings(
     latencyHigh = "High",
     latencyPending = "Not measured",
 
-    systemTitle = "System & Maintenance",
     versionAndUpdates = "Version & Updates",
     currentLatest = "Up to date",
     hasUpdateAvailable = "New update available",
@@ -533,9 +484,7 @@ val AppStringsEn = AppStrings(
 
     settingsTitle = "Settings & Security",
     serverList = "Gateway Servers",
-    securityAndPreferences = "Security & Preferences",
     biometricLock = "Biometric Lock",
-    biometricLockDesc = "Protect access with fingerprint, face, or PIN",
     backgroundTimeout = "Background Lock Timeout",
     cleartextWarning = "Cleartext Warning",
     cleartextWarningDesc = "Warn when connecting to unencrypted HTTP",
@@ -550,7 +499,6 @@ val AppStringsEn = AppStrings(
     importCluster = "Import Config",
 
     subDialogTitle = "Get Subscriptions",
-    subDialogSubtitle = "Aggregated multi-protocol egress subscriptions",
     ageEncryptedBadge = "Encrypted with age",
     genericSubTitle = "Universal (Base64)",
     genericSubDesc = "Base64 / raw node URI list",
@@ -587,14 +535,9 @@ val AppStringsEn = AppStrings(
     allowInsecureTlsLabel = "Allow Self-Signed / Insecure TLS",
     testConnection = "Test Connection",
     deleteServer = "Delete Server",
-    saveServerConfig = "Save Configuration",
     scanQrCode = "Scan QR Code",
-    manualAdd = "Manual Add",
     deleteConfirmTitle = "Delete Server?",
-    deleteConfirmMsg = "Are you sure you want to remove this server? You can restore it later via backup or QR code.",
 
-    biometricPromptTitle = "Biometric Authentication",
-    biometricPromptDesc = "Verify fingerprint, face, or lock screen to unlock NXGate",
     cameraPermissionRequired = "Camera permission required, or paste configuration link manually",
     manualImport = "Manual Import",
     pasteLinkPrompt = "Paste the nxgate:// pairing link generated from the Web console:",

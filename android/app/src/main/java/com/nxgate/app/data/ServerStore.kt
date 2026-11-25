@@ -28,19 +28,17 @@ class ServerStore(private val context: Context) {
                 EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
             )
             // 自动从旧版存储无缝平滑迁移
-            val oldAimiliSecure = context.getSharedPreferences("aimili_server_secure_prefs", Context.MODE_PRIVATE)
             val oldPrefs = context.getSharedPreferences("aimili_server_prefs", Context.MODE_PRIVATE)
-            val sourcePrefs = if (oldAimiliSecure.contains(KEY_SERVERS)) oldAimiliSecure else oldPrefs
-            if (!encPrefs.contains(KEY_SERVERS) && sourcePrefs.contains(KEY_SERVERS)) {
-                val oldJson = sourcePrefs.getString(KEY_SERVERS, null)
-                val oldActive = sourcePrefs.getString(KEY_ACTIVE_SERVER_ID, null)
-                val oldBio = sourcePrefs.getBoolean(KEY_BIOMETRIC, true)
-                val oldBioTimeout = sourcePrefs.getInt(KEY_BIOMETRIC_TIMEOUT, 60)
-                val oldClear = sourcePrefs.getBoolean(KEY_CLEARTEXT_WARN, true)
-                val oldMode = sourcePrefs.getString(KEY_THEME_MODE, "system")
-                val oldPalette = sourcePrefs.getString(KEY_THEME_PALETTE, "teal")
-                val oldAccent = sourcePrefs.getString(KEY_THEME_ACCENT, "teal")
-                val oldBase = sourcePrefs.getString(KEY_THEME_BASE, "neutral")
+            if (!encPrefs.contains(KEY_SERVERS) && oldPrefs.contains(KEY_SERVERS)) {
+                val oldJson = oldPrefs.getString(KEY_SERVERS, null)
+                val oldActive = oldPrefs.getString(KEY_ACTIVE_SERVER_ID, null)
+                val oldBio = oldPrefs.getBoolean(KEY_BIOMETRIC, true)
+                val oldBioTimeout = oldPrefs.getInt(KEY_BIOMETRIC_TIMEOUT, 60)
+                val oldClear = oldPrefs.getBoolean(KEY_CLEARTEXT_WARN, true)
+                val oldMode = oldPrefs.getString(KEY_THEME_MODE, "system")
+                val oldPalette = oldPrefs.getString(KEY_THEME_PALETTE, "teal")
+                val oldAccent = oldPrefs.getString(KEY_THEME_ACCENT, "teal")
+                val oldBase = oldPrefs.getString(KEY_THEME_BASE, "neutral")
 
                 encPrefs.edit().apply {
                     putString(KEY_SERVERS, oldJson)
@@ -235,7 +233,7 @@ class ServerStore(private val context: Context) {
         prefs.edit().putString(KEY_THEME_BASE, base).apply()
     }
 
-    fun updateServerTraffic(serverId: String, downSpeedStr: String, upSpeedStr: String, totalTrafficStr: String, activeConns: Int) {
+    fun updateServerTraffic(serverId: String, downSpeedStr: String, totalTrafficStr: String, activeConns: Int) {
         val list = _servers.value.map {
             if (it.id == serverId) {
                 it.copy(

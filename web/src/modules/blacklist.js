@@ -29,7 +29,6 @@ export async function fetchBlacklist(showNotice = false) {
 
 
 export function switchBlacklistTab(tab) {
-    appState.activeBlacklistTab = tab;
     const btnTemp = document.getElementById('bl-tab-temp');
     const btnPerm = document.getElementById('bl-tab-perm');
     const contentTemp = document.getElementById('bl-content-temp');

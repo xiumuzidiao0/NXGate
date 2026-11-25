@@ -19,7 +19,6 @@ export const appState = {
     editingPort: null,
     editingGroupId: null,
     currentBlacklist: [],
-    activeBlacklistTab: 'temp',
     activeEditorDrawer: null,
     singBoxOverview: null,
     currentSelectedProto: 'reality',

@@ -1,6 +1,6 @@
 import { appState } from '../state.js';
 import { getLanguage, localize, t, tAlert, tConfirm } from '../i18n-runtime.js';
-import { editDynamicGroup, fetchDynamicGroups, fetchPortRules, switchMatrixTab } from './matrix.js';
+import { fetchDynamicGroups, fetchPortRules } from './matrix.js';
 import { switchView } from './shell.js';
 import { fetchNodes } from './nodes.js';
 import { fetchStatus } from '../transport.js';
@@ -93,12 +93,6 @@ export async function loadSettingsForm() {
 }
 
 export function closeSettingsModal() { switchView('dashboard'); }
-
-export function openSystemPrimaryConfig() {
-    switchView('matrix');
-    switchMatrixTab('groups');
-    editDynamicGroup('system-primary');
-}
 
 export function randomPath() {
     const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -411,7 +405,7 @@ export async function checkForUpdates(silent = false) {
         const data = await res.json();
 
         curVerElements.forEach(el => {
-            if (el) el.textContent = 'v' + String(data.current_version || '2.5.6').replace(/^v/, '');
+            if (el) el.textContent = data.current_version ? ('v' + String(data.current_version).replace(/^v/, '')) : '--';
         });
 
         if (!data.ok) {

@@ -367,7 +367,6 @@ fun ServerConsoleScreen(
                 NXGateApplication.instance.serverStore.updateServerTraffic(
                     activeServer.id,
                     downSpeedStr = data.traffic.downSpeedMbStr,
-                    upSpeedStr = data.traffic.upSpeedMbStr,
                     totalTrafficStr = data.traffic.totalTrafficGbStr,
                     activeConns = data.traffic.activeConnections
                 )
@@ -394,7 +393,6 @@ fun ServerConsoleScreen(
                             NXGateApplication.instance.serverStore.updateServerTraffic(
                                 activeServer.id,
                                 downSpeedStr = data.traffic.downSpeedMbStr,
-                                upSpeedStr = data.traffic.upSpeedMbStr,
                                 totalTrafficStr = data.traffic.totalTrafficGbStr,
                                 activeConns = data.traffic.activeConnections
                             )

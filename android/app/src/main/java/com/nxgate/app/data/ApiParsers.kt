@@ -29,7 +29,6 @@ internal fun parseTunnelItem(obj: JSONObject, index: Int): TunnelItem {
 
     val unlockObj = obj.optJSONObject("unlock")
     val throughputBps = unlockObj?.optLong("throughput_bps", 0) ?: 0
-    val throughputPassed = unlockObj?.optBoolean("throughput_passed", true) ?: true
 
     val isUserland = obj.optBoolean("is_userland", false) || devName.startsWith("sstp")
     val isResidential = nodeObj?.optBoolean("is_residential", false) ?: false
@@ -50,7 +49,6 @@ internal fun parseTunnelItem(obj: JSONObject, index: Int): TunnelItem {
         country = country,
         countryLong = cLong,
         throughputBps = throughputBps,
-        throughputPassed = throughputPassed,
         isUserland = isUserland,
         isResidential = isResidential,
         isHosting = isHosting,

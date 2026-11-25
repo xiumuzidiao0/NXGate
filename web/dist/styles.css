@@ -1110,20 +1110,8 @@ button {
         .hidden {
             display: none !important;
         }
-        .flex-column {
-            flex-direction: column;
-        }
         .justify-between {
             justify-content: space-between;
-        }
-        .justify-end {
-            justify-content: flex-end;
-        }
-        .gap-3 {
-            gap: 12px;
-        }
-        .gap-4 {
-            gap: 16px;
         }
         .mt-1 {
             margin-top: 6px;
@@ -1148,9 +1136,6 @@ button {
         }
         .ml-1 {
             margin-left: 6px;
-        }
-        .scroll-y {
-            overflow-y: auto;
         }
         .card-stack {
             display: flex;
@@ -1374,9 +1359,9 @@ button {
             background: rgba(255, 255, 255, 0.035);
         }
         .log-time { color: var(--text-tertiary); margin-right: 6px; font-variant-numeric: tabular-nums; }
-        .log-level-INFO { color: var(--primary); }
-        .log-level-WARNING { color: #fbbf24; }
-        .log-level-ERROR { color: #f87171; }
+        .log-level-info { color: var(--primary); }
+        .log-level-warning { color: #fbbf24; }
+        .log-level-error { color: #f87171; }
 
         /* Quick Chips Filter Bar */
         .chips-bar {
@@ -1939,17 +1924,6 @@ button {
         }
         .security-warning-banner[hidden] {
             display: none;
-        }
-        .sr-only {
-            position: absolute;
-            width: 1px;
-            height: 1px;
-            padding: 0;
-            margin: -1px;
-            overflow: hidden;
-            clip: rect(0, 0, 0, 0);
-            white-space: nowrap;
-            border: 0;
         }
 
         @media (max-width: 1180px) {

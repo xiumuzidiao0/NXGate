@@ -63,7 +63,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import com.nxgate.app.data.ApiClient
+import com.nxgate.app.data.ServerUriParser
 import com.nxgate.app.model.ServerProfile
 import com.nxgate.app.util.AppStringsEn
 import com.nxgate.app.util.LocalAppStrings
@@ -270,7 +270,7 @@ fun CameraQrScannerDialog(
 
                             Button(
                                 onClick = {
-                                    val parsed = ApiClient.parseAimiliUri(manualInput.trim())
+                                    val parsed = ServerUriParser.parse(manualInput.trim())
                                     if (parsed != null) {
                                         onServerScanned(parsed)
                                     } else {
@@ -325,7 +325,7 @@ fun CameraQrScannerDialog(
                                     imageAnalysis.setAnalyzer(
                                         cameraExecutor,
                                         QrCodeAnalyzer { rawText ->
-                                            val profile = ApiClient.parseAimiliUri(rawText)
+                                            val profile = ServerUriParser.parse(rawText)
                                             if (profile != null) {
                                                 previewView.post {
                                                     onServerScanned(profile)

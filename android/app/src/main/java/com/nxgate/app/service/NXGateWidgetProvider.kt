@@ -165,7 +165,6 @@ class NXGateWidgetProvider : AppWidgetProvider() {
                             NXGateApplication.instance.serverStore.updateServerTraffic(
                                 server.id,
                                 downSpeedStr = data.traffic.downSpeedMbStr,
-                                upSpeedStr = data.traffic.upSpeedMbStr,
                                 totalTrafficStr = data.traffic.totalTrafficGbStr,
                                 activeConns = data.traffic.activeConnections
                             )

@@ -140,6 +140,7 @@ export function toggleSidebar() {
     const isCollapsed = sb.classList.toggle('collapsed');
     try {
         localStorage.setItem('nxgate_sidebar_collapsed', isCollapsed ? '1' : '0');
+        localStorage.removeItem('aimili_sidebar_collapsed');
     } catch(e){}
     updateSidebarUI(isCollapsed);
 }

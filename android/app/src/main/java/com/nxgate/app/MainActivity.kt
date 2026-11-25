@@ -19,7 +19,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
-import com.nxgate.app.data.ApiClient
+import com.nxgate.app.data.ServerUriParser
 import com.nxgate.app.theme.NXGateTheme
 import com.nxgate.app.ui.components.BiometricLockOverlay
 import com.nxgate.app.ui.navigation.MainAppScaffold
@@ -37,7 +37,7 @@ class MainActivity : FragmentActivity() {
 
         // Handle incoming intent aimili://server
         intent?.data?.let { uri ->
-            ApiClient.parseAimiliUri(uri.toString())?.let { server ->
+            ServerUriParser.parse(uri.toString())?.let { server ->
                 NXGateApplication.instance.serverStore.addServer(server)
             }
         }

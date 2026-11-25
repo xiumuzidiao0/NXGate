@@ -194,7 +194,6 @@ data class TunnelItem(
     val countryLong: String = "",
     val uptimeSeconds: Long = 0,
     val throughputBps: Long = 0,
-    val throughputPassed: Boolean = true,
     val isUserland: Boolean = false,
     val isResidential: Boolean = false,
     val isHosting: Boolean = false,
@@ -284,7 +283,6 @@ data class DynamicGroupCard(
     val targetCount: Int = 1,
     val intervalMinutes: Int = 30,
     val activeTunnelIds: List<String> = emptyList(),
-    val statusText: String = "",
     val fallbackPolicy: String = "none",
     val inFallback: Boolean = false,
     val fallbackReason: String = ""
@@ -342,7 +340,6 @@ data class InboundProtocolItem(
     val outboundGroupCount: Int? = null,
     val uuid: String = "",
     val password: String = "",
-    val sni: String = "",
     val shareUrl: String = ""
 ) {
     val title: String
@@ -372,14 +369,11 @@ data class NodeCandidate(
     val riskScore: Float = -1.0f,
     val riskLevel: String = "unknown",
     val riskLabel: String = "",
-    val fraudFlags: List<String> = emptyList(),
     val sstpPort: Int = 0,
-    val resConfidence: Int = 0,
     val openai: String = "unknown",
     val claude: String = "unknown",
     val gemini: String = "unknown",
     val google: String = "unknown",
-    val cloudflare: String = "unknown",
     val netflix: String = "unknown",
     val inActivePool: Boolean = true
 ) {
@@ -425,8 +419,6 @@ data class BlacklistRecord(
     val ip: String,
     val country: String,
     val reason: String,
-    val blacklistedAt: String = "",
-    val expiresAt: String = "",
     val isPermanent: Boolean = false,
     val scope: String = "node"
 )
@@ -460,7 +452,6 @@ data class ServerUpdateCheck(
     val hasUpdate: Boolean = false,
     val releaseName: String = "",
     val releaseNotes: String = "",
-    val releaseUrl: String = "",
     val publishedAt: String = "",
     val error: String = ""
 )
