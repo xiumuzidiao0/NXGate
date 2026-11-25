@@ -320,17 +320,19 @@ func (t *Tunnel) performHandshake(ctx context.Context) error {
 		return errors.New("sstp tunnel missing tls connection")
 	}
 
-	deadline := time.Now().Add(DefaultConnectTimeout)
-	if d, ok := ctx.Deadline(); ok {
-		deadline = d
+	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, DefaultConnectTimeout)
+		defer cancel()
 	}
-	_ = t.tlsConn.SetDeadline(deadline)
-	defer func() { _ = t.tlsConn.SetDeadline(time.Time{}) }()
 
 	stopCancel := context.AfterFunc(ctx, func() {
 		_ = t.tlsConn.SetDeadline(time.Now().Add(-time.Second))
 	})
-	defer stopCancel()
+	defer func() {
+		stopCancel()
+		_ = t.tlsConn.SetDeadline(time.Time{})
+	}()
 
 	wrapHandshakeErr := func(msg string, err error) error {
 		if ctxErr := ctx.Err(); ctxErr != nil {

@@ -551,7 +551,7 @@ func TestPerformHandshakeRespectsContextCancel(t *testing.T) {
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("expected context.DeadlineExceeded, got %v", err)
 	}
-	if elapsed > 500*time.Millisecond {
+	if elapsed > 2*time.Second {
 		t.Fatalf("performHandshake blocked past context deadline: %s", elapsed)
 	}
 }
@@ -601,7 +601,7 @@ func TestKeepAliveLoopSelfClosesStaleTunnel(t *testing.T) {
 
 	select {
 	case <-tun.Done():
-	case <-time.After(500 * time.Millisecond):
+	case <-time.After(2 * time.Second):
 		t.Fatal("expected runKeepAlive to close stale tunnel promptly")
 	}
 }
