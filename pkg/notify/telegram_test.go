@@ -46,14 +46,6 @@ func TestTelegramNotifierMock(t *testing.T) {
 	if !strings.Contains(sentMsg, "NXGate 代理网关已就绪") {
 		t.Fatalf("unexpected sentMsg for NotifyStartup: %s", sentMsg)
 	}
-	notifier.NotifyFailover("node1", "node2", "JP")
-	if !strings.Contains(sentMsg, "节点故障自动转移通知") {
-		t.Fatalf("unexpected sentMsg for NotifyFailover: %s", sentMsg)
-	}
-	notifier.NotifyPoolAlert("JP-Group", "0 nodes alive")
-	if !strings.Contains(sentMsg, "自适应隧道组告警") {
-		t.Fatalf("unexpected sentMsg for NotifyPoolAlert: %s", sentMsg)
-	}
 
 	// Verify command handler
 	handler := func(cmd, args string) string {

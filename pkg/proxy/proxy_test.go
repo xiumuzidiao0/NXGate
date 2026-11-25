@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -717,6 +718,25 @@ func configureLocalTestEgress(l *PortListener) {
 	l.SetUserlandPacketConn(func() (net.PacketConn, error) { return net.ListenPacket("udp4", "127.0.0.1:0") })
 }
 
+func packSocks5UDPPacketForTest(addr *net.UDPAddr, data []byte) []byte {
+	if addr == nil {
+		return nil
+	}
+	if ip4 := addr.IP.To4(); ip4 != nil {
+		header := make([]byte, 10+len(data))
+		writeSocks5UDPHeader(header, addr)
+		copy(header[10:], data)
+		return header
+	}
+	if ip6 := addr.IP.To16(); ip6 != nil {
+		header := make([]byte, 22+len(data))
+		writeSocks5UDPHeader(header, addr)
+		copy(header[22:], data)
+		return header
+	}
+	return nil
+}
+
 func TestPackSocks5UDPPacketInPlaceMatchesAllocatingPack(t *testing.T) {
 	payload := []byte("hello-udp-payload")
 
@@ -734,7 +754,7 @@ func TestPackSocks5UDPPacketInPlaceMatchesAllocatingPack(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			want := packSocks5UDPPacket(tc.addr, payload)
+			want := packSocks5UDPPacketForTest(tc.addr, payload)
 			buf := make([]byte, socks5UDPPacketHeadroom+len(payload)+16)
 			copy(buf[socks5UDPPacketHeadroom:], payload)
 
@@ -779,4 +799,140 @@ func TestBufferedConnUnwrapIfEmpty(t *testing.T) {
 	}
 	releaseBufioReader(bcFull.br)
 	bcFull.br = nil
+}
+
+func TestPortListenerSocks5UserlandUDPAssociateDomainDNS(t *testing.T) {
+	mockPktConn := newMockUserlandPacketConn()
+	defer mockPktConn.Close()
+
+	var dnsCalls atomic.Int32
+	cfg := &config.Config{
+		ProxyHost:           "127.0.0.1",
+		ProxyMaxConnections: 64,
+	}
+	listener := NewPortListener(PortRule{Port: 0, Enabled: true, AuthMode: "none"}, cfg, nil)
+	listener.SetUserlandPacketConn(func() (net.PacketConn, error) {
+		return mockPktConn, nil
+	})
+	listener.SetUserlandDialer(func(ctx context.Context, network, addr string) (net.Conn, error) {
+		if addr != "1.1.1.1:53" {
+			return nil, fmt.Errorf("unexpected DNS dial target %s", addr)
+		}
+		dnsCalls.Add(1)
+		c, s := net.Pipe()
+		go func() {
+			defer s.Close()
+			lenBuf := make([]byte, 2)
+			if _, err := io.ReadFull(s, lenBuf); err != nil {
+				return
+			}
+			qLen := int(binary.BigEndian.Uint16(lenBuf))
+			q := make([]byte, qLen)
+			if _, err := io.ReadFull(s, q); err != nil {
+				return
+			}
+			// Build minimal RFC 1035 TCP DNS reply with A record 203.0.113.42.
+			// Go's net.Resolver appends an EDNS0 OPT RR in AR, so trim q after QCLASS and zero NSCOUNT/ARCOUNT.
+			qEnd := 12
+			for qEnd < len(q) && q[qEnd] != 0 {
+				qEnd += 1 + int(q[qEnd])
+			}
+			if qEnd+5 > len(q) {
+				return
+			}
+			qEnd += 5 // root 0x00 + QTYPE(2) + QCLASS(2)
+			resp := append([]byte(nil), q[:qEnd]...)
+			binary.BigEndian.PutUint16(resp[2:4], 0x8180)
+			binary.BigEndian.PutUint16(resp[6:8], 1)  // ANCOUNT
+			binary.BigEndian.PutUint16(resp[8:10], 0) // NSCOUNT
+			binary.BigEndian.PutUint16(resp[10:12], 0) // ARCOUNT
+			resp = append(resp, 0xc0, 0x0c, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x3c, 0x00, 0x04, 203, 0, 113, 42)
+			out := make([]byte, 2+len(resp))
+			binary.BigEndian.PutUint16(out[0:2], uint16(len(resp)))
+			copy(out[2:], resp)
+			_, _ = s.Write(out)
+		}()
+		return c, nil
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { _ = listener.Start(ctx) }()
+
+	listenerPort := 0
+	for i := 0; i < 25; i++ {
+		listener.mu.Lock()
+		if listener.listener != nil {
+			listenerPort = listener.listener.Addr().(*net.TCPAddr).Port
+		}
+		listener.mu.Unlock()
+		if listenerPort > 0 {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if listenerPort == 0 {
+		t.Fatal("listener failed to bind port")
+	}
+	defer listener.Close()
+
+	tcpConn, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", listenerPort))
+	if err != nil {
+		t.Fatalf("dial listener failed: %v", err)
+	}
+	defer tcpConn.Close()
+
+	_, _ = tcpConn.Write([]byte{0x05, 0x01, 0x00})
+	resp := make([]byte, 2)
+	if _, err := io.ReadFull(tcpConn, resp); err != nil || resp[1] != 0x00 {
+		t.Fatalf("handshake failed: %v", resp)
+	}
+
+	_, _ = tcpConn.Write([]byte{0x05, 0x03, 0x00, 0x01, 0, 0, 0, 0, 0, 0})
+	assocResp := make([]byte, 10)
+	if _, err := io.ReadFull(tcpConn, assocResp); err != nil || assocResp[1] != 0x00 {
+		t.Fatalf("udp associate failed: %v", assocResp)
+	}
+
+	relayAddr := &net.UDPAddr{
+		IP:   net.IP(assocResp[4:8]),
+		Port: int(binary.BigEndian.Uint16(assocResp[8:10])),
+	}
+	clientUDP, err := net.ListenUDP("udp4", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clientUDP.Close()
+
+	domain := "udp-domain.example.com"
+	payload := []byte("domain-udp-payload")
+	pkt := make([]byte, 4+1+len(domain)+2+len(payload))
+	pkt[3] = atypDomain
+	pkt[4] = byte(len(domain))
+	copy(pkt[5:], domain)
+	binary.BigEndian.PutUint16(pkt[5+len(domain):], 5353)
+	copy(pkt[5+len(domain)+2:], payload)
+
+	if _, err := clientUDP.WriteTo(pkt, relayAddr); err != nil {
+		t.Fatalf("client write failed: %v", err)
+	}
+
+	_ = clientUDP.SetReadDeadline(time.Now().Add(2 * time.Second))
+	recvBuf := make([]byte, 2048)
+	rn, _, err := clientUDP.ReadFrom(recvBuf)
+	if err != nil {
+		t.Fatalf("client read failed: %v", err)
+	}
+	if rn < 10 || string(recvBuf[10:rn]) != "echo:domain-udp-payload" {
+		t.Fatalf("unexpected echo payload: %q", string(recvBuf[:rn]))
+	}
+	if dnsCalls.Load() == 0 {
+		t.Fatal("expected userland DNS dialer to be invoked for domain UDP target")
+	}
+
+	mockPktConn.mu.Lock()
+	defer mockPktConn.mu.Unlock()
+	if len(mockPktConn.targetAddrs) != 1 || mockPktConn.targetAddrs[0].String() != "203.0.113.42:5353" {
+		t.Fatalf("expected resolved destination 203.0.113.42:5353, got %v", mockPktConn.targetAddrs)
+	}
 }

@@ -95,24 +95,6 @@ func (t *TelegramNotifier) NotifyStartup(ver string, port int, path string) {
 	_ = t.SendMessage(msg)
 }
 
-func (t *TelegramNotifier) NotifyFailover(oldID, newID, country string) {
-	msg := fmt.Sprintf("<b>节点故障自动转移通知</b>\n\n"+
-		"<b>原节点:</b> <code>%s</code> (异常中断)\n"+
-		"<b>新节点:</b> <code>%s</code> (%s)\n"+
-		"<b>状态:</b> 已平滑自动切换至新候选节点",
-		oldID, newID, country)
-	_ = t.SendMessage(msg)
-}
-
-func (t *TelegramNotifier) NotifyPoolAlert(groupName string, msgDetail string) {
-	msg := fmt.Sprintf("<b>自适应隧道组告警</b>\n\n"+
-		"<b>隧道组:</b> %s\n"+
-		"<b>详情:</b> %s\n"+
-		"<b>建议:</b> 请检查 VPS 外网连通性或在控制台刷新节点源",
-		groupName, msgDetail)
-	_ = t.SendMessage(msg)
-}
-
 type tgUpdateResponse struct {
 	Ok     bool `json:"ok"`
 	Result []struct {

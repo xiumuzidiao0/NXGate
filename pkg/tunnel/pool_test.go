@@ -393,3 +393,69 @@ func TestUserlandTunnelHealthAndReap(t *testing.T) {
 		t.Fatalf("expected devIndex 1 to be recycled after reaping unhealthy userland tunnel, got %d", reusedIdx)
 	}
 }
+
+func TestRegisterPrimaryUserlandEntryLifecycleAndReap(t *testing.T) {
+	cfg := &config.Config{DataDir: t.TempDir()}
+	pool := NewPool(cfg, nil)
+	np := nodes.NewNodePool(cfg)
+	mgr := NewDynamicGroupManager(cfg, pool, np)
+
+	if _, err := pool.RegisterPrimaryUserlandTunnel(nil, nil); err == nil {
+		t.Fatal("expected error for nil node/tunnel")
+	}
+
+	hc := &mockHealthCloser{healthy: true}
+	doneCh := make(chan struct{})
+	node := &nodes.Node{ID: "node-u-primary", IP: "198.51.100.8", CountryShort: "JP", LatencyMs: 42}
+	dummyDialer := func(context.Context, string, string) (net.Conn, error) {
+		return nil, fmt.Errorf("unused")
+	}
+
+	tun, err := pool.registerPrimaryUserlandEntry(node, "sstp-443", "ready", dummyDialer, nil, hc, doneCh)
+	if err != nil {
+		t.Fatalf("registerPrimaryUserlandEntry failed: %v", err)
+	}
+	if tun.ID != PrimaryUserlandTunnelID || tun.DevIndex != 0 || !tun.IsUserland || !tun.IsHealthy() {
+		t.Fatalf("unexpected primary userland tunnel: %+v", tun)
+	}
+
+	listed := pool.ListTunnels()
+	if len(listed) != 1 || listed[0].ID != PrimaryUserlandTunnelID {
+		t.Fatalf("expected primary userland tunnel in ListTunnels, got %+v", listed)
+	}
+	if healthy := pool.GetHealthyTunnels(nil); len(healthy) != 1 || healthy[0].ID != PrimaryUserlandTunnelID {
+		t.Fatalf("expected primary userland tunnel in GetHealthyTunnels, got %+v", healthy)
+	}
+	if groupTuns := mgr.GetTunnelsForGroups([]string{SystemPrimaryGroupID}); len(groupTuns) != 1 || groupTuns[0].ID != PrimaryUserlandTunnelID {
+		t.Fatalf("expected system-primary group to resolve primary userland tunnel, got %+v", groupTuns)
+	}
+
+	// Closing sessionDone transitions status and reaps the tunnel from pool.
+	close(doneCh)
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if pool.GetTunnel(PrimaryUserlandTunnelID) == nil {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if pool.GetTunnel(PrimaryUserlandTunnelID) != nil {
+		t.Fatal("expected primary userland tunnel to be reaped after sessionDone closes")
+	}
+
+	// Register a second time and verify StopTunnel closes closer and cleans up DevIndex 0.
+	hc2 := &mockHealthCloser{healthy: true}
+	doneCh2 := make(chan struct{})
+	if _, err := pool.registerPrimaryUserlandEntry(node, "sstp-443", "ready", dummyDialer, nil, hc2, doneCh2); err != nil {
+		t.Fatalf("second registerPrimaryUserlandEntry failed: %v", err)
+	}
+	if err := pool.StopTunnel(PrimaryUserlandTunnelID); err != nil {
+		t.Fatalf("StopTunnel failed: %v", err)
+	}
+	if !hc2.closed {
+		t.Fatal("expected StopTunnel to close underlying userland closer")
+	}
+	if pool.GetTunnel(PrimaryUserlandTunnelID) != nil {
+		t.Fatal("expected primary userland tunnel to be removed after StopTunnel")
+	}
+}

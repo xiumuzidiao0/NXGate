@@ -3,49 +3,18 @@ package server
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"time"
 
-	"aimili-vpngate-go/pkg/nodes"
 	"aimili-vpngate-go/pkg/proxy"
 	"aimili-vpngate-go/pkg/tunnel"
-	"aimili-vpngate-go/pkg/vpn"
 )
 
 func (s *Server) getActiveTunnels() []*tunnel.Tunnel {
-	var tunnels []*tunnel.Tunnel
-	if s.tunnelPool != nil {
-		tunnels = s.tunnelPool.ListTunnels()
+	if s.tunnelPool == nil {
+		return nil
 	}
-	// Synthesize primary userland Zero-TUN egress so it is properly exposed in active tunnels and metrics
-	if s.vpn != nil && s.vpn.DriverMode() == vpn.DriverUserland && s.vpn.GetStatus() == string(vpn.StatusConnected) {
-		activeNode := s.vpn.GetActiveNode()
-		if activeNode != nil {
-			var unlockRes *nodes.UnlockResult
-			if s.tunnelPool != nil && s.tunnelPool.UnlockDetector() != nil {
-				unlockRes = s.tunnelPool.UnlockDetector().GetUnlock(activeNode.IP)
-			}
-			if unlockRes == nil {
-				unlockRes = activeNode.Unlock
-			}
-
-			primaryUserland := &tunnel.Tunnel{
-				ID:          "primary-userland",
-				DevName:     fmt.Sprintf("sstp-%d", activeNode.Port),
-				DevIndex:    0,
-				Node:        activeNode.CloneWithoutConfig(),
-				Status:      tunnel.StatusConnected,
-				Message:     "系统主连网关 (用户态免TUN直连)",
-				ConnectedAt: s.vpn.ConnectedAt(),
-				LatencyMs:   activeNode.LatencyMs,
-				IsUserland:  true,
-				Unlock:      unlockRes,
-			}
-			tunnels = append([]*tunnel.Tunnel{primaryUserland}, tunnels...)
-		}
-	}
-	return tunnels
+	return s.tunnelPool.ListTunnels()
 }
 
 func (s *Server) handleListTunnels(w http.ResponseWriter, r *http.Request) {
@@ -252,26 +221,7 @@ func (s *Server) handleProbeTunnelUnlock(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	var t *tunnel.Tunnel
-	if req.TunnelID == "primary-userland" {
-		if s.vpn != nil && s.vpn.DriverMode() == vpn.DriverUserland && s.vpn.GetStatus() == string(vpn.StatusConnected) {
-			activeNode := s.vpn.GetActiveNode()
-			sTun := s.vpn.GetSSTPTunnel()
-			if activeNode != nil && sTun != nil {
-				t = &tunnel.Tunnel{
-					ID:         "primary-userland",
-					DevName:    fmt.Sprintf("sstp-%d", activeNode.Port),
-					Node:       activeNode,
-					Status:     tunnel.StatusConnected,
-					IsUserland: true,
-					Dialer:     sTun.Dial,
-				}
-			}
-		}
-	} else {
-		t = s.tunnelPool.GetTunnel(req.TunnelID)
-	}
-
+	t := s.tunnelPool.GetTunnel(req.TunnelID)
 	if t == nil || t.Node == nil {
 		s.writeError(w, http.StatusBadRequest, "指定隧道不存在或未上线")
 		return
@@ -285,12 +235,9 @@ func (s *Server) handleProbeTunnelUnlock(w http.ResponseWriter, r *http.Request)
 			return
 		}
 		res := detector.ProbeTunnelInstance(ctx, t)
-		if t.ID == "primary-userland" {
-			if t.Node != nil {
-				t.Node.Unlock = res
-			}
-		} else {
-			t.SetUnlock(res)
+		t.SetUnlock(res)
+		if t.Node != nil {
+			t.Node.Unlock = res
 		}
 	}()
 

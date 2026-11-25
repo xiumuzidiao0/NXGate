@@ -53,33 +53,41 @@ func DefaultThroughputConfig() ThroughputConfig {
 
 // CheckThroughputWithRetry performs throughput testing with retry logic
 func CheckThroughputWithRetry(devName string, cfg ThroughputConfig) ThroughputResult {
-	for attempt := 1; attempt <= cfg.MaxAttempts; attempt++ {
-		result := checkThroughput(devName, cfg, attempt)
-		if result.Passed {
-			return result
+	attempts := cfg.MaxAttempts
+	if attempts < 1 {
+		attempts = 1
+	}
+	var last ThroughputResult
+	for attempt := 1; attempt <= attempts; attempt++ {
+		last = checkThroughput(devName, cfg, attempt)
+		if last.Passed {
+			return last
 		}
 		// Don't retry if we got a hard error (network unreachable, etc)
-		if result.Error != nil && result.BytesRead == 0 {
-			return result
+		if last.Error != nil && last.BytesRead == 0 {
+			return last
 		}
 	}
-
-	// Return last attempt result
-	return checkThroughput(devName, cfg, cfg.MaxAttempts)
+	return last
 }
 
 // CheckThroughputWithDialer performs throughput testing via a custom dialer (e.g. userland Zero-TUN)
 func CheckThroughputWithDialer(dialer func(ctx context.Context, network, addr string) (net.Conn, error), cfg ThroughputConfig) ThroughputResult {
-	for attempt := 1; attempt <= cfg.MaxAttempts; attempt++ {
-		result := checkThroughputWithClient(newDialerHTTPClient(dialer, cfg.Timeout), cfg, attempt)
-		if result.Passed {
-			return result
+	attempts := cfg.MaxAttempts
+	if attempts < 1 {
+		attempts = 1
+	}
+	var last ThroughputResult
+	for attempt := 1; attempt <= attempts; attempt++ {
+		last = checkThroughputWithClient(newDialerHTTPClient(dialer, cfg.Timeout), cfg, attempt)
+		if last.Passed {
+			return last
 		}
-		if result.Error != nil && result.BytesRead == 0 {
-			return result
+		if last.Error != nil && last.BytesRead == 0 {
+			return last
 		}
 	}
-	return checkThroughputWithClient(newDialerHTTPClient(dialer, cfg.Timeout), cfg, cfg.MaxAttempts)
+	return last
 }
 
 // checkThroughput performs a single throughput test on a tunnel interface

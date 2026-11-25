@@ -82,7 +82,6 @@ func main() {
 	dynamicGroupMgr := tunnel.NewDynamicGroupManager(cfg, tunnelPool, nodePool)
 	dynamicGroupMgr.SetPrimaryConnector(vpnMgr)
 	portMgr := proxy.NewMultiPortManager(cfg, tunnelPool, dynamicGroupMgr)
-	vpnMgr.SetProxyAttacher(portMgr)
 	// Primary egress failover must respect the system-primary dynamic group's
 	// constraints instead of falling back to an unconstrained global best-node
 	// pick (which silently ignores country / IP-type / purity / unlock filters).
@@ -92,7 +91,7 @@ func main() {
 			return false
 		}
 		stats.LogInfo("VPN", "主出口由动态组 [%s] 托管，转交动态组按既定约束重新评估选路", g.Name)
-		go dynamicGroupMgr.EvaluateGroup(context.Background(), g)
+		dynamicGroupMgr.EnqueueGroupEvaluation(g.ID)
 		return true
 	})
 	vpnMgr.SetAutoRotateGuard(func() bool {

@@ -7,6 +7,7 @@ import (
 
 	"aimili-vpngate-go/pkg/config"
 	"aimili-vpngate-go/pkg/nodes"
+	"aimili-vpngate-go/pkg/tunnel"
 )
 
 func TestAutoDetectDriverModeEnvOverride(t *testing.T) {
@@ -131,10 +132,10 @@ func TestProbeUserlandEgressRejectsNilTunnel(t *testing.T) {
 // TestUserlandEgressProbesUseLiteralIPs guards the probe design: the check must
 // measure packet forwarding only, never DNS resolution.
 func TestUserlandEgressProbesUseLiteralIPs(t *testing.T) {
-	if len(userlandEgressProbes) < 2 {
-		t.Fatalf("expected several independent egress probes, got %v", userlandEgressProbes)
+	if len(tunnel.UserlandConnectivityTargets) < 2 {
+		t.Fatalf("expected several independent egress probes, got %v", tunnel.UserlandConnectivityTargets)
 	}
-	for _, target := range userlandEgressProbes {
+	for _, target := range tunnel.UserlandConnectivityTargets {
 		host, _, err := net.SplitHostPort(target)
 		if err != nil {
 			t.Fatalf("probe target %q is not host:port: %v", target, err)

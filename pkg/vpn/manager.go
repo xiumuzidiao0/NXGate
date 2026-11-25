@@ -18,16 +18,10 @@ import (
 	"aimili-vpngate-go/pkg/tunnel"
 )
 
-type UserlandProxyAttacher interface {
-	SetUserlandDialer(dialer func(ctx context.Context, network, addr string) (net.Conn, error))
-	SetUserlandPacketConn(packetConn func() (net.PacketConn, error))
-}
-
 type Manager struct {
 	cfg        *config.Config
 	pool       *nodes.NodePool
 	tunnelPool *tunnel.Pool
-	attacher   UserlandProxyAttacher
 	sstpTunnel *sstp.Tunnel
 	driverMode DriverMode
 
@@ -101,11 +95,6 @@ func (m *Manager) Wait() {
 	m.bgWG.Wait()
 }
 
-// userlandEgressProbes are dialled through a userland tunnel using literal IPs,
-// so the check exercises IP packet forwarding only and never depends on DNS or
-// on the tunnel's own DoH resolver.
-var userlandEgressProbes = []string{"1.1.1.1:443", "8.8.8.8:443", "9.9.9.9:443"}
-
 const (
 	userlandEgressProbeInterval = 60 * time.Second
 	userlandEgressProbeTimeout  = 5 * time.Second
@@ -119,16 +108,9 @@ func probeUserlandEgress(tun *sstp.Tunnel) bool {
 	if tun == nil {
 		return false
 	}
-	for _, target := range userlandEgressProbes {
-		ctx, cancel := context.WithTimeout(context.Background(), userlandEgressProbeTimeout)
-		conn, err := tun.Dial(ctx, "tcp", target)
-		cancel()
-		if err == nil {
-			_ = conn.Close()
-			return true
-		}
-	}
-	return false
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(len(tunnel.UserlandConnectivityTargets))*userlandEgressProbeTimeout+time.Second)
+	defer cancel()
+	return tunnel.CheckDialerConnectivityContext(ctx, tun.Dial, userlandEgressProbeTimeout)
 }
 
 // AutoDetectDriverMode inspects system environment and capabilities to select appropriate driver mode.
@@ -176,12 +158,6 @@ func NewManager(cfg *config.Config, pool *nodes.NodePool, tp *tunnel.Pool) *Mana
 		status:      StatusDisconnected,
 		lastMessage: "VPN 服务已就绪，未连接",
 	}
-}
-
-func (m *Manager) SetProxyAttacher(attacher UserlandProxyAttacher) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.attacher = attacher
 }
 
 // SetPrimaryFailoverDelegate installs a handler consulted before the built-in
@@ -310,10 +286,6 @@ func (m *Manager) ConnectWithMode(target *nodes.Node, mode string) error {
 		_ = m.sstpTunnel.Close()
 		m.sstpTunnel = nil
 	}
-	if m.attacher != nil {
-		m.attacher.SetUserlandDialer(nil)
-		m.attacher.SetUserlandPacketConn(nil)
-	}
 
 	// Stop previous primary tunnel if running
 	if m.primaryID != "" && m.tunnelPool != nil {
@@ -431,20 +403,11 @@ func (m *Manager) ConnectUserland(target *nodes.Node) error {
 	m.mu.Lock()
 	currentEpoch, bgCtx := m.resetEpochLocked()
 
-	// Stop previous primary openvpn tunnel if running
-	if m.primaryID != "" && m.tunnelPool != nil {
-		_ = m.tunnelPool.StopTunnel(m.primaryID)
-		m.primaryID = ""
-	}
-	// Stop previous sstp tunnel if running
-	if m.sstpTunnel != nil {
-		_ = m.sstpTunnel.Close()
-		m.sstpTunnel = nil
-	}
-	if m.attacher != nil {
-		m.attacher.SetUserlandDialer(nil)
-		m.attacher.SetUserlandPacketConn(nil)
-	}
+	prevPrimaryID := m.primaryID
+	prevSSTPTunnel := m.sstpTunnel
+	m.primaryID = ""
+	m.sstpTunnel = nil
+	tp := m.tunnelPool
 
 	m.activeNode = target
 	m.driverMode = DriverUserland
@@ -452,6 +415,13 @@ func (m *Manager) ConnectUserland(target *nodes.Node) error {
 	m.isConnecting = true
 	m.lastMessage = fmt.Sprintf("正在通过用户态 SSTP (免 TUN) 连接 %s (%s)...", target.ID, target.CountryShort)
 	m.mu.Unlock()
+
+	if prevPrimaryID != "" && tp != nil {
+		_ = tp.StopTunnel(prevPrimaryID)
+	}
+	if prevSSTPTunnel != nil {
+		_ = prevSSTPTunnel.Close()
+	}
 
 	stats.LogInfo("VPN", "开始用户态免 TUN 直连: %s (%s %s:%d, 协议: %s)", target.ID, target.CountryShort, target.IP, target.Port, target.Proto)
 
@@ -510,23 +480,69 @@ func (m *Manager) ConnectUserland(target *nodes.Node) error {
 			target.SSTPPort = tun.Port()
 		}
 
-		m.mu.Lock()
-		if m.epoch != currentEpoch {
+		m.mu.RLock()
+		stale := m.epoch != currentEpoch || bgCtx.Err() != nil
+		tp := m.tunnelPool
+		m.mu.RUnlock()
+		if stale {
 			_ = tun.Close()
+			return
+		}
+
+		var regID string
+		if tp != nil {
+			reg, regErr := tp.RegisterPrimaryUserlandTunnel(target, tun)
+			if regErr != nil {
+				_ = tun.Close()
+				m.mu.Lock()
+				if m.epoch == currentEpoch {
+					m.status = StatusFailed
+					m.isConnecting = false
+					m.lastMessage = fmt.Sprintf("注册用户态主隧道失败: %v", regErr)
+				}
+				m.mu.Unlock()
+				return
+			}
+			regID = reg.ID
+		}
+
+		m.mu.Lock()
+		if m.epoch != currentEpoch || bgCtx.Err() != nil {
 			m.mu.Unlock()
+			if tp != nil && regID != "" {
+				_ = tp.StopTunnel(regID)
+			} else {
+				_ = tun.Close()
+			}
 			return
 		}
 		m.sstpTunnel = tun
+		m.primaryID = regID
 		m.status = StatusConnected
 		m.isConnecting = false
 		m.connectedAt = time.Now()
 		m.lastMessage = fmt.Sprintf("用户态免 TUN 直连已就绪 (虚拟 IP: %s, 端口: %d)", tun.AssignedIP(), tun.Port())
 		m.mu.Unlock()
 
-		if m.attacher != nil {
-			m.attacher.SetUserlandDialer(tun.Dial)
-			m.attacher.SetUserlandPacketConn(tun.OpenPacketConn)
-		}
+		m.launchBG(func() {
+			select {
+			case <-bgCtx.Done():
+				return
+			case <-tun.Done():
+				m.mu.Lock()
+				active := m.epoch == currentEpoch && m.status == StatusConnected
+				if active {
+					m.status = StatusFailed
+					m.isConnecting = false
+					m.lastMessage = "用户态主隧道连接已断开"
+				}
+				m.mu.Unlock()
+				if active {
+					stats.LogWarn("VPN", "检测到用户态主隧道底层会话断开，触发自动故障转移")
+					m.launchBG(m.TriggerAutoFailover)
+				}
+			}
+		})
 
 		stats.LogInfo("VPN", "用户态免 TUN 直连就绪: %s (%s), 虚拟 IP: %s, 端口: %d", target.ID, target.CountryShort, tun.AssignedIP(), tun.Port())
 	})
@@ -540,10 +556,6 @@ func (m *Manager) Disconnect(reason string) {
 	if m.sstpTunnel != nil {
 		_ = m.sstpTunnel.Close()
 		m.sstpTunnel = nil
-	}
-	if m.attacher != nil {
-		m.attacher.SetUserlandDialer(nil)
-		m.attacher.SetUserlandPacketConn(nil)
 	}
 	if m.primaryID != "" && m.tunnelPool != nil {
 		_ = m.tunnelPool.StopTunnel(m.primaryID)
@@ -784,12 +796,6 @@ func (m *Manager) ConnectedAt() time.Time {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.connectedAt
-}
-
-func (m *Manager) GetSSTPTunnel() *sstp.Tunnel {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return m.sstpTunnel
 }
 
 func (m *Manager) GetUserlandDialer() func(ctx context.Context, network, addr string) (net.Conn, error) {

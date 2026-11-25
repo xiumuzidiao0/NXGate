@@ -129,13 +129,31 @@ func (m *DynamicGroupManager) primaryConnectedAt() time.Time {
 	return time.Time{}
 }
 
-func (m *DynamicGroupManager) primaryUserlandDialer() func(ctx context.Context, network, addr string) (net.Conn, error) {
-	if provider, ok := m.primaryConnector.(interface {
-		GetUserlandDialer() func(ctx context.Context, network, addr string) (net.Conn, error)
-	}); ok {
-		return provider.GetUserlandDialer()
+func (m *DynamicGroupManager) populateSystemPrimaryView(cp *DynamicGroup) {
+	if !(cp.IsSystem || cp.ID == SystemPrimaryGroupID) || len(cp.ActiveTunnelIDs) > 0 {
+		return
 	}
-	return nil
+	if m.pool != nil {
+		for _, t := range m.pool.ListTunnels() {
+			if t.DevIndex == 0 && t.IsHealthy() {
+				cp.ActiveTunnelIDs = []string{t.ID}
+				if t.Node != nil {
+					modeTag := t.DevName
+					if t.IsUserland {
+						modeTag = "免TUN"
+					}
+					cp.StatusText = fmt.Sprintf("主网关正常运行: %s (%s, %s)", t.Node.IP, t.Node.CountryShort, modeTag)
+				}
+				return
+			}
+		}
+	}
+	if m.isPrimaryUserlandMode(cp) && m.primaryConnector != nil && m.primaryConnector.GetStatus() == "connected" {
+		if activeNode := m.primaryConnector.GetActiveNode(); activeNode != nil {
+			cp.ActiveTunnelIDs = []string{PrimaryUserlandTunnelID}
+			cp.StatusText = fmt.Sprintf("主网关正常运行: %s (%s, 免TUN)", activeNode.IP, activeNode.CountryShort)
+		}
+	}
 }
 
 func (m *DynamicGroupManager) load() {
@@ -197,15 +215,7 @@ func (m *DynamicGroupManager) ListGroups() []*DynamicGroup {
 		// Clone active IDs slice
 		cp.ActiveTunnelIDs = make([]string, len(g.ActiveTunnelIDs))
 		copy(cp.ActiveTunnelIDs, g.ActiveTunnelIDs)
-		if (cp.IsSystem || cp.ID == SystemPrimaryGroupID) && m.isPrimaryUserlandMode(&cp) {
-			if m.primaryConnector != nil && m.primaryConnector.GetStatus() == "connected" {
-				activeNode := m.primaryConnector.GetActiveNode()
-				if activeNode != nil {
-					cp.ActiveTunnelIDs = []string{"primary-userland"}
-					cp.StatusText = fmt.Sprintf("主网关正常运行: %s (%s, 免TUN)", activeNode.IP, activeNode.CountryShort)
-				}
-			}
-		}
+		m.populateSystemPrimaryView(&cp)
 		list = append(list, &cp)
 	}
 	sort.Slice(list, func(i, j int) bool {
@@ -226,15 +236,7 @@ func (m *DynamicGroupManager) GetGroup(id string) *DynamicGroup {
 	}
 	cp := *g
 	cp.ActiveTunnelIDs = append([]string(nil), g.ActiveTunnelIDs...)
-	if (cp.IsSystem || cp.ID == SystemPrimaryGroupID) && m.isPrimaryUserlandMode(&cp) {
-		if m.primaryConnector != nil && m.primaryConnector.GetStatus() == "connected" {
-			activeNode := m.primaryConnector.GetActiveNode()
-			if activeNode != nil {
-				cp.ActiveTunnelIDs = []string{"primary-userland"}
-				cp.StatusText = fmt.Sprintf("主网关正常运行: %s (%s, 免TUN)", activeNode.IP, activeNode.CountryShort)
-			}
-		}
-	}
+	m.populateSystemPrimaryView(&cp)
 	return &cp
 }
 

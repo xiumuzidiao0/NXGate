@@ -216,7 +216,6 @@ func (l *PortListener) dispatch(client net.Conn) {
 
 	// 2. Resolve tunnel from scheduler if custom proxy was not used
 	var userlandPacketConn func() (net.PacketConn, error)
-	var outboundTun *tunnel.Tunnel
 	if dialer == nil && len(l.rule.BoundCustomProxyIDs) == 0 && l.scheduler != nil {
 		if tun := l.scheduler.SelectTunnel(l.rule.Port, l.rule.BoundTunnelIDs, l.rule.BoundGroupIDs, l.rule.Policy, l.rule.IntervalSeconds); tun != nil {
 			selectedTun = tun
@@ -243,10 +242,11 @@ func (l *PortListener) dispatch(client net.Conn) {
 		}
 	}
 
+	// Pass nil tunnel because dialScheduledWithFailover already records per-tunnel success/failure.
 	if firstByte[0] == socks5Version {
-		_ = handleSocks5(bConn, auth, devName, outboundTun, dialer, userlandPacketConn)
+		_ = handleSocks5(bConn, auth, devName, nil, dialer, userlandPacketConn)
 	} else {
-		_ = handleHTTP(bConn, br, auth, devName, outboundTun, dialer)
+		_ = handleHTTP(bConn, br, auth, devName, nil, dialer)
 	}
 }
 

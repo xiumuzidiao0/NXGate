@@ -243,57 +243,6 @@ func (s *Server) handleSingBoxOverview(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(resp)
 }
 
-func (s *Server) handleSingBoxStatus(w http.ResponseWriter, r *http.Request) {
-	if s.singboxClient == nil {
-		s.singboxClient = singbox.NewClient()
-	}
-
-	status, err := s.singboxClient.GetStatus(r.Context())
-	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": err.Error()})
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(status)
-}
-
-func (s *Server) handleSingBoxProtocols(w http.ResponseWriter, r *http.Request) {
-	if s.singboxClient == nil {
-		s.singboxClient = singbox.NewClient()
-	}
-
-	protos, err := s.singboxClient.GetProtocols(r.Context())
-	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": err.Error()})
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "protocols": protos})
-}
-
-func (s *Server) handleSingBoxListNodes(w http.ResponseWriter, r *http.Request) {
-	if s.singboxClient == nil {
-		s.singboxClient = singbox.NewClient()
-	}
-
-	nodes, err := s.singboxClient.ListNodes(r.Context())
-	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": err.Error()})
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "count": len(nodes), "nodes": nodes})
-}
-
 type AddNodeRequest struct {
 	Protocol string `json:"protocol"`
 	Port     string `json:"port"`
@@ -749,16 +698,6 @@ func (s *Server) handleSingBoxGetSub(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, _ = w.Write(data)
-}
-
-func (s *Server) handleSingBoxSyncSub(w http.ResponseWriter, r *http.Request) {
-	// Sync subscription is inherently instantaneous and zero-overhead in native Go
-	s.handleSingBoxGetSub(w, r)
-}
-
-func (s *Server) handleSingBoxInitSub(w http.ResponseWriter, r *http.Request) {
-	// Native subscription is always initialized and ready without third-party web servers
-	s.handleSingBoxGetSub(w, r)
 }
 
 // Admin-only metadata endpoint for management clients. No node connection credentials.

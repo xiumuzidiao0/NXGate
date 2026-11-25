@@ -410,23 +410,6 @@ func (c *Client) DeleteNode(ctx context.Context, nameOrAll string) error {
 	return nil
 }
 
-func (c *Client) GetSubscription(ctx context.Context) (*SubResponse, error) {
-	ctxTimeout, cancel := context.WithTimeout(ctx, 6*time.Second)
-	defer cancel()
-
-	data, err := c.execAPI(ctxTimeout, "sub", "get")
-	if err != nil {
-		return nil, err
-	}
-
-	var resp SubResponse
-	if err := json.Unmarshal(data, &resp); err != nil {
-		return nil, fmt.Errorf("failed to parse subscription json: %w", err)
-	}
-
-	return &resp, nil
-}
-
 func (c *Client) RestartService(ctx context.Context) error {
 	defer c.InvalidateStatusCache()
 	ctxTimeout, cancel := context.WithTimeout(ctx, 10*time.Second)

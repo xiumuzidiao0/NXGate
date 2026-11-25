@@ -95,15 +95,11 @@ func (s *Server) Start(ctx context.Context) error {
 	mux.HandleFunc("GET /api/unlock", s.handleGetUnlockStatus)
 	mux.HandleFunc("POST /api/unlock/probe", s.handleProbeTunnelUnlock)
 
-	// Reputation & Telegram Integration APIs
-	mux.HandleFunc("GET /api/reputation", s.handleGetReputation)
+	// Telegram Integration APIs
 	mux.HandleFunc("POST /api/telegram/test", s.handleTelegramTest)
 
 	// sing-box Inbound & Outbound Integration APIs
 	mux.HandleFunc("GET /api/singbox/overview", s.handleSingBoxOverview)
-	mux.HandleFunc("GET /api/singbox/status", s.handleSingBoxStatus)
-	mux.HandleFunc("GET /api/singbox/protocols", s.handleSingBoxProtocols)
-	mux.HandleFunc("GET /api/singbox/nodes", s.handleSingBoxListNodes)
 	mux.HandleFunc("POST /api/singbox/nodes", s.handleSingBoxAddNode)
 	mux.HandleFunc("POST /api/singbox/nodes/outbound", s.handleSingBoxSetOutbound)
 	mux.HandleFunc("DELETE /api/singbox/nodes", s.handleSingBoxDeleteNode)
@@ -111,8 +107,6 @@ func (s *Server) Start(ctx context.Context) error {
 	mux.HandleFunc("GET /api/singbox/subscription", s.handleSingBoxGetSub)
 	mux.HandleFunc("GET /api/singbox/subscription/raw", s.handleSingBoxRawSub)
 	mux.HandleFunc("GET /api/singbox/subscription/clash", s.handleSingBoxClashSub)
-	mux.HandleFunc("POST /api/singbox/subscription/sync", s.handleSingBoxSyncSub)
-	mux.HandleFunc("POST /api/singbox/subscription/init", s.handleSingBoxInitSub)
 	mux.HandleFunc("POST /api/singbox/subscription/age/generate", s.handleAgeGenerate)
 	mux.HandleFunc("POST /api/singbox/subscription/age/derive", s.handleAgeDerive)
 

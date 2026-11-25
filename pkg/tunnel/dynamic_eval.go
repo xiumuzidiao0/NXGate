@@ -491,6 +491,11 @@ func (m *DynamicGroupManager) StartEvaluationLoop(ctx context.Context) {
 // Slow handshakes are separated from the bounded health round. One refill worker
 // preserves device-allocation ordering; a bounded deduplicated FIFO avoids spawning
 // a goroutine per group or starving later groups on every monitor tick.
+// EnqueueGroupEvaluation schedules an asynchronous deduplicated evaluation for id.
+func (m *DynamicGroupManager) EnqueueGroupEvaluation(id string) {
+	m.enqueueEvaluation(id)
+}
+
 func (m *DynamicGroupManager) enqueueEvaluation(id string) {
 	m.queueMu.Lock()
 	defer m.queueMu.Unlock()
@@ -693,7 +698,7 @@ func (m *DynamicGroupManager) syncPrimaryActiveTunnelID(gid string) {
 	}
 	if len(activeIDs) == 0 {
 		if reporter, ok := m.primaryConnector.(interface{ IsZeroTun() bool }); ok && reporter.IsZeroTun() {
-			activeIDs = []string{"primary-userland"}
+			activeIDs = []string{PrimaryUserlandTunnelID}
 			isZeroTun = true
 		}
 	}
@@ -750,30 +755,15 @@ func (m *DynamicGroupManager) evaluatePrimarySystemGroup(ctx context.Context, g 
 	isUserland := m.isPrimaryUserlandMode(g)
 	// 严苛物理实测校验：如果配置了解锁要求（如三大 AI 全通），实测当前主网关
 	primaryUnlockValid := true
-	var unlockTarget *Tunnel
-	if primaryTun != nil {
-		unlockTarget = primaryTun
-	} else if isUserland && currentActiveNode != nil && primaryHealthy {
-		if dialer := m.primaryUserlandDialer(); dialer != nil {
-			unlockTarget = &Tunnel{
-				ID:         "primary-userland",
-				DevName:    fmt.Sprintf("sstp-%d", currentActiveNode.Port),
-				Node:       currentActiveNode,
-				Status:     StatusConnected,
-				IsUserland: true,
-				Dialer:     dialer,
-			}
-		}
-	}
-	if g.UnlockFilter != "" && g.UnlockFilter != "none" && unlockTarget != nil && currentActiveNode != nil {
-		currUnlock := unlockTarget.GetUnlock()
+	if g.UnlockFilter != "" && g.UnlockFilter != "none" && primaryTun != nil && currentActiveNode != nil {
+		currUnlock := primaryTun.GetUnlock()
 		if currUnlock == nil || !currUnlock.IsProbed {
 			if m.pool.UnlockDetector() != nil {
 				probeCtx, probeCancel := context.WithTimeout(ctx, 8*time.Second)
-				currUnlock = m.pool.UnlockDetector().ProbeTunnelInstance(probeCtx, unlockTarget)
+				currUnlock = m.pool.UnlockDetector().ProbeTunnelInstance(probeCtx, primaryTun)
 				probeCancel()
-				unlockTarget.SetUnlock(currUnlock)
-				if primaryTun == nil && currentActiveNode != nil {
+				primaryTun.SetUnlock(currUnlock)
+				if currentActiveNode != nil {
 					currentActiveNode.Unlock = currUnlock
 				}
 			}
@@ -821,7 +811,7 @@ func (m *DynamicGroupManager) evaluatePrimarySystemGroup(ctx context.Context, g 
 		if primaryTun != nil {
 			g.ActiveTunnelIDs = []string{primaryTun.ID}
 		} else if isUserland {
-			g.ActiveTunnelIDs = []string{"primary-userland"}
+			g.ActiveTunnelIDs = []string{PrimaryUserlandTunnelID}
 		}
 		g.LastEvaluatedAt = time.Now()
 		g.StatusText = fmt.Sprintf("主网关固定连接: %s (%s, %s)", currentActiveNode.IP, currentActiveNode.CountryShort, modeTag)
@@ -836,7 +826,7 @@ func (m *DynamicGroupManager) evaluatePrimarySystemGroup(ctx context.Context, g 
 		if primaryTun != nil {
 			g.ActiveTunnelIDs = []string{primaryTun.ID}
 		} else if isUserland {
-			g.ActiveTunnelIDs = []string{"primary-userland"}
+			g.ActiveTunnelIDs = []string{PrimaryUserlandTunnelID}
 		}
 		g.LastEvaluatedAt = time.Now()
 		g.StatusText = fmt.Sprintf("主网关正常运行: %s (%s, %s)", currentActiveNode.IP, currentActiveNode.CountryShort, modeTag)
@@ -847,19 +837,19 @@ func (m *DynamicGroupManager) evaluatePrimarySystemGroup(ctx context.Context, g 
 
 	// If primary connection was established within last 60 seconds and satisfies unlock requirement, don't interrupt it
 	if primaryHealthy && primaryUnlockValid {
-		if primaryTun != nil && !primaryTun.ConnectedAt.IsZero() && time.Since(primaryTun.ConnectedAt) < 60*time.Second {
+		if primaryTun != nil && !primaryTun.ConnectedAt.IsZero() && time.Since(primaryTun.ConnectedAt) < 60*time.Second && primaryTun.Node != nil {
 			m.mu.Lock()
 			g.ActiveTunnelIDs = []string{primaryTun.ID}
 			g.LastEvaluatedAt = time.Now()
-			g.StatusText = fmt.Sprintf("主网关刚建立: %s (%s, tun0)", primaryTun.Node.IP, primaryTun.Node.CountryShort)
+			g.StatusText = fmt.Sprintf("主网关刚建立: %s (%s, %s)", primaryTun.Node.IP, primaryTun.Node.CountryShort, modeTag)
 			m.saveLocked()
 			m.mu.Unlock()
 			return
-		} else if isUserland && currentActiveNode != nil {
+		} else if primaryTun == nil && isUserland && currentActiveNode != nil {
 			cAt := m.primaryConnectedAt()
 			if !cAt.IsZero() && time.Since(cAt) < 60*time.Second {
 				m.mu.Lock()
-				g.ActiveTunnelIDs = []string{"primary-userland"}
+				g.ActiveTunnelIDs = []string{PrimaryUserlandTunnelID}
 				g.LastEvaluatedAt = time.Now()
 				g.StatusText = fmt.Sprintf("主网关正常运行: %s (%s, 免TUN)", currentActiveNode.IP, currentActiveNode.CountryShort)
 				m.saveLocked()

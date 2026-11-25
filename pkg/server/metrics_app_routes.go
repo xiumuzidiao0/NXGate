@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"aimili-vpngate-go/pkg/config"
-	"aimili-vpngate-go/pkg/nodes"
 	"aimili-vpngate-go/pkg/stats"
 )
 
@@ -34,22 +33,11 @@ func (s *Server) handleTelegramTest(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handleGetReputation(w http.ResponseWriter, r *http.Request) {
-	if s.pool == nil || s.pool.Reputation() == nil {
-		s.writeJSON(w, http.StatusOK, map[string]*nodes.NodeReputation{})
-		return
-	}
-	s.writeJSON(w, http.StatusOK, s.pool.Reputation().GetAllRecords())
-}
-
 func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	tr := stats.GetTrafficTracker().Snapshot()
 	state := s.vpn.Snapshot()
 
-	var tunnelsOnline int
-	if s.tunnelPool != nil {
-		tunnelsOnline = len(s.tunnelPool.ListTunnels())
-	}
+	tunnelsOnline := len(s.getActiveTunnels())
 	var nodeCount, totalNodeCount, blCount int
 	if s.pool != nil {
 		_, _, _, nodeCount, totalNodeCount = s.pool.Status()
@@ -144,10 +132,7 @@ type AppInfoResponse struct {
 func (s *Server) handleAppInfo(w http.ResponseWriter, r *http.Request) {
 	vpnState := s.vpn.Snapshot()
 	traffic := stats.GetTrafficTracker().Snapshot()
-	var tunnelsCount int
-	if s.tunnelPool != nil {
-		tunnelsCount = len(s.tunnelPool.ListTunnels())
-	}
+	tunnelsCount := len(s.getActiveTunnels())
 
 	capabilities := []string{
 		"status",

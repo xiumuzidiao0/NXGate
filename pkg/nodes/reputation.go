@@ -91,17 +91,6 @@ func (rm *ReputationManager) GetScore(ip string) int {
 	return 60
 }
 
-func (rm *ReputationManager) GetRecord(ip string) *NodeReputation {
-	rm.mu.RLock()
-	defer rm.mu.RUnlock()
-
-	if rec, ok := rm.records[ip]; ok {
-		cp := *rec
-		return &cp
-	}
-	return nil
-}
-
 func (rm *ReputationManager) GetAllRecords() map[string]*NodeReputation {
 	rm.mu.RLock()
 	defer rm.mu.RUnlock()

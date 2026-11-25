@@ -9,7 +9,9 @@ import (
 	"time"
 )
 
-var userlandConnectivityTargets = []string{"1.1.1.1:443", "8.8.8.8:443", "9.9.9.9:443"}
+// UserlandConnectivityTargets are dialled through a userland tunnel using literal IPs,
+// so connectivity checks exercise IP forwarding only and never depend on DNS.
+var UserlandConnectivityTargets = []string{"1.1.1.1:443", "8.8.8.8:443", "9.9.9.9:443"}
 
 // CheckDialerConnectivityContext tests whether a userland dialer can establish an outbound TCP connection.
 func CheckDialerConnectivityContext(ctx context.Context, dialer func(context.Context, string, string) (net.Conn, error), timeout time.Duration) bool {
@@ -27,7 +29,7 @@ func probeDialerConnectivity(ctx context.Context, dialer func(context.Context, s
 	if timeout <= 0 {
 		timeout = 2 * time.Second
 	}
-	for _, target := range userlandConnectivityTargets {
+	for _, target := range UserlandConnectivityTargets {
 		if ctx.Err() != nil {
 			return false, ctx.Err()
 		}

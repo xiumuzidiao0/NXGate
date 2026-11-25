@@ -146,7 +146,7 @@ func TestHotPoolSizeCappingAndPruning(t *testing.T) {
 	np := NewNodePool(cfg)
 	now := time.Now()
 
-	// 1. Generate 300 nodes (exceeding MaxHotPoolSize of 250)
+	// 1. Generate 300 nodes (exceeding DefaultNodeHotPoolSize of 250)
 	var batch []*Node
 	for i := 1; i <= 300; i++ {
 		batch = append(batch, &Node{
@@ -167,17 +167,17 @@ func TestHotPoolSizeCappingAndPruning(t *testing.T) {
 	totalStored := len(np.nodeStore)
 	np.mu.Unlock()
 
-	// Verify that candidates (hot pool) is strictly capped at MaxHotPoolSize (250)
-	if len(candidates) != MaxHotPoolSize {
-		t.Fatalf("expected hot candidates to be capped at %d, got %d", MaxHotPoolSize, len(candidates))
+	// Verify that candidates (hot pool) is strictly capped at DefaultNodeHotPoolSize (250)
+	if len(candidates) != config.DefaultNodeHotPoolSize {
+		t.Fatalf("expected hot candidates to be capped at %d, got %d", config.DefaultNodeHotPoolSize, len(candidates))
 	}
 	// Verify that total store contains all 300 nodes in cold storage
 	if totalStored != 300 {
 		t.Fatalf("expected total store to have 300 nodes, got %d", totalStored)
 	}
 
-	// 2. Test MaxStoreNodes capacity pruning
-	// Add 400 more dead nodes to exceed MaxStoreNodes (600)
+	// 2. Test DefaultNodeStoreMaxSize capacity pruning
+	// Add 400 more dead nodes to exceed DefaultNodeStoreMaxSize (600)
 	var excessBatch []*Node
 	for i := 301; i <= 700; i++ {
 		excessBatch = append(excessBatch, &Node{
@@ -201,8 +201,8 @@ func TestHotPoolSizeCappingAndPruning(t *testing.T) {
 	newStoreCount := len(np.nodeStore)
 	np.mu.Unlock()
 
-	if newStoreCount > MaxStoreNodes {
-		t.Fatalf("expected store count <= %d after capacity pruning, got %d (evicted: %d)", MaxStoreNodes, newStoreCount, evicted)
+	if newStoreCount > config.DefaultNodeStoreMaxSize {
+		t.Fatalf("expected store count <= %d after capacity pruning, got %d (evicted: %d)", config.DefaultNodeStoreMaxSize, newStoreCount, evicted)
 	}
 }
 

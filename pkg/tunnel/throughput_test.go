@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -90,5 +91,35 @@ func TestCheckThroughputLocalTimeout(t *testing.T) {
 	got := CheckThroughputWithDialer(dial, cfg)
 	if got.Error == nil || got.Passed {
 		t.Fatalf("%+v", got)
+	}
+}
+
+func TestCheckThroughputWithDialerHonorsMaxAttempts(t *testing.T) {
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		time.Sleep(15 * time.Millisecond)
+		io.WriteString(w, strings.Repeat("x", 1024))
+	}))
+	defer srv.Close()
+
+	cfg := ThroughputConfig{
+		TestURL:        srv.URL,
+		MinBytesPerSec: 100 * 1024 * 1024, // force slow failure
+		Timeout:        time.Second,
+		MaxAttempts:    2,
+		SampleDuration: time.Second,
+		MinSampleBytes: 1,
+	}
+	dial := func(ctx context.Context, network, addr string) (net.Conn, error) {
+		return (&net.Dialer{}).DialContext(ctx, network, srv.Listener.Addr().String())
+	}
+
+	got := CheckThroughputWithDialer(dial, cfg)
+	if got.Passed {
+		t.Fatalf("expected slow throughput check to fail: %+v", got)
+	}
+	if n := hits.Load(); n != 2 {
+		t.Fatalf("expected exactly 2 attempts, got %d", n)
 	}
 }

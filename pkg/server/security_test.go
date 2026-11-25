@@ -136,7 +136,7 @@ func TestSecuritySubscriptionTokenNotAdmin(t *testing.T) {
 	cfg := &config.Config{UIUsername: "admin", UIPassword: "test-password", SubToken: "subscription-token", UIPath: "secret"}
 	mw := NewMiddleware(cfg)
 	handler := mw.SecretPathGuard(mw.BasicAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(204) })))
-	for _, item := range []struct{ method, path string }{{"GET", "/api/singbox/subscription-info"}, {"POST", "/api/singbox/subscription/age/generate"}, {"POST", "/api/singbox/subscription/sync"}} {
+	for _, item := range []struct{ method, path string }{{"GET", "/api/singbox/subscription-info"}, {"POST", "/api/singbox/subscription/age/generate"}, {"POST", "/api/singbox/subscription/age/derive"}} {
 		r := httptest.NewRequest(item.method, item.path+"?token=subscription-token", nil)
 		w := httptest.NewRecorder()
 		handler.ServeHTTP(w, r)

@@ -20,26 +20,17 @@ import (
 	"aimili-vpngate-go/pkg/stats"
 )
 
-const (
-	// MaxHotPoolSize defines the strict upper boundary of active hot candidate nodes.
-	MaxHotPoolSize = 250
-
-	// MaxStoreNodes defines the storage upper bound for historical/cold nodes to prevent indefinite bloat.
-	MaxStoreNodes = 600
-)
-
 // ProbeStrategy defines timeout values for each probe attempt
 type ProbeStrategy struct {
 	TCPTimeout time.Duration
-	UDPTimeout time.Duration
 }
 
 // GetProbeStrategy returns timeout strategy for a given attempt number
 func GetProbeStrategy(attempt int) ProbeStrategy {
 	strategies := []ProbeStrategy{
-		{TCPTimeout: 6 * time.Second, UDPTimeout: 4 * time.Second}, // Attempt 0: generous
-		{TCPTimeout: 4 * time.Second, UDPTimeout: 3 * time.Second}, // Attempt 1: tighter
-		{TCPTimeout: 3 * time.Second, UDPTimeout: 2 * time.Second}, // Attempt 2: strict
+		{TCPTimeout: 6 * time.Second}, // Attempt 0: generous
+		{TCPTimeout: 4 * time.Second}, // Attempt 1: tighter
+		{TCPTimeout: 3 * time.Second}, // Attempt 2: strict
 	}
 	if attempt < len(strategies) {
 		return strategies[attempt]
@@ -118,14 +109,14 @@ func (np *NodePool) hotPoolLimit() int {
 	if np.cfg != nil {
 		return np.cfg.GetNodeHotPoolSize()
 	}
-	return MaxHotPoolSize
+	return config.DefaultNodeHotPoolSize
 }
 
 func (np *NodePool) storeMaxLimit() int {
 	if np.cfg != nil {
 		return np.cfg.GetNodeStoreMaxSize()
 	}
-	return MaxStoreNodes
+	return config.DefaultNodeStoreMaxSize
 }
 
 func (np *NodePool) minPerCountry() int {

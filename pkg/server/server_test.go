@@ -107,22 +107,6 @@ func TestServerAPI(t *testing.T) {
 		t.Fatalf("expected list groups 200, got %d", wListGroups.Code)
 	}
 
-	// Test sing-box status endpoint
-	reqSBStatus := httptest.NewRequest("GET", "/api/singbox/status", nil)
-	wSBStatus := httptest.NewRecorder()
-	srv.handleSingBoxStatus(wSBStatus, reqSBStatus)
-	if wSBStatus.Code != http.StatusOK {
-		t.Fatalf("expected singbox status 200, got %d", wSBStatus.Code)
-	}
-
-	// Test sing-box protocols endpoint
-	reqSBProtos := httptest.NewRequest("GET", "/api/singbox/protocols", nil)
-	wSBProtos := httptest.NewRecorder()
-	srv.handleSingBoxProtocols(wSBProtos, reqSBProtos)
-	if wSBProtos.Code != http.StatusOK {
-		t.Fatalf("expected singbox protocols 200, got %d", wSBProtos.Code)
-	}
-
 	// Test sing-box overview endpoint
 	reqSBOverview := httptest.NewRequest("GET", "/api/singbox/overview", nil)
 	wSBOverview := httptest.NewRecorder()

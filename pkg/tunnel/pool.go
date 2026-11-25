@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -85,6 +86,136 @@ func (p *Pool) allocConcurrentDevIndexLocked() int {
 
 func (p *Pool) freeDevIndexLocked(idx int) {
 	delete(p.usedDevs, idx)
+}
+
+const (
+	// PrimaryUserlandTunnelID is the fixed pool ID assigned to the primary Zero-TUN SSTP tunnel (DevIndex 0).
+	PrimaryUserlandTunnelID = "primary-userland"
+)
+
+// RegisterPrimaryUserlandTunnel registers the primary Zero-TUN SSTP session into
+// tunnel.Pool at DevIndex 0 so port schedulers, /api/tunnels, Prometheus metrics,
+// Telegram commands, unlock probes, and circuit breakers see one unified tunnel.
+func (p *Pool) RegisterPrimaryUserlandTunnel(node *nodes.Node, st *sstp.Tunnel) (*Tunnel, error) {
+	if node == nil || st == nil {
+		return nil, fmt.Errorf("missing node or sstp tunnel")
+	}
+	devName := fmt.Sprintf("sstp-%d", st.Port())
+	msg := fmt.Sprintf("系统主连网关 (用户态免TUN直连, 虚拟 IP: %s, 端口: %d)", st.AssignedIP(), st.Port())
+	return p.registerPrimaryUserlandEntry(node, devName, msg, st.Dial, st.OpenPacketConn, st, st.Done())
+}
+
+func (p *Pool) registerPrimaryUserlandEntry(
+	node *nodes.Node,
+	devName string,
+	msg string,
+	dialer func(context.Context, string, string) (net.Conn, error),
+	openPacketConn func() (net.PacketConn, error),
+	closer interface{ Close() error },
+	sessionDone <-chan struct{},
+) (*Tunnel, error) {
+	if node == nil {
+		return nil, fmt.Errorf("missing node")
+	}
+
+	p.mu.Lock()
+
+	// Stop any previous tunnel occupying DevIndex 0.
+	var prevPrimaryID string
+	for id, t := range p.tunnels {
+		if t.DevIndex == 0 {
+			prevPrimaryID = id
+			break
+		}
+	}
+	if prevPrimaryID != "" {
+		p.mu.Unlock()
+		_ = p.StopTunnel(prevPrimaryID)
+		p.mu.Lock()
+	}
+
+	// Stop any concurrent tunnel (DevIndex > 0) already targeting this node so it promotes cleanly.
+	var concurrentID string
+	for id, t := range p.tunnels {
+		if t.Node != nil && t.Node.ID == node.ID {
+			concurrentID = id
+			break
+		}
+	}
+	if concurrentID != "" {
+		p.mu.Unlock()
+		_ = p.StopTunnel(concurrentID)
+		p.mu.Lock()
+	}
+
+	p.usedDevs[0] = true
+
+	initialLatency := 0
+	if node.LatencyMs > 0 {
+		initialLatency = node.LatencyMs
+	} else if node.Ping > 0 {
+		initialLatency = node.Ping
+	}
+
+	var unlockRes *UnlockResult
+	if p.unlockDetector != nil {
+		unlockRes = p.unlockDetector.GetUnlock(node.IP)
+	}
+	if unlockRes == nil && node.Unlock != nil {
+		cp := *node.Unlock
+		unlockRes = &cp
+	}
+
+	tun := &Tunnel{
+		ID:             PrimaryUserlandTunnelID,
+		DevName:        devName,
+		DevIndex:       0,
+		Node:           node,
+		Status:         StatusConnected,
+		Message:        msg,
+		ConnectedAt:    time.Now(),
+		LatencyMs:      initialLatency,
+		IsUserland:     true,
+		Unlock:         unlockRes,
+		Dialer:         dialer,
+		OpenPacketConn: openPacketConn,
+		Closer:         closer,
+		done:           make(chan struct{}),
+	}
+	p.tunnels[PrimaryUserlandTunnelID] = tun
+	p.mu.Unlock()
+
+	stats.LogInfo("TunnelPool", "用户态免 TUN 主隧道 [%s] (%s) 已注册至统一池 (节点: %s)", PrimaryUserlandTunnelID, devName, node.ID)
+
+	if sessionDone != nil {
+		go func() {
+			<-sessionDone
+
+			tun.mu.Lock()
+			wasStopped := tun.Status == StatusStopped
+			connectedAt := tun.ConnectedAt
+			tunNode := tun.Node
+			if tun.Status == StatusConnecting || tun.Status == StatusConnected {
+				tun.Status = StatusFailed
+				tun.Message = "用户态主隧道连接已断开"
+			}
+			tun.mu.Unlock()
+
+			if p.nodePool != nil && tunNode != nil && !connectedAt.IsZero() {
+				uptimeSec := int64(time.Since(connectedAt).Seconds())
+				if rep := p.nodePool.Reputation(); rep != nil {
+					rep.RecordUptime(tunNode.IP, tunNode.ID, uptimeSec)
+					if uptimeSec < 180 && !wasStopped {
+						rep.RecordFail(tunNode.IP, tunNode.ID, true)
+					}
+				}
+			}
+
+			p.cleanupTunnel(tun, PrimaryUserlandTunnelID)
+		}()
+	}
+
+	return tun, nil
 }
 
 // StartPrimaryTunnel starts or replaces the dedicated Primary Connection tunnel, strictly bound to devIndex 0 (tun0).

@@ -62,13 +62,11 @@ type Config struct {
 	// Intervals & Limits
 	FetchInterval       time.Duration
 	CheckInterval       time.Duration
-	TargetValidNodes    int
 	MaxScanRows         int
 	NodeHotPoolSize     int
 	NodeStoreMaxSize    int
 	NodeMinPerCountry   int
 	NodeMajorCountryCap int
-	InvalidBackoff      time.Duration
 	DiscoveryCountries  []string
 
 	// 自动轮换策略
@@ -360,14 +358,12 @@ func LoadConfig() *Config {
 			return time.Duration(fetchSec) * time.Second
 		}(),
 		CheckInterval:       time.Duration(getEnvInt("CHECK_INTERVAL_SECONDS", 20, 5, 300)) * time.Second,
-		TargetValidNodes:    getEnvInt("TARGET_VALID_NODES", 5, 1, 50),
 		MaxScanRows:         getEnvInt("MAX_SCAN_ROWS", 1000, 10, 5000),
 		NodeHotPoolSize:     getEnvLimit("NODE_HOT_POOL_SIZE", DefaultNodeHotPoolSize, MinNodeHotPoolSize, MaxNodeHotPoolSize),
 		NodeStoreMaxSize:    getEnvLimit("NODE_STORE_MAX_SIZE", DefaultNodeStoreMaxSize, MinNodeStoreMaxSize, MaxNodeStoreMaxSize),
 		NodeMinPerCountry:   getEnvInt("NODE_MIN_PER_COUNTRY", DefaultNodeMinPerCountry, 0, MaxNodeMinPerCountry),
 		NodeMajorCountryCap: getEnvInt("NODE_MAJOR_COUNTRY_CAP", DefaultNodeMajorCountryCap, 0, MaxNodeMajorCountryCap),
-		InvalidBackoff:      time.Duration(getEnvInt("INVALID_BACKOFF_SECONDS", 1800, 60, 86400)) * time.Second,
-		DiscoveryCountries: countries,
+		DiscoveryCountries:  countries,
 
 		AutoRotateMinutes: getEnvInt("AUTO_ROTATE_INTERVAL_MINUTES", 0, 0, 1440),
 		AutoRotateIPType:  getEnv("AUTO_ROTATE_IP_TYPE", "all"),

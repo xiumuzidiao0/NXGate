@@ -219,6 +219,13 @@ func handleSocks5(client net.Conn, auth *Authenticator, devName string, tun *tun
 		return nil
 
 	case cmdUdpAssociate:
+		if uPacketConn != nil || (tun != nil && tun.IsUserland) {
+			udpDNSDialer := dialer
+			if udpDNSDialer == nil && tun != nil {
+				udpDNSDialer = tun.Dialer
+			}
+			return handleSocks5UDPAssociate(client, reqHeader[3], devName, tun, uPacketConn, udpDNSDialer)
+		}
 		return handleSocks5UDPAssociate(client, reqHeader[3], devName, tun, uPacketConn)
 
 	default:
@@ -554,25 +561,6 @@ func packSocks5UDPPacketInPlace(buf []byte, addr *net.UDPAddr, payloadLen int) [
 	if ip6 := addr.IP.To16(); ip6 != nil {
 		writeSocks5UDPHeader(buf[0:socks5UDPPacketHeadroom], addr)
 		return buf[0 : socks5UDPPacketHeadroom+payloadLen]
-	}
-	return nil
-}
-
-func packSocks5UDPPacket(addr *net.UDPAddr, data []byte) []byte {
-	if addr == nil {
-		return nil
-	}
-	if ip4 := addr.IP.To4(); ip4 != nil {
-		header := make([]byte, 10+len(data))
-		writeSocks5UDPHeader(header, addr)
-		copy(header[10:], data)
-		return header
-	}
-	if ip6 := addr.IP.To16(); ip6 != nil {
-		header := make([]byte, 22+len(data))
-		writeSocks5UDPHeader(header, addr)
-		copy(header[22:], data)
-		return header
 	}
 	return nil
 }
