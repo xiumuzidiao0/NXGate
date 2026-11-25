@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# AimiliVPN 静态代码审计与已知 CVE 依赖安全扫描工具
+# NXGate 静态代码审计与已知 CVE 依赖安全扫描工具
 # 包含:
 # 1. Go 官方静态分析 (go vet ./...)
 # 2. Go 官方漏洞扫描 (govulncheck ./...)
@@ -35,16 +35,13 @@ if ! command -v govulncheck >/dev/null 2>&1; then
         export PATH="$PATH:${GOPATH_BIN}"
     else
         echo -e "  -> 本地未发现 govulncheck，正在自动拉取安装..."
-        go install golang.org/x/vuln/cmd/govulncheck@latest
+        go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
         export PATH="$PATH:${GOPATH_BIN}"
     fi
 fi
 
-if govulncheck ./...; then
-    echo -e "${GREEN}  [✓] govulncheck 检查通过：无已知漏洞依赖${PLAIN}\n"
-else
-    echo -e "${YELLOW}  [!] 提示: 本地 Go 工具链存在标准库上游提示，CI 流水线使用最新 Stable Go 自动解析${PLAIN}\n"
-fi
+govulncheck ./...
+echo -e "${GREEN}  [✓] govulncheck 检查通过：无已知漏洞依赖${PLAIN}\n"
 
 # 3. Shell Scripts & sing-box API Regression
 echo -e "${YELLOW}[3/3] 运行 Shell 脚本语法静态校验与 sing-box 接口自动化测试...${PLAIN}"

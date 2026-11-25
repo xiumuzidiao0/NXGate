@@ -43,14 +43,26 @@ jobs:
             exit 1
           fi
 
+      - name: Run Offline Installer Regressions
+        run: |
+          bash -n install.sh
+          bash -n scripts/singbox/src/download.sh
+          shellcheck --severity=error install.sh scripts/singbox/src/download.sh
+          python3 scripts/tests/test_installer.py
+          python3 scripts/tests/test_downloads.py
+          bash scripts/test-security-cli.sh
+
       - name: Run Full Test Suite & Security Audit
         run: |
           go vet ./...
           go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
           govulncheck ./...
           go test -v -count=1 ./...
-          npm --prefix web install
+          npm --prefix web install --no-audit --no-fund
           npm --prefix web run build
+          git diff --exit-code web/dist/app.js
+          npm --prefix web run test:i18n
+          npm --prefix web run test:status
           npx --prefix web playwright install --with-deps chromium
           npm --prefix web run test:ui
 
@@ -60,11 +72,11 @@ jobs:
           distribution: "temurin"
           java-version: "21"
 
-      - name: Build Android Release APK
+      - name: Test & Build Android Release APK
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon
+          ./gradlew testDebugUnitTest assembleRelease --no-daemon
           cd ..
           cp -f android/app/build/outputs/apk/release/app-release.apk nxgate-release.apk
 

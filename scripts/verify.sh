@@ -147,7 +147,6 @@ sh_files=()
 while IFS= read -r -d '' f; do
     sh_files+=("$f")
 done < <(find . -maxdepth 4 \( -name "install.sh" -o -path "./scripts/*.sh" -o -path "./scripts/*/*.sh" \) -type f -print0)
-sh_files+=(".githooks/commit-msg" ".githooks/pre-push")
 for f in "${sh_files[@]}"; do
     if [ -f "$f" ]; then
         bash -n "$f"

@@ -141,9 +141,6 @@ detect_os() {
             PKG_MGR="apt-get"
             export DEBIAN_FRONTEND=noninteractive
             ;;
-        alpine)
-            PKG_MGR="apk"
-            ;;
         centos|rhel|rocky|almalinux|fedora|ol|amzn)
             if command -v dnf >/dev/null 2>&1; then
                 PKG_MGR="dnf"
@@ -245,9 +242,6 @@ install_dependencies() {
     if [ "$PKG_MGR" = "apt-get" ]; then
         apt-get update -q || true
         apt-get install -y jq openvpn curl git ca-certificates iptables iproute2 psmisc
-    elif [ "$PKG_MGR" = "apk" ]; then
-        apk update || true
-        apk add jq openvpn curl git ca-certificates iptables iproute2 psmisc bash
     elif [ "$PKG_MGR" = "dnf" ] || [ "$PKG_MGR" = "yum" ]; then
         if [ "$OS_TYPE" != "fedora" ] && [ "$OS_TYPE" != "amzn" ]; then
             $PKG_MGR install -y epel-release || true
@@ -375,7 +369,7 @@ install_verified_go() {
 # 辅助生成随机字符串与密码 (连续流式读取，消除熵池截断)
 rand_str() {
     local len="${1:-8}"
-    LC_ALL=C tr -dc 'A-Za-z0-9' < /dev/urandom 2>/dev/null | head -c "$len" || echo "aimili"
+    LC_ALL=C tr -dc 'A-Za-z0-9' < /dev/urandom 2>/dev/null | head -c "$len" || echo "nxgate"
 }
 
 rand_pass() {
@@ -581,7 +575,6 @@ LOCAL_PROXY_PORT=${custom_proxy_port}
 LOCAL_PROXY_MAX_CONNECTIONS=512
 CHECK_INTERVAL_SECONDS=20
 FETCH_INTERVAL_SECONDS=900
-TARGET_VALID_NODES=5
 EOF
     chmod 600 "${CONFIG_FILE}"
 }
@@ -629,9 +622,6 @@ build_and_deploy() {
 
     # 部署本地兜底镜像
     mkdir -p "${INSTALL_DIR}/mirror"
-    if [ -f "${SCRIPT_DIR}/mirror/vpngate.csv" ]; then
-        cp -f "${SCRIPT_DIR}/mirror/vpngate.csv" "${INSTALL_DIR}/mirror/" 2>/dev/null || true
-    fi
     if [ ! -f "${INSTALL_DIR}/mirror/vpngate.csv" ] || [ ! -s "${INSTALL_DIR}/mirror/vpngate.csv" ]; then
         echo -e "  -> $(msg '正在下载初始节点快照镜像...' 'Downloading initial node snapshot mirror...')"
         local mirror_csv_urls=(
@@ -1167,8 +1157,6 @@ menu_update() {
                 cp -f "${TMP_DIR}/install.sh" "${INSTALL_DIR}/install.sh" 2>/dev/null || true
                 chmod +x "${INSTALL_DIR}/install.sh" 2>/dev/null || true
                 cp -f "${TMP_DIR}/VERSION" "${INSTALL_DIR}/VERSION" 2>/dev/null || true
-                mkdir -p "${INSTALL_DIR}/mirror"
-                cp -f "${TMP_DIR}/mirror/vpngate.csv" "${INSTALL_DIR}/mirror/" 2>/dev/null || true
                 register_shortcuts
                 systemctl restart nxgate 2>/dev/null || systemctl restart aimilivpn 2>/dev/null || true
                 echo -e "\n${GREEN}🎉 $(msg '源码就地编译更新完成并已重启服务！' 'Built update from source and restarted service!') (v$(get_app_version))${PLAIN}"
@@ -1196,7 +1184,7 @@ menu_uninstall() {
         systemctl disable aimilivpn 2>/dev/null || true
         rm -f "${SERVICE_FILE}" /etc/systemd/system/aimilivpn.service
         systemctl daemon-reload
-        rm -f /usr/local/bin/nxgate /usr/bin/nxgate /usr/local/bin/nx /usr/bin/nx /usr/local/bin/aimilivpn /usr/bin/aimilivpn /usr/local/bin/ml /usr/bin/ml /usr/bin/aimili
+        rm -f /usr/local/bin/nxgate /usr/bin/nxgate /usr/local/bin/nx /usr/bin/nx /usr/local/bin/aimilivpn /usr/bin/aimilivpn /usr/local/bin/ml /usr/bin/ml /usr/local/bin/aimili /usr/bin/aimili
         rm -rf "${INSTALL_DIR}" /opt/aimilivpn 2>/dev/null || true
 
         if type -P sing-box &>/dev/null || [ -d "/etc/sing-box" ]; then
@@ -1333,18 +1321,10 @@ do_install_singbox() {
     local need_pkgs=()
     type -P jq &>/dev/null || need_pkgs+=("jq")
     type -P tar &>/dev/null || need_pkgs+=("tar")
-    if [ "$OS_TYPE" = "alpine" ]; then
-        type -P gcompat &>/dev/null || need_pkgs+=("gcompat")
-    fi
     if [ ${#need_pkgs[@]} -gt 0 ]; then
         echo -e "  -> $(msg '正在安装基础依赖' 'Installing base dependencies'): ${need_pkgs[*]} ..."
         if [ -n "$PKG_MGR" ]; then
-            if [ "$PKG_MGR" = "apk" ]; then
-                apk update &>/dev/null || true
-                apk add "${need_pkgs[@]}" &>/dev/null || true
-            else
-                $PKG_MGR install -y "${need_pkgs[@]}" &>/dev/null || true
-            fi
+            $PKG_MGR install -y "${need_pkgs[@]}" &>/dev/null || true
         fi
     fi
 
@@ -1867,9 +1847,14 @@ main() {
     fi
     require_systemd
     case "${1:-}" in
-        start) systemctl start nxgate; return ;;
-        stop) systemctl stop nxgate; return ;;
-        restart) systemctl restart nxgate; return ;;
+        start|stop|restart)
+            if [ ! -f "${SERVICE_FILE}" ] && [ -f /etc/systemd/system/aimilivpn.service ]; then
+                systemctl "$1" aimilivpn
+            else
+                systemctl "$1" nxgate
+            fi
+            return
+            ;;
         ""|menu|update|upgrade|9|install) ;;
         *) echo "$(msg "未知命令: $1" "Unknown command: $1")" >&2; return 1 ;;
     esac

@@ -1,15 +1,13 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# AimiliVPN 自动化发布辅助脚本
-# 用法: ./scripts/release.sh <版本号，例如 2.5.2>
+# NXGate 自动化发布辅助脚本
+# 用法: ./scripts/release.sh <版本号，例如 2.6.6>
 # 流程:
-# 1. 检查 Git 工作区状态
-# 2. 全项目版本号自动同步
-# 3. 运行静态代码与依赖安全审计 (go vet + govulncheck)
-# 4. 运行 Go 后端单元与集成测试 (go test)
-# 5. 运行 WebUI 多端无头浏览器测试 (playwright)
-# 6. 自动提交版本变更、打 Tag 并推送到远程
-# 7. 触发 GitHub Actions 自动化编译与 Release 产物发布
+# 1. 检查 Git 分支状态
+# 2. 全项目版本号与 Android versionCode 自动同步
+# 3. 运行统一全量门禁 verify.sh --all (静态检查、Go 测试、WebUI、Android 单测)
+# 4. 自动提交版本变更、打 Tag 并推送到远程
+# 5. 触发 GitHub Actions 自动化编译与 Release 产物发布
 # ==============================================================================
 
 set -e
@@ -60,34 +58,25 @@ if [ "$CURRENT_BRANCH" != "main" ]; then
 fi
 
 # 2. 同步全工程版本
-echo -e "\n${YELLOW}[1/5] 同步全项目 4 处版本定义...${PLAIN}"
-./scripts/check-version.sh --set "$TARGET_VER"
+echo -e "\n${YELLOW}[1/4] 同步全项目 5 处版本定义与 Android versionCode...${PLAIN}"
+./scripts/check-version.sh --set "$TARGET_VER" --bump-code
 
-# 3. 运行代码与依赖安全审计
-echo -e "\n${YELLOW}[2/5] 执行静态代码与依赖安全审计...${PLAIN}"
-./scripts/audit.sh
+# 3. 运行全量统一门禁
+echo -e "\n${YELLOW}[2/4] 执行全量验证门禁 (verify.sh --all)...${PLAIN}"
+./scripts/verify.sh --all
+echo -e "${GREEN}  [✓] 全套自动化验证通过！${PLAIN}"
 
-# 4. 运行全量测试套件
-echo -e "\n${YELLOW}[3/5] 运行 Go 全量子包测试与 WebUI 视口测试...${PLAIN}"
-go test -count=1 ./...
-if command -v npm >/dev/null 2>&1 && [ -f "web/package.json" ]; then
-    npm --prefix web run test:ui
-fi
-echo -e "${GREEN}  [✓] 全套自动化测试通过！${PLAIN}"
-
-# 5. 提交版本变更与打标签
-echo -e "\n${YELLOW}[4/5] 提交版本变更并创建 Git Tag (v${TARGET_VER})...${PLAIN}"
+# 4. 提交版本变更与打标签
+echo -e "\n${YELLOW}[3/4] 提交版本变更并创建 Git Tag (v${TARGET_VER})...${PLAIN}"
 git add VERSION pkg/config/version.go install.sh web/dist/index.html android/app/build.gradle.kts
 if ! git diff --cached --quiet; then
-    git commit -m "chore(release): bump version to v${TARGET_VER}
-
-Co-Authored-By: Claude Code <noreply@anthropic.com>"
+    git commit -m "chore(release): bump version to v${TARGET_VER}"
 fi
 
 git tag -a "v${TARGET_VER}" -m "Release v${TARGET_VER}" -f
 
-# 6. 推送并触发流水线
-echo -e "\n${YELLOW}[5/5] 推送代码与 Tag 到远程仓库...${PLAIN}"
+# 5. 推送并触发流水线
+echo -e "\n${YELLOW}[4/4] 推送代码与 Tag 到远程仓库...${PLAIN}"
 read -p "确认推送到远程并触发 GitHub Actions 自动构建与发布？(Y/n): " confirm_push
 if [[ "$confirm_push" =~ ^[nN]$ ]]; then
     echo -e "${YELLOW}已取消推送。本地已打好 Tag: v${TARGET_VER}，稍后可手动执行:${PLAIN}"
@@ -100,6 +89,6 @@ git push origin "v${TARGET_VER}" -f
 
 echo -e "\n${GREEN}==================================================================${PLAIN}"
 echo -e "${GREEN}🎉 [Release] v${TARGET_VER} 代码与标签已成功推送到远程！${PLAIN}"
-echo -e "${BLUE}GitHub Actions 将自动执行多架构交叉编译、生成哈希并在 Releases 中发布 9 个完整产物。${PLAIN}"
+echo -e "${BLUE}GitHub Actions 将自动执行多架构交叉编译、生成哈希并在 Releases 中发布 10 个完整产物。${PLAIN}"
 echo -e "监控构建流水线: ${YELLOW}https://github.com/xiumuzidiao0/NXGate/actions${PLAIN}"
 echo -e "${GREEN}==================================================================${PLAIN}\n"

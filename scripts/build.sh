@@ -20,12 +20,12 @@ for TARGET in "${TARGETS[@]}"; do
     ARCH="${TARGET#*/}"
     OUTPUT="dist/nxgate_${OS}_${ARCH}"
     echo "-> 正在编译 ${TARGET} ..."
-    CGO_ENABLED=0 GOOS="$OS" GOARCH="$ARCH" go build -ldflags="-s -w" -o "$OUTPUT" ./cmd/nxgate
+    CGO_ENABLED=0 GOOS="$OS" GOARCH="$ARCH" go build -trimpath -ldflags="-s -w" -o "$OUTPUT" ./cmd/nxgate
     gzip -kf "$OUTPUT"
 done
 
 echo "-> 正在生成 SHA256 校验和清单..."
-(cd dist && rm -f aimilivpn_* && sha256sum nxgate_* > SHA256SUMS.txt)
+(cd dist && sha256sum nxgate_* > SHA256SUMS.txt)
 
 echo "=== 编译完成，产物位于 dist/ 目录 ==="
 ls -lh dist/

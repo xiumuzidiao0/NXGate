@@ -1,7 +1,6 @@
 # Binaries and release builds
 /bin/
 /dist/
-aimili-vpngate
 *.exe
 *.apk
 *.test
