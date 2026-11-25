@@ -94,7 +94,7 @@ jobs:
   android-test:
     name: Android Unit Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -108,7 +108,9 @@ jobs:
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew testDebugUnitTest --no-daemon
+          ./gradlew testDebugUnitTest --no-daemon --max-workers=2 \
+            -Dorg.gradle.internal.http.connectionTimeout=60000 \
+            -Dorg.gradle.internal.http.socketTimeout=60000
 
   network-integration:
     if: github.event_name == 'workflow_dispatch' && inputs.network_integration
