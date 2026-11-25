@@ -7,69 +7,70 @@ import (
 	"time"
 )
 
-type mockRawSender struct {
-	sentPackets [][]byte
-}
-
 func TestUDPConnReadWrite(t *testing.T) {
-	localIP := net.ParseIP("10.211.1.2")
-	remoteIP := net.ParseIP("8.8.8.8")
-	tun := &Tunnel{
-		assignedIP: localIP,
-		udpConns:   make(map[uint16]*UDPConn),
+	bridge := newSSTPPeerBridge(t, sstpBridgeOpts{})
+	defer bridge.Close()
+
+	peerIP := net.ParseIP("8.8.8.8")
+	srvUDP, err := bridge.listenPeerUDP(peerIP, 53)
+	if err != nil {
+		t.Fatalf("listenPeerUDP failed: %v", err)
 	}
+	defer srvUDP.Close()
 
-	uConn := newUDPConn(tun, localIP, 54321)
-	tun.udpConns[54321] = uConn
-
-	// 1. Simulate incoming UDP packet
-	payload := []byte("dns response payload")
-	incoming := &ParsedUDPPacket{
-		SrcIP:   remoteIP,
-		DstIP:   localIP,
-		SrcPort: 53,
-		DstPort: 54321,
-		Payload: payload,
-	}
-
+	expected := []byte("dns response payload")
 	go func() {
-		time.Sleep(10 * time.Millisecond)
-		uConn.handleIncoming(incoming)
+		buf := make([]byte, 512)
+		n, from, rerr := srvUDP.ReadFrom(buf)
+		if rerr != nil {
+			return
+		}
+		if bytes.Equal(buf[:n], []byte("ping-query")) {
+			_, _ = srvUDP.WriteTo(expected, from)
+		}
 	}()
 
+	uConn, err := bridge.tun.OpenPacketConn()
+	if err != nil {
+		t.Fatalf("OpenPacketConn failed: %v", err)
+	}
+
+	// 1. Verify LocalAddr uses tunnel's assigned IPv4 and ephemeral port
+	lAddr := uConn.LocalAddr().(*net.UDPAddr)
+	if !lAddr.IP.Equal(bridge.tun.assignedIP) || lAddr.Port == 0 {
+		t.Fatalf("unexpected local addr: %v", lAddr)
+	}
+
+	// 2. Round-trip UDP packet over SSTP + gVisor netstack
+	if _, err := uConn.WriteTo([]byte("ping-query"), &net.UDPAddr{IP: peerIP, Port: 53}); err != nil {
+		t.Fatalf("WriteTo failed: %v", err)
+	}
+
 	buf := make([]byte, 1024)
+	_ = uConn.SetReadDeadline(time.Now().Add(2 * time.Second))
 	n, addr, err := uConn.ReadFrom(buf)
 	if err != nil {
 		t.Fatalf("ReadFrom failed: %v", err)
 	}
-	if n != len(payload) || !bytes.Equal(buf[:n], payload) {
-		t.Fatalf("unexpected data: %s", buf[:n])
+	if n != len(expected) || !bytes.Equal(buf[:n], expected) {
+		t.Fatalf("unexpected data: %q", buf[:n])
 	}
 	udpAddr, ok := addr.(*net.UDPAddr)
-	if !ok || !udpAddr.IP.Equal(remoteIP) || udpAddr.Port != 53 {
+	if !ok || !udpAddr.IP.Equal(peerIP) || udpAddr.Port != 53 {
 		t.Fatalf("unexpected remote addr: %v", addr)
 	}
 
-	// 2. Test LocalAddr
-	lAddr := uConn.LocalAddr().(*net.UDPAddr)
-	if !lAddr.IP.Equal(localIP) || lAddr.Port != 54321 {
-		t.Fatalf("unexpected local addr: %v", lAddr)
-	}
-
 	// 3. Test Deadline Timeout
-	err = uConn.SetReadDeadline(time.Now().Add(20 * time.Millisecond))
-	if err != nil {
+	if err := uConn.SetReadDeadline(time.Now().Add(20 * time.Millisecond)); err != nil {
 		t.Fatalf("SetReadDeadline failed: %v", err)
 	}
-	_, _, err = uConn.ReadFrom(buf)
-	if err == nil {
+	if _, _, err := uConn.ReadFrom(buf); err == nil {
 		t.Fatalf("expected timeout error, got nil")
 	}
 
 	// 4. Test Close
 	_ = uConn.Close()
-	_, _, err = uConn.ReadFrom(buf)
-	if err == nil {
+	if _, _, err := uConn.ReadFrom(buf); err == nil {
 		t.Fatalf("expected error on closed connection, got nil")
 	}
 }

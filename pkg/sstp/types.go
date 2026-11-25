@@ -16,9 +16,10 @@ var (
 
 const (
 	DefaultConnectTimeout = 15 * time.Second
+	DefaultDialTimeout    = 10 * time.Second
 	DefaultWriteTimeout   = 10 * time.Second
 	DefaultEchoInterval   = 20 * time.Second
-	DefaultTCPMSS         = 1360
+	DefaultTunnelMTU      = 1400
 
 	// DefaultIdleTimeout bounds how long a tunnel may stay completely silent
 	// before it is treated as dead. The keepalive loop sends an SSTP echo every
@@ -83,13 +84,4 @@ const (
 // IPCP Options
 const (
 	IPCPOptIPAddress = 3
-)
-
-// TCP Flags
-const (
-	TCPFlagFIN = 0x01
-	TCPFlagSYN = 0x02
-	TCPFlagRST = 0x04
-	TCPFlagPSH = 0x08
-	TCPFlagACK = 0x10
 )

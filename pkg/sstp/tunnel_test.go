@@ -198,9 +198,6 @@ func TestIsHealthyHonoursIdleTimeout(t *testing.T) {
 	tun := &Tunnel{
 		assignedIP: net.ParseIP("10.211.1.7"),
 		closeCh:    make(chan struct{}),
-		sessions:   make(map[uint32]*TCPConn),
-		udpConns:   make(map[uint16]*UDPConn),
-		pending:    make(map[uint16]*pendingHandshake),
 	}
 	defer tun.Close()
 
@@ -230,9 +227,6 @@ func TestDialRejectsStaleTunnel(t *testing.T) {
 	tun := &Tunnel{
 		assignedIP: net.ParseIP("10.211.1.7"),
 		closeCh:    make(chan struct{}),
-		sessions:   make(map[uint32]*TCPConn),
-		udpConns:   make(map[uint16]*UDPConn),
-		pending:    make(map[uint16]*pendingHandshake),
 	}
 	defer tun.Close()
 
@@ -259,7 +253,9 @@ func TestHandlePPPControlAnswersLCPEcho(t *testing.T) {
 	defer server.Close()
 
 	tun := server.newTunnel(t)
+	tun.ctrlTxCh = make(chan []byte, 64)
 	defer tun.Close()
+	go tun.writeLoop()
 	go tun.readLoop()
 
 	// Server asks for an LCP echo the way a SoftEther relay does.
@@ -286,9 +282,6 @@ func TestHandlePPPControlTerminateIsFatal(t *testing.T) {
 	tun := &Tunnel{
 		assignedIP: net.ParseIP("10.211.1.7"),
 		closeCh:    make(chan struct{}),
-		sessions:   make(map[uint32]*TCPConn),
-		udpConns:   make(map[uint16]*UDPConn),
-		pending:    make(map[uint16]*pendingHandshake),
 	}
 	defer tun.Close()
 
@@ -390,9 +383,6 @@ func (lb *pppLoopback) newTunnel(t *testing.T) *Tunnel {
 		port:       443,
 		assignedIP: net.ParseIP("10.211.1.7"),
 		tlsConn:    lb.client,
-		sessions:   make(map[uint32]*TCPConn),
-		udpConns:   make(map[uint16]*UDPConn),
-		pending:    make(map[uint16]*pendingHandshake),
 		closeCh:    make(chan struct{}),
 	}
 }
@@ -454,109 +444,164 @@ func (lb *pppLoopback) readIPv4Frame(t *testing.T, timeout time.Duration) []byte
 	return body[4:]
 }
 
-func TestTunnelReadLoopAndTxBufReuseNoAliasing(t *testing.T) {
+func TestTunnelNetstackLoopbackTCPAndUDP(t *testing.T) {
+	bridge := newSSTPPeerBridge(t, sstpBridgeOpts{})
+	defer bridge.Close()
+
+	// Start a TCP echo listener inside the peer netstack on 93.184.216.34:80
+	peerTCPAddr := net.ParseIP("93.184.216.34")
+	ln, err := bridge.listenPeerTCP(peerTCPAddr, 80)
+	if err != nil {
+		t.Fatalf("listenPeerTCP failed: %v", err)
+	}
+	defer ln.Close()
+	go func() {
+		for {
+			c, aerr := ln.Accept()
+			if aerr != nil {
+				return
+			}
+			go func(conn net.Conn) {
+				defer conn.Close()
+				_, _ = io.Copy(conn, conn)
+			}(c)
+		}
+	}()
+
+	// Start a UDP echo listener inside the peer netstack on 8.8.8.8:5353
+	peerUDPAddr := net.ParseIP("8.8.8.8")
+	uSrv, err := bridge.listenPeerUDP(peerUDPAddr, 5353)
+	if err != nil {
+		t.Fatalf("listenPeerUDP failed: %v", err)
+	}
+	defer uSrv.Close()
+	go func() {
+		buf := make([]byte, 2048)
+		for {
+			n, from, rerr := uSrv.ReadFrom(buf)
+			if rerr != nil {
+				return
+			}
+			_, _ = uSrv.WriteTo(buf[:n], from)
+		}
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Concurrent UDP & TCP roundtrips over writeLoop + readLoop
+	pconn, err := bridge.tun.OpenPacketConn()
+	if err != nil {
+		t.Fatalf("OpenPacketConn failed: %v", err)
+	}
+	defer pconn.Close()
+
+	for _, payload := range []string{"UDP-FIRST-LONGER-PAYLOAD", "UDP-TWO"} {
+		if _, err := pconn.WriteTo([]byte(payload), &net.UDPAddr{IP: peerUDPAddr, Port: 5353}); err != nil {
+			t.Fatalf("UDP WriteTo failed: %v", err)
+		}
+		buf := make([]byte, 128)
+		_ = pconn.SetReadDeadline(time.Now().Add(2 * time.Second))
+		n, _, err := pconn.ReadFrom(buf)
+		if err != nil || string(buf[:n]) != payload {
+			t.Fatalf("UDP echo mismatch: got %q err=%v want %q", string(buf[:n]), err, payload)
+		}
+	}
+
+	tcpConn, err := bridge.tun.Dial(ctx, "tcp", "93.184.216.34:80")
+	if err != nil {
+		t.Fatalf("tunnel Dial failed: %v", err)
+	}
+	defer tcpConn.Close()
+
+	msg := "TCP-ONE-TCP-TWO-NETSTACK-OK"
+	if _, err := tcpConn.Write([]byte(msg)); err != nil {
+		t.Fatalf("TCP write failed: %v", err)
+	}
+	tBuf := make([]byte, len(msg))
+	_ = tcpConn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	if _, err := io.ReadFull(tcpConn, tBuf); err != nil || string(tBuf) != msg {
+		t.Fatalf("TCP stream mismatch: %q err=%v", string(tBuf), err)
+	}
+}
+
+func TestPerformHandshakeRespectsContextCancel(t *testing.T) {
 	lb := newLoopbackPPP(t)
 	defer lb.Close()
+
+	// Drain client's handshake write so Write succeeds, then intentionally never reply.
+	go func() {
+		buf := make([]byte, 1024)
+		for {
+			if _, err := lb.srv.Read(buf); err != nil {
+				return
+			}
+		}
+	}()
 
 	tun := lb.newTunnel(t)
 	defer tun.Close()
 
-	remoteTCP := net.ParseIP("93.184.216.34")
-	tcpConn := newTCPConn(tun, tun.assignedIP, remoteTCP, 45100, 80, 1000, 2000)
-	sessKey := (uint32(45100) << 16) | uint32(80)
-	tun.mu.Lock()
-	tun.sessions[sessKey] = tcpConn
-	tun.mu.Unlock()
+	ctx, cancel := context.WithTimeout(context.Background(), 80*time.Millisecond)
+	defer cancel()
 
-	pktConn, err := tun.OpenPacketConn()
-	if err != nil {
-		t.Fatalf("OpenPacketConn failed: %v", err)
+	start := time.Now()
+	err := tun.performHandshake(ctx)
+	elapsed := time.Since(start)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected context.DeadlineExceeded, got %v", err)
 	}
-	uConn := pktConn.(*UDPConn)
+	if elapsed > 500*time.Millisecond {
+		t.Fatalf("performHandshake blocked past context deadline: %s", elapsed)
+	}
+}
 
-	go tun.readLoop()
+func TestPerformHandshakeIgnoresMalformedPPPFrames(t *testing.T) {
+	lb := newLoopbackPPP(t)
+	defer lb.Close()
 
-	// Write two UDP packets and two TCP segments back-to-back into rxLoop before consumer reads.
-	dns1 := BuildIPv4UDPPacket(net.ParseIP("8.8.8.8"), tun.assignedIP, 53, uConn.localPort, []byte("UDP-FIRST-LONGER-PAYLOAD"))
-	dns2 := BuildIPv4UDPPacket(net.ParseIP("1.1.1.1"), tun.assignedIP, 53, uConn.localPort, []byte("UDP-TWO"))
-	tcp1 := BuildIPv4TCPPacket(remoteTCP, tun.assignedIP, 80, 45100, 2000, 1000, TCPFlagACK|TCPFlagPSH, []byte("TCP-ONE-"))
-	tcp2 := BuildIPv4TCPPacket(remoteTCP, tun.assignedIP, 80, 45100, 2008, 1000, TCPFlagACK|TCPFlagPSH, []byte("TCP-TWO"))
+	go func() {
+		buf := make([]byte, 2048)
+		_, _ = lb.srv.Read(buf)
+		_, _ = lb.Write([]byte("HTTP/1.1 200 OK\r\nContent-Length: 18446744073709551615\r\n\r\n"))
 
-	var batch []byte
-	batch = append(batch, dns1...)
-	batch = append(batch, dns2...)
-	batch = append(batch, tcp1...)
-	batch = append(batch, tcp2...)
-	if _, err := lb.Write(batch); err != nil {
-		t.Fatalf("loopback write failed: %v", err)
-	}
+		// 1. Short PPP frame after HDLC (only 4 bytes total -> len(payload)==2)
+		shortPPP := BuildDataPacket([]byte{0xc0, 0x21, 0x01, 0x01})
+		// 2. LCP Configure-Request with plen = 0
+		zeroPlen := BuildDataPacket([]byte{0xc0, 0x21, PPPCodeConfigureRequest, 1, 0x00, 0x00})
+		// 3. LCP Configure-Request with plen = 0xffff (> len(payload))
+		hugePlen := BuildDataPacket([]byte{0xc0, 0x21, PPPCodeConfigureRequest, 2, 0xff, 0xff, 0x01})
+		_, _ = lb.Write(append(append(shortPPP, zeroPlen...), hugePlen...))
+		_ = lb.srv.Close()
+	}()
 
-	_ = uConn.SetReadDeadline(time.Now().Add(2 * time.Second))
-	uBuf := make([]byte, 128)
-	n1, _, err := uConn.ReadFrom(uBuf)
-	if err != nil || string(uBuf[:n1]) != "UDP-FIRST-LONGER-PAYLOAD" {
-		t.Fatalf("first UDP payload corrupted/aliased: %q err=%v", string(uBuf[:n1]), err)
-	}
-	n2, _, err := uConn.ReadFrom(uBuf)
-	if err != nil || string(uBuf[:n2]) != "UDP-TWO" {
-		t.Fatalf("second UDP payload mismatch: %q err=%v", string(uBuf[:n2]), err)
-	}
+	tun := lb.newTunnel(t)
+	defer tun.Close()
 
-	_ = tcpConn.SetReadDeadline(time.Now().Add(2 * time.Second))
-	tBuf := make([]byte, 15)
-	if _, err := io.ReadFull(tcpConn, tBuf); err != nil || string(tBuf) != "TCP-ONE-TCP-TWO" {
-		t.Fatalf("TCP stream mismatch: %q err=%v", string(tBuf), err)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	err := tun.performHandshake(ctx)
+	if err == nil {
+		t.Fatal("expected error after EOF without IPCP completion, got nil")
 	}
+}
 
-	// Verify txBuf reuse for multiple outgoing TCP & UDP writes produces valid checksums and distinct headers.
-	if _, err := tcpConn.Write([]byte("OUT-TCP-A")); err != nil {
-		t.Fatalf("tcpConn write A failed: %v", err)
+func TestKeepAliveLoopSelfClosesStaleTunnel(t *testing.T) {
+	tun := &Tunnel{
+		host:       "127.0.0.1",
+		port:       443,
+		assignedIP: net.ParseIP("10.211.1.7"),
+		lastRecv:   time.Now().Add(-DefaultIdleTimeout - time.Second),
+		closeCh:    make(chan struct{}),
+		ctrlTxCh:   make(chan []byte, 4),
 	}
-	if _, err := tcpConn.Write([]byte("OUT-TCP-B")); err != nil {
-		t.Fatalf("tcpConn write B failed: %v", err)
-	}
-	if _, err := uConn.WriteTo([]byte("OUT-UDP-1"), &net.UDPAddr{IP: net.ParseIP("8.8.8.8"), Port: 53}); err != nil {
-		t.Fatalf("uConn write 1 failed: %v", err)
-	}
-	if _, err := uConn.WriteTo([]byte("OUT-UDP-2"), &net.UDPAddr{IP: net.ParseIP("1.1.1.1"), Port: 53}); err != nil {
-		t.Fatalf("uConn write 2 failed: %v", err)
-	}
+	defer tun.Close()
 
-	var gotPayloads []string
-	deadline := time.Now().Add(2 * time.Second)
-	for len(gotPayloads) < 4 && time.Now().Before(deadline) {
-		ipPkt := lb.readIPv4Frame(t, 2*time.Second)
-		// Validate IPv4 checksum was recomputed cleanly on reused txBuf
-		if InternetChecksum(ipPkt, 0, 20) != 0 {
-			t.Fatalf("invalid IPv4 header checksum on reused txBuf: %x", ipPkt[:20])
-		}
-		switch ipPkt[9] {
-		case 6:
-			p, err := ParseIncomingIPv4TCP(ipPkt)
-			if err != nil {
-				t.Fatalf("parse outgoing TCP failed: %v", err)
-			}
-			// Skip pure ACK control frames triggered by delayed ACK
-			if len(p.Payload) > 0 {
-				if tcpChecksum(p.SrcIP.To4(), p.DstIP.To4(), ipPkt[20:]) != 0 {
-					t.Fatalf("invalid TCP checksum on reused txBuf")
-				}
-				gotPayloads = append(gotPayloads, string(p.Payload))
-			}
-		case 17:
-			p, err := ParseIncomingIPv4UDP(ipPkt)
-			if err != nil {
-				t.Fatalf("parse outgoing UDP failed: %v", err)
-			}
-			if udpChecksum(p.SrcIP.To4(), p.DstIP.To4(), ipPkt[20:]) != 0xffff {
-				t.Fatalf("invalid UDP checksum on reused txBuf")
-			}
-			gotPayloads = append(gotPayloads, string(p.Payload))
-		}
-	}
+	go tun.runKeepAlive(10 * time.Millisecond)
 
-	joined := strings.Join(gotPayloads, "|")
-	if joined != "OUT-TCP-A|OUT-TCP-B|OUT-UDP-1|OUT-UDP-2" {
-		t.Fatalf("unexpected outgoing payloads on reused txBuf: %q", joined)
+	select {
+	case <-tun.Done():
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("expected runKeepAlive to close stale tunnel promptly")
 	}
 }

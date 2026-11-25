@@ -6,87 +6,41 @@ import (
 	"net"
 	"sync"
 	"time"
+
+	"gvisor.dev/gvisor/pkg/tcpip/adapters/gonet"
 )
 
-// UDPConn implements net.PacketConn for Userland UDP over SSTP PPP link.
+// UDPConn wraps gVisor gonet.UDPConn while preserving resolved-IP-only egress invariants.
 type UDPConn struct {
-	tun           *Tunnel
-	localIP       net.IP
-	localPort     uint16
-	inCh          chan *ParsedUDPPacket
-	closeOnce     sync.Once
-	closed        chan struct{}
-	readDeadline  time.Time
-	writeDeadline time.Time
-	mu            sync.RWMutex
+	conn      *gonet.UDPConn
+	closeOnce sync.Once
+	closed    chan struct{}
 }
 
-func newUDPConn(tun *Tunnel, localIP net.IP, localPort uint16) *UDPConn {
+func newUDPConn(conn *gonet.UDPConn) *UDPConn {
 	return &UDPConn{
-		tun:       tun,
-		localIP:   localIP,
-		localPort: localPort,
-		inCh:      make(chan *ParsedUDPPacket, 256),
-		closed:    make(chan struct{}),
+		conn:   conn,
+		closed: make(chan struct{}),
 	}
 }
 
-func (u *UDPConn) handleIncoming(pkt *ParsedUDPPacket) {
-	select {
-	case <-u.closed:
-	case u.inCh <- pkt:
-	default:
-		// Queue full, drop packet per standard UDP best-effort semantics
-	}
-}
-
-func (u *UDPConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
-	u.mu.RLock()
-	deadline := u.readDeadline
-	u.mu.RUnlock()
-
-	var timer *time.Timer
-	var timeoutCh <-chan time.Time
-	if !deadline.IsZero() {
-		dur := time.Until(deadline)
-		if dur <= 0 {
-			return 0, nil, errors.New("i/o timeout")
-		}
-		timer = time.NewTimer(dur)
-		defer timer.Stop()
-		timeoutCh = timer.C
-	}
-
+func (u *UDPConn) ReadFrom(p []byte) (int, net.Addr, error) {
 	select {
 	case <-u.closed:
 		return 0, nil, errors.New("use of closed network connection")
-	case <-timeoutCh:
-		return 0, nil, errors.New("i/o timeout")
-	case pkt, ok := <-u.inCh:
-		if !ok {
-			return 0, nil, errors.New("use of closed network connection")
-		}
-		n = copy(p, pkt.Payload)
-		srcAddr := &net.UDPAddr{
-			IP:   pkt.SrcIP,
-			Port: int(pkt.SrcPort),
-		}
-		return n, srcAddr, nil
+	default:
 	}
+	if u.conn == nil {
+		return 0, nil, errors.New("use of closed network connection")
+	}
+	return u.conn.ReadFrom(p)
 }
 
-func (u *UDPConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
+func (u *UDPConn) WriteTo(p []byte, addr net.Addr) (int, error) {
 	select {
 	case <-u.closed:
 		return 0, errors.New("use of closed network connection")
 	default:
-	}
-
-	u.mu.RLock()
-	deadline := u.writeDeadline
-	u.mu.RUnlock()
-	if !deadline.IsZero() && time.Now().After(deadline) {
-		return 0, errors.New("i/o timeout")
 	}
 
 	// PacketConn destinations must already be resolved by the selected egress.
@@ -95,51 +49,57 @@ func (u *UDPConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	if !ok || udpAddr == nil {
 		return 0, fmt.Errorf("UDP destination must be a resolved *net.UDPAddr")
 	}
-
 	if udpAddr.IP == nil {
 		return 0, errors.New("nil destination IP")
 	}
-
-	if err := u.tun.sendUDP(u.localIP, udpAddr.IP, u.localPort, uint16(udpAddr.Port), p); err != nil {
-		return 0, err
+	ip4 := udpAddr.IP.To4()
+	if ip4 == nil {
+		return 0, fmt.Errorf("SSTP UDP supports IPv4 targets only")
+	}
+	if u.conn == nil {
+		return 0, errors.New("use of closed network connection")
 	}
 
-	return len(p), nil
+	return u.conn.WriteTo(p, &net.UDPAddr{IP: ip4, Port: udpAddr.Port})
 }
 
 func (u *UDPConn) Close() error {
+	var err error
 	u.closeOnce.Do(func() {
-		close(u.closed)
-		u.tun.removeUDPConn(u.localPort)
+		if u.closed != nil {
+			close(u.closed)
+		}
+		if u.conn != nil {
+			err = u.conn.Close()
+		}
 	})
-	return nil
+	return err
 }
 
 func (u *UDPConn) LocalAddr() net.Addr {
-	return &net.UDPAddr{
-		IP:   u.localIP,
-		Port: int(u.localPort),
+	if u.conn != nil {
+		return u.conn.LocalAddr()
 	}
+	return nil
 }
 
 func (u *UDPConn) SetDeadline(t time.Time) error {
-	u.mu.Lock()
-	defer u.mu.Unlock()
-	u.readDeadline = t
-	u.writeDeadline = t
-	return nil
+	if u.conn == nil {
+		return errors.New("use of closed network connection")
+	}
+	return u.conn.SetDeadline(t)
 }
 
 func (u *UDPConn) SetReadDeadline(t time.Time) error {
-	u.mu.Lock()
-	defer u.mu.Unlock()
-	u.readDeadline = t
-	return nil
+	if u.conn == nil {
+		return errors.New("use of closed network connection")
+	}
+	return u.conn.SetReadDeadline(t)
 }
 
 func (u *UDPConn) SetWriteDeadline(t time.Time) error {
-	u.mu.Lock()
-	defer u.mu.Unlock()
-	u.writeDeadline = t
-	return nil
+	if u.conn == nil {
+		return errors.New("use of closed network connection")
+	}
+	return u.conn.SetWriteDeadline(t)
 }

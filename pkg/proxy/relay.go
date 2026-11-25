@@ -57,8 +57,8 @@ func (b *bufferedConn) unwrapIfEmpty() (net.Conn, *bufio.Reader) {
 }
 
 func (b *bufferedConn) CloseWrite() error {
-	if tcp, ok := b.Conn.(*net.TCPConn); ok {
-		return tcp.CloseWrite()
+	if cw, ok := b.Conn.(interface{ CloseWrite() error }); ok {
+		return cw.CloseWrite()
 	}
 	return b.Conn.Close()
 }
@@ -77,12 +77,8 @@ func (c *countingReader) Read(p []byte) (int, error) {
 }
 
 func closeWrite(c net.Conn) {
-	if bc, ok := c.(*bufferedConn); ok {
-		_ = bc.CloseWrite()
-		return
-	}
-	if tcp, ok := c.(*net.TCPConn); ok {
-		_ = tcp.CloseWrite()
+	if cw, ok := c.(interface{ CloseWrite() error }); ok {
+		_ = cw.CloseWrite()
 		return
 	}
 	_ = c.Close()

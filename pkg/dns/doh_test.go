@@ -88,16 +88,52 @@ func TestDualEngineResolver_MockDoHSuccessAndCache(t *testing.T) {
 		t.Errorf("expected cache hit with no new HTTP calls, before: %d, after: %d", firstCallCount, mockCalls)
 	}
 
-	// 3. Test LookupIPv4
+	// 3. Test LookupIPv4 hits cache without additional queries
 	v4s, err := resolver.LookupIPv4(ctx, "example.com")
 	if err != nil || len(v4s) != 1 || v4s[0].String() != "93.184.216.34" {
 		t.Errorf("LookupIPv4 failed: %v, got %v", err, v4s)
 	}
 
-	// 4. Test LookupIPv6
-	v6s, err := resolver.LookupIPv6(ctx, "example.com")
-	if err != nil || len(v6s) != 1 || v6s[0].String() != "2606:2800:220:1:248:1893:25c8:1946" {
-		t.Errorf("LookupIPv6 failed: %v, got %v", err, v6s)
+	// 4. Verify LookupIP returned both A and AAAA records
+	foundV6 := false
+	for _, ip := range ips {
+		if ip.String() == "2606:2800:220:1:248:1893:25c8:1946" {
+			foundV6 = true
+		}
+	}
+	if !foundV6 {
+		t.Errorf("expected LookupIP to include IPv6 answer, got %v", ips)
+	}
+}
+
+func TestDualEngineResolver_LookupIPv4SkipsAAAA(t *testing.T) {
+	var sawAAAA bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		qType := r.URL.Query().Get("type")
+		if qType == TypeAAAA {
+			sawAAAA = true
+		}
+		resp := DoHResponse{
+			Status: 0,
+			Answer: []DoHAnswer{
+				{Name: "ipv4only.test", Type: 1, TTL: 60, Data: "203.0.113.10"},
+			},
+		}
+		w.Header().Set("Content-Type", "application/dns-json")
+		_ = json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	resolver := NewDualEngineResolver([]string{server.URL}, server.Client())
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	ips, err := resolver.LookupIPv4(ctx, "ipv4only.test")
+	if err != nil || len(ips) != 1 || ips[0].String() != "203.0.113.10" {
+		t.Fatalf("LookupIPv4 failed: %v, got %v", err, ips)
+	}
+	if sawAAAA {
+		t.Fatal("LookupIPv4 must not issue type=AAAA DoH requests")
 	}
 }
 

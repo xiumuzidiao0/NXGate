@@ -18,15 +18,19 @@ import (
 
 	"aimili-vpngate-go/pkg/dns"
 	"aimili-vpngate-go/pkg/stats"
+
+	"gvisor.dev/gvisor/pkg/buffer"
+	"gvisor.dev/gvisor/pkg/tcpip"
+	"gvisor.dev/gvisor/pkg/tcpip/adapters/gonet"
+	"gvisor.dev/gvisor/pkg/tcpip/link/channel"
+	"gvisor.dev/gvisor/pkg/tcpip/network/ipv4"
+	"gvisor.dev/gvisor/pkg/tcpip/stack"
 )
 
-type pendingHandshake struct {
-	targetIP   net.IP
-	targetPort uint16
-	srcPort    uint16
-	initSeq    uint32
-	respCh     chan *ParsedTCPPacket
-}
+const (
+	maxCoalescePackets = 64
+	maxCoalesceBytes   = 24 * 1024
+)
 
 type Tunnel struct {
 	host       string
@@ -37,12 +41,11 @@ type Tunnel struct {
 	assignedIP net.IP
 
 	mu           sync.RWMutex
-	sessions     map[uint32]*TCPConn          // key: (localPort << 16) | remotePort
-	udpConns     map[uint16]*UDPConn          // key: localPort
-	pending      map[uint16]*pendingHandshake // key: srcPort
+	netStack     *stack.Stack
+	linkEP       *channel.Endpoint
+	txNotifyCh   chan struct{}
+	ctrlTxCh     chan []byte
 	readBr       *bufio.Reader
-	writeMu      sync.Mutex
-	txBuf        []byte
 	lastRecv     time.Time
 	closeReason  string
 	closed       bool
@@ -244,10 +247,13 @@ func Connect(ctx context.Context, host string, port int, user, pass string) (*Tu
 		pass = "vpn"
 	}
 
-	dialer := &net.Dialer{Timeout: DefaultConnectTimeout}
+	dialer := &net.Dialer{Timeout: DefaultConnectTimeout, KeepAlive: 15 * time.Second}
 	rawConn, err := dialer.DialContext(ctx, "tcp", net.JoinHostPort(host, strconv.Itoa(port)))
 	if err != nil {
 		return nil, fmt.Errorf("tcp dial failed: %w", err)
+	}
+	if tcpConn, ok := rawConn.(*net.TCPConn); ok {
+		_ = tcpConn.SetNoDelay(true)
 	}
 
 	tlsConfig := sstpTLSConfig(host)
@@ -263,13 +269,14 @@ func Connect(ctx context.Context, host string, port int, user, pass string) (*Tu
 		username: user,
 		password: pass,
 		tlsConn:  tlsConn,
-		sessions: make(map[uint32]*TCPConn),
-		udpConns: make(map[uint16]*UDPConn),
-		pending:  make(map[uint16]*pendingHandshake),
 		closeCh:  make(chan struct{}),
 	}
 
 	if err := t.performHandshake(ctx); err != nil {
+		_ = t.Close()
+		return nil, err
+	}
+	if err := t.initNetstack(); err != nil {
 		_ = t.Close()
 		return nil, err
 	}
@@ -278,14 +285,60 @@ func Connect(ctx context.Context, host string, port int, user, pass string) (*Tu
 	// the staleness bound below).
 	t.markActivity()
 
+	go t.writeLoop()
 	go t.readLoop()
 	go t.keepAliveLoop()
 
-	stats.LogInfo("SSTP", "用户态免 TUN 隧道已成功建立于 %s:%d, 分配虚拟 IP: %s", host, port, t.assignedIP)
+	stats.LogInfo("SSTP", "用户态免 TUN 隧道已成功建立于 %s:%d (gVisor Netstack MTU %d), 分配虚拟 IP: %s", host, port, DefaultTunnelMTU, t.assignedIP)
 	return t, nil
 }
 
+func (t *Tunnel) initNetstack() error {
+	s, ep, notifyCh, err := newNetstack(t.assignedIP)
+	if err != nil {
+		return err
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.closed {
+		ep.Close()
+		s.Close()
+		return ErrTunnelClosed
+	}
+	t.netStack = s
+	t.linkEP = ep
+	t.txNotifyCh = notifyCh
+	t.ctrlTxCh = make(chan []byte, 64)
+	return nil
+}
+
 func (t *Tunnel) performHandshake(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if t.tlsConn == nil {
+		return errors.New("sstp tunnel missing tls connection")
+	}
+
+	deadline := time.Now().Add(DefaultConnectTimeout)
+	if d, ok := ctx.Deadline(); ok {
+		deadline = d
+	}
+	_ = t.tlsConn.SetDeadline(deadline)
+	defer func() { _ = t.tlsConn.SetDeadline(time.Time{}) }()
+
+	stopCancel := context.AfterFunc(ctx, func() {
+		_ = t.tlsConn.SetDeadline(time.Now().Add(-time.Second))
+	})
+	defer stopCancel()
+
+	wrapHandshakeErr := func(msg string, err error) error {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return fmt.Errorf("%s: %w", msg, ctxErr)
+		}
+		return fmt.Errorf("%s: %w", msg, err)
+	}
+
 	// 1. Send HTTP Handshake + Call Connect Request + LCP Configure-Request
 	corrID := fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
 		rand.Uint32(), rand.Uint32()&0xffff, rand.Uint32()&0xffff, rand.Uint32()&0xffff, rand.Uint64()&0xffffffffffff)
@@ -312,7 +365,7 @@ func (t *Tunnel) performHandshake(ctx context.Context) error {
 	initBuf = append(initBuf, sstpLCP...)
 
 	if _, err := t.tlsConn.Write(initBuf); err != nil {
-		return fmt.Errorf("send sstp init handshake failed: %w", err)
+		return wrapHandshakeErr("send sstp init handshake failed", err)
 	}
 
 	// 2. Read HTTP Response Header using persistent buffered reader
@@ -322,7 +375,7 @@ func (t *Tunnel) performHandshake(ctx context.Context) error {
 	}
 	statusLine, err := br.ReadString('\n')
 	if err != nil {
-		return fmt.Errorf("read http status failed: %w", err)
+		return wrapHandshakeErr("read http status failed", err)
 	}
 	if !strings.Contains(statusLine, "200") {
 		return fmt.Errorf("sstp http handshake rejected: %s", strings.TrimSpace(statusLine))
@@ -331,7 +384,7 @@ func (t *Tunnel) performHandshake(ctx context.Context) error {
 	for {
 		line, err := br.ReadString('\n')
 		if err != nil {
-			return fmt.Errorf("read http header failed: %w", err)
+			return wrapHandshakeErr("read http header failed", err)
 		}
 		if line == "\r\n" || line == "\n" {
 			break
@@ -341,9 +394,12 @@ func (t *Tunnel) performHandshake(ctx context.Context) error {
 	// 3. Negotiate PPP LCP -> PAP -> IPCP
 	ipcpFinished := false
 	for round := 0; round < 30 && !ipcpFinished; round++ {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
 		isCtrl, body, err := t.readPacketDirect(br)
 		if err != nil {
-			return fmt.Errorf("handshake read failed: %w", err)
+			return wrapHandshakeErr("handshake read failed", err)
 		}
 		if isCtrl {
 			continue
@@ -353,7 +409,8 @@ func (t *Tunnel) performHandshake(ctx context.Context) error {
 		if len(body) >= 2 && body[0] == 0xff && body[1] == 0x03 {
 			offset = 2
 		}
-		if len(body)-offset < 4 {
+		// Require 2-byte PPP protocol + 4-byte PPP header (code, ident, length).
+		if len(body)-offset < 6 {
 			continue
 		}
 
@@ -361,7 +418,10 @@ func (t *Tunnel) performHandshake(ctx context.Context) error {
 		payload := body[offset+2:]
 		code := payload[0]
 		ident := payload[1]
-		plen := binary.BigEndian.Uint16(payload[2:4])
+		plen := int(binary.BigEndian.Uint16(payload[2:4]))
+		if plen < 4 || plen > len(payload) {
+			continue
+		}
 
 		switch proto {
 		case ProtoLCP:
@@ -373,7 +433,7 @@ func (t *Tunnel) performHandshake(ctx context.Context) error {
 				out = append(out, BuildDataPacket(ack)...)
 				out = append(out, BuildDataPacket(pap)...)
 				if _, err := t.tlsConn.Write(out); err != nil {
-					return err
+					return wrapHandshakeErr("send lcp ack failed", err)
 				}
 			}
 		case ProtoPAP:
@@ -383,7 +443,7 @@ func (t *Tunnel) performHandshake(ctx context.Context) error {
 					IPCPOptIPAddress, 6, 0, 0, 0, 0,
 				})
 				if _, err := t.tlsConn.Write(BuildDataPacket(ipcp)); err != nil {
-					return err
+					return wrapHandshakeErr("send ipcp request failed", err)
 				}
 			} else if code == PAPCodeAuthNak {
 				return ErrAuthFailed
@@ -393,7 +453,7 @@ func (t *Tunnel) performHandshake(ctx context.Context) error {
 				// ACK server's IPCP
 				ack := BuildIPCPPacket(PPPCodeConfigureAck, ident, payload[4:plen])
 				if _, err := t.tlsConn.Write(BuildDataPacket(ack)); err != nil {
-					return err
+					return wrapHandshakeErr("send ipcp ack failed", err)
 				}
 			} else if code == PPPCodeConfigureNak {
 				// Server assigned virtual IP
@@ -403,7 +463,7 @@ func (t *Tunnel) performHandshake(ctx context.Context) error {
 						IPCPOptIPAddress, 6, payload[6], payload[7], payload[8], payload[9],
 					})
 					if _, err := t.tlsConn.Write(BuildDataPacket(req)); err != nil {
-						return err
+						return wrapHandshakeErr("send ipcp confirm failed", err)
 					}
 				}
 			} else if code == PPPCodeConfigureAck {
@@ -419,7 +479,7 @@ func (t *Tunnel) performHandshake(ctx context.Context) error {
 	// 4. Send SSTP MsgCallConnected
 	callConn := BuildControlPacket(MsgCallConnected, nil)
 	if _, err := t.tlsConn.Write(callConn); err != nil {
-		return fmt.Errorf("send call connected failed: %w", err)
+		return wrapHandshakeErr("send call connected failed", err)
 	}
 
 	return nil
@@ -429,7 +489,7 @@ func (t *Tunnel) ensureReadBr() *bufio.Reader {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.readBr == nil && t.tlsConn != nil {
-		t.readBr = bufio.NewReaderSize(t.tlsConn, 16*1024)
+		t.readBr = bufio.NewReaderSize(t.tlsConn, 64*1024)
 	}
 	return t.readBr
 }
@@ -482,7 +542,6 @@ func (t *Tunnel) readLoop() {
 
 	var hdr [4]byte
 	rxBuf := make([]byte, 4096)
-	var tcpPkt ParsedTCPPacket
 
 	for {
 		isCtrl, body, err := t.readPacketInto(br, &hdr, rxBuf)
@@ -528,65 +587,114 @@ func (t *Tunnel) readLoop() {
 			continue
 		}
 
-		protoNum := ipPacket[9]
-		if protoNum == 6 { // TCP
-			if err := parseIncomingIPv4TCPInto(ipPacket, &tcpPkt, false); err != nil {
-				continue
+		t.mu.RLock()
+		ep := t.linkEP
+		closed := t.closed
+		t.mu.RUnlock()
+		if closed || ep == nil {
+			continue
+		}
+
+		pkt := stack.NewPacketBuffer(stack.PacketBufferOptions{
+			Payload: buffer.MakeWithData(ipPacket),
+		})
+		ep.InjectInbound(ipv4.ProtocolNumber, pkt)
+		pkt.DecRef()
+	}
+}
+
+func (t *Tunnel) writeLoop() {
+	batchBuf := make([]byte, 0, 32*1024)
+	hasMore := false
+
+	for {
+		var ctrl []byte
+		if !hasMore {
+			select {
+			case <-t.closeCh:
+				return
+			case ctrl = <-t.ctrlTxCh:
+			case <-t.txNotifyCh:
 			}
+		}
+		hasMore = false
+		batchBuf = batchBuf[:0]
 
-			// Check if this packet belongs to a pending dialing handshake
-			t.mu.RLock()
-			pending := t.pending[tcpPkt.DstPort]
-			t.mu.RUnlock()
-
-			if pending != nil && pending.targetPort == tcpPkt.SrcPort {
-				// Copy packet off rxBuf before handing off to handshake goroutine.
-				hsPkt := tcpPkt
-				if len(tcpPkt.Payload) > 0 {
-					hsPkt.Payload = append([]byte(nil), tcpPkt.Payload...)
-				} else {
-					hsPkt.Payload = nil
+		if len(ctrl) > 0 {
+			batchBuf = append(batchBuf, ctrl...)
+		}
+	drainCtrl:
+		for len(batchBuf) < maxCoalesceBytes {
+			select {
+			case extra := <-t.ctrlTxCh:
+				if len(extra) > 0 {
+					batchBuf = append(batchBuf, extra...)
 				}
-				select {
-				case pending.respCh <- &hsPkt:
-				default:
+			default:
+				break drainCtrl
+			}
+		}
+
+		t.mu.RLock()
+		ep := t.linkEP
+		tlsConn := t.tlsConn
+		closed := t.closed
+		t.mu.RUnlock()
+		if closed {
+			return
+		}
+
+		if ep != nil {
+			pktCount := 0
+			for pktCount < maxCoalescePackets && len(batchBuf) < maxCoalesceBytes {
+				pkt := ep.Read()
+				if pkt == nil {
+					break
 				}
-				continue
-			}
-
-			// Route to active TCP connection synchronously (handleIncoming copies into readBuf/outOfOrder).
-			sessKey := (uint32(tcpPkt.DstPort) << 16) | uint32(tcpPkt.SrcPort)
-			t.mu.RLock()
-			sess := t.sessions[sessKey]
-			t.mu.RUnlock()
-
-			if sess != nil {
-				sess.handleIncoming(&tcpPkt)
-			}
-		} else if protoNum == 17 { // UDP
-			udpPkt, err := ParseIncomingIPv4UDP(ipPacket)
-			if err != nil {
-				continue
-			}
-
-			t.mu.RLock()
-			uConn := t.udpConns[udpPkt.DstPort]
-			t.mu.RUnlock()
-
-			if uConn != nil {
-				if len(udpPkt.Payload) > 0 {
-					udpPkt.Payload = append([]byte(nil), udpPkt.Payload...)
-				} else {
-					udpPkt.Payload = nil
+				ipLen := pkt.Size()
+				frameLen := 8 + ipLen
+				if ipLen > 0 && frameLen <= 0x0fff {
+					batchBuf = append(batchBuf,
+						SSTPVersion,
+						SSTPFlagData,
+						byte((frameLen>>8)|0x80),
+						byte(frameLen),
+						0xff,
+						0x03,
+						byte(ProtoIPv4>>8),
+						byte(ProtoIPv4),
+					)
+					for _, slice := range pkt.AsSlices() {
+						batchBuf = append(batchBuf, slice...)
+					}
+					pktCount++
 				}
-				uConn.handleIncoming(udpPkt)
+				pkt.DecRef()
 			}
+			if pktCount >= maxCoalescePackets || len(batchBuf) >= maxCoalesceBytes {
+				hasMore = true
+			}
+		}
+
+		if len(batchBuf) == 0 || tlsConn == nil {
+			continue
+		}
+
+		_ = tlsConn.SetWriteDeadline(time.Now().Add(DefaultWriteTimeout))
+		if _, err := tlsConn.Write(batchBuf); err != nil {
+			t.noteCloseReason(fmt.Sprintf("write to peer failed: %v", err))
+			_ = t.Close()
+			return
 		}
 	}
 }
 
 func (t *Tunnel) keepAliveLoop() {
-	ticker := time.NewTicker(DefaultEchoInterval)
+	t.runKeepAlive(DefaultEchoInterval)
+}
+
+func (t *Tunnel) runKeepAlive(interval time.Duration) {
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
 	for {
@@ -594,6 +702,11 @@ func (t *Tunnel) keepAliveLoop() {
 		case <-t.closeCh:
 			return
 		case <-ticker.C:
+			if !t.IsHealthy() {
+				t.noteCloseReason("idle timeout waiting for peer activity")
+				_ = t.Close()
+				return
+			}
 			echoReq := BuildControlPacket(MsgEchoRequest, nil)
 			if err := t.sendRaw(echoReq); err != nil {
 				return
@@ -608,119 +721,56 @@ func (t *Tunnel) keepAliveLoop() {
 }
 
 func (t *Tunnel) sendRaw(b []byte) error {
-	t.writeMu.Lock()
-	defer t.writeMu.Unlock()
-
 	t.mu.RLock()
 	closed := t.closed
+	ctrlCh := t.ctrlTxCh
 	t.mu.RUnlock()
 
 	if closed {
 		return ErrTunnelClosed
 	}
 
-	if t.tlsConn == nil {
+	if ctrlCh == nil {
 		return nil
 	}
 
-	_ = t.tlsConn.SetWriteDeadline(time.Now().Add(DefaultWriteTimeout))
-	_, err := t.tlsConn.Write(b)
-	return err
-}
-
-func (t *Tunnel) ensureTxBufLocked(needed int) []byte {
-	if cap(t.txBuf) < needed {
-		allocSize := max(2048, needed)
-		t.txBuf = make([]byte, allocSize)
-	}
-	return t.txBuf[:needed]
-}
-
-func (t *Tunnel) sendTCP(srcIP, dstIP net.IP, srcPort, dstPort uint16, seq, ack uint32, flags byte, window uint16, payload []byte) error {
-	t.writeMu.Lock()
-	defer t.writeMu.Unlock()
-
-	t.mu.RLock()
-	closed := t.closed
-	t.mu.RUnlock()
-	if closed {
+	cp := append([]byte(nil), b...)
+	select {
+	case <-t.closeCh:
 		return ErrTunnelClosed
-	}
-	if t.tlsConn == nil {
+	case ctrlCh <- cp:
 		return nil
+	case <-time.After(2 * time.Second):
+		return ErrTimeout
 	}
-
-	buf := t.ensureTxBufLocked(48 + len(payload))
-	pkt := buildIPv4TCPPacketInto(buf, srcIP, dstIP, srcPort, dstPort, seq, ack, flags, window, payload)
-	if pkt == nil {
-		return errors.New("build sstp tcp packet failed")
-	}
-
-	_ = t.tlsConn.SetWriteDeadline(time.Now().Add(DefaultWriteTimeout))
-	_, err := t.tlsConn.Write(pkt)
-	return err
-}
-
-func (t *Tunnel) sendUDP(srcIP, dstIP net.IP, srcPort, dstPort uint16, payload []byte) error {
-	t.writeMu.Lock()
-	defer t.writeMu.Unlock()
-
-	t.mu.RLock()
-	closed := t.closed
-	t.mu.RUnlock()
-	if closed {
-		return ErrTunnelClosed
-	}
-	if t.tlsConn == nil {
-		return nil
-	}
-
-	buf := t.ensureTxBufLocked(36 + len(payload))
-	pkt := buildIPv4UDPPacketInto(buf, srcIP, dstIP, srcPort, dstPort, payload)
-	if pkt == nil {
-		return errors.New("build sstp udp packet failed")
-	}
-
-	_ = t.tlsConn.SetWriteDeadline(time.Now().Add(DefaultWriteTimeout))
-	_, err := t.tlsConn.Write(pkt)
-	return err
-}
-
-func (t *Tunnel) deregisterConn(localPort, remotePort uint16) {
-	key := (uint32(localPort) << 16) | uint32(remotePort)
-	t.mu.Lock()
-	delete(t.sessions, key)
-	t.mu.Unlock()
 }
 
 func (t *Tunnel) OpenPacketConn() (net.PacketConn, error) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	if t.closed {
+	t.mu.RLock()
+	closed := t.closed
+	netStack := t.netStack
+	assigned := t.assignedIP
+	t.mu.RUnlock()
+	if closed || netStack == nil || assigned == nil {
 		return nil, ErrTunnelClosed
 	}
 
-	var port uint16
-	for i := 0; i < 100; i++ {
-		candidate := uint16(40000 + rand.Intn(25000))
-		if _, exists := t.udpConns[candidate]; !exists {
-			port = candidate
-			break
-		}
-	}
-	if port == 0 {
-		return nil, errors.New("no free udp port available")
+	ip4 := assigned.To4()
+	if ip4 == nil {
+		return nil, ErrTunnelClosed
 	}
 
-	uConn := newUDPConn(t, t.assignedIP, port)
-	t.udpConns[port] = uConn
-	return uConn, nil
-}
+	laddr := tcpip.FullAddress{
+		NIC:  sstpNICID,
+		Addr: tcpip.AddrFrom4Slice(ip4),
+		Port: 0,
+	}
+	rawUDP, err := gonet.DialUDP(netStack, &laddr, nil, ipv4.ProtocolNumber)
+	if err != nil {
+		return nil, fmt.Errorf("sstp open packet conn: %w", err)
+	}
 
-func (t *Tunnel) removeUDPConn(port uint16) {
-	t.mu.Lock()
-	delete(t.udpConns, port)
-	t.mu.Unlock()
+	return newUDPConn(rawUDP), nil
 }
 
 func (t *Tunnel) tunnelResolver() (*dns.DualEngineResolver, error) {
@@ -743,7 +793,9 @@ func (t *Tunnel) tunnelResolver() (*dns.DualEngineResolver, error) {
 			IdleConnTimeout: 30 * time.Second, TLSHandshakeTimeout: 3 * time.Second,
 		}
 		t.dnsTransport = transport
-		t.dnsResolver = dns.NewTunnelResolver([]string{dns.CloudflareDoHIP, dns.GoogleDoHIP}, &http.Client{Transport: transport, Timeout: 5 * time.Second})
+		resolver := dns.NewTunnelResolver([]string{dns.CloudflareDoHIP, dns.GoogleDoHIP}, &http.Client{Transport: transport, Timeout: 5 * time.Second})
+		resolver.SetPrimaryLookup(t.lookupIPv4ViaUDP)
+		t.dnsResolver = resolver
 	}
 	return t.dnsResolver, nil
 }
@@ -762,6 +814,19 @@ func (t *Tunnel) Dial(ctx context.Context, network, addr string) (net.Conn, erro
 		return nil, fmt.Errorf("invalid port %q", portStr)
 	}
 	targetPort := uint16(portInt)
+
+	// Check tunnel health BEFORE attempting DNS so stale/black-holed peers fail fast.
+	t.mu.RLock()
+	closed := t.closed
+	lastRecv := t.lastRecv
+	netStack := t.netStack
+	t.mu.RUnlock()
+	if closed {
+		return nil, ErrTunnelClosed
+	}
+	if !lastRecv.IsZero() && time.Since(lastRecv) > DefaultIdleTimeout {
+		return nil, ErrTunnelStale
+	}
 
 	// Resolve over this tunnel, never via host/system DNS. Per-instance cache
 	// and transport are discarded on Close; a replacement tunnel has a fresh namespace.
@@ -783,99 +848,29 @@ func (t *Tunnel) Dial(ctx context.Context, network, addr string) (net.Conn, erro
 		}
 	}
 
-	t.mu.Lock()
-	if t.closed {
-		t.mu.Unlock()
-		return nil, ErrTunnelClosed
-	}
-	// Fail fast while the peer is black-holing instead of waiting out the full
-	// SYN timeout for every proxied request in the failover window.
-	if !t.lastRecv.IsZero() && time.Since(t.lastRecv) > DefaultIdleTimeout {
-		t.mu.Unlock()
-		return nil, ErrTunnelStale
-	}
-
-	// Allocate unique ephemeral port
-	var srcPort uint16
-	for i := 0; i < 1000; i++ {
-		candidate := uint16(30000 + rand.Intn(30000))
-		sessKey := (uint32(candidate) << 16) | uint32(targetPort)
-		if t.pending[candidate] == nil && t.sessions[sessKey] == nil {
-			srcPort = candidate
-			break
+	if netStack == nil {
+		t.mu.RLock()
+		netStack = t.netStack
+		closed = t.closed
+		t.mu.RUnlock()
+		if closed || netStack == nil {
+			return nil, ErrTunnelClosed
 		}
 	}
-	if srcPort == 0 {
-		t.mu.Unlock()
-		return nil, errors.New("no ephemeral port available for dial")
+
+	dialCtx := ctx
+	var cancel context.CancelFunc
+	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+		dialCtx, cancel = context.WithTimeout(ctx, DefaultDialTimeout)
+		defer cancel()
 	}
 
-	initSeq := rand.Uint32()
-	respCh := make(chan *ParsedTCPPacket, 4)
-	handshake := &pendingHandshake{
-		targetIP:   targetIP,
-		targetPort: targetPort,
-		srcPort:    srcPort,
-		initSeq:    initSeq,
-		respCh:     respCh,
+	dst := tcpip.FullAddress{
+		NIC:  sstpNICID,
+		Addr: tcpip.AddrFrom4Slice(targetIP),
+		Port: targetPort,
 	}
-	t.pending[srcPort] = handshake
-	t.mu.Unlock()
-
-	defer func() {
-		t.mu.Lock()
-		delete(t.pending, srcPort)
-		t.mu.Unlock()
-	}()
-
-	// Send TCP SYN packet
-	if err := t.sendTCP(
-		t.assignedIP, targetIP,
-		srcPort, targetPort,
-		initSeq, 0,
-		TCPFlagSYN,
-		maxTCPReadBufCap,
-		nil,
-	); err != nil {
-		return nil, fmt.Errorf("send syn failed: %w", err)
-	}
-
-	// Wait for TCP SYN-ACK
-	dialTimer := time.NewTimer(6 * time.Second)
-	defer dialTimer.Stop()
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	case <-dialTimer.C:
-		return nil, fmt.Errorf("tcp handshake to %s timed out", addr)
-	case resp := <-respCh:
-		if resp.Flags&(TCPFlagSYN|TCPFlagACK) != (TCPFlagSYN | TCPFlagACK) {
-			return nil, fmt.Errorf("unexpected tcp flags 0x%02x during handshake", resp.Flags)
-		}
-
-		peerSeq := resp.Seq
-		ackNum := peerSeq + 1
-		localSeq := initSeq + 1
-
-		// Send TCP ACK to complete 3-way handshake
-		_ = t.sendTCP(
-			t.assignedIP, targetIP,
-			srcPort, targetPort,
-			localSeq, ackNum,
-			TCPFlagACK,
-			maxTCPReadBufCap,
-			nil,
-		)
-
-		conn := newTCPConn(t, t.assignedIP, targetIP, srcPort, targetPort, localSeq, ackNum)
-
-		t.mu.Lock()
-		sessKey := (uint32(srcPort) << 16) | uint32(targetPort)
-		t.sessions[sessKey] = conn
-		t.mu.Unlock()
-
-		return conn, nil
-	}
+	return gonet.DialContextTCP(dialCtx, netStack, dst, ipv4.ProtocolNumber)
 }
 
 func (t *Tunnel) AssignedIP() net.IP {
@@ -992,40 +987,27 @@ func (t *Tunnel) Close() error {
 			t.dnsResolver.Clear()
 		}
 		transport := t.dnsTransport
+		ep := t.linkEP
+		netStack := t.netStack
+		tlsConn := t.tlsConn
+		t.linkEP = nil
+		t.netStack = nil
 		close(t.closeCh)
-
-		// Terminate all TCP sessions
-		tcpToClose := make([]*TCPConn, 0, len(t.sessions))
-		for _, sess := range t.sessions {
-			tcpToClose = append(tcpToClose, sess)
-		}
-		t.sessions = make(map[uint32]*TCPConn)
-
-		// Terminate all UDP sessions
-		udpToClose := make([]*UDPConn, 0, len(t.udpConns))
-		for _, u := range t.udpConns {
-			udpToClose = append(udpToClose, u)
-		}
-		t.udpConns = make(map[uint16]*UDPConn)
+		reason := t.closeReason
 		t.mu.Unlock()
+
 		if transport != nil {
 			transport.CloseIdleConnections()
 		}
-
-		for _, sess := range tcpToClose {
-			_ = sess.Close()
+		if ep != nil {
+			ep.Close()
 		}
-		for _, u := range udpToClose {
-			_ = u.Close()
+		if netStack != nil {
+			netStack.Close()
 		}
-
-		if t.tlsConn != nil {
-			_ = t.tlsConn.Close()
+		if tlsConn != nil {
+			_ = tlsConn.Close()
 		}
-		t.writeMu.Lock()
-		t.txBuf = nil
-		t.writeMu.Unlock()
-		reason := t.closeReason
 		if reason == "" {
 			reason = "closed locally"
 		}
