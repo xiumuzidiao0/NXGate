@@ -843,6 +843,50 @@ func (np *NodePool) ProbeSpecificNodes(ctx context.Context, ids []string) []*Nod
 	return targets
 }
 
+// ApplyDeepProbeResult persists direct TCP, tunnel handshake, SSTP port, and unlock probe findings
+// into the matching node in storage without penalizing or blacklisting manual probe targets.
+func (np *NodePool) ApplyDeepProbeResult(nodeID string, tcpLatencyMs int, tcpReachable bool, tunnelConnected bool, sstpPort int, unlock *UnlockResult) {
+	if np == nil || nodeID == "" {
+		return
+	}
+	np.mu.Lock()
+	defer np.mu.Unlock()
+
+	n, ok := np.nodeStore[nodeID]
+	if !ok || n == nil {
+		return
+	}
+
+	now := time.Now()
+	n.LastChecked = now
+	if sstpPort > 0 {
+		n.SSTPPort = sstpPort
+	}
+	if tcpReachable && tcpLatencyMs > 0 {
+		n.LatencyMs = tcpLatencyMs
+		n.ProbeStatus = "reachable"
+		n.FailCount = 0
+	}
+	if tunnelConnected {
+		n.ProbeStatus = "connected"
+		n.LastConnected = now
+		n.FailCount = 0
+		if tcpLatencyMs > 0 && n.LatencyMs <= 0 {
+			n.LatencyMs = tcpLatencyMs
+		}
+	} else if !tcpReachable && tcpLatencyMs < 0 {
+		n.LatencyMs = -1
+		n.ProbeStatus = "unreachable"
+	}
+	if unlock != nil {
+		cp := *unlock
+		n.Unlock = &cp
+	}
+
+	np.rebuildCandidatesLocked()
+	np.saveStoreLocked()
+}
+
 func (np *NodePool) cloneNodeWithMetadata(n *Node, inActive bool) *Node {
 	cp := *n
 	cp.IsFavorite = np.favorites != nil && np.favorites.IsFavorite(n.ID)

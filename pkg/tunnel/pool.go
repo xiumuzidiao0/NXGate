@@ -24,13 +24,14 @@ import (
 )
 
 type Pool struct {
-	cfg            *config.Config
-	mu             sync.RWMutex
-	tunnels        map[string]*Tunnel
-	usedDevs       map[int]bool
-	nodePool       *nodes.NodePool
-	unlockDetector *UnlockDetector
-	nextIDSeq      int
+	cfg             *config.Config
+	mu              sync.RWMutex
+	tunnels         map[string]*Tunnel
+	usedDevs        map[int]bool
+	nodePool        *nodes.NodePool
+	unlockDetector  *UnlockDetector
+	nextIDSeq       int
+	sstpProbeDialer func(ctx context.Context, node *nodes.Node) (func(context.Context, string, string) (net.Conn, error), interface{ Close() error }, int, error)
 }
 
 var rpFilterState = struct {
@@ -263,15 +264,18 @@ func (p *Pool) StartPrimaryTunnel(node *nodes.Node) (*Tunnel, error) {
 	}
 
 	p.usedDevs[0] = true
-	return p.startTunnelInternalLocked(node, 0)
+	return p.startTunnelInternalLocked(node, 0, false)
 }
 
 // StartTunnel starts a concurrent or dynamic group tunnel, strictly allocating from devIndex 1 upwards (tun1, tun2...).
 func (p *Pool) StartTunnel(node *nodes.Node) (*Tunnel, error) {
 	p.mu.Lock()
 
-	// Check if already connecting or connected to this node
+	// Check if already connecting or connected to this node (ignore ephemeral probe tunnels)
 	for _, t := range p.tunnels {
+		if t.IsProbe {
+			continue
+		}
 		status := t.GetStatus()
 		if t.Node != nil && t.Node.ID == node.ID && (status == StatusConnected || status == StatusConnecting) {
 			p.mu.Unlock()
@@ -285,15 +289,30 @@ func (p *Pool) StartTunnel(node *nodes.Node) (*Tunnel, error) {
 		return nil, fmt.Errorf("并发隧道已达上限 (最多63个并发出口)")
 	}
 
-	return p.startTunnelInternalLocked(node, devIdx)
+	return p.startTunnelInternalLocked(node, devIdx, false)
+}
+
+// startProbeTunnel launches an ephemeral OpenVPN tunnel excluded from ListTunnels,
+// GetHealthyTunnels, and automatic blacklisting on probe failure.
+func (p *Pool) startProbeTunnel(node *nodes.Node) (*Tunnel, error) {
+	p.mu.Lock()
+	devIdx := p.allocConcurrentDevIndexLocked()
+	if devIdx < 0 {
+		p.mu.Unlock()
+		return nil, fmt.Errorf("并发隧道已达上限 (最多63个并发出口)")
+	}
+	return p.startTunnelInternalLocked(node, devIdx, true)
 }
 
 // StartUserlandTunnel starts a pure userland SSTP (Zero-TUN) tunnel without creating any Linux kernel TUN devices.
 func (p *Pool) StartUserlandTunnel(node *nodes.Node) (*Tunnel, error) {
 	p.mu.Lock()
 
-	// Check if already connecting or connected to this node
+	// Check if already connecting or connected to this node (ignore ephemeral probe tunnels)
 	for _, t := range p.tunnels {
+		if t.IsProbe {
+			continue
+		}
 		status := t.GetStatus()
 		if t.Node != nil && t.Node.ID == node.ID && (status == StatusConnected || status == StatusConnecting) {
 			p.mu.Unlock()
@@ -399,7 +418,7 @@ func (p *Pool) StartUserlandTunnel(node *nodes.Node) (*Tunnel, error) {
 	return tun, nil
 }
 
-func (p *Pool) startTunnelInternalLocked(node *nodes.Node, devIdx int) (*Tunnel, error) {
+func (p *Pool) startTunnelInternalLocked(node *nodes.Node, devIdx int, isProbe bool) (*Tunnel, error) {
 	p.nextIDSeq++
 	tunnelID := fmt.Sprintf("tun-%d", p.nextIDSeq)
 	devName := fmt.Sprintf("tun%d", devIdx)
@@ -421,6 +440,7 @@ func (p *Pool) startTunnelInternalLocked(node *nodes.Node, devIdx int) (*Tunnel,
 		Status:    StatusConnecting,
 		Message:   fmt.Sprintf("正在发起对节点 %s 的连接...", node.ID),
 		LatencyMs: initialLatency,
+		IsProbe:   isProbe,
 		done:      make(chan struct{}),
 	}
 	p.tunnels[tunnelID] = t
@@ -504,7 +524,7 @@ func (p *Pool) startTunnelInternalLocked(node *nodes.Node, devIdx int) (*Tunnel,
 			node := t.Node
 			t.mu.Unlock()
 
-			if p.nodePool != nil && node != nil {
+			if p.nodePool != nil && node != nil && !isProbe {
 				if wasConnected || !connectedAt.IsZero() {
 					uptimeSec := int64(time.Since(connectedAt).Seconds())
 					if p.nodePool.Reputation() != nil {
@@ -568,13 +588,15 @@ func (p *Pool) startTunnelInternalLocked(node *nodes.Node, devIdx int) (*Tunnel,
 
 				stats.LogInfo("TunnelPool", "隧道 [%s] (%s) 已成功连通并就绪路由！", tunnelID, devName)
 
-				if p.nodePool != nil && t.Node != nil {
-					p.nodePool.RecordSuccess(t.Node.ID)
-					if p.nodePool.Reputation() != nil {
-						p.nodePool.Reputation().RecordSuccess(t.Node.IP, t.Node.ID)
+				if !isProbe {
+					if p.nodePool != nil && t.Node != nil {
+						p.nodePool.RecordSuccess(t.Node.ID)
+						if p.nodePool.Reputation() != nil {
+							p.nodePool.Reputation().RecordSuccess(t.Node.IP, t.Node.ID)
+						}
 					}
+					go p.probeUnlock(tunnelID)
 				}
-				go p.probeUnlock(tunnelID)
 			} else if strings.Contains(line, "AUTH_FAILED") {
 				t.mu.Lock()
 				t.Status = StatusFailed
@@ -888,6 +910,9 @@ func (p *Pool) ListTunnels() []*Tunnel {
 
 	res := make([]*Tunnel, 0, len(p.tunnels))
 	for _, t := range p.tunnels {
+		if t.IsProbe {
+			continue
+		}
 		t.mu.RLock()
 		st := t.Status
 		t.mu.RUnlock()
@@ -949,7 +974,7 @@ func (p *Pool) GetHealthyTunnels(targetIDs []string) []*Tunnel {
 	}
 	healthy := make([]*Tunnel, 0, capacity)
 	visit := func(t *Tunnel) {
-		if t != nil && t.IsHealthy() {
+		if t != nil && !t.IsProbe && t.IsHealthy() {
 			healthy = append(healthy, t)
 		}
 	}

@@ -59,6 +59,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
@@ -119,6 +120,13 @@ import kotlinx.coroutines.launch
 import com.nxgate.app.ui.screens.matrix.*
 import com.nxgate.app.ui.components.showApiErrorToast
 
+private data class GroupBlockCandidate(
+    val nodeId: String,
+    val ip: String,
+    val country: String,
+    val groupId: String
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RoutingMatrixScreen(
@@ -153,6 +161,9 @@ fun RoutingMatrixScreen(
     var inbounds by remember { mutableStateOf<List<InboundProtocolItem>>(emptyList()) }
     var tunnels by remember { mutableStateOf<List<TunnelItem>>(emptyList()) }
     var nodeCountryCounts by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
+    var favoriteNodeIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var groupBlockCandidate by remember { mutableStateOf<GroupBlockCandidate?>(null) }
+    var groupBlockOptionSelected by remember { mutableIntStateOf(0) }
     var masterInfo by remember { mutableStateOf(MasterGatewayInfo()) }
     var availableOutbounds by remember(isEn) {
         mutableStateOf(
@@ -365,10 +376,13 @@ fun RoutingMatrixScreen(
             if (tunnelsRes.isSuccess && !tunnelsRes.getOrNull().isNullOrEmpty()) {
                 tunnels = tunnelsRes.getOrNull()!!
             }
+            val favSet = linkedSetOf<String>()
+            tunnels.filter { it.isFavorite && it.nodeId.isNotEmpty() }.forEach { favSet.add(it.nodeId) }
             val nodesRes = NXGateApplication.instance.apiClient.fetchNodes(activeServer)
             if (nodesRes.isSuccess) {
                 val counts = mutableMapOf<String, Int>()
                 nodesRes.getOrNull().orEmpty().forEach { node ->
+                    if (node.isFavorite) favSet.add(node.id)
                     val c = node.countryShort.trim().uppercase()
                     if (c.length == 2 && c[0] in 'A'..'Z' && c[1] in 'A'..'Z') {
                         counts[c] = (counts[c] ?: 0) + 1
@@ -376,6 +390,7 @@ fun RoutingMatrixScreen(
                 }
                 nodeCountryCounts = counts
             }
+            favoriteNodeIds = favSet
             val sbOverviewRes = NXGateApplication.instance.apiClient.fetchSingBoxOverview(activeServer)
             if (sbOverviewRes.isSuccess) {
                 val data = sbOverviewRes.getOrNull()
@@ -423,10 +438,13 @@ fun RoutingMatrixScreen(
                                     }
                                     val tunnelsRes = NXGateApplication.instance.apiClient.fetchTunnels(activeServer)
                                     if (tunnelsRes.isSuccess && !tunnelsRes.getOrNull().isNullOrEmpty()) tunnels = tunnelsRes.getOrNull()!!
+                                    val favSet = linkedSetOf<String>()
+                                    tunnels.filter { it.isFavorite && it.nodeId.isNotEmpty() }.forEach { favSet.add(it.nodeId) }
                                     val nodesRes = NXGateApplication.instance.apiClient.fetchNodes(activeServer)
                                     if (nodesRes.isSuccess) {
                                         val counts = mutableMapOf<String, Int>()
                                         nodesRes.getOrNull().orEmpty().forEach { node ->
+                                            if (node.isFavorite) favSet.add(node.id)
                                             val c = node.countryShort.trim().uppercase()
                                             if (c.length == 2 && c[0] in 'A'..'Z' && c[1] in 'A'..'Z') {
                                                 counts[c] = (counts[c] ?: 0) + 1
@@ -434,6 +452,7 @@ fun RoutingMatrixScreen(
                                         }
                                         nodeCountryCounts = counts
                                     }
+                                    favoriteNodeIds = favSet
                                     val sbOverviewRes = NXGateApplication.instance.apiClient.fetchSingBoxOverview(activeServer)
                                     if (sbOverviewRes.isSuccess) {
                                         val data = sbOverviewRes.getOrNull()
@@ -535,12 +554,20 @@ fun RoutingMatrixScreen(
                                     val masterPort = if ((masterTunnel?.nodePort ?: 0) > 0) masterTunnel!!.nodePort else 443
                                     val masterLat = if ((masterTunnel?.latencyMs ?: 0) > 0) masterTunnel!!.latencyMs else masterInfo.latencyMs
                                     val masterLeaves = if (masterIp !in listOf("", "未连接", "Disconnected")) {
+                                        val mNodeId = masterTunnel?.nodeId?.ifEmpty { null }
+                                            ?: masterInfo.nodeName.takeIf { it.isNotEmpty() && it != "未连接" && it != "Disconnected" }
+                                            ?: ""
                                         listOf(
                                             PipelineLeaf(
                                                 devName = masterTunnel?.devName ?: (if (masterInfo.isZeroTun) "sstp-1422" else "tun0"),
                                                 locText = if (masterLoc.isNotEmpty()) masterLoc else (if (isEn) "Primary Gateway" else "系统主出口"),
                                                 ipWithPort = "$masterIp:$masterPort",
                                                 latency = masterLat,
+                                                nodeId = mNodeId,
+                                                nodeIp = masterIp,
+                                                countryCode = masterTunnel?.country ?: masterInfo.country,
+                                                groupId = sysPrimaryGroup?.id ?: "system-primary",
+                                                isFavorite = (mNodeId.isNotEmpty() && favoriteNodeIds.contains(mNodeId)) || masterTunnel?.isFavorite == true || masterInfo.isFavorite,
                                                 openai = masterTunnel?.openai ?: "unknown",
                                                 claude = masterTunnel?.claude ?: "unknown",
                                                 gemini = masterTunnel?.gemini ?: "unknown",
@@ -622,6 +649,11 @@ fun RoutingMatrixScreen(
                                                         locText = if (loc.isNotEmpty()) loc else (if (isEn) "Global" else "全球"),
                                                         ipWithPort = "${t.nodeIp}$portStr",
                                                         latency = t.latencyMs,
+                                                        nodeId = t.nodeId,
+                                                        nodeIp = t.nodeIp,
+                                                        countryCode = t.country,
+                                                        groupId = matchedGroup?.id ?: "",
+                                                        isFavorite = (t.nodeId.isNotEmpty() && favoriteNodeIds.contains(t.nodeId)) || t.isFavorite,
                                                         openai = t.openai,
                                                         claude = t.claude,
                                                         gemini = t.gemini,
@@ -650,6 +682,11 @@ fun RoutingMatrixScreen(
                                                         locText = if (loc.isNotEmpty()) loc else (if (isEn) "Global" else "全球"),
                                                         ipWithPort = "${t.nodeIp}$portStr",
                                                         latency = t.latencyMs,
+                                                        nodeId = t.nodeId,
+                                                        nodeIp = t.nodeIp,
+                                                        countryCode = t.country,
+                                                        groupId = "",
+                                                        isFavorite = (t.nodeId.isNotEmpty() && favoriteNodeIds.contains(t.nodeId)) || t.isFavorite,
                                                         openai = t.openai,
                                                         claude = t.claude,
                                                         gemini = t.gemini,
@@ -691,11 +728,40 @@ fun RoutingMatrixScreen(
                                     if (hasExplicitDefaultPort) ruleBranches else listOf(defaultBranch) + ruleBranches
                                 }
 
+                                val toggleFavoriteAction: (String) -> Unit = { nid ->
+                                    if (activeServer != null && nid.isNotEmpty()) {
+                                        val wasFav = favoriteNodeIds.contains(nid)
+                                        favoriteNodeIds = if (wasFav) favoriteNodeIds - nid else favoriteNodeIds + nid
+                                        scope.launch {
+                                            val res = NXGateApplication.instance.apiClient.toggleFavorite(activeServer, nid)
+                                            if (res.isSuccess) {
+                                                Toast.makeText(
+                                                    context,
+                                                    if (!wasFav) strings.localized("已收藏节点 [$nid]", "Added [$nid] to favorites") else strings.localized("已取消收藏 [$nid]", "Removed [$nid] from favorites"),
+                                                    Toast.LENGTH_SHORT
+                                                ).show()
+                                            } else {
+                                                favoriteNodeIds = if (wasFav) favoriteNodeIds + nid else favoriteNodeIds - nid
+                                                showApiErrorToast(context, res.exceptionOrNull(), activeServer, isEn)
+                                            }
+                                        }
+                                    }
+                                }
+                                val blacklistAction: (String, String, String, String) -> Unit = { nid, ip, c, gid ->
+                                    if (nid.isNotEmpty() || ip.isNotEmpty()) {
+                                        groupBlockCandidate = GroupBlockCandidate(nid, ip, c, gid)
+                                        groupBlockOptionSelected = 0
+                                    }
+                                }
+
                                 MatrixPipelineTab(
                                     allStreams = allStreams,
                                     portRules = portRules,
                                     activeServer = activeServer,
                                     isEn = isEn,
+                                    favoriteNodeIds = favoriteNodeIds,
+                                    onToggleFavoriteNode = toggleFavoriteAction,
+                                    onBlacklistNode = blacklistAction,
                                     onToggleRuleEnabled = { index, rule ->
                                         val updated = portRules.toMutableList()
                                         updated[index] = rule.copy(enabled = !rule.enabled)
@@ -779,6 +845,34 @@ fun RoutingMatrixScreen(
                                     dynamicGroups = dynamicGroups,
                                     activeServer = activeServer,
                                     isEn = isEn,
+                                    tunnels = tunnels,
+                                    masterInfo = masterInfo,
+                                    favoriteNodeIds = favoriteNodeIds,
+                                    onToggleFavoriteNode = { nid ->
+                                        if (activeServer != null && nid.isNotEmpty()) {
+                                            val wasFav = favoriteNodeIds.contains(nid)
+                                            favoriteNodeIds = if (wasFav) favoriteNodeIds - nid else favoriteNodeIds + nid
+                                            scope.launch {
+                                                val res = NXGateApplication.instance.apiClient.toggleFavorite(activeServer, nid)
+                                                if (res.isSuccess) {
+                                                    Toast.makeText(
+                                                        context,
+                                                        if (!wasFav) strings.localized("已收藏节点 [$nid]", "Added [$nid] to favorites") else strings.localized("已取消收藏 [$nid]", "Removed [$nid] from favorites"),
+                                                        Toast.LENGTH_SHORT
+                                                    ).show()
+                                                } else {
+                                                    favoriteNodeIds = if (wasFav) favoriteNodeIds + nid else favoriteNodeIds - nid
+                                                    showApiErrorToast(context, res.exceptionOrNull(), activeServer, isEn)
+                                                }
+                                            }
+                                        }
+                                    },
+                                    onBlacklistNode = { nid, ip, c, gid ->
+                                        if (nid.isNotEmpty() || ip.isNotEmpty()) {
+                                            groupBlockCandidate = GroupBlockCandidate(nid, ip, c, gid)
+                                            groupBlockOptionSelected = 0
+                                        }
+                                    },
                                     onDeleteGroup = { group ->
                                         deleteGroupCandidate = group
                                     },
@@ -1528,6 +1622,126 @@ fun RoutingMatrixScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showInboundQRDialog = null }) { Text(strings.localized("关闭", "Close")) }
+            }
+        )
+    }
+
+    // 9. Blacklist Node from Dynamic Group / Pipeline Dialog
+    if (groupBlockCandidate != null) {
+        val candidate = groupBlockCandidate!!
+        val parts = candidate.ip.split(".")
+        val subnet24 = if (parts.size == 4) "${parts[0]}.${parts[1]}.${parts[2]}.0/24" else ""
+
+        AlertDialog(
+            onDismissRequest = { groupBlockCandidate = null },
+            shape = RoundedCornerShape(24.dp),
+            containerColor = MaterialTheme.colorScheme.surfaceContainer,
+            title = {
+                Text(
+                    text = "${strings.blockConfirmTitle} [${candidate.ip.ifEmpty { candidate.nodeId }}]",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (groupBlockOptionSelected == 0) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+                        modifier = Modifier.fillMaxWidth().clickable { groupBlockOptionSelected = 0 }
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                RadioButton(selected = groupBlockOptionSelected == 0, onClick = { groupBlockOptionSelected = 0 })
+                                Spacer(Modifier.width(6.dp))
+                                Text(strings.blockOptionPermanent, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                            }
+                            Text(strings.blockOptionPermanentDesc, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 32.dp))
+                        }
+                    }
+                    if (subnet24.isNotEmpty()) {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (groupBlockOptionSelected == 2) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+                            modifier = Modifier.fillMaxWidth().clickable { groupBlockOptionSelected = 2 }
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    RadioButton(selected = groupBlockOptionSelected == 2, onClick = { groupBlockOptionSelected = 2 })
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("${strings.blockOptionSubnet} [$subnet24]", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                                }
+                                Text(strings.blockOptionSubnetDesc, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 32.dp))
+                            }
+                        }
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (groupBlockOptionSelected == 1) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+                        modifier = Modifier.fillMaxWidth().clickable { groupBlockOptionSelected = 1 }
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                RadioButton(selected = groupBlockOptionSelected == 1, onClick = { groupBlockOptionSelected = 1 })
+                                Spacer(Modifier.width(6.dp))
+                                Text(strings.blockOptionTemporary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                            }
+                            Text(strings.blockOptionTemporaryDesc, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 32.dp))
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val isSubnet = groupBlockOptionSelected == 2
+                        val isPermanent = groupBlockOptionSelected != 1
+                        val dur = if (isPermanent) 0 else 1440
+                        val scopeStr = if (isSubnet) "cidr" else "node"
+                        val targetId = if (isSubnet && subnet24.isNotEmpty()) subnet24 else candidate.nodeId
+                        val targetIp = if (isSubnet && subnet24.isNotEmpty()) subnet24 else candidate.ip
+                        val reasonStr = when (groupBlockOptionSelected) {
+                            2 -> strings.localized("用户手动永久屏蔽网段 ($subnet24)", "Manual permanent subnet block ($subnet24)")
+                            1 -> strings.localized("用户临时隔离 24 小时", "Manual 24h temporary quarantine")
+                            else -> strings.localized("用户手动永久屏蔽", "Manual permanent block")
+                        }
+                        if (activeServer != null) {
+                            scope.launch {
+                                val res = NXGateApplication.instance.apiClient.addBlacklist(
+                                    activeServer,
+                                    targetId,
+                                    targetIp,
+                                    candidate.country,
+                                    permanent = isPermanent,
+                                    durationMinutes = dur,
+                                    scope = scopeStr,
+                                    reason = reasonStr,
+                                    groupId = candidate.groupId
+                                )
+                                if (res.isSuccess) {
+                                    Toast.makeText(
+                                        context,
+                                        strings.localized("已拉黑并触发分流组自动换线", "Blocked node & triggered group rotation"),
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                    val tRes = NXGateApplication.instance.apiClient.fetchTunnels(activeServer)
+                                    if (tRes.isSuccess) tunnels = tRes.getOrNull() ?: emptyList()
+                                    val gRes = NXGateApplication.instance.apiClient.fetchDynamicGroups(activeServer)
+                                    if (gRes.isSuccess) dynamicGroups = gRes.getOrNull() ?: dynamicGroups
+                                } else {
+                                    showApiErrorToast(context, res.exceptionOrNull(), activeServer, isEn)
+                                }
+                            }
+                        }
+                        groupBlockCandidate = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text(if (isEn) "Confirm Block" else "确认屏蔽")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { groupBlockCandidate = null }) { Text(strings.cancel) }
             }
         )
     }

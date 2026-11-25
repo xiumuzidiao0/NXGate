@@ -17,12 +17,16 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Block
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Star
+import androidx.compose.material.icons.rounded.StarBorder
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -32,20 +36,40 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.nxgate.app.model.DynamicGroupCard
+import com.nxgate.app.model.MasterGatewayInfo
 import com.nxgate.app.model.ServerProfile
+import com.nxgate.app.model.TunnelItem
 import com.nxgate.app.ui.components.ConnectedButtonGroup
 import com.nxgate.app.ui.components.ConnectedButtonItem
 import com.nxgate.app.ui.components.ConnectedButtonStyle
+import com.nxgate.app.ui.components.countryFlag
 import com.nxgate.app.util.LocalAppStrings
+
+private data class GroupExitRow(
+    val devName: String,
+    val nodeId: String,
+    val nodeIp: String,
+    val nodePort: Int,
+    val country: String,
+    val latencyMs: Int,
+    val isFavorite: Boolean
+)
 
 @Composable
 fun DynamicGroupTab(
     dynamicGroups: List<DynamicGroupCard>,
     activeServer: ServerProfile?,
     isEn: Boolean,
+    tunnels: List<TunnelItem> = emptyList(),
+    masterInfo: MasterGatewayInfo = MasterGatewayInfo(),
+    favoriteNodeIds: Set<String> = emptySet(),
+    onToggleFavoriteNode: (String) -> Unit = {},
+    onBlacklistNode: (nodeId: String, ip: String, country: String, groupId: String) -> Unit = { _, _, _, _ -> },
     onDeleteGroup: (DynamicGroupCard) -> Unit,
     onEditGroup: (DynamicGroupCard) -> Unit,
     onEvaluateAndRotateClick: () -> Unit,
@@ -169,6 +193,120 @@ fun DynamicGroupTab(
                                             color = MaterialTheme.colorScheme.onErrorContainer,
                                             fontWeight = FontWeight.SemiBold
                                         )
+                                    }
+                                }
+                            }
+                            Spacer(Modifier.height(10.dp))
+                            val groupExits = tunnels.filter { t ->
+                                group.activeTunnelIds.contains(t.id) ||
+                                    group.activeTunnelIds.contains(t.devName) ||
+                                    (group.isSystem && (t.isMaster || t.id == "primary-userland" || t.devIndex == 0))
+                            }.map { t ->
+                                GroupExitRow(
+                                    devName = t.devName,
+                                    nodeId = t.nodeId,
+                                    nodeIp = t.nodeIp,
+                                    nodePort = t.nodePort,
+                                    country = t.country,
+                                    latencyMs = t.latencyMs,
+                                    isFavorite = favoriteNodeIds.contains(t.nodeId) || t.isFavorite
+                                )
+                            }.ifEmpty {
+                                val hasPrimaryNode = group.isSystem && masterInfo.isConnected && masterInfo.nodeIp.isNotEmpty()
+                                val resolvedId = masterInfo.nodeName.takeIf { it.isNotEmpty() && it != "未连接" && it != "Disconnected" } ?: ""
+                                if (hasPrimaryNode) {
+                                    listOf(
+                                        GroupExitRow(
+                                            devName = if (masterInfo.isZeroTun) "sstp" else "tun0",
+                                            nodeId = resolvedId,
+                                            nodeIp = masterInfo.nodeIp,
+                                            nodePort = 443,
+                                            country = masterInfo.country,
+                                            latencyMs = masterInfo.latencyMs,
+                                            isFavorite = (resolvedId.isNotEmpty() && favoriteNodeIds.contains(resolvedId)) || masterInfo.isFavorite
+                                        )
+                                    )
+                                } else emptyList()
+                            }
+
+                            if (groupExits.isNotEmpty()) {
+                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    text = "${strings.groupActiveNodes} (${groupExits.size})",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Spacer(Modifier.height(6.dp))
+                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    groupExits.forEach { exit ->
+                                        Surface(
+                                            shape = RoundedCornerShape(10.dp),
+                                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier.weight(1f),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                                ) {
+                                                    Text(
+                                                        text = exit.devName,
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        fontFamily = FontFamily.Monospace,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = MaterialTheme.colorScheme.primary
+                                                    )
+                                                    Text(
+                                                        text = "${countryFlag(exit.country)} ${exit.nodeIp}${if (exit.nodePort > 0) ":${exit.nodePort}" else ""}",
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        fontFamily = FontFamily.Monospace,
+                                                        color = MaterialTheme.colorScheme.onSurface
+                                                    )
+                                                    if (exit.latencyMs > 0) {
+                                                        Text(
+                                                            text = "${exit.latencyMs}ms",
+                                                            style = MaterialTheme.typography.labelSmall,
+                                                            color = MaterialTheme.colorScheme.secondary
+                                                        )
+                                                    }
+                                                }
+                                                if (exit.nodeId.isNotEmpty()) {
+                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                        IconButton(
+                                                            onClick = { onToggleFavoriteNode(exit.nodeId) },
+                                                            modifier = Modifier.size(32.dp)
+                                                        ) {
+                                                            Icon(
+                                                                imageVector = if (exit.isFavorite) Icons.Rounded.Star else Icons.Rounded.StarBorder,
+                                                                contentDescription = if (exit.isFavorite) strings.favorited else strings.favorite,
+                                                                tint = if (exit.isFavorite) Color(0xFFF59E0B) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                                modifier = Modifier.size(18.dp)
+                                                            )
+                                                        }
+                                                        IconButton(
+                                                            onClick = { onBlacklistNode(exit.nodeId, exit.nodeIp, exit.country, group.id) },
+                                                            modifier = Modifier.size(32.dp)
+                                                        ) {
+                                                            Icon(
+                                                                imageVector = Icons.Rounded.Block,
+                                                                contentDescription = strings.blockAndRotate,
+                                                                tint = MaterialTheme.colorScheme.error,
+                                                                modifier = Modifier.size(18.dp)
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }

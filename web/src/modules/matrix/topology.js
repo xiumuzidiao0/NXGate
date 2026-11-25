@@ -2,7 +2,7 @@ import { appState } from '../../state.js';
 import { getLanguage, localize } from '../../i18n-runtime.js';
 import { closeEditorDrawer, switchView } from '../shell.js';
 import { fetchStatus } from '../../transport.js';
-import { alert, appendLog, escapeHtml, getCountryFlagSVG, getCountryName } from '../../utils.js';
+import { alert, appendLog, escapeHtml, getCountryFlagSVG, getCountryName, jsonAttr } from '../../utils.js';
 import { renderDynamicGroups } from './groups.js';
 import { renderPortRules } from './ports.js';
 
@@ -118,12 +118,18 @@ export function renderMatrixTopology() {
 
     const primaryLeaves = [];
     if (primaryIp) {
+        const pNodeId = (st && st.vpn && st.vpn.active_node && st.vpn.active_node.id) || (st && st.vpn && st.vpn.active_node_id) || '';
+        const pLiveNode = (appState.allNodes || []).find(n => n.id === pNodeId);
+        const pFav = pLiveNode ? !!pLiveNode.is_favorite : !!(st && st.vpn && st.vpn.active_node && st.vpn.active_node.is_favorite);
         primaryLeaves.push({
             devName: primaryDev,
+            nodeId: pNodeId,
             ip: primaryIp,
             port: primaryPort,
             country: primaryCountry,
             latency: primaryLat,
+            isFavorite: pFav,
+            groupId: 'system-primary',
             unlock: (st && st.vpn && st.vpn.active_node && st.vpn.active_node.unlock) || null
         });
     }
@@ -188,16 +194,22 @@ export function renderMatrixTopology() {
                     );
                     if (activeTuns.length > 0) {
                         leaves = activeTuns.map(t => {
+                            const nodeId = (t.node && t.node.id) || '';
+                            const liveNode = (appState.allNodes || []).find(n => n.id === nodeId);
+                            const isFav = liveNode ? !!liveNode.is_favorite : !!(t.node && t.node.is_favorite);
                             const ip = (t.node && t.node.ip) || (t.node && t.node.id) || t.dev_name;
                             const port = (t.node && t.node.port) || 0;
                             const c = (t.node && t.node.country_short) || '';
                             const latVal = (t.node && t.node.latency_ms > 0) ? t.node.latency_ms : (t.latency_ms > 0 ? t.latency_ms : 0);
                             return {
                                 devName: t.dev_name,
+                                nodeId,
                                 ip: ip,
                                 port: port,
                                 country: c,
                                 latency: latVal,
+                                isFavorite: isFav,
+                                groupId: firstGroupId,
                                 unlock: t.unlock || (t.node ? appState.cachedUnlockMap[t.node.ip] : null)
                             };
                         });
@@ -214,16 +226,22 @@ export function renderMatrixTopology() {
                 const activeTuns = tunnels.filter(t => rule.bound_tunnel_ids.includes(t.id) || rule.bound_tunnel_ids.includes(t.dev_name));
                 if (activeTuns.length > 0) {
                     leaves = activeTuns.map(t => {
+                        const nodeId = (t.node && t.node.id) || '';
+                        const liveNode = (appState.allNodes || []).find(n => n.id === nodeId);
+                        const isFav = liveNode ? !!liveNode.is_favorite : !!(t.node && t.node.is_favorite);
                         const ip = (t.node && t.node.ip) || t.dev_name;
                         const port = (t.node && t.node.port) || 0;
                         const c = (t.node && t.node.country_short) || '';
                         const latVal = (t.node && t.node.latency_ms > 0) ? t.node.latency_ms : (t.latency_ms > 0 ? t.latency_ms : 0);
                         return {
                             devName: t.dev_name,
+                            nodeId,
                             ip: ip,
                             port: port,
                             country: c,
                             latency: latVal,
+                            isFavorite: isFav,
+                            groupId: '',
                             unlock: t.unlock || (t.node ? appState.cachedUnlockMap[t.node.ip] : null)
                         };
                     });
@@ -332,6 +350,14 @@ export function renderMatrixTopology() {
                 const unlockHtml = `${gptDot}${claudeDot}${geminiDot}${nfDot}`;
 
                 const portStr = leaf.port > 0 ? `:${leaf.port}` : '';
+                const leafActions = (leaf.nodeId && leaf.devName !== 'direct') ? `
+                    <div class="egress-actions">
+                        <button type="button" class="star-btn ${leaf.isFavorite ? 'active' : ''}" data-action="toggleFavorite" data-args="${jsonAttr([leaf.nodeId])}" title="${leaf.isFavorite ? (isEn ? 'Remove from favorites' : '取消收藏') : (isEn ? 'Add to favorites' : '加入收藏')}">
+                            ${leaf.isFavorite ? '★' : '☆'}
+                        </button>
+                        <button type="button" class="btn btn-outline btn-xs btn-icon-danger" data-action="blacklistGroupNode" data-args="${jsonAttr([leaf.nodeId, leaf.ip, leaf.country || '', leaf.groupId || ''])}" title="${isEn ? 'Block node & rotate' : '拉黑并自动换线'}">×</button>
+                    </div>
+                ` : '';
 
                 return `
                     <div class="topo-node-card egress-card">
@@ -340,7 +366,10 @@ export function renderMatrixTopology() {
                                 <span class="egress-nic-pill">${escapeHtml(leaf.devName)}</span>
                                 <span class="egress-location">${flag} ${escapeHtml(locText)}</span>
                             </div>
-                            ${latBadge}
+                            <div class="flex items-center gap-1">
+                                ${latBadge}
+                                ${leafActions}
+                            </div>
                         </div>
                         <div class="egress-ip-row">
                             <code class="egress-ip-code">${escapeHtml(leaf.ip)}${escapeHtml(portStr)}</code>

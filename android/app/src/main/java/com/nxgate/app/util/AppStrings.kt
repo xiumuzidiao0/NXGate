@@ -197,7 +197,21 @@ data class AppStrings(
     val addCidrDialogTitle: String,
     val addCidrDialogPrompt: String,
     val favoritesPool: String,
-    val favoritesGroupBadge: String
+    val favoritesGroupBadge: String,
+
+    // Deep Node Probe & Group Node Actions
+    val testNode: String,
+    val testSelectedNodes: String,
+    val selectedNodesCount: String,
+    val clearSelection: String,
+    val testingInProgress: String,
+    val probeResultsTitle: String,
+    val cancelProbe: String,
+    val egressOk: String,
+    val egressBlocked: String,
+    val handshakeFailed: String,
+    val groupActiveNodes: String,
+    val blockAndRotate: String
 )
 
 val AppStringsZh = AppStrings(
@@ -382,7 +396,20 @@ val AppStringsZh = AppStrings(
     addCidrDialogTitle = "永久屏蔽整个网段 (CIDR)",
     addCidrDialogPrompt = "输入要永久封禁的目标网段 (例如 1.1.1.0/24)：\n\n该网段现有以及未来所有新节点都将被自动屏蔽并隐藏。",
     favoritesPool = "⭐ 我的收藏节点 (跨国收藏池)",
-    favoritesGroupBadge = "收藏组"
+    favoritesGroupBadge = "收藏组",
+
+    testNode = "测试",
+    testSelectedNodes = "测试已选节点（解锁/延迟/连通性）",
+    selectedNodesCount = "已选 %d 个节点（单次上限 20）",
+    clearSelection = "清空选择",
+    testingInProgress = "实测中...",
+    probeResultsTitle = "节点实测详情（连通性 / 延迟 / 解锁）",
+    cancelProbe = "取消实测",
+    egressOk = "真实可出网",
+    egressBlocked = "出网受阻",
+    handshakeFailed = "握手失败",
+    groupActiveNodes = "当前活跃出口节点",
+    blockAndRotate = "拉黑并自动换线"
 )
 
 val AppStringsEn = AppStrings(
@@ -567,7 +594,20 @@ val AppStringsEn = AppStrings(
     addCidrDialogTitle = "Block Subnet (CIDR)",
     addCidrDialogPrompt = "Enter target subnet to permanently block (e.g. 1.1.1.0/24):\n\nAll existing and future nodes in this subnet will be automatically blocked and hidden.",
     favoritesPool = "⭐ My Favorites (Curated Pool)",
-    favoritesGroupBadge = "Favorites"
+    favoritesGroupBadge = "Favorites",
+
+    testNode = "Test",
+    testSelectedNodes = "Test Selected (Unlock / Latency / Egress)",
+    selectedNodesCount = "Selected %d node(s) (max 20)",
+    clearSelection = "Clear",
+    testingInProgress = "Testing...",
+    probeResultsTitle = "Node Test Results (Connectivity / Latency / Unlock)",
+    cancelProbe = "Cancel",
+    egressOk = "Egress OK",
+    egressBlocked = "Egress Blocked",
+    handshakeFailed = "Failed",
+    groupActiveNodes = "Active Exit Nodes",
+    blockAndRotate = "Block & Auto-Rotate"
 )
 
 val LocalAppStrings = staticCompositionLocalOf<AppStrings> { AppStringsZh }

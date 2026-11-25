@@ -2,6 +2,7 @@ import { appState } from '../state.js';
 import { getLanguage, tAlert, tConfirm, tPrompt } from '../i18n-runtime.js';
 import { fetchNodes } from './nodes.js';
 import { fetchStatus } from '../transport.js';
+import { fetchDynamicGroups } from './matrix/groups.js';
 import { escapeHtml, getCountryFlagSVG, jsonAttr, showToast } from '../utils.js';
 
 export async function openBlacklistModal() {
@@ -262,7 +263,7 @@ export async function resurrectBlacklist() {
     }
 }
 
-export async function addNodeToBlacklist(nodeId, ip, country) {
+export async function addNodeToBlacklist(nodeId, ip, country, groupId = '') {
     let derivedSubnet = '';
     if (ip) {
         const parts = ip.split('.');
@@ -300,18 +301,22 @@ export async function addNodeToBlacklist(nodeId, ip, country) {
     }
 
     try {
+        const payload = {
+            node_id: targetNodeId,
+            ip: targetIP,
+            country: country,
+            duration_minutes: dur,
+            permanent: permanent,
+            scope: scope,
+            reason: reason
+        };
+        if (groupId) {
+            payload.group_id = groupId;
+        }
         const res = await fetch('/api/blacklist/add', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                node_id: targetNodeId,
-                ip: targetIP,
-                country: country,
-                duration_minutes: dur,
-                permanent: permanent,
-                scope: scope,
-                reason: reason
-            })
+            body: JSON.stringify(payload)
         });
         const ret = await res.json();
         if (!res.ok) {
@@ -330,8 +335,14 @@ export async function addNodeToBlacklist(nodeId, ip, country) {
         } else {
             msg = getLanguage() === 'en' ? `Quarantined [${nodeId}] for 24h` : `已将节点 [${nodeId}] 临时隔离 24 小时`;
         }
+        if (Array.isArray(ret.evicted_tunnels) && ret.evicted_tunnels.length > 0) {
+            msg += getLanguage() === 'en'
+                ? ` · Evicted ${ret.evicted_tunnels.length} exit(s), rotating group`
+                : ` · 已断开 ${ret.evicted_tunnels.length} 个在用出口并触发重评换线`;
+        }
         showToast(msg);
         fetchStatus();
+        fetchDynamicGroups();
         fetchNodes();
     } catch (err) {
         tAlert('请求失败: ' + err, 'Request failed: ' + err);

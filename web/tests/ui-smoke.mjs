@@ -202,6 +202,10 @@ const coldNodes = [{
 let lastOutboundPost = null;
 let lastSettingsPost=null;
 let lastPortRulesPost = null;
+let lastFavoritePost = null;
+let lastBlacklistPost = null;
+let lastDeepProbePost = null;
+let mockDeepProbeJob = null;
 
 async function mockAPI(route) {
   const reqUrl = new URL(route.request().url());
@@ -287,8 +291,59 @@ async function mockAPI(route) {
       telegram_bot_token: "123456:ABC-DEF",
       telegram_chat_id: "987654321",
     };
+  } else if (path.endsWith("/api/blacklist/add")) {
+    try {
+      lastBlacklistPost = JSON.parse(route.request().postData() || "{}");
+    } catch {}
+    body = { ok: true, node_id: lastBlacklistPost?.node_id || "", evicted_tunnels: ["t-1"], re_evaluated_groups: ["dg-1"] };
   } else if (path.endsWith("/api/blacklist")) {
     body = [];
+  } else if (path.endsWith("/api/nodes/favorite")) {
+    try {
+      lastFavoritePost = JSON.parse(route.request().postData() || "{}");
+    } catch {}
+    const nid = lastFavoritePost?.node_id || "";
+    const target = [...nodes, ...coldNodes].find(n => n.id === nid);
+    const nextFav = target ? !target.is_favorite : true;
+    if (target) target.is_favorite = nextFav;
+    body = { node_id: nid, is_favorite: nextFav };
+  } else if (path.endsWith("/api/nodes/probe/deep/cancel")) {
+    if (mockDeepProbeJob) mockDeepProbeJob.status = "cancelled";
+    body = mockDeepProbeJob || { ok: true };
+  } else if (path.endsWith("/api/nodes/probe/deep")) {
+    if (route.request().method() === "POST") {
+      try {
+        lastDeepProbePost = JSON.parse(route.request().postData() || "{}");
+      } catch {}
+      const ids = Array.isArray(lastDeepProbePost?.node_ids) ? lastDeepProbePost.node_ids : [];
+      mockDeepProbeJob = {
+        job_id: "probe-smoke-1",
+        status: "completed",
+        total: ids.length,
+        completed: ids.length,
+        results: ids.map(id => {
+          const matched = [...nodes, ...coldNodes].find(n => n.id === id);
+          return {
+            node_id: id,
+            ip: matched?.ip || id,
+            port: matched?.port || 443,
+            proto: matched?.proto || "tcp",
+            country_short: matched?.country_short || "JP",
+            status: "ok",
+            driver: "sstp",
+            tcp_reachable: true,
+            tcp_latency_ms: 42,
+            tunnel_connected: true,
+            egress_reachable: true,
+            egress_latency_ms: 138,
+            unlock: { ip: matched?.ip || "", openai: "unlocked", claude: "unlocked", gemini: "unlocked", google: "unlocked", cloudflare: "unlocked", netflix: "unlocked", is_probed: true, throughput_passed: true, throughput_bytes_per_sec: 1250000 }
+          };
+        })
+      };
+      body = mockDeepProbeJob;
+    } else {
+      body = mockDeepProbeJob || { job_id: "probe-smoke-1", status: "completed", total: 0, completed: 0, results: [] };
+    }
   } else if (path.endsWith("/api/app/profile")) {
     body = {
       ok: true,
@@ -477,6 +532,16 @@ try {
     if (!groupsVisible) failures.push(`${viewport}px: matrix dynamic groups content is not visible`);
     const groupCardVisible = await page.locator(".dynamic-group-card").first().isVisible();
     if (!groupCardVisible) failures.push(`${viewport}px: dynamic group card is not visible in matrix tab`);
+    const groupNodeRows = await page.locator("#dynamic-groups-container .group-node-row").count();
+    if (groupNodeRows < 1) failures.push(`${viewport}px: dynamic group card missing active exit node rows`);
+    lastFavoritePost = null;
+    await page.locator('#dynamic-groups-container .group-node-row [data-action="toggleFavorite"]').first().click();
+    await page.waitForTimeout(80);
+    if (!lastFavoritePost || !lastFavoritePost.node_id) {
+      failures.push(`${viewport}px: group node favorite button did not post /api/nodes/favorite`);
+    }
+    const groupBlacklistBtns = await page.locator('#dynamic-groups-container .group-node-row [data-action="blacklistGroupNode"]').count();
+    if (groupBlacklistBtns < 1) failures.push(`${viewport}px: group node blacklist button missing`);
     const groupsOverflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1);
     if (groupsOverflow) failures.push(`${viewport}px: matrix groups tab overflows horizontally`);
 
@@ -560,6 +625,32 @@ try {
     if (nodesScopeOverflow) failures.push(`${viewport}px: nodes view with pool scope bar overflows horizontally`);
     await page.locator("#scope-active").click();
     await page.waitForTimeout(100);
+    // Test multi-select checkboxes and deep probe UI
+    const checkboxes = page.locator("#nodes-tbody .node-select-checkbox");
+    if (await checkboxes.count() < 2) {
+      failures.push(`${viewport}px: expected at least 2 node selection checkboxes`);
+    } else {
+      await checkboxes.nth(0).check();
+      await checkboxes.nth(1).check();
+      await page.waitForTimeout(80);
+      const selBarVisible = await page.locator("#nodes-selection-bar").isVisible();
+      if (!selBarVisible) failures.push(`${viewport}px: #nodes-selection-bar did not become visible after selecting 2 nodes`);
+      lastDeepProbePost = null;
+      await page.locator("#btn-probe-selected").click();
+      await page.waitForTimeout(150);
+      if (!lastDeepProbePost || !Array.isArray(lastDeepProbePost.node_ids) || lastDeepProbePost.node_ids.length !== 2) {
+        failures.push(`${viewport}px: probeSelectedNodes did not post 2 node_ids: ${JSON.stringify(lastDeepProbePost)}`);
+      }
+      const probePanelVisible = await page.locator("#nodes-probe-results-panel").isVisible();
+      if (!probePanelVisible) failures.push(`${viewport}px: #nodes-probe-results-panel not visible after probe`);
+      const probeRowsCount = await page.locator("#deep-probe-results-body .probe-result-row").count();
+      if (probeRowsCount !== 2) failures.push(`${viewport}px: expected 2 deep probe result rows, got ${probeRowsCount}`);
+      const probeOverflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1);
+      if (probeOverflow) failures.push(`${viewport}px: nodes view with deep probe results panel overflows horizontally`);
+      await page.locator("#btn-clear-selected").click();
+      await page.locator("#nodes-probe-results-panel [data-action='toggleDeepProbePanel']").click();
+      await page.waitForTimeout(60);
+    }
     await page.locator("#chip-fav").click();
 
     // Test Language Toggle (zh <-> en)

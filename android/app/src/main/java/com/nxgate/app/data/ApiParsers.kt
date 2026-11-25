@@ -1,6 +1,8 @@
 package com.nxgate.app.data
 
 import com.nxgate.app.model.MasterGatewayInfo
+import com.nxgate.app.model.NodeDeepProbeJob
+import com.nxgate.app.model.NodeDeepProbeResult
 import com.nxgate.app.model.TunnelItem
 import org.json.JSONObject
 
@@ -11,8 +13,10 @@ internal fun parseTunnelItem(obj: JSONObject, index: Int): TunnelItem {
     val tStatus = obj.optString("status", "connected")
     val uptime = obj.optLong("uptime", 0)
     val nodeObj = obj.optJSONObject("node")
+    val nodeId = nodeObj?.optString("id", "") ?: ""
     val ip = nodeObj?.optString("ip", "") ?: ""
     val port = nodeObj?.optInt("port", 443) ?: 443
+    val isFav = nodeObj?.optBoolean("is_favorite", false) ?: false
     val cShort = nodeObj?.optString("country_short", "") ?: ""
     val cLong = nodeObj?.optString("country_long", "") ?: ""
     val country = if (cShort.isNotEmpty()) cShort else (if (cLong.isNotEmpty()) cLong else "JP")
@@ -44,12 +48,14 @@ internal fun parseTunnelItem(obj: JSONObject, index: Int): TunnelItem {
         status = tStatus,
         uptimeSeconds = uptime,
         latencyMs = latency,
+        nodeId = nodeId,
         nodeIp = ip,
         nodePort = port,
         country = country,
         countryLong = cLong,
         throughputBps = throughputBps,
         isUserland = isUserland,
+        isFavorite = isFav,
         isResidential = isResidential,
         isHosting = isHosting,
         riskScore = riskScore,
@@ -85,6 +91,7 @@ internal fun parseMasterGateway(vpnObj: JSONObject?, includeNodeDetails: Boolean
     val isConnected = status == "connected"
     val isZeroTun = vpnObj?.optBoolean("zero_tun", false) ?: false
     val driverMode = vpnObj?.optString("driver_mode", if (isZeroTun) "userland" else "kernel") ?: if (isZeroTun) "userland" else "kernel"
+    val masterFav = activeNodeObj?.optBoolean("is_favorite", false) ?: false
     val devLabel = when {
         isZeroTun && isEn -> "Zero-TUN Gateway"
         isZeroTun -> "主网关 (免TUN)"
@@ -103,6 +110,51 @@ internal fun parseMasterGateway(vpnObj: JSONObject?, includeNodeDetails: Boolean
         status = if (isConnected) (if (isEn) "Healthy" else "断流检测通过") else disconnectedLabel,
         isConnected = isConnected,
         isZeroTun = isZeroTun,
-        driverMode = driverMode
+        driverMode = driverMode,
+        isFavorite = masterFav
+    )
+}
+
+internal fun parseDeepProbeJob(obj: JSONObject): NodeDeepProbeJob {
+    val arr = obj.optJSONArray("results")
+    val results = mutableListOf<NodeDeepProbeResult>()
+    if (arr != null) {
+        for (i in 0 until arr.length()) {
+            val item = arr.optJSONObject(i) ?: continue
+            val unlockObj = item.optJSONObject("unlock")
+            results.add(
+                NodeDeepProbeResult(
+                    nodeId = item.optString("node_id", ""),
+                    ip = item.optString("ip", ""),
+                    port = item.optInt("port", 0),
+                    proto = item.optString("proto", ""),
+                    countryShort = item.optString("country_short", ""),
+                    status = item.optString("status", "pending"),
+                    driver = item.optString("driver", ""),
+                    tcpReachable = item.optBoolean("tcp_reachable", false),
+                    tcpLatencyMs = item.optInt("tcp_latency_ms", 0),
+                    tunnelConnected = item.optBoolean("tunnel_connected", false),
+                    egressReachable = item.optBoolean("egress_reachable", false),
+                    egressLatencyMs = item.optInt("egress_latency_ms", 0),
+                    sstpPort = item.optInt("sstp_port", 0),
+                    openai = unlockObj?.optString("openai", "unknown") ?: "unknown",
+                    claude = unlockObj?.optString("claude", "unknown") ?: "unknown",
+                    gemini = unlockObj?.optString("gemini", "unknown") ?: "unknown",
+                    google = unlockObj?.optString("google", "unknown") ?: "unknown",
+                    cloudflare = unlockObj?.optString("cloudflare", "unknown") ?: "unknown",
+                    netflix = unlockObj?.optString("netflix", "unknown") ?: "unknown",
+                    isProbed = unlockObj?.optBoolean("is_probed", false) ?: false,
+                    throughputBps = unlockObj?.optLong("throughput_bytes_per_sec", 0) ?: 0,
+                    error = item.optString("error", "")
+                )
+            )
+        }
+    }
+    return NodeDeepProbeJob(
+        jobId = obj.optString("job_id", ""),
+        status = obj.optString("status", "running"),
+        total = obj.optInt("total", results.size),
+        completed = obj.optInt("completed", 0),
+        results = results
     )
 }

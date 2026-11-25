@@ -33,6 +33,7 @@ type Tunnel struct {
 	Unlock         *UnlockResult                                                     `json:"unlock,omitempty"`      // AI and Streaming unlock probe status
 	CircuitBroken  bool                                                              `json:"circuit_broken"`        // true if in cooldown due to consecutive failures
 	IsUserland     bool                                                              `json:"is_userland,omitempty"` // true if pure userland SSTP (Zero-TUN)
+	IsProbe        bool                                                              `json:"-"`                     // ephemeral probe tunnel excluded from public tunnel pools
 	Dialer         func(ctx context.Context, network, addr string) (net.Conn, error) `json:"-"`
 	OpenPacketConn func() (net.PacketConn, error)                                    `json:"-"`
 	Closer         io.Closer                                                         `json:"-"`

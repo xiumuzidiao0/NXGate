@@ -25,4 +25,9 @@ export const appState = {
     currentAgeType: 'x25519',
     currentAppProfile: null,
     isUpdating: false,
+    selectedNodeIds: new Set(),
+    deepProbeJob: null,
+    deepProbeResults: {},
+    deepProbePanelOpen: false,
+    deepProbePollTimer: null,
 };

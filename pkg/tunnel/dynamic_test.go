@@ -565,3 +565,56 @@ func TestProbeDialerConnectivityAndPrimaryExclusion(t *testing.T) {
 		t.Fatalf("expected cold-storage fallback to find BR candidate, got group=%+v", got)
 	}
 }
+
+func TestEvictTunnelIDsAndBlockedPrimaryGuard(t *testing.T) {
+	cfg := &config.Config{DataDir: t.TempDir()}
+	np := nodes.NewNodePool(cfg)
+	tp := NewPool(cfg, np)
+	mgr := NewDynamicGroupManager(cfg, tp, np)
+
+	sec := &DynamicGroup{
+		ID:              "dg-evict",
+		Name:            "Evict Group",
+		Enabled:         true,
+		Country:         "JP",
+		TargetCount:     2,
+		IntervalMinutes: 15,
+		ActiveTunnelIDs: []string{"tun-1", "tun-2"},
+	}
+	if err := mgr.SaveGroup(sec); err != nil {
+		t.Fatalf("save group: %v", err)
+	}
+
+	affected := mgr.EvictTunnelIDs([]string{"tun-1"})
+	if len(affected) != 1 || affected[0] != "dg-evict" {
+		t.Fatalf("expected [dg-evict] affected, got %v", affected)
+	}
+	updated := mgr.GetGroup("dg-evict")
+	if len(updated.ActiveTunnelIDs) != 1 || updated.ActiveTunnelIDs[0] != "tun-2" {
+		t.Fatalf("expected only tun-2 remaining, got %v", updated.ActiveTunnelIDs)
+	}
+
+	// Verify evaluatePrimarySystemGroup switches away when the current active node is blacklisted,
+	// even with IntervalMinutes == 0 (fixed mode).
+	blockedNode := &nodes.Node{ID: "n-bad", IP: "203.0.113.10", CountryShort: "JP", LatencyMs: 15, Score: 1000}
+	cleanNode := &nodes.Node{ID: "n-good", IP: "203.0.113.20", CountryShort: "JP", LatencyMs: 25, Score: 900}
+	np.SetCandidatesForTest([]*nodes.Node{blockedNode, cleanNode})
+	np.Blacklist().MarkManual(blockedNode.ID, blockedNode.IP, blockedNode.CountryShort, "test block", time.Hour)
+
+	mockPrimary := &mockPrimaryConnector{connectedNode: blockedNode, status: "connected"}
+	mgr.SetPrimaryConnector(mockPrimary)
+
+	sysGroup := mgr.GetGroup(SystemPrimaryGroupID)
+	sysGroup.Enabled = true
+	sysGroup.IntervalMinutes = 0
+	if err := mgr.SaveGroup(sysGroup); err != nil {
+		t.Fatalf("save sysGroup: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	mgr.evaluatePrimarySystemGroup(ctx, sysGroup, []*nodes.Node{cleanNode})
+	if mockPrimary.connectCalls != 1 || mockPrimary.connectedNode == nil || mockPrimary.connectedNode.ID != "n-good" {
+		t.Fatalf("expected fixed system-primary to switch from blacklisted node to n-good, calls=%d node=%+v", mockPrimary.connectCalls, mockPrimary.connectedNode)
+	}
+}

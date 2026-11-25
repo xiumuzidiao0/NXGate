@@ -2,7 +2,7 @@ import { appState } from '../state.js';
 import { getLanguage, localize, t, tAlert } from '../i18n-runtime.js';
 import { fetchStatus, fetchUnlockCache } from '../transport.js';
 import { appendLog, escapeHtml, getCountryFlagSVG, getCountryName, jsonAttr, renderUnlockBadges } from '../utils.js';
-import { updateDynamicGroupCountryOptions } from './matrix/groups.js';
+import { renderDynamicGroups, renderMatrixTopology, updateDynamicGroupCountryOptions } from './matrix.js';
 
 export function updateNodePoolSummary() {
     const isEn = getLanguage() === 'en';
@@ -133,11 +133,24 @@ export async function toggleFavorite(nodeId) {
         });
         const ret = await res.json();
         if (res.ok) {
+            const isFav = !!ret.is_favorite;
             const node = appState.allNodes.find(n => n.id === nodeId);
             if (node) {
-                node.is_favorite = ret.is_favorite;
-                renderNodes();
+                node.is_favorite = isFav;
             }
+            if (appState.currentState?.vpn?.active_node?.id === nodeId) {
+                appState.currentState.vpn.active_node.is_favorite = isFav;
+            }
+            if (Array.isArray(appState.currentState?.tunnels)) {
+                appState.currentState.tunnels.forEach(t => {
+                    if (t?.node?.id === nodeId) {
+                        t.node.is_favorite = isFav;
+                    }
+                });
+            }
+            renderNodes();
+            renderDynamicGroups();
+            renderMatrixTopology();
             fetchStatus();
             fetchNodes();
         }
@@ -369,19 +382,13 @@ export function toggleMapCollapse() {
     }
 }
 
-export function renderNodes() {
-    const tbody = document.getElementById('nodes-tbody');
-    const search = document.getElementById('search-filter').value.toLowerCase();
-    const country = document.getElementById('country-filter').value;
-    const ipType = document.getElementById('ip-type-filter').value;
-    const sortMode = document.getElementById('sort-filter').value;
-
-    const favCount = appState.allNodes.filter(n => n.is_favorite).length;
-    const favCountEl = document.getElementById('fav-count');
-    if (favCountEl) favCountEl.innerText = favCount;
+function getFilteredSortedNodes() {
+    const search = (document.getElementById('search-filter')?.value || '').toLowerCase();
+    const country = document.getElementById('country-filter')?.value || '';
+    const ipType = document.getElementById('ip-type-filter')?.value || '';
+    const sortMode = document.getElementById('sort-filter')?.value || 'latency_asc';
 
     const filtered = appState.allNodes.filter(n => {
-        // Quick Chips Filter Logic
         if (appState.activeQuickFilter === 'fav' && !n.is_favorite) return false;
         if (appState.activeQuickFilter === 'res' && n.ip_type !== 'residential') return false;
         if (appState.activeQuickFilter === 'pure' && n.risk_level !== 'pure') return false;
@@ -408,7 +415,6 @@ export function renderNodes() {
             if (!u || u.netflix !== 'unlocked') return false;
         }
 
-        // Standard Filters
         if (country && n.country_short !== country) return false;
         if (ipType && n.ip_type !== ipType) return false;
         if (search) {
@@ -437,20 +443,360 @@ export function renderNodes() {
         return 0;
     });
 
+    return filtered;
+}
+
+function syncSelectAllCheckbox(filtered) {
+    const selectAllEl = document.getElementById('nodes-select-all');
+    if (!selectAllEl) return;
+    if (!filtered || filtered.length === 0) {
+        selectAllEl.checked = false;
+        selectAllEl.indeterminate = false;
+        return;
+    }
+    let selectedVisible = 0;
+    filtered.forEach(n => {
+        if (appState.selectedNodeIds.has(n.id)) selectedVisible++;
+    });
+    selectAllEl.checked = selectedVisible > 0 && selectedVisible === filtered.length;
+    selectAllEl.indeterminate = selectedVisible > 0 && selectedVisible < filtered.length;
+}
+
+export function toggleSelectNode(nodeId, event) {
+    if (!nodeId) return;
+    const target = event?.target;
+    if (target && target.type === 'checkbox') {
+        if (target.checked) appState.selectedNodeIds.add(nodeId);
+        else appState.selectedNodeIds.delete(nodeId);
+    } else if (appState.selectedNodeIds.has(nodeId)) {
+        appState.selectedNodeIds.delete(nodeId);
+    } else {
+        appState.selectedNodeIds.add(nodeId);
+    }
+    syncSelectAllCheckbox(getFilteredSortedNodes());
+    renderDeepProbeUI();
+}
+
+export function toggleSelectAllNodes(event) {
+    const checked = !!event?.target?.checked;
+    const filtered = getFilteredSortedNodes();
+    filtered.forEach(n => {
+        if (checked) appState.selectedNodeIds.add(n.id);
+        else appState.selectedNodeIds.delete(n.id);
+    });
+    renderNodes();
+}
+
+export function clearNodeSelection() {
+    appState.selectedNodeIds.clear();
+    renderNodes();
+}
+
+export function toggleDeepProbePanel() {
+    appState.deepProbePanelOpen = !appState.deepProbePanelOpen;
+    renderDeepProbeUI();
+}
+
+export function probeSingleNodeDeep(nodeId) {
+    if (!nodeId) return;
+    return startDeepNodeProbe([nodeId]);
+}
+
+export function probeSelectedNodes() {
+    const ids = Array.from(appState.selectedNodeIds || []);
+    if (ids.length === 0) {
+        tAlert('请先勾选至少 1 个节点', 'Please select at least 1 node first');
+        return;
+    }
+    if (ids.length > 20) {
+        tAlert('单次最多支持实测 20 个节点，请减少勾选数量', 'You can deeply test at most 20 nodes per batch');
+        return;
+    }
+    return startDeepNodeProbe(ids);
+}
+
+export async function startDeepNodeProbe(nodeIds) {
+    const uniqueIds = [...new Set((nodeIds || []).filter(Boolean))];
+    if (uniqueIds.length === 0) return;
+    if (uniqueIds.length > 20) {
+        tAlert('单次最多支持实测 20 个节点', 'At most 20 nodes can be tested per batch');
+        return;
+    }
+
+    if (appState.deepProbePollTimer) {
+        clearInterval(appState.deepProbePollTimer);
+        appState.deepProbePollTimer = null;
+    }
+
+    appendLog({
+        level: 'INFO',
+        module: 'NodeProbe',
+        message: localize(
+            `已发起 ${uniqueIds.length} 个节点的真实连通性、延迟与解锁实测...`,
+            `Started deep connectivity, latency & unlock test for ${uniqueIds.length} node(s)...`
+        )
+    });
+
+    try {
+        const res = await fetch('/api/nodes/probe/deep', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ node_ids: uniqueIds })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            tAlert('启动深度实测失败: ' + (data.error || res.statusText), 'Failed to start deep test: ' + (data.error || res.statusText));
+            return;
+        }
+        appState.deepProbeJob = data;
+        appState.deepProbePanelOpen = true;
+        if (Array.isArray(data.results)) {
+            data.results.forEach(item => {
+                if (item && item.node_id) {
+                    appState.deepProbeResults[item.node_id] = item;
+                }
+            });
+        }
+        renderDeepProbeUI();
+        renderNodes();
+
+        if (data.status === 'running' && data.job_id) {
+            appState.deepProbePollTimer = setInterval(() => {
+                pollDeepProbeJob(data.job_id);
+            }, 1200);
+        }
+    } catch (err) {
+        tAlert('请求失败: ' + err, 'Request failed: ' + err);
+    }
+}
+
+async function pollDeepProbeJob(jobId) {
+    if (!jobId) return;
+    try {
+        const res = await fetch(`/api/nodes/probe/deep?job_id=${encodeURIComponent(jobId)}`);
+        if (!res.ok) return;
+        const job = await res.json();
+        appState.deepProbeJob = job;
+        if (Array.isArray(job.results)) {
+            job.results.forEach(item => {
+                if (item && item.node_id) {
+                    appState.deepProbeResults[item.node_id] = item;
+                }
+            });
+        }
+        renderDeepProbeUI();
+        renderNodes();
+
+        if (job.status !== 'running') {
+            if (appState.deepProbePollTimer) {
+                clearInterval(appState.deepProbePollTimer);
+                appState.deepProbePollTimer = null;
+            }
+            appendLog({
+                level: 'INFO',
+                module: 'NodeProbe',
+                message: localize(
+                    `节点实测任务完成 (${job.completed}/${job.total})`,
+                    `Node deep test complete (${job.completed}/${job.total})`
+                )
+            });
+            await fetchNodes();
+            await fetchUnlockCache();
+        }
+    } catch (err) {
+        console.error('pollDeepProbeJob error:', err);
+    }
+}
+
+export async function cancelDeepProbe() {
+    const jobId = appState.deepProbeJob?.job_id;
+    if (!jobId) return;
+    try {
+        const res = await fetch('/api/nodes/probe/deep/cancel', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ job_id: jobId })
+        });
+        const job = await res.json().catch(() => null);
+        if (res.ok && job) {
+            appState.deepProbeJob = job;
+            if (Array.isArray(job.results)) {
+                job.results.forEach(item => {
+                    if (item && item.node_id) appState.deepProbeResults[item.node_id] = item;
+                });
+            }
+        }
+    } catch (err) {}
+    if (appState.deepProbePollTimer) {
+        clearInterval(appState.deepProbePollTimer);
+        appState.deepProbePollTimer = null;
+    }
+    renderDeepProbeUI();
+    renderNodes();
+}
+
+export function renderDeepProbeUI() {
+    const bar = document.getElementById('nodes-selection-bar');
+    const summaryEl = document.getElementById('nodes-selection-summary');
+    const probeSelectedBtn = document.getElementById('btn-probe-selected');
+    const clearSelBtn = document.getElementById('btn-clear-selected');
+    const jobStatusEl = document.getElementById('deep-probe-job-status');
+    const cancelBtn = document.getElementById('btn-cancel-deep-probe');
+    const toggleBtn = document.getElementById('btn-toggle-probe-panel');
+    const panel = document.getElementById('nodes-probe-results-panel');
+    const panelBody = document.getElementById('deep-probe-results-body');
+    const panelTitle = document.getElementById('deep-probe-panel-title');
+
+    const isEn = getLanguage() === 'en';
+    const selectedCount = appState.selectedNodeIds ? appState.selectedNodeIds.size : 0;
+    const job = appState.deepProbeJob;
+    const hasJob = !!(job && Array.isArray(job.results) && job.results.length > 0);
+    const isRunning = !!(job && job.status === 'running');
+
+    if (bar) {
+        const showBar = selectedCount > 0 || hasJob;
+        bar.classList.toggle('hidden', !showBar);
+        bar.hidden = !showBar;
+    }
+
+    if (summaryEl) {
+        summaryEl.innerText = isEn
+            ? `Selected ${selectedCount} node(s) (max 20)`
+            : `已选 ${selectedCount} 个节点（单次上限 20）`;
+    }
+    if (probeSelectedBtn) {
+        probeSelectedBtn.disabled = selectedCount === 0 || selectedCount > 20 || isRunning;
+        probeSelectedBtn.innerText = isEn
+            ? `Test Selected (${selectedCount})`
+            : `测试已选节点（解锁/延迟/连通性 ${selectedCount}）`;
+    }
+    if (clearSelBtn) {
+        clearSelBtn.classList.toggle('hidden', selectedCount === 0);
+    }
+
+    if (jobStatusEl) {
+        if (!hasJob) {
+            jobStatusEl.innerText = '';
+        } else if (isRunning) {
+            jobStatusEl.innerText = isEn
+                ? `Testing ${job.completed}/${job.total}...`
+                : `实测进度 ${job.completed}/${job.total}...`;
+        } else if (job.status === 'cancelled') {
+            jobStatusEl.innerText = isEn
+                ? `Cancelled (${job.completed}/${job.total})`
+                : `已取消 (${job.completed}/${job.total})`;
+        } else {
+            const okCount = job.results.filter(r => r.status === 'ok').length;
+            jobStatusEl.innerText = isEn
+                ? `Done: ${okCount}/${job.total} reachable`
+                : `已完成：${okCount}/${job.total} 可出网`;
+        }
+    }
+    if (cancelBtn) {
+        cancelBtn.classList.toggle('hidden', !isRunning);
+        cancelBtn.innerText = isEn ? 'Cancel' : '取消实测';
+    }
+    if (toggleBtn) {
+        toggleBtn.classList.toggle('hidden', !hasJob);
+        toggleBtn.innerText = appState.deepProbePanelOpen
+            ? (isEn ? 'Hide Details' : '收起结果')
+            : (isEn ? 'View Details' : '查看结果详情');
+    }
+
+    if (panel) {
+        const showPanel = hasJob && appState.deepProbePanelOpen;
+        panel.classList.toggle('hidden', !showPanel);
+        panel.hidden = !showPanel;
+    }
+    if (panelTitle && hasJob) {
+        panelTitle.innerText = isEn
+            ? `Node Connectivity, Latency & Unlock Test Results (${job.completed}/${job.total})`
+            : `节点实测详情（连通性 / 延迟 / 解锁 ${job.completed}/${job.total}）`;
+    }
+
+    if (panelBody && hasJob) {
+        panelBody.innerHTML = job.results.map(r => {
+            const statusClass = r.status === 'ok'
+                ? 'connected'
+                : (r.status === 'partial' ? 'connecting' : (r.status === 'failed' || r.status === 'cancelled' ? 'disconnected' : 'badge-info'));
+            const statusLabel = isEn
+                ? ({ ok: 'Egress OK', partial: 'Handshake Only', failed: 'Failed', cancelled: 'Cancelled', running: 'Testing...', pending: 'Pending' }[r.status] || r.status)
+                : ({ ok: '真实可出网', partial: '仅握手/出网受阻', failed: '实测失败', cancelled: '已取消', running: '实测中...', pending: '排队中' }[r.status] || r.status);
+            const driverTag = r.driver ? `<span class="badge badge-proto badge-mini">${escapeHtml(r.driver)}</span>` : '';
+            const tcpLat = r.tcp_reachable && r.tcp_latency_ms > 0 ? `TCP ${r.tcp_latency_ms}ms` : (r.tcp_latency_ms < 0 ? (isEn ? 'TCP Timeout' : 'TCP 超时') : 'TCP -');
+            const egressLat = r.egress_reachable && r.egress_latency_ms > 0 ? `${isEn ? 'Egress' : '出网'} ${r.egress_latency_ms}ms` : (r.tunnel_connected ? (isEn ? 'Egress Blocked' : '出网不通') : `${isEn ? 'Egress' : '出网'} -`);
+            const unlockHtml = r.unlock ? renderUnlockBadges(r.unlock) : `<span class="text-xs text-muted">${isEn ? 'No unlock data' : '暂无解锁数据'}</span>`;
+            const errHtml = r.error ? `<div class="text-xs text-warning">${escapeHtml(r.error)}</div>` : '';
+            const cFlag = r.country_short ? getCountryFlagSVG(r.country_short) : '';
+            const liveNode = appState.allNodes.find(n => n.id === r.node_id);
+            const isFav = !!(liveNode && liveNode.is_favorite);
+            const cShort = r.country_short || liveNode?.country_short || '';
+
+            return `
+                <div class="probe-result-row">
+                    <div class="probe-result-cell probe-result-node">
+                        <span class="flag-box">${cFlag} <code class="mono">${escapeHtml(r.ip || r.node_id)}${r.port > 0 ? ':' + r.port : ''}</code></span>
+                        <div class="row gap-1 wrap mt-1">
+                            <span class="badge ${statusClass} badge-mini"><span class="status-dot"></span> ${escapeHtml(statusLabel)}</span>
+                            ${driverTag}
+                        </div>
+                        ${errHtml}
+                    </div>
+                    <div class="probe-result-cell probe-result-latency">
+                        <div class="text-xs">${escapeHtml(tcpLat)}</div>
+                        <div class="text-xs text-muted">${escapeHtml(egressLat)}</div>
+                    </div>
+                    <div class="probe-result-cell probe-result-unlock">
+                        ${unlockHtml}
+                    </div>
+                    <div class="probe-result-cell probe-result-actions">
+                        <button type="button" class="btn btn-outline btn-xs" data-action="toggleFavorite" data-args="${jsonAttr([r.node_id])}">
+                            ${isFav ? '★ ' + (isEn ? 'Fav' : '已收藏') : '☆ ' + (isEn ? 'Fav' : '收藏')}
+                        </button>
+                        <button type="button" class="btn btn-outline btn-xs btn-icon-danger" data-action="addNodeToBlacklist" data-args="${jsonAttr([r.node_id, r.ip || '', cShort])}">
+                            🚫 ${isEn ? 'Block' : '拉黑'}
+                        </button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+}
+
+export function renderNodes() {
+    const tbody = document.getElementById('nodes-tbody');
+    if (appState.allNodes.length > 0 && appState.selectedNodeIds && appState.selectedNodeIds.size > 0) {
+        const knownIDs = new Set(appState.allNodes.map(n => n.id));
+        for (const id of Array.from(appState.selectedNodeIds)) {
+            if (!knownIDs.has(id)) appState.selectedNodeIds.delete(id);
+        }
+    }
+
+    const favCount = appState.allNodes.filter(n => n.is_favorite).length;
+    const favCountEl = document.getElementById('fav-count');
+    if (favCountEl) favCountEl.innerText = favCount;
+
+    const filtered = getFilteredSortedNodes();
+    syncSelectAllCheckbox(filtered);
+
     const isEn = getLanguage() === 'en';
     updateNodePoolSummary();
     document.getElementById('filtered-count').innerText = `${isEn ? 'Showing ' : '已筛选出 '}${filtered.length} / ${appState.allNodes.length} ${isEn ? 'nodes' : '个节点'}`;
 
     updateNodesMapMarkers(filtered);
+    renderDeepProbeUI();
 
     if (filtered.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="9" class="empty-state">${isEn ? 'No nodes match the selected criteria' : '未找到匹配条件的节点'}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="10" class="empty-state">${isEn ? 'No nodes match the selected criteria' : '未找到匹配条件的节点'}</td></tr>`;
         return;
     }
 
     tbody.innerHTML = filtered.map(n => {
         const isCurrent = appState.currentState && appState.currentState.vpn && appState.currentState.vpn.active_node_id === n.id;
         const activeTun = (appState.currentState && appState.currentState.tunnels) ? appState.currentState.tunnels.find(t => t.node && (t.node.id === n.id || t.node.ip === n.ip)) : null;
+        const isSelected = appState.selectedNodeIds ? appState.selectedNodeIds.has(n.id) : false;
+        const deepRes = appState.deepProbeResults ? appState.deepProbeResults[n.id] : null;
+        const isDeepTesting = !!(deepRes && (deepRes.status === 'running' || deepRes.status === 'pending'));
 
         let latencyBadge = '';
         if (n.probe_status === 'connected' && n.latency_ms <= 0) {
@@ -461,6 +807,19 @@ export function renderNodes() {
             latencyBadge = `<span class="badge latency-badge latency-timeout"><span class="status-dot"></span> ${isEn ? 'Timeout' : '超时不可达'}</span>`;
         } else {
             latencyBadge = `<span class="badge latency-badge latency-unknown"><span class="status-dot"></span> ${isEn ? 'Unverified' : '未验证'}</span>`;
+        }
+
+        let deepBadge = '';
+        if (deepRes) {
+            if (deepRes.status === 'ok') {
+                deepBadge = `<div class="mt-1"><span class="badge connected badge-mini" title="${escapeHtml(deepRes.driver || '')}">✓ ${isEn ? 'Egress' : '出网'} ${deepRes.egress_latency_ms}ms</span></div>`;
+            } else if (deepRes.status === 'partial') {
+                deepBadge = `<div class="mt-1"><span class="badge connecting badge-mini" title="${escapeHtml(deepRes.error || '')}">⚠ ${isEn ? 'Egress Blocked' : '无法出网'}</span></div>`;
+            } else if (deepRes.status === 'failed') {
+                deepBadge = `<div class="mt-1"><span class="badge disconnected badge-mini" title="${escapeHtml(deepRes.error || '')}">✕ ${isEn ? 'Test Failed' : '实测失败'}</span></div>`;
+            } else if (deepRes.status === 'running' || deepRes.status === 'pending') {
+                deepBadge = `<div class="mt-1"><span class="badge badge-info badge-mini">⟳ ${isEn ? 'Testing...' : '实测中...'}</span></div>`;
+            }
         }
 
         const speedMbps = (n.speed / 1000000).toFixed(1) + ' Mbps';
@@ -479,7 +838,7 @@ export function renderNodes() {
         const repClass = repVal < 45 ? 'rep-bad' : (repVal < 70 ? 'rep-warn' : 'rep-good');
         const repBadge = `<span class="badge reputation-badge ${repClass}">${repVal}${isEn ? ' pts' : '分'}</span>`;
 
-        const unlockData = (appState.cachedUnlockMap && appState.cachedUnlockMap[n.ip]) || n.unlock;
+        const unlockData = (appState.cachedUnlockMap && appState.cachedUnlockMap[n.ip]) || deepRes?.unlock || n.unlock;
         const unlockInfo = unlockData ? renderUnlockBadges(unlockData) : `<span class="text-xs text-muted">${isEn ? 'Not Probed' : '未检测'}</span>`;
 
         let riskBadge = '';
@@ -488,8 +847,13 @@ export function renderNodes() {
             riskBadge = `<span class="risk-badge ${escapeHtml(n.risk_level)}" title="${isEn ? 'Risk Score' : '风险评分'}: ${n.risk_score || 0}%">${escapeHtml(riskLabel)}</span>`;
         }
 
+        const deepTestBtn = `<button type="button" class="btn btn-outline btn-xs" ${isDeepTesting ? 'disabled' : ''} data-action="probeSingleNodeDeep" data-args="${jsonAttr([n.id])}" title="${isEn ? 'Test real connectivity, egress latency & service unlocks' : '实测真实连通性、出网延迟与解锁能力'}">${isDeepTesting ? (isEn ? 'Testing...' : '实测中') : (isEn ? 'Test' : '测试')}</button>`;
+
         return `
             <tr class="${isCurrent ? 'node-row-current' : (activeTun ? 'node-row-active' : '')}">
+                <td data-label="" class="cell-center cell-select">
+                    <input type="checkbox" class="node-select-checkbox" ${isSelected ? 'checked' : ''} data-change-action="toggleSelectNode" data-args="${jsonAttr([n.id])}" aria-label="${escapeHtml(n.ip || n.id)}">
+                </td>
                 <td data-label="" class="text-center">
                     <button class="star-btn ${n.is_favorite ? 'active' : ''}" data-action="toggleFavorite" data-args="${jsonAttr([n.id])}" title="${n.is_favorite ? (isEn ? 'Remove from favorites' : '取消收藏') : (isEn ? 'Add to favorites' : '加入收藏')}">
                         ${n.is_favorite ? '<svg viewBox="0 0 24 24" width="14" height="14" fill="#f59e0b" stroke="#f59e0b" stroke-width="1.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>' : '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#64748b" stroke-width="1.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>'}
@@ -507,7 +871,7 @@ export function renderNodes() {
                     <span class="badge badge-proto">${escapeHtml(String(n.proto || '').toUpperCase())}</span>${n.in_active_pool === false ? ` <span class="badge badge-cold" title="${isEn ? 'Cold storage relay outside auto-probe pool' : '位于全量冷库，未纳入活跃自动测速'}">${isEn ? 'Cold' : '冷库'}</span>` : ''}
                 </td>
                 <td data-label="${isEn ? 'Type' : '网络类型'}">${typeTag} ${riskBadge}${ispInfo}</td>
-                <td data-label="${isEn ? 'Latency' : '延迟'}">${latencyBadge}</td>
+                <td data-label="${isEn ? 'Latency' : '延迟'}">${latencyBadge}${deepBadge}</td>
                 <td data-label="${isEn ? 'Reputation' : '信誉'}">${repBadge}</td>
                 <td data-label="${isEn ? 'Unlocks' : '解锁能力'}">${unlockInfo}</td>
                 <td data-label="${isEn ? 'Bandwidth' : '带宽'}">
@@ -518,18 +882,20 @@ export function renderNodes() {
                     ${isCurrent ?
                         `<div class="action-group">
                             <span class="badge connected"><span class="status-dot"></span> ${isEn ? (appState.currentState?.vpn?.zero_tun ? 'Zero-TUN' : 'Primary') : (appState.currentState?.vpn?.zero_tun ? '当前免TUN' : '当前主连')}</span>
+                            ${deepTestBtn}
                             <button class="btn btn-danger btn-xs" data-action="disconnectVPN">${isEn ? 'Disconnect' : '断开'}</button>
                         </div>` :
                         (activeTun ?
                             `<div class="action-group">
                                 <span class="badge badge-current"><span class="status-dot"></span> ${escapeHtml(activeTun.dev_name)}</span>
+                                ${deepTestBtn}
                                 <button class="btn btn-danger btn-xs" data-action="stopTunnel" data-args="${jsonAttr([activeTun.id])}">${isEn ? 'Disconnect' : '断开'}</button>
                             </div>` :
                             `<div class="action-group">
                                 <button class="btn btn-xs" data-action="connectToNode" data-args="${jsonAttr([n.id, 'kernel'])}" title="${isEn ? 'Connect via OpenVPN (kernel TUN)' : '内核 OpenVPN 直连'}">${isEn ? 'Kernel' : '内核连'}</button>
                                 <button class="btn btn-outline btn-xs" data-action="connectToNode" data-args="${jsonAttr([n.id, 'sstp'])}" title="${isEn ? 'Zero-TUN userland direct connect via SSTP 443' : '纯用户态免虚拟网卡直连 (SSTP 443)'}">⚡${isEn ? 'ZeroTUN' : '免TUN'}</button>
                                 <button class="btn btn-outline btn-xs" data-action="startNewTunnel" data-args="${jsonAttr([n.id])}" title="${isEn ? 'Launch as new independent tunnel exit' : '启动为新的独立并发出口'}">${isEn ? '+Tunnel' : '+并发'}</button>
-                                ${n.in_active_pool === false ? `<button class="btn btn-outline btn-xs" data-action="probeSingleNode" data-args="${jsonAttr([n.id])}" title="${isEn ? 'Probe latency and unlock status for this cold node' : '立即测速并检测此冷库节点解锁'}">${isEn ? 'Probe' : '测速'}</button>` : ''}
+                                ${deepTestBtn}
                                 <button class="btn btn-outline btn-xs btn-icon-danger" data-action="addNodeToBlacklist" data-args="${jsonAttr([n.id, n.ip, n.country_short])}" title="${isEn ? 'Blacklist node for 24h' : '屏蔽/拉黑此节点24小时'}">×</button>
                             </div>`
                         )

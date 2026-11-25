@@ -25,11 +25,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Block
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Lan
 import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Star
+import androidx.compose.material.icons.rounded.StarBorder
 import androidx.compose.material.icons.rounded.ToggleOff
 import androidx.compose.material.icons.rounded.ToggleOn
 import androidx.compose.material3.Card
@@ -65,6 +68,9 @@ fun MatrixPipelineTab(
     portRules: List<PortRuleItem>,
     activeServer: ServerProfile?,
     isEn: Boolean,
+    favoriteNodeIds: Set<String> = emptySet(),
+    onToggleFavoriteNode: (String) -> Unit = {},
+    onBlacklistNode: (nodeId: String, ip: String, country: String, groupId: String) -> Unit = { _, _, _, _ -> },
     onToggleRuleEnabled: (Int, PortRuleItem) -> Unit,
     onEditRule: (PortRuleItem) -> Unit,
     onDeleteRule: (PortRuleItem) -> Unit,
@@ -392,15 +398,48 @@ fun MatrixPipelineTab(
                                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                                     )
 
-                                                    // Row 3: Unlock Pills (GPT✓, Claude✓, Gemini✓, NF✓)
+                                                    // Row 3: Unlock Pills (GPT✓, Claude✓, Gemini✓, NF✓) + Favorite / Block Actions
                                                     Row(
-                                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        horizontalArrangement = Arrangement.SpaceBetween,
                                                         verticalAlignment = Alignment.CenterVertically
                                                     ) {
-                                                        UnlockMiniPill("GPT", leaf.openai)
-                                                        UnlockMiniPill("Claude", leaf.claude)
-                                                        UnlockMiniPill("Gemini", leaf.gemini)
-                                                        UnlockMiniPill("NF", leaf.netflix)
+                                                        Row(
+                                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                                            verticalAlignment = Alignment.CenterVertically
+                                                        ) {
+                                                            UnlockMiniPill("GPT", leaf.openai)
+                                                            UnlockMiniPill("Claude", leaf.claude)
+                                                            UnlockMiniPill("Gemini", leaf.gemini)
+                                                            UnlockMiniPill("NF", leaf.netflix)
+                                                        }
+                                                        if (leaf.nodeId.isNotEmpty() && leaf.devName != "direct") {
+                                                            val leafFav = favoriteNodeIds.contains(leaf.nodeId) || leaf.isFavorite
+                                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                                IconButton(
+                                                                    onClick = { onToggleFavoriteNode(leaf.nodeId) },
+                                                                    modifier = Modifier.size(26.dp)
+                                                                ) {
+                                                                    Icon(
+                                                                        imageVector = if (leafFav) Icons.Rounded.Star else Icons.Rounded.StarBorder,
+                                                                        contentDescription = strings.favorite,
+                                                                        tint = if (leafFav) Color(0xFFF59E0B) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                                        modifier = Modifier.size(16.dp)
+                                                                    )
+                                                                }
+                                                                IconButton(
+                                                                    onClick = { onBlacklistNode(leaf.nodeId, leaf.nodeIp, leaf.countryCode, leaf.groupId) },
+                                                                    modifier = Modifier.size(26.dp)
+                                                                ) {
+                                                                    Icon(
+                                                                        imageVector = Icons.Rounded.Block,
+                                                                        contentDescription = strings.blockAndRotate,
+                                                                        tint = MaterialTheme.colorScheme.error,
+                                                                        modifier = Modifier.size(16.dp)
+                                                                    )
+                                                                }
+                                                            }
+                                                        }
                                                     }
                                                 }
                                             }

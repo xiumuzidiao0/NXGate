@@ -412,7 +412,12 @@ export const I18N = {
                 'dg.int_30': '每 30 分钟重评轮换',
                 'dg.int_60': '每 1 小时重评轮换',
                 'dg.int_120': '每 2 小时重评轮换',
-                'app.https_opt': 'HTTPS (支持反代)'
+                'app.https_opt': 'HTTPS (支持反代)',
+                'nodes.probe_selected': '测试已选节点（解锁/延迟/连通性）',
+                'nodes.clear_selection': '清空选择',
+                'nodes.cancel_probe': '取消实测',
+                'nodes.toggle_probe_panel': '查看结果详情',
+                'nodes.probe_panel_title': '节点实测详情（连通性 / 延迟 / 解锁）'
             },
             en: {
                 'brand.sub': 'Multi-Egress Gateway',
@@ -827,6 +832,11 @@ export const I18N = {
                 'dg.int_30': 'Every 30 minutes',
                 'dg.int_60': 'Every 1 hour',
                 'dg.int_120': 'Every 2 hours',
-                'app.https_opt': 'HTTPS (Reverse Proxy)'
+                'app.https_opt': 'HTTPS (Reverse Proxy)',
+                'nodes.probe_selected': 'Test Selected (Unlock / Latency / Egress)',
+                'nodes.clear_selection': 'Clear Selection',
+                'nodes.cancel_probe': 'Cancel Test',
+                'nodes.toggle_probe_panel': 'View Details',
+                'nodes.probe_panel_title': 'Node Test Results (Connectivity / Latency / Unlock)'
             }
         };

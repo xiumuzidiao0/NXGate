@@ -3,7 +3,8 @@ import { getLanguage, localize, localizeGroupStatus, tAlert, tConfirm } from '..
 import { closeEditorDrawer, openEditorDrawer } from '../shell.js';
 import { fetchStatus } from '../../transport.js';
 import { fetchNodes } from '../nodes.js';
-import { alert, appendLog, escapeHtml, getCountryName, jsonAttr } from '../../utils.js';
+import { addNodeToBlacklist } from '../blacklist.js';
+import { alert, appendLog, escapeHtml, getCountryFlagSVG, getCountryName, jsonAttr } from '../../utils.js';
 import { renderMatrixTopology } from './topology.js';
 
 const PRESET_COUNTRY_CODES = [
@@ -99,6 +100,66 @@ export async function fetchDynamicGroups() {
     }
 }
 
+export function blacklistGroupNode(nodeId, ip, country, groupId = '') {
+    return addNodeToBlacklist(nodeId, ip, country, groupId);
+}
+
+function resolveGroupActiveExits(g) {
+    const st = appState.currentState || {};
+    const tunnels = Array.isArray(st.tunnels) ? st.tunnels : [];
+    const allNodes = Array.isArray(appState.allNodes) ? appState.allNodes : [];
+    const isSys = g.is_system || g.id === 'system-primary';
+    const activeIds = Array.isArray(g.active_tunnel_ids) ? g.active_tunnel_ids : [];
+
+    const matched = [];
+    const seen = new Set();
+    const pushTunnel = (t) => {
+        if (!t || !t.node) return;
+        const key = t.id || t.node.id;
+        if (!key || seen.has(key)) return;
+        seen.add(key);
+        const liveNode = allNodes.find(n => n.id === t.node.id);
+        const isFav = liveNode ? !!liveNode.is_favorite : !!t.node.is_favorite;
+        const lat = (t.node.latency_ms > 0) ? t.node.latency_ms : (t.latency_ms > 0 ? t.latency_ms : 0);
+        const unlock = t.unlock || (t.node.ip && appState.cachedUnlockMap ? appState.cachedUnlockMap[t.node.ip] : null) || t.node.unlock;
+        matched.push({
+            tunnelId: t.id || '',
+            devName: t.dev_name || (t.is_userland ? 'sstp' : 'tun0'),
+            nodeId: t.node.id || '',
+            ip: t.node.ip || '',
+            port: t.node.port || 0,
+            country: t.node.country_short || '',
+            latency: lat,
+            isFavorite: isFav,
+            unlock
+        });
+    };
+
+    tunnels.forEach(t => {
+        if (!t) return;
+        if (activeIds.includes(t.id) || activeIds.includes(t.dev_name) || (isSys && (t.id === 'primary-userland' || t.dev_index === 0))) {
+            pushTunnel(t);
+        }
+    });
+
+    if (isSys && matched.length === 0 && st.vpn && st.vpn.active_node && st.vpn.status === 'connected') {
+        const n = st.vpn.active_node;
+        const liveNode = allNodes.find(item => item.id === n.id);
+        matched.push({
+            tunnelId: st.vpn.zero_tun ? 'primary-userland' : 'tun0',
+            devName: st.vpn.zero_tun ? 'sstp' : 'tun0',
+            nodeId: n.id || '',
+            ip: n.ip || '',
+            port: n.port || 0,
+            country: n.country_short || '',
+            latency: n.latency_ms > 0 ? n.latency_ms : 0,
+            isFavorite: liveNode ? !!liveNode.is_favorite : !!n.is_favorite,
+            unlock: (n.ip && appState.cachedUnlockMap ? appState.cachedUnlockMap[n.ip] : null) || n.unlock
+        });
+    }
+    return matched;
+}
+
 export function renderDynamicGroups() {
     const container = document.getElementById('dynamic-groups-container');
     if (!container) return;
@@ -173,32 +234,76 @@ export function renderDynamicGroups() {
         const deleteBtn = isSys ? '' : `<button class="btn btn-danger btn-xs" data-action="deleteDynamicGroup" data-args="${jsonAttr([g.id])}">${isEn ? 'Delete' : '删除'}</button>`;
         const editLabel = isSys ? (isEn ? 'Configure Strategy' : '配置主连策略') : (isEn ? 'Edit' : '编辑');
 
+        const activeExits = resolveGroupActiveExits(g);
+        const exitsHtml = activeExits.length > 0 ? `
+            <div class="group-nodes-section">
+                <div class="group-nodes-title">${isEn ? 'Active Exits' : '当前活跃出口节点'} (${activeExits.length})</div>
+                <div class="group-nodes-list">
+                    ${activeExits.map(ex => {
+                        const cName = ex.country ? getCountryName(ex.country) : (isEn ? 'Global' : '未知');
+                        const flag = ex.country ? getCountryFlagSVG(ex.country) : '';
+                        const portStr = ex.port > 0 ? `:${ex.port}` : '';
+                        const latStr = ex.latency > 0 ? `<span class="badge latency-badge latency-available badge-mini">${ex.latency}ms</span>` : '';
+                        const u = ex.unlock;
+                        const unlockHint = u ? `${u.openai === 'unlocked' ? '<span class="egress-unlock-dot ok">GPT✓</span>' : ''}${u.claude === 'unlocked' ? '<span class="egress-unlock-dot ok">Claude✓</span>' : ''}${u.gemini === 'unlocked' ? '<span class="egress-unlock-dot ok">Gemini✓</span>' : ''}` : '';
+                        const starSvg = ex.isFavorite
+                            ? '<svg viewBox="0 0 24 24" width="13" height="13" fill="#f59e0b" stroke="#f59e0b" stroke-width="1.6"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>'
+                            : '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.6"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>';
+                        return `
+                            <div class="group-node-row">
+                                <div class="group-node-info">
+                                    <span class="egress-nic-pill">${escapeHtml(ex.devName)}</span>
+                                    <span class="flag-box text-xs">${flag} ${escapeHtml(cName)}</span>
+                                    <code class="egress-ip-code">${escapeHtml(ex.ip)}${escapeHtml(portStr)}</code>
+                                    ${latStr}
+                                    ${unlockHint}
+                                </div>
+                                ${ex.nodeId ? `<div class="group-node-actions">
+                                    <button type="button" class="btn btn-outline btn-xs group-node-star ${ex.isFavorite ? 'is-fav' : ''}" data-action="toggleFavorite" data-args="${jsonAttr([ex.nodeId])}" title="${ex.isFavorite ? (isEn ? 'Remove from favorites' : '取消收藏') : (isEn ? 'Add to favorites' : '加入收藏')}">
+                                        ${starSvg} <span>${ex.isFavorite ? (isEn ? 'Fav' : '已收藏') : (isEn ? 'Fav' : '收藏')}</span>
+                                    </button>
+                                    <button type="button" class="btn btn-outline btn-xs btn-icon-danger" data-action="blacklistGroupNode" data-args="${jsonAttr([ex.nodeId, ex.ip, ex.country, g.id])}" title="${isEn ? 'Block node & auto-rotate' : '拉黑此节点并自动换线'}">
+                                        🚫 <span>${isEn ? 'Block' : '拉黑'}</span>
+                                    </button>
+                                </div>` : ''}
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            </div>
+        ` : '';
+
         return `
             <div class="dynamic-group-card ${isSys ? 'is-system' : ''} ${g.in_fallback ? 'is-fallback' : ''}">
-                <div>
-                    <div class="dynamic-group-title-row">
-                        <span class="badge ${statusClass}"><span class="status-dot"></span> ${escapeHtml(statusText)}</span>
-                        <strong class="dynamic-group-name">${escapeHtml(g.name)}</strong>
-                        ${sysBadge}
-                        ${modeBadge}
-                        ${purityBadge}
-                        ${fallbackBadge}
+                <div class="dynamic-group-main">
+                    <div class="dynamic-group-header-bar">
+                        <div>
+                            <div class="dynamic-group-title-row">
+                                <span class="badge ${statusClass}"><span class="status-dot"></span> ${escapeHtml(statusText)}</span>
+                                <strong class="dynamic-group-name">${escapeHtml(g.name)}</strong>
+                                ${sysBadge}
+                                ${modeBadge}
+                                ${purityBadge}
+                                ${fallbackBadge}
+                            </div>
+                            <div class="dynamic-group-meta">
+                                <span>${isEn ? 'Driver: ' : '连接方式: '}<strong class="text-strong">${isZeroTun ? (isEn ? 'Zero-TUN' : '免TUN用户态') : (isEn ? 'Kernel TUN' : '内核虚拟网卡')}</strong></span>
+                                <span>${isEn ? 'Target: ' : '目标: '}<strong class="text-strong">${escapeHtml(countryStr)}</strong></span>
+                                <span>${isEn ? 'Type: ' : '类型: '}<strong class="text-strong">${escapeHtml(ipTypeText)}</strong></span>
+                                ${purityInfo}
+                                ${unlockText}
+                                ${fallbackInfo}
+                                <span>${isEn ? 'Policy: ' : '指标: '}<strong class="dynamic-metric">${metricText}</strong></span>
+                                <span>${isEn ? 'Interval: ' : '周期: '}<strong class="text-strong">${g.interval_minutes}${isEn ? ' min' : '分钟'}</strong></span>
+                            </div>
+                            ${fallbackReasonDiv}
+                        </div>
+                        <div class="row gap-1 shrink-0">
+                            <button class="btn btn-outline btn-xs" data-action="editDynamicGroup" data-args="${jsonAttr([g.id])}">${editLabel}</button>
+                            ${deleteBtn}
+                        </div>
                     </div>
-                    <div class="dynamic-group-meta">
-                        <span>${isEn ? 'Driver: ' : '连接方式: '}<strong class="text-strong">${isZeroTun ? (isEn ? 'Zero-TUN' : '免TUN用户态') : (isEn ? 'Kernel TUN' : '内核虚拟网卡')}</strong></span>
-                        <span>${isEn ? 'Target: ' : '目标: '}<strong class="text-strong">${escapeHtml(countryStr)}</strong></span>
-                        <span>${isEn ? 'Type: ' : '类型: '}<strong class="text-strong">${escapeHtml(ipTypeText)}</strong></span>
-                        ${purityInfo}
-                        ${unlockText}
-                        ${fallbackInfo}
-                        <span>${isEn ? 'Policy: ' : '指标: '}<strong class="dynamic-metric">${metricText}</strong></span>
-                        <span>${isEn ? 'Interval: ' : '周期: '}<strong class="text-strong">${g.interval_minutes}${isEn ? ' min' : '分钟'}</strong></span>
-                    </div>
-                    ${fallbackReasonDiv}
-                </div>
-                <div class="row gap-1">
-                    <button class="btn btn-outline btn-xs" data-action="editDynamicGroup" data-args="${jsonAttr([g.id])}">${editLabel}</button>
-                    ${deleteBtn}
+                    ${exitsHtml}
                 </div>
             </div>
         `;

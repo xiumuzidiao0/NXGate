@@ -575,12 +575,20 @@ func (m *DynamicGroupManager) evaluateAll(ctx context.Context) {
 				hasPrimary := false
 				if m.primaryConnector != nil {
 					hasPrimary = m.primaryConnector.GetStatus() == "connected"
+					if hasPrimary && m.nodePool != nil {
+						if active := m.primaryConnector.GetActiveNode(); active != nil && m.nodePool.Blacklist().IsNodeBlocked(active.ID, active.IP) {
+							hasPrimary = false
+						}
+					}
 					if hasPrimary && len(g.ActiveTunnelIDs) == 0 {
 						m.syncPrimaryActiveTunnelID(g.ID)
 					}
 				} else {
 					for _, t := range m.pool.ListTunnels() {
 						if t.DevIndex == 0 && t.IsHealthy() && t.IsAvailable() {
+							if t.Node != nil && m.nodePool != nil && m.nodePool.Blacklist().IsNodeBlocked(t.Node.ID, t.Node.IP) {
+								continue
+							}
 							hasPrimary = true
 							break
 						}
@@ -594,6 +602,9 @@ func (m *DynamicGroupManager) evaluateAll(ctx context.Context) {
 				for _, id := range g.ActiveTunnelIDs {
 					t := m.pool.GetTunnel(id)
 					if t != nil && t.IsHealthy() && t.IsAvailable() {
+						if t.Node != nil && m.nodePool != nil && m.nodePool.Blacklist().IsNodeBlocked(t.Node.ID, t.Node.IP) {
+							continue
+						}
 						if allowed, known := health[t]; !known || allowed {
 							valid++
 						}
@@ -620,14 +631,20 @@ func (m *DynamicGroupManager) evaluateAll(ctx context.Context) {
 			if g.IsSystem || gid == SystemPrimaryGroupID {
 				if m.primaryConnector != nil {
 					if m.primaryConnector.GetStatus() == "connected" {
-						validCount = 1
-						if len(g.ActiveTunnelIDs) == 0 {
-							m.syncPrimaryActiveTunnelID(g.ID)
+						active := m.primaryConnector.GetActiveNode()
+						if active == nil || m.nodePool == nil || !m.nodePool.Blacklist().IsNodeBlocked(active.ID, active.IP) {
+							validCount = 1
+							if len(g.ActiveTunnelIDs) == 0 {
+								m.syncPrimaryActiveTunnelID(g.ID)
+							}
 						}
 					}
 				} else {
 					for _, t := range m.pool.ListTunnels() {
 						if t.DevIndex == 0 && t.IsHealthy() && t.IsAvailable() {
+							if t.Node != nil && m.nodePool != nil && m.nodePool.Blacklist().IsNodeBlocked(t.Node.ID, t.Node.IP) {
+								continue
+							}
 							validCount = 1
 							break
 						}
@@ -637,6 +654,9 @@ func (m *DynamicGroupManager) evaluateAll(ctx context.Context) {
 				for _, tid := range g.ActiveTunnelIDs {
 					t := m.pool.GetTunnel(tid)
 					if t == nil || !t.IsHealthy() || !t.IsAvailable() {
+						continue
+					}
+					if t.Node != nil && m.nodePool != nil && m.nodePool.Blacklist().IsNodeBlocked(t.Node.ID, t.Node.IP) {
 						continue
 					}
 					if allowed, known := health[t]; known && !allowed {
@@ -750,6 +770,10 @@ func (m *DynamicGroupManager) evaluatePrimarySystemGroup(ctx context.Context, g 
 		currentActiveNode = m.primaryConnector.GetActiveNode()
 	} else if primaryTun != nil {
 		currentActiveNode = primaryTun.Node
+	}
+
+	if currentActiveNode != nil && m.nodePool != nil && m.nodePool.Blacklist().IsNodeBlocked(currentActiveNode.ID, currentActiveNode.IP) {
+		primaryHealthy = false
 	}
 
 	isUserland := m.isPrimaryUserlandMode(g)

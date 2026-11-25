@@ -1,8 +1,8 @@
 import { appState } from './state.js';
 import { applyLanguage, getLanguage, onUiLanguageChanged, toggleLanguage } from './i18n-runtime.js';
 import { addNodeToBlacklist, clearPermBlacklist, clearTempBlacklist, closeBlacklistModal, fetchBlacklist, openBlacklistModal, promptAddCidrBlock, removeNodeFromBlacklist, resurrectBlacklist, switchBlacklistTab } from './modules/blacklist.js';
-import { closePortMatrixModal, deleteDynamicGroup, deletePortRule, editDynamicGroup, editPortRule, evaluateDynamicGroups, fetchDynamicGroups, fetchPortRules, generateRandomPortAuth, hideDynamicGroupForm, hideEditPortForm, onAllTunnelsCheckChanged, onSpecificTunnelCheckChanged, openPortMatrixModal, saveDynamicGroup, savePortRule, selectAuthMode, selectPolicy, setIntervalVal, setPortVal, showAddDynamicGroupForm, showAddPortForm, startNewTunnel, stopTunnel, suggestNextPort, switchMatrixTab } from './modules/matrix.js';
-import { connectToNode, disconnectVPN, fetchNodes, probeCurrentNodes, probeSingleNode, quickConnect, refreshNodes, renderNodes, resetMapView, selectNodeScope, selectQuickFilter, toggleFavorite, toggleMapCollapse, toggleSort } from './modules/nodes.js';
+import { blacklistGroupNode, closePortMatrixModal, deleteDynamicGroup, deletePortRule, editDynamicGroup, editPortRule, evaluateDynamicGroups, fetchDynamicGroups, fetchPortRules, generateRandomPortAuth, hideDynamicGroupForm, hideEditPortForm, onAllTunnelsCheckChanged, onSpecificTunnelCheckChanged, openPortMatrixModal, saveDynamicGroup, savePortRule, selectAuthMode, selectPolicy, setIntervalVal, setPortVal, showAddDynamicGroupForm, showAddPortForm, startNewTunnel, stopTunnel, suggestNextPort, switchMatrixTab } from './modules/matrix.js';
+import { cancelDeepProbe, clearNodeSelection, connectToNode, disconnectVPN, fetchNodes, probeCurrentNodes, probeSelectedNodes, probeSingleNode, probeSingleNodeDeep, quickConnect, refreshNodes, renderNodes, resetMapView, selectNodeScope, selectQuickFilter, toggleDeepProbePanel, toggleFavorite, toggleMapCollapse, toggleSelectAllNodes, toggleSelectNode, toggleSort } from './modules/nodes.js';
 import { checkForUpdates, closeMobileAppModal, closeSettingsModal, closeUpdateModal, downloadBackupPackage, onAppProfileFieldChanged, onBackupFileSelected, onDisableAuthChanged, openMobileAppModal, openUpdateModal, randomPassword, randomPath, saveSettings, switchSettingsTab, testMobileApiConnectivity, testTelegramAlert, triggerBackupFileSelect, triggerForceUpdate, triggerSystemUpdate } from './modules/settings.js';
 import { closeEditorDrawer, enhanceInteractiveElements, initSidebarState, switchView, toggleSidebar } from './modules/shell.js';
 import { applyAgePublicKey, batchSetSingBoxOutbound, closeAddSingBoxModal, closeAgeKeyHelper, closeSingBoxQRModal, closeSubFilterModal, copyAgePublicKey, copyAgeSecretKey, copyClashSubURL, copyFilteredClashSub, copyFilteredGenericSub, copyNodeShareLink, copyQuickRelayedSub, copySingBoxSubURL, deleteSingBoxNode, deriveAgePublicKey, downloadClashConfig, fetchSingBoxOverview, filterProtoGrid, generateAgeKey, onAgeToggleChanged, openAddSingBoxModal, openAgeKeyHelper, openSubFilterModal, selectSingBoxProto, setSingBoxPortAuto, showFilteredQR, showNodeQRCode, submitAddSingBoxNode, switchAgeType, updateNodeOutboundFromSelect, updateSubFilterPreview } from './modules/singbox.js';
@@ -25,6 +25,13 @@ const uiActions = {
     fetchSingBoxOverview,
     probeCurrentNodes,
     probeSingleNode,
+    probeSingleNodeDeep,
+    probeSelectedNodes,
+    cancelDeepProbe,
+    toggleDeepProbePanel,
+    toggleSelectNode,
+    toggleSelectAllNodes,
+    clearNodeSelection,
     refreshNodes,
     selectNodeScope,
     selectQuickFilter,
@@ -50,6 +57,7 @@ const uiActions = {
     showAddDynamicGroupForm,
     hideDynamicGroupForm,
     saveDynamicGroup,
+    blacklistGroupNode,
     closeAddSingBoxModal,
     selectSingBoxProto,
     filterProtoGrid,

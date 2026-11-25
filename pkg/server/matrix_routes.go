@@ -14,7 +14,16 @@ func (s *Server) getActiveTunnels() []*tunnel.Tunnel {
 	if s.tunnelPool == nil {
 		return nil
 	}
-	return s.tunnelPool.ListTunnels()
+	tunnels := s.tunnelPool.ListTunnels()
+	if s.pool != nil && s.pool.Favorites() != nil {
+		favs := s.pool.Favorites()
+		for _, t := range tunnels {
+			if t != nil && t.Node != nil {
+				t.Node.IsFavorite = favs.IsFavorite(t.Node.ID)
+			}
+		}
+	}
+	return tunnels
 }
 
 func (s *Server) handleListTunnels(w http.ResponseWriter, r *http.Request) {

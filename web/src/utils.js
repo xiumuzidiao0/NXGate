@@ -148,7 +148,10 @@ export function renderUnlockBadges(u) {
 
     if (badges.length === 0) return `<span class="text-xs text-muted">${isEn ? 'Not Probed' : '未检测'}</span>`;
     const tag = u.is_probed ? `<span class="badge badge-system badge-mini" title="${isEn ? 'Probed via virtual NIC' : '经虚拟网卡物理流量实测'}">${isEn ? 'Probed' : '实测'}</span> ` : '';
-    return `<div class="unlock-badges">${tag}${badges.join('')}</div>`;
+    const tpTag = (u.is_probed && u.throughput_bytes_per_sec > 0)
+        ? `<span class="badge badge-mini badge-info" title="${isEn ? 'Measured egress download throughput' : '实测隧道吞吐速度'}">⚡ ${formatSpeed(u.throughput_bytes_per_sec)}</span>`
+        : '';
+    return `<div class="unlock-badges">${tag}${badges.join('')}${tpTag}</div>`;
 }
 
 export function showToast(text, type = 'success', duration = 2500) {

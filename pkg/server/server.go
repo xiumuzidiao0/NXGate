@@ -33,6 +33,11 @@ type Server struct {
 	sseHub        *SSEHub
 	mu            sync.Mutex
 	listener      net.Listener
+
+	deepProbeMu    sync.Mutex
+	deepProbeJobs  map[string]*NodeDeepProbeJob
+	deepProbeOrder []string
+	deepProbeSem   chan struct{}
 }
 
 func NewServer(cfg *config.Config, pool *nodes.NodePool, vpnMgr *vpn.Manager, tp *tunnel.Pool, dm *tunnel.DynamicGroupManager, pm *proxy.MultiPortManager, tn *notify.TelegramNotifier) *Server {
@@ -45,6 +50,8 @@ func NewServer(cfg *config.Config, pool *nodes.NodePool, vpnMgr *vpn.Manager, tp
 		portMgr:       pm,
 		notifier:      tn,
 		singboxClient: singbox.NewClient(),
+		deepProbeJobs: make(map[string]*NodeDeepProbeJob),
+		deepProbeSem:  make(chan struct{}, 3),
 	}
 	s.sseHub = NewSSEHub(s)
 	return s
@@ -57,6 +64,9 @@ func (s *Server) Start(ctx context.Context) error {
 	mux.HandleFunc("GET /api/status", s.handleStatus)
 	mux.HandleFunc("GET /api/nodes", s.handleNodes)
 	mux.HandleFunc("POST /api/nodes/probe", s.handleProbeNodes)
+	mux.HandleFunc("POST /api/nodes/probe/deep", s.handleStartDeepNodeProbe)
+	mux.HandleFunc("GET /api/nodes/probe/deep", s.handleGetDeepNodeProbe)
+	mux.HandleFunc("POST /api/nodes/probe/deep/cancel", s.handleCancelDeepNodeProbe)
 	mux.HandleFunc("POST /api/nodes/favorite", s.handleToggleFavorite)
 	mux.HandleFunc("POST /api/connect", s.handleConnect)
 	mux.HandleFunc("POST /api/disconnect", s.handleDisconnect)

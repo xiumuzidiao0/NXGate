@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -473,5 +474,167 @@ func TestHandleNodesScopeAndLiveSettingsRebuild(t *testing.T) {
 	status := srv.buildStatusResponse()
 	if status.NodeCount != 5 || status.StoredAvailableCount != 5 || status.HotPoolLimit != -1 || status.MajorCountryCap != 0 {
 		t.Fatalf("unexpected status pool metadata: %+v", status)
+	}
+}
+
+func TestBlacklistEvictionAndDeepProbeAPI(t *testing.T) {
+	cfg := &config.Config{
+		DataDir:   t.TempDir(),
+		UIPath:    "testadmin",
+		UIPort:    8787,
+		ProxyPort: 7928,
+	}
+	pool := nodes.NewNodePool(cfg)
+	tp := tunnel.NewPool(cfg, pool)
+	vpnMgr := vpn.NewManager(cfg, pool, tp)
+	dm := tunnel.NewDynamicGroupManager(cfg, tp, pool)
+	pm := proxy.NewMultiPortManager(cfg, tp, dm)
+	srv := NewServer(cfg, pool, vpnMgr, tp, dm, pm, nil)
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer ln.Close()
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			_ = c.Close()
+		}
+	}()
+	port := ln.Addr().(*net.TCPAddr).Port
+
+	secNode := &nodes.Node{
+		ID:           fmt.Sprintf("127.0.0.1:%d", port),
+		IP:           "127.0.0.1",
+		Port:         port,
+		Proto:        "tcp",
+		CountryShort: "JP",
+		LatencyMs:    12,
+	}
+	pool.SetCandidatesForTest([]*nodes.Node{secNode})
+
+	// 1. Toggle favorite reflects immediately in buildStatusResponse and getActiveTunnels.
+	favReq := httptest.NewRequest("POST", "/api/nodes/favorite", strings.NewReader(fmt.Sprintf(`{"node_id":%q}`, secNode.ID)))
+	favW := httptest.NewRecorder()
+	srv.handleToggleFavorite(favW, favReq)
+	if favW.Code != http.StatusOK || !strings.Contains(favW.Body.String(), `"is_favorite":true`) {
+		t.Fatalf("expected favorite toggle true, got %d %s", favW.Code, favW.Body.String())
+	}
+
+	vpnMgr.SetActiveNodeForTest(&nodes.Node{ID: secNode.ID, IP: secNode.IP, Port: secNode.Port, CountryShort: "JP"})
+	statusResp := srv.buildStatusResponse()
+	if statusResp.VPN == nil {
+		t.Fatal("expected vpn snapshot in status response")
+	}
+
+	// Register an active healthy tunnel reusing secNode so getActiveTunnels & deep probe reuse it.
+	if _, regErr := tp.RegisterPrimaryUserlandTunnel(secNode, nil); regErr == nil {
+		t.Fatal("expected nil sstp tunnel rejection")
+	}
+
+	// Test Deep Probe validation errors (0 IDs, >20 IDs).
+	wEmpty := httptest.NewRecorder()
+	srv.handleStartDeepNodeProbe(wEmpty, httptest.NewRequest("POST", "/api/nodes/probe/deep", strings.NewReader(`{"node_ids":[]}`)))
+	if wEmpty.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for empty node_ids, got %d", wEmpty.Code)
+	}
+
+	tooMany := make([]string, 21)
+	for i := range tooMany {
+		tooMany[i] = fmt.Sprintf("n-%d", i)
+	}
+	tooManyBytes, _ := json.Marshal(map[string]any{"node_ids": tooMany})
+	wTooMany := httptest.NewRecorder()
+	srv.handleStartDeepNodeProbe(wTooMany, httptest.NewRequest("POST", "/api/nodes/probe/deep", strings.NewReader(string(tooManyBytes))))
+	if wTooMany.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for >20 node_ids, got %d", wTooMany.Code)
+	}
+
+	// Start a real deep probe job and verify polling & cancellation endpoints.
+	startBody, _ := json.Marshal(map[string]any{"node_ids": []string{secNode.ID}})
+	wStart := httptest.NewRecorder()
+	srv.handleStartDeepNodeProbe(wStart, httptest.NewRequest("POST", "/api/nodes/probe/deep", strings.NewReader(string(startBody))))
+	if wStart.Code != http.StatusOK {
+		t.Fatalf("expected 200 starting deep probe, got %d (%s)", wStart.Code, wStart.Body.String())
+	}
+	var startedJob NodeDeepProbeJob
+	if err := json.Unmarshal(wStart.Body.Bytes(), &startedJob); err != nil {
+		t.Fatalf("decode start job: %v", err)
+	}
+	if startedJob.JobID == "" || startedJob.Total != 1 {
+		t.Fatalf("unexpected started job: %+v", startedJob)
+	}
+
+	wGet := httptest.NewRecorder()
+	srv.handleGetDeepNodeProbe(wGet, httptest.NewRequest("GET", "/api/nodes/probe/deep?job_id="+startedJob.JobID, nil))
+	if wGet.Code != http.StatusOK {
+		t.Fatalf("expected 200 getting deep probe, got %d", wGet.Code)
+	}
+
+	cancelBody, _ := json.Marshal(map[string]string{"job_id": startedJob.JobID})
+	wCancel := httptest.NewRecorder()
+	srv.handleCancelDeepNodeProbe(wCancel, httptest.NewRequest("POST", "/api/nodes/probe/deep/cancel", strings.NewReader(string(cancelBody))))
+	if wCancel.Code != http.StatusOK {
+		t.Fatalf("expected 200 cancelling deep probe, got %d", wCancel.Code)
+	}
+	var cancelledJob NodeDeepProbeJob
+	if err := json.Unmarshal(wCancel.Body.Bytes(), &cancelledJob); err != nil {
+		t.Fatalf("decode cancelled job: %v", err)
+	}
+	if cancelledJob.Status != "cancelled" || cancelledJob.Completed != cancelledJob.Total {
+		t.Fatalf("expected cancelled job with completed==total, got %+v", cancelledJob)
+	}
+
+	// Wait for the background probe goroutine to exit before proceeding / t.TempDir() cleanup.
+	deadline := time.Now().Add(5 * time.Second)
+	finished := false
+	for time.Now().Before(deadline) {
+		wPoll := httptest.NewRecorder()
+		srv.handleGetDeepNodeProbe(wPoll, httptest.NewRequest("GET", "/api/nodes/probe/deep?job_id="+startedJob.JobID, nil))
+		if wPoll.Code == http.StatusOK {
+			var polled NodeDeepProbeJob
+			if err := json.Unmarshal(wPoll.Body.Bytes(), &polled); err == nil && polled.FinishedAt != nil {
+				finished = true
+				break
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if !finished {
+		t.Fatal("timed out waiting for cancelled deep probe job goroutine to finish")
+	}
+
+	// Test blacklist eviction disconnects active primary node and clears group active IDs.
+	dg := &tunnel.DynamicGroup{
+		ID:              "dg-bl-test",
+		Name:            "BL Evict",
+		Enabled:         true,
+		Country:         "JP",
+		TargetCount:     1,
+		IntervalMinutes: 15,
+		ActiveTunnelIDs: []string{tunnel.PrimaryUserlandTunnelID},
+	}
+	_ = dm.SaveGroup(dg)
+
+	blBody := fmt.Sprintf(`{"node_id":%q,"ip":%q,"country":"JP","permanent":true,"group_id":"dg-bl-test"}`, secNode.ID, secNode.IP)
+	wBL := httptest.NewRecorder()
+	srv.handleBlacklistAdd(wBL, httptest.NewRequest("POST", "/api/blacklist/add", strings.NewReader(blBody)))
+	if wBL.Code != http.StatusOK {
+		t.Fatalf("expected 200 on blacklist add, got %d (%s)", wBL.Code, wBL.Body.String())
+	}
+	var blResp map[string]any
+	if err := json.Unmarshal(wBL.Body.Bytes(), &blResp); err != nil {
+		t.Fatalf("decode blacklist add response: %v", err)
+	}
+	evictedRaw, _ := blResp["evicted_tunnels"].([]any)
+	if len(evictedRaw) == 0 {
+		t.Fatalf("expected primary userland tunnel eviction in response, got %v", blResp)
+	}
+	if updatedGroup := dm.GetGroup("dg-bl-test"); updatedGroup == nil || len(updatedGroup.ActiveTunnelIDs) != 0 {
+		t.Fatalf("expected ActiveTunnelIDs cleared after eviction, got %+v", updatedGroup)
 	}
 }

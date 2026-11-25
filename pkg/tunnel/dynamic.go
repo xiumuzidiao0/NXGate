@@ -334,6 +334,54 @@ func (m *DynamicGroupManager) DeleteGroup(id string) {
 	}
 }
 
+// EvictTunnelIDs removes stopped or blacklisted tunnel IDs from every dynamic group's active list
+// and returns the enabled group IDs whose membership changed so callers can enqueue re-evaluation.
+func (m *DynamicGroupManager) EvictTunnelIDs(tunnelIDs []string) []string {
+	if len(tunnelIDs) == 0 {
+		return nil
+	}
+	evictSet := make(map[string]bool, len(tunnelIDs))
+	for _, tid := range tunnelIDs {
+		if tid != "" {
+			evictSet[tid] = true
+		}
+	}
+	if len(evictSet) == 0 {
+		return nil
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	var affected []string
+	changed := false
+	for _, g := range m.groups {
+		if g == nil || len(g.ActiveTunnelIDs) == 0 {
+			continue
+		}
+		kept := make([]string, 0, len(g.ActiveTunnelIDs))
+		groupChanged := false
+		for _, tid := range g.ActiveTunnelIDs {
+			if evictSet[tid] {
+				groupChanged = true
+				continue
+			}
+			kept = append(kept, tid)
+		}
+		if groupChanged {
+			g.ActiveTunnelIDs = kept
+			changed = true
+			if g.Enabled {
+				affected = append(affected, g.ID)
+			}
+		}
+	}
+	if changed {
+		_ = m.saveLocked()
+	}
+	return affected
+}
+
 // GetTunnelsForGroups returns all active healthy tunnels belonging to the specified dynamic groups
 func (m *DynamicGroupManager) GetTunnelsForGroups(groupIDs []string) []*Tunnel {
 	m.mu.RLock()

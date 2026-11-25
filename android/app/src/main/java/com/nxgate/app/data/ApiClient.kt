@@ -10,6 +10,7 @@ import com.nxgate.app.model.InboundProtocolItem
 import com.nxgate.app.model.LiveTrafficInfo
 import com.nxgate.app.model.MasterGatewayInfo
 import com.nxgate.app.model.NodeCandidate
+import com.nxgate.app.model.NodeDeepProbeJob
 import com.nxgate.app.model.PortRuleItem
 import com.nxgate.app.model.ServerProfile
 import com.nxgate.app.model.ServerSettingsDTO
@@ -675,9 +676,54 @@ class ApiClient {
         }
     }
 
-    suspend fun probeNodes(profile: ServerProfile): Result<Boolean> = withContext(Dispatchers.IO) {
+    suspend fun probeNodes(profile: ServerProfile, nodeIds: List<String> = emptyList()): Result<Boolean> = withContext(Dispatchers.IO) {
         try {
-            executeCall(profile, "/api/nodes/probe", "POST", "{}").use { resp ->
+            val body = if (nodeIds.isNotEmpty()) {
+                JSONObject().put("node_ids", JSONArray(nodeIds)).toString()
+            } else {
+                "{}"
+            }
+            executeCall(profile, "/api/nodes/probe", "POST", body).use { resp ->
+                Result.success(resp.isSuccessful)
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun startDeepNodeProbe(profile: ServerProfile, nodeIds: List<String>): Result<NodeDeepProbeJob> = withContext(Dispatchers.IO) {
+        try {
+            val body = JSONObject().put("node_ids", JSONArray(nodeIds)).toString()
+            executeCall(profile, "/api/nodes/probe/deep", "POST", body).use { resp ->
+                val raw = resp.body?.string() ?: "{}"
+                if (!resp.isSuccessful) {
+                    val errObj = runCatching { JSONObject(raw) }.getOrNull()
+                    return@withContext Result.failure(Exception(errObj?.optString("error")?.ifEmpty { null } ?: "HTTP ${resp.code}: ${resp.message}"))
+                }
+                Result.success(parseDeepProbeJob(JSONObject(raw)))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getDeepNodeProbe(profile: ServerProfile, jobId: String): Result<NodeDeepProbeJob> = withContext(Dispatchers.IO) {
+        try {
+            val path = if (jobId.isNotEmpty()) "/api/nodes/probe/deep?job_id=${Uri.encode(jobId)}" else "/api/nodes/probe/deep"
+            executeCall(profile, path).use { resp ->
+                val raw = resp.body?.string() ?: "{}"
+                if (!resp.isSuccessful) return@withContext Result.failure(Exception("HTTP ${resp.code}: ${resp.message}"))
+                Result.success(parseDeepProbeJob(JSONObject(raw)))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun cancelDeepNodeProbe(profile: ServerProfile, jobId: String): Result<Boolean> = withContext(Dispatchers.IO) {
+        try {
+            val body = JSONObject().put("job_id", jobId).toString()
+            executeCall(profile, "/api/nodes/probe/deep/cancel", "POST", body).use { resp ->
                 Result.success(resp.isSuccessful)
             }
         } catch (e: Exception) {
@@ -729,7 +775,8 @@ class ApiClient {
         permanent: Boolean = true,
         durationMinutes: Int = 1440,
         scope: String = "node",
-        reason: String = ""
+        reason: String = "",
+        groupId: String = ""
     ): Result<Boolean> = withContext(Dispatchers.IO) {
         try {
             val body = JSONObject().apply {
@@ -740,6 +787,7 @@ class ApiClient {
                 put("duration_minutes", durationMinutes)
                 put("scope", scope)
                 if (reason.isNotBlank()) put("reason", reason)
+                if (groupId.isNotBlank()) put("group_id", groupId)
             }.toString()
             executeCall(profile, "/api/blacklist/add", "POST", body).use { resp ->
                 Result.success(resp.isSuccessful)

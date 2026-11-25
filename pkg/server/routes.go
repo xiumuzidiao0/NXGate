@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -41,6 +42,9 @@ type StatusResponse struct {
 
 func (s *Server) buildStatusResponse() StatusResponse {
 	vpnState := s.vpn.Snapshot()
+	if vpnState.ActiveNode != nil && s.pool != nil && s.pool.Favorites() != nil {
+		vpnState.ActiveNode.IsFavorite = s.pool.Favorites().IsFavorite(vpnState.ActiveNode.ID)
+	}
 	traffic := stats.GetTrafficTracker().Snapshot()
 	_, source, _, count, totalCount := s.pool.Status()
 	blCount := s.pool.Blacklist().Count()
@@ -240,7 +244,8 @@ type BlacklistNodeReq struct {
 	DurationMinutes int    `json:"duration_minutes,omitempty"`
 	Reason          string `json:"reason,omitempty"`
 	Permanent       bool   `json:"permanent,omitempty"`
-	Scope           string `json:"scope,omitempty"` // "node" (默认) 或 "ip" (整机IP屏蔽)
+	Scope           string `json:"scope,omitempty"`    // "node" (默认) 或 "ip" (整机IP屏蔽)
+	GroupID         string `json:"group_id,omitempty"` // 来自哪个动态分流组的触发，便于立即重评
 }
 
 func (s *Server) handleBlacklistRemove(w http.ResponseWriter, r *http.Request) {
@@ -320,20 +325,103 @@ func (s *Server) handleBlacklistAdd(w http.ResponseWriter, r *http.Request) {
 	}
 	s.pool.Blacklist().MarkManualWithOptions(req.NodeID, req.IP, req.Country, reason, dur, req.Scope, req.Permanent)
 	s.pool.RebuildCandidates()
+
+	evictedTunnels, reEvaluatedGroups := s.evictBlockedTunnelsAndReevaluate(req.GroupID)
+
 	targetDesc := req.NodeID
 	if req.Scope == "ip" && req.IP != "" {
 		targetDesc = fmt.Sprintf("整机IP [%s]", req.IP)
 	} else if req.Scope == "cidr" {
 		targetDesc = fmt.Sprintf("网段 [%s]", req.IP)
 	}
-	stats.LogInfo("Server", "管理员手动将 %s (%s) 屏蔽 (永久=%v, 时长=%v): %s", targetDesc, req.Country, req.Permanent, dur, reason)
+	stats.LogInfo("Server", "管理员手动将 %s (%s) 屏蔽 (永久=%v, 时长=%v, 驱逐隧道=%d, 触发重评组=%d): %s",
+		targetDesc, req.Country, req.Permanent, dur, len(evictedTunnels), len(reEvaluatedGroups), reason)
 	s.writeJSON(w, http.StatusOK, map[string]any{
-		"ok":        true,
-		"message":   "已成功加入屏蔽库",
-		"node_id":   req.NodeID,
-		"permanent": req.Permanent,
-		"scope":     req.Scope,
+		"ok":                  true,
+		"message":             "已成功加入屏蔽库",
+		"node_id":             req.NodeID,
+		"permanent":           req.Permanent,
+		"scope":               req.Scope,
+		"evicted_tunnels":     evictedTunnels,
+		"re_evaluated_groups": reEvaluatedGroups,
 	})
+}
+
+func (s *Server) evictBlockedTunnelsAndReevaluate(triggerGroupID string) ([]string, []string) {
+	evictedTunnels := make([]string, 0)
+	affectedGroups := make(map[string]bool)
+	disconnectPrimary := false
+
+	if s.tunnelPool != nil && s.pool != nil {
+		for _, t := range s.tunnelPool.ListTunnels() {
+			if t == nil || t.Node == nil {
+				continue
+			}
+			if !s.pool.Blacklist().IsNodeBlocked(t.Node.ID, t.Node.IP) {
+				continue
+			}
+			evictedTunnels = append(evictedTunnels, t.ID)
+			if t.DevIndex == 0 {
+				disconnectPrimary = true
+			} else {
+				_ = s.tunnelPool.StopTunnel(t.ID)
+			}
+		}
+	}
+
+	if s.vpn != nil && s.pool != nil {
+		if active := s.vpn.GetActiveNode(); active != nil && s.pool.Blacklist().IsNodeBlocked(active.ID, active.IP) {
+			disconnectPrimary = true
+		}
+	}
+
+	if disconnectPrimary {
+		if s.vpn != nil {
+			s.vpn.Disconnect("节点已被手动拉黑")
+		} else if s.tunnelPool != nil {
+			for _, tid := range evictedTunnels {
+				_ = s.tunnelPool.StopTunnel(tid)
+			}
+		}
+		if s.dynamicMgr != nil {
+			if g := s.dynamicMgr.GetGroup(tunnel.SystemPrimaryGroupID); g != nil && g.Enabled {
+				affectedGroups[g.ID] = true
+			}
+		}
+		evictedTunnels = appendIfMissing(evictedTunnels, tunnel.PrimaryUserlandTunnelID)
+	}
+
+	if s.dynamicMgr != nil {
+		for _, gid := range s.dynamicMgr.EvictTunnelIDs(evictedTunnels) {
+			affectedGroups[gid] = true
+		}
+		if triggerGroupID != "" {
+			if g := s.dynamicMgr.GetGroup(triggerGroupID); g != nil && g.Enabled {
+				affectedGroups[g.ID] = true
+			}
+		}
+	}
+
+	reEvaluatedGroups := make([]string, 0, len(affectedGroups))
+	for gid := range affectedGroups {
+		reEvaluatedGroups = append(reEvaluatedGroups, gid)
+	}
+	sort.Strings(reEvaluatedGroups)
+	if s.dynamicMgr != nil {
+		for _, gid := range reEvaluatedGroups {
+			s.dynamicMgr.EnqueueGroupEvaluation(gid)
+		}
+	}
+	return evictedTunnels, reEvaluatedGroups
+}
+
+func appendIfMissing(list []string, target string) []string {
+	for _, item := range list {
+		if item == target {
+			return list
+		}
+	}
+	return append(list, target)
 }
 
 func (s *Server) handleBlacklistResurrect(w http.ResponseWriter, r *http.Request) {

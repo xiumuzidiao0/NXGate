@@ -398,11 +398,37 @@
                 <span id="filtered-count" class="filtered-count" data-i18n="nodes.filtered_init">共加载 0 个节点</span>
             </div>
 
-            <!-- Clean Compact 8-Column Table -->
+            <!-- Batch Selection & Deep Probe Toolbar -->
+            <div id="nodes-selection-bar" class="nodes-selection-bar hidden" hidden>
+                <div class="row items-center gap-2 wrap">
+                    <span id="nodes-selection-summary" class="text-sm font-semibold">已选 0 个节点</span>
+                    <button type="button" id="btn-probe-selected" class="btn btn-sm" data-action="probeSelectedNodes" data-i18n="nodes.probe_selected">测试已选节点（解锁/延迟/连通性）</button>
+                    <button type="button" id="btn-clear-selected" class="btn btn-outline btn-xs" data-action="clearNodeSelection" data-i18n="nodes.clear_selection">清空选择</button>
+                </div>
+                <div class="row items-center gap-2 wrap">
+                    <span id="deep-probe-job-status" class="text-xs text-muted"></span>
+                    <button type="button" id="btn-cancel-deep-probe" class="btn btn-danger btn-xs hidden" data-action="cancelDeepProbe" data-i18n="nodes.cancel_probe">取消实测</button>
+                    <button type="button" id="btn-toggle-probe-panel" class="btn btn-outline btn-xs hidden" data-action="toggleDeepProbePanel" data-i18n="nodes.toggle_probe_panel">查看结果详情</button>
+                </div>
+            </div>
+
+            <!-- Deep Probe Detailed Results Panel -->
+            <div id="nodes-probe-results-panel" class="probe-results-panel hidden" hidden>
+                <div class="probe-results-header">
+                    <strong id="deep-probe-panel-title" data-i18n="nodes.probe_panel_title">节点实测详情（连通性 / 延迟 / 解锁）</strong>
+                    <button type="button" class="btn btn-outline btn-xs" data-action="toggleDeepProbePanel" data-i18n="common.close">关闭</button>
+                </div>
+                <div class="probe-results-table-wrap">
+                    <div id="deep-probe-results-body" class="probe-results-list"></div>
+                </div>
+            </div>
+
+            <!-- Clean Compact 10-Column Table -->
             <div class="table-wrap" id="nodes-table-wrap" aria-busy="true">
                 <table>
                     <thead>
                         <tr>
+                            <th class="cell-center cell-select"><input type="checkbox" id="nodes-select-all" aria-label="Select all visible nodes" data-change-action="toggleSelectAllNodes"></th>
                             <th  class="cell-center cell-favorite" data-i18n="th.favorite">收藏</th>
                             <th data-i18n="th.region">国家 / 城市</th>
                             <th data-i18n="th.endpoint">出口端点</th>
@@ -415,9 +441,9 @@
                         </tr>
                     </thead>
                     <tbody id="nodes-tbody">
-                        <tr class="skeleton-row"><td colspan="9"><span class="skeleton skeleton-line"></span></td></tr>
-                        <tr class="skeleton-row"><td colspan="9"><span class="skeleton skeleton-line"></span></td></tr>
-                        <tr class="skeleton-row"><td colspan="9"><span class="skeleton skeleton-line"></span></td></tr>
+                        <tr class="skeleton-row"><td colspan="10"><span class="skeleton skeleton-line"></span></td></tr>
+                        <tr class="skeleton-row"><td colspan="10"><span class="skeleton skeleton-line"></span></td></tr>
+                        <tr class="skeleton-row"><td colspan="10"><span class="skeleton skeleton-line"></span></td></tr>
                     </tbody>
                 </table>
             </div>

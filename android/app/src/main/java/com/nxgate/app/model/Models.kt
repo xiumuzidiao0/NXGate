@@ -164,7 +164,8 @@ data class MasterGatewayInfo(
     val status: String = "未连接",
     val isConnected: Boolean = false,
     val isZeroTun: Boolean = false,
-    val driverMode: String = "kernel"
+    val driverMode: String = "kernel",
+    val isFavorite: Boolean = false
 )
 
 data class AvailableOutbound(
@@ -188,6 +189,7 @@ data class TunnelItem(
     val devIndex: Int = 0,
     val status: String = "connected",
     val latencyMs: Int = 0,
+    val nodeId: String = "",
     val nodeIp: String = "",
     val nodePort: Int = 443,
     val country: String = "",
@@ -195,6 +197,7 @@ data class TunnelItem(
     val uptimeSeconds: Long = 0,
     val throughputBps: Long = 0,
     val isUserland: Boolean = false,
+    val isFavorite: Boolean = false,
     val isResidential: Boolean = false,
     val isHosting: Boolean = false,
     val riskScore: Float = -1.0f,
@@ -491,4 +494,37 @@ data class AgeKeyGenerationResult(
     val secretKey: String = "",
     val publicKey: String = "",
     val error: String = ""
+)
+
+data class NodeDeepProbeResult(
+    val nodeId: String,
+    val ip: String = "",
+    val port: Int = 0,
+    val proto: String = "",
+    val countryShort: String = "",
+    val status: String = "pending", // pending, running, ok, partial, failed, cancelled
+    val driver: String = "",
+    val tcpReachable: Boolean = false,
+    val tcpLatencyMs: Int = 0,
+    val tunnelConnected: Boolean = false,
+    val egressReachable: Boolean = false,
+    val egressLatencyMs: Int = 0,
+    val sstpPort: Int = 0,
+    val openai: String = "unknown",
+    val claude: String = "unknown",
+    val gemini: String = "unknown",
+    val google: String = "unknown",
+    val cloudflare: String = "unknown",
+    val netflix: String = "unknown",
+    val isProbed: Boolean = false,
+    val throughputBps: Long = 0,
+    val error: String = ""
+)
+
+data class NodeDeepProbeJob(
+    val jobId: String,
+    val status: String = "running",
+    val total: Int = 0,
+    val completed: Int = 0,
+    val results: List<NodeDeepProbeResult> = emptyList()
 )

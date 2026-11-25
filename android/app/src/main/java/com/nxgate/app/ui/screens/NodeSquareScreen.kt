@@ -44,6 +44,7 @@ import androidx.compose.material.icons.rounded.Public
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.RocketLaunch
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.StarBorder
 import androidx.compose.material3.AlertDialog
@@ -51,6 +52,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -86,11 +88,15 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.nxgate.app.NXGateApplication
 import com.nxgate.app.model.BlacklistRecord
 import com.nxgate.app.model.NodeCandidate
+import com.nxgate.app.model.NodeDeepProbeJob
+import com.nxgate.app.model.NodeDeepProbeResult
 import com.nxgate.app.model.ServerProfile
 import com.nxgate.app.ui.components.AppExposedDropdown
 import com.nxgate.app.ui.components.ConnectedButtonItem
@@ -110,6 +116,10 @@ import kotlinx.coroutines.launch
 fun FullNodeCard(
     node: NodeCandidate,
     isMaster: Boolean = false,
+    isSelected: Boolean = false,
+    onToggleSelect: () -> Unit = {},
+    probeResult: NodeDeepProbeResult? = null,
+    onDeepProbe: () -> Unit = {},
     onSetMaster: () -> Unit,
     isFavorite: Boolean,
     onToggleFavorite: () -> Unit,
@@ -124,7 +134,10 @@ fun FullNodeCard(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainer
         ),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        border = BorderStroke(
+            width = if (isSelected) 1.5.dp else 1.dp,
+            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
+        ),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.5.dp)
     ) {
         Column(
@@ -133,26 +146,39 @@ fun FullNodeCard(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // Row 1: Country Flag + Country Name + IP:Port + (主连 Badge) + Latency Badge
+            // Row 1: Checkbox + Country Flag + Country Name + IP:Port + (主连 Badge) + Latency Badge
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Checkbox(
+                        checked = isSelected,
+                        onCheckedChange = { onToggleSelect() },
+                        modifier = Modifier.size(28.dp)
+                    )
+                    Spacer(Modifier.width(4.dp))
                     val displayName = node.countryLong.ifBlank { countryDisplayName(node.countryShort, isEnglish = strings == AppStringsEn) }
                     Text(
                         text = "${countryFlag(node.countryShort)} $displayName",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                     Spacer(Modifier.width(6.dp))
                     Text(
                         text = "${node.ip}:${node.port}",
                         style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                     if (isMaster) {
                         Surface(
@@ -170,6 +196,7 @@ fun FullNodeCard(
                         }
                     }
                 }
+                Spacer(Modifier.width(6.dp))
 
                 val (latencyBg, latencyTextColor, latencyTierText) = when {
                     node.latencyMs in 1..60 -> Triple(
@@ -310,7 +337,7 @@ fun FullNodeCard(
                 }
             }
 
-            // Row 3: Speed & Score (大字/清晰排版去噪)
+            // Row 3: Speed, Score & Quick Deep Test Button
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -322,12 +349,33 @@ fun FullNodeCard(
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
-                Text(
-                    text = if (strings == AppStringsEn) "${node.score} pts" else "${node.score} 分",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = if (strings == AppStringsEn) "${node.score} pts" else "${node.score} 分",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold
+                    )
+                    val isDeepRunning = probeResult?.status in listOf("running", "pending")
+                    OutlinedButton(
+                        onClick = onDeepProbe,
+                        enabled = !isDeepRunning,
+                        modifier = Modifier.height(30.dp),
+                        shape = RoundedCornerShape(10.dp),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 0.dp)
+                    ) {
+                        Icon(Icons.Rounded.Speed, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            text = if (isDeepRunning) strings.testingInProgress else strings.testNode,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
             }
 
             // Row 4: AI & Streaming Unlock Badges Row (可横滑防小屏溢出，去噪自解释)
@@ -338,10 +386,48 @@ fun FullNodeCard(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                UnlockPill("ChatGPT", node.openai)
-                UnlockPill("Claude", node.claude)
-                UnlockPill("Gemini", node.gemini)
-                UnlockPill("Netflix", node.netflix)
+                UnlockPill("ChatGPT", if (probeResult?.isProbed == true) probeResult.openai else node.openai)
+                UnlockPill("Claude", if (probeResult?.isProbed == true) probeResult.claude else node.claude)
+                UnlockPill("Gemini", if (probeResult?.isProbed == true) probeResult.gemini else node.gemini)
+                UnlockPill("Netflix", if (probeResult?.isProbed == true) probeResult.netflix else node.netflix)
+            }
+
+            if (probeResult != null) {
+                val (probeBg, probeColor, probeLabel) = when (probeResult.status) {
+                    "ok" -> Triple(
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                        MaterialTheme.colorScheme.primary,
+                        "${strings.egressOk} · TCP ${if (probeResult.tcpLatencyMs > 0) "${probeResult.tcpLatencyMs}ms" else "-"} / ${strings.localized("出网", "Egress")} ${probeResult.egressLatencyMs}ms"
+                    )
+                    "partial" -> Triple(
+                        MaterialTheme.colorScheme.tertiary.copy(alpha = 0.15f),
+                        MaterialTheme.colorScheme.tertiary,
+                        "${strings.egressBlocked} (${probeResult.error.ifEmpty { strings.localized("握手正常但无法出网", "Tunnel established but egress blocked") }})"
+                    )
+                    "failed" -> Triple(
+                        MaterialTheme.colorScheme.error.copy(alpha = 0.12f),
+                        MaterialTheme.colorScheme.error,
+                        "${strings.handshakeFailed}${if (probeResult.error.isNotEmpty()) " · ${probeResult.error}" else ""}"
+                    )
+                    else -> Triple(
+                        MaterialTheme.colorScheme.surfaceContainerHigh,
+                        MaterialTheme.colorScheme.onSurfaceVariant,
+                        strings.testingInProgress
+                    )
+                }
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = probeBg,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = probeLabel,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = probeColor,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
+                    )
+                }
             }
 
             Spacer(Modifier.height(2.dp))
@@ -439,6 +525,12 @@ fun NodeSquareScreen(
     var showAddCidrDialog by remember { mutableStateOf(false) }
     var cidrInputText by remember { mutableStateOf("") }
 
+    var selectedNodeIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var deepProbeJob by remember { mutableStateOf<NodeDeepProbeJob?>(null) }
+    var deepProbeResults by remember { mutableStateOf<Map<String, NodeDeepProbeResult>>(emptyMap()) }
+    var showProbeResultsSheet by remember { mutableStateOf(false) }
+    val probeResultsSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
     // Dynamic country dropdown options calculated from allNodes (matching Web)
     val countryOptions = remember(allNodes, strings) {
         val countMap = allNodes.groupingBy { it.countryShort.uppercase() }.eachCount()
@@ -507,6 +599,56 @@ fun NodeSquareScreen(
     // Pull real nodes whenever active server or scope changes
     LaunchedEffect(activeServer?.id, nodeScope) {
         refreshAllNodes()
+    }
+
+    LaunchedEffect(deepProbeJob?.jobId, deepProbeJob?.status) {
+        val currentJob = deepProbeJob ?: return@LaunchedEffect
+        val srv = activeServer ?: return@LaunchedEffect
+        if (currentJob.status != "running" || currentJob.jobId.isEmpty()) return@LaunchedEffect
+        while (true) {
+            delay(1200)
+            val res = NXGateApplication.instance.apiClient.getDeepNodeProbe(srv, currentJob.jobId)
+            val updated = res.getOrNull() ?: continue
+            deepProbeJob = updated
+            if (updated.results.isNotEmpty()) {
+                val mapCopy = deepProbeResults.toMutableMap()
+                updated.results.forEach { mapCopy[it.nodeId] = it }
+                deepProbeResults = mapCopy
+            }
+            if (updated.status != "running") {
+                refreshAllNodes()
+                break
+            }
+        }
+    }
+
+    fun launchDeepProbe(ids: List<String>) {
+        val srv = activeServer ?: return
+        val distinct = ids.distinct().filter { it.isNotEmpty() }
+        if (distinct.isEmpty()) return
+        if (distinct.size > 20) {
+            Toast.makeText(context, strings.localized("单次最多支持实测 20 个节点", "At most 20 nodes can be tested per batch"), Toast.LENGTH_SHORT).show()
+            return
+        }
+        scope.launch {
+            val res = NXGateApplication.instance.apiClient.startDeepNodeProbe(srv, distinct)
+            if (res.isSuccess) {
+                val job = res.getOrNull()
+                if (job != null) {
+                    deepProbeJob = job
+                    val mapCopy = deepProbeResults.toMutableMap()
+                    job.results.forEach { mapCopy[it.nodeId] = it }
+                    deepProbeResults = mapCopy
+                    showProbeResultsSheet = true
+                }
+            } else {
+                Toast.makeText(
+                    context,
+                    strings.localized("启动实测失败: ${res.exceptionOrNull()?.message}", "Deep probe failed: ${res.exceptionOrNull()?.message}"),
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
     }
 
     // Update country options selection if options change
@@ -772,6 +914,91 @@ fun NodeSquareScreen(
                     height = 44.dp
                 )
 
+                if (selectedNodeIds.isNotEmpty() || deepProbeJob != null) {
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.45f),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = strings.selectedNodesCount.format(selectedNodeIds.size),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                val job = deepProbeJob
+                                if (job != null) {
+                                    Text(
+                                        text = if (job.status == "running") "${strings.testingInProgress} ${job.completed}/${job.total}" else "${job.completed}/${job.total}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Button(
+                                    onClick = { launchDeepProbe(selectedNodeIds.toList()) },
+                                    enabled = selectedNodeIds.size in 1..20 && deepProbeJob?.status != "running",
+                                    modifier = Modifier.height(34.dp),
+                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 0.dp)
+                                ) {
+                                    Text("${strings.testSelectedNodes} (${selectedNodeIds.size})", style = MaterialTheme.typography.labelSmall)
+                                }
+                                if (selectedNodeIds.isNotEmpty()) {
+                                    OutlinedButton(
+                                        onClick = { selectedNodeIds = emptySet() },
+                                        modifier = Modifier.height(34.dp),
+                                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 0.dp)
+                                    ) {
+                                        Text(strings.clearSelection, style = MaterialTheme.typography.labelSmall)
+                                    }
+                                }
+                                if (deepProbeJob?.status == "running" && activeServer != null) {
+                                    OutlinedButton(
+                                        onClick = {
+                                            val jobId = deepProbeJob?.jobId ?: ""
+                                            scope.launch {
+                                                NXGateApplication.instance.apiClient.cancelDeepNodeProbe(activeServer, jobId)
+                                                deepProbeJob = deepProbeJob?.copy(status = "cancelled")
+                                            }
+                                        },
+                                        modifier = Modifier.height(34.dp),
+                                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 0.dp)
+                                    ) {
+                                        Text(strings.cancelProbe, style = MaterialTheme.typography.labelSmall)
+                                    }
+                                }
+                                if (deepProbeJob != null) {
+                                    OutlinedButton(
+                                        onClick = { showProbeResultsSheet = true },
+                                        modifier = Modifier.height(34.dp),
+                                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 0.dp)
+                                    ) {
+                                        Text(strings.probeResultsTitle.substringBefore("（").substringBefore(" ("), style = MaterialTheme.typography.labelSmall)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 if (isLoadingNodes) {
                     LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.primary)
                 }
@@ -834,6 +1061,12 @@ fun NodeSquareScreen(
                             FullNodeCard(
                                 node = node,
                                 isMaster = isMaster,
+                                isSelected = selectedNodeIds.contains(node.id),
+                                onToggleSelect = {
+                                    selectedNodeIds = if (selectedNodeIds.contains(node.id)) selectedNodeIds - node.id else selectedNodeIds + node.id
+                                },
+                                probeResult = deepProbeResults[node.id],
+                                onDeepProbe = { launchDeepProbe(listOf(node.id)) },
                                 onSetMaster = {
                                     if (activeServer != null) {
                                         scope.launch {
@@ -890,6 +1123,12 @@ fun NodeSquareScreen(
                             FullNodeCard(
                                 node = node,
                                 isMaster = isMaster,
+                                isSelected = selectedNodeIds.contains(node.id),
+                                onToggleSelect = {
+                                    selectedNodeIds = if (selectedNodeIds.contains(node.id)) selectedNodeIds - node.id else selectedNodeIds + node.id
+                                },
+                                probeResult = deepProbeResults[node.id],
+                                onDeepProbe = { launchDeepProbe(listOf(node.id)) },
                                 onSetMaster = {
                                     if (activeServer != null) {
                                         scope.launch {
@@ -1428,6 +1667,119 @@ fun NodeSquareScreen(
                                             Text(if (isEn) "Unblock" else "移出黑名单")
                                         }
                                     }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (showProbeResultsSheet && deepProbeJob != null) {
+        val job = deepProbeJob!!
+        ModalBottomSheet(
+            onDismissRequest = { showProbeResultsSheet = false },
+            sheetState = probeResultsSheetState,
+            containerColor = MaterialTheme.colorScheme.surfaceContainer,
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .padding(bottom = 28.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "${strings.probeResultsTitle} (${job.completed}/${job.total})",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (job.status == "running" && activeServer != null) {
+                        TextButton(onClick = {
+                            scope.launch {
+                                NXGateApplication.instance.apiClient.cancelDeepNodeProbe(activeServer, job.jobId)
+                                deepProbeJob = deepProbeJob?.copy(status = "cancelled")
+                            }
+                        }) {
+                            Text(strings.cancelProbe, color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                }
+                if (job.status == "running") {
+                    LinearProgressIndicator(
+                        progress = { if (job.total > 0) job.completed.toFloat() / job.total else 0f },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(360.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(job.results, key = { it.nodeId }) { r ->
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "${countryFlag(r.countryShort)} ${r.ip.ifEmpty { r.nodeId }}${if (r.port > 0) ":${r.port}" else ""}",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontFamily = FontFamily.Monospace,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    val statusText = when (r.status) {
+                                        "ok" -> strings.egressOk
+                                        "partial" -> strings.egressBlocked
+                                        "failed" -> strings.handshakeFailed
+                                        "cancelled" -> strings.cancel
+                                        else -> strings.testingInProgress
+                                    }
+                                    Text(
+                                        text = statusText,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (r.status == "ok") MaterialTheme.colorScheme.primary else if (r.status == "failed") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.secondary
+                                    )
+                                }
+                                Text(
+                                    text = "TCP: ${if (r.tcpLatencyMs > 0) "${r.tcpLatencyMs}ms" else "-"}  ·  ${strings.localized("出网 RTT", "Egress RTT")}: ${if (r.egressLatencyMs > 0) "${r.egressLatencyMs}ms" else "-"}${if (r.driver.isNotEmpty()) " (${r.driver})" else ""}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Row(
+                                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    UnlockPill("ChatGPT", r.openai)
+                                    UnlockPill("Claude", r.claude)
+                                    UnlockPill("Gemini", r.gemini)
+                                    UnlockPill("Netflix", r.netflix)
+                                }
+                                if (r.error.isNotEmpty()) {
+                                    Text(
+                                        text = r.error,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.error
+                                    )
                                 }
                             }
                         }
